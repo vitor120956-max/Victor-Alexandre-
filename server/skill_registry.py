@@ -1,0 +1,1061 @@
+"""Registro allowlist de skills Python executáveis pela API."""
+from __future__ import annotations
+
+import ast
+import asyncio
+import json
+import math
+import operator
+import platform
+import re
+import unicodedata
+from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .agency import (
+    AgencyError,
+    audit_board,
+    audit_budget,
+    audit_permissions,
+    audit_roster,
+    default_permissions,
+    verify_watchdog,
+)
+from .documents import create_document, merge_pdfs, read_document
+from .engineering import create_adr, create_plan, create_spec, design_tests, evaluate_webvitals, release_gate, review_code, threat_model
+from .lean import LeanError, audit_tree, evaluate_ladder, harvest_debt, review_change
+from .legal_corpus import LegalCorpus
+from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
+from .productivity import analyze_meeting, generate_changelog, pick_winners
+from .studio import (
+    StudioError,
+    audit_artifact,
+    audit_contrast,
+    audit_contract,
+    critique,
+    design_reference,
+)
+from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout
+from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
+
+
+class SkillError(Exception):
+    """Erro esperado de uma skill, seguro para apresentar ao usuário."""
+
+
+class EmptyInput(BaseModel):
+    pass
+
+
+class PlanningCreateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan_id: str = Field(default="", alias="planId", title="ID opcional do plano", max_length=80, description="Minúsculas, números e hífens. Vazio deriva um slug estável do título.")
+    title: str = Field(title="Título", min_length=3, max_length=180)
+    goal: str = Field(title="Objetivo", min_length=3, max_length=6000, json_schema_extra={"format": "textarea"})
+    phases: str = Field(title="Fases e critérios", min_length=5, max_length=8000, json_schema_extra={"format": "textarea", "description": "2–7 linhas: Título da fase | critério verificável"})
+    requirements: str = Field(default="", title="Requisitos", max_length=8000, json_schema_extra={"format": "textarea", "description": "Um requisito por linha."})
+
+
+class PlanningIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan_id: str = Field(alias="planId", title="ID explícito do plano", min_length=2, max_length=80, pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$")
+
+
+class PlanningUpdateInput(PlanningIdInput):
+    expected_sha256: str = Field(alias="expectedSha256", title="Hash do estado lido", min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$")
+    phase: int = Field(default=0, title="Fase", ge=0, le=50, description="Zero mantém a fase; informe status ao escolher uma fase.")
+    status: Literal["", "pending", "in_progress", "complete"] = Field(default="", title="Novo status")
+    next_step: str = Field(default="", alias="nextStep", title="Próximo passo", max_length=4000, json_schema_extra={"format": "textarea"})
+    evidence: str = Field(default="", title="Evidência de conclusão", max_length=6000, json_schema_extra={"format": "textarea", "description": "Obrigatória quando o status for complete."})
+    note_type: Literal["", "finding", "progress", "error", "test"] = Field(default="", alias="noteType", title="Tipo de anotação")
+    note: str = Field(default="", title="Anotação", max_length=8000, json_schema_extra={"format": "textarea", "description": "Conteúdo da descoberta, progresso, erro ou validação declarada."})
+
+
+class TextAnalyzeInput(BaseModel):
+    text: str = Field(
+        title="Texto",
+        min_length=1,
+        max_length=20_000,
+        json_schema_extra={"format": "textarea", "description": "Conteúdo que será analisado localmente."},
+    )
+
+
+class TextTransformInput(BaseModel):
+    text: str = Field(title="Texto", min_length=1, max_length=20_000, json_schema_extra={"format": "textarea"})
+    operation: Literal["upper", "lower", "title", "slug"] = Field(
+        title="Operação",
+        description="upper: maiúsculas; lower: minúsculas; title: título; slug: texto para URL.",
+        json_schema_extra={"enumLabels": ["Maiúsculas", "Minúsculas", "Título", "Slug"]},
+    )
+
+
+class CalculateInput(BaseModel):
+    expression: str = Field(title="Expressão", min_length=1, max_length=160, description="Ex.: (42 + 8) / 2")
+
+
+class FileListInput(BaseModel):
+    path: str = Field(default="", title="Subpasta (opcional)", max_length=120)
+
+
+class FileReadInput(BaseModel):
+    path: str = Field(title="Arquivo", min_length=1, max_length=160, description="Caminho relativo dentro da pasta do JARVIS.")
+
+
+class FileWriteInput(BaseModel):
+    path: str = Field(title="Arquivo de destino", min_length=1, max_length=160, description="Ex.: notas/ideia.md")
+    content: str = Field(title="Conteúdo", max_length=100_000, json_schema_extra={"format": "textarea"})
+    overwrite: bool = Field(default=False, title="Permitir sobrescrever")
+
+
+class FileOrganizeInput(BaseModel):
+    path: str = Field(default="", title="Subpasta (opcional)", max_length=120)
+
+
+class DocumentReadInput(BaseModel):
+    path: str = Field(title="Documento", min_length=1, max_length=160, description="Arquivo DOCX, XLSX, PPTX ou PDF da área isolada.")
+
+
+class DocumentCreateInput(BaseModel):
+    format: Literal["docx", "xlsx", "pptx", "pdf"] = Field(
+        title="Formato",
+        json_schema_extra={"enumLabels": ["Word (DOCX)", "Planilha (XLSX)", "Apresentação (PPTX)", "PDF"]},
+    )
+    path: str = Field(title="Arquivo de destino", min_length=1, max_length=160, description="Ex.: documentos/relatorio.docx")
+    title: str = Field(title="Título", min_length=1, max_length=200)
+    content: str = Field(
+        title="Conteúdo",
+        min_length=1,
+        max_length=100_000,
+        json_schema_extra={"format": "textarea", "description": "DOCX/PDF: títulos e listas; XLSX: CSV/TSV; PPTX: separe slides por ---."},
+    )
+    overwrite: bool = Field(default=False, title="Permitir sobrescrever")
+
+
+class PdfMergeInput(BaseModel):
+    paths: str = Field(title="PDFs de entrada", min_length=1, max_length=2_000, json_schema_extra={"format": "textarea", "description": "De 2 a 10 caminhos, um por linha."})
+    output: str = Field(title="PDF de destino", min_length=1, max_length=160, description="Ex.: documentos/arquivo-consolidado.pdf")
+    overwrite: bool = Field(default=False, title="Permitir sobrescrever")
+
+
+class MeetingAnalyzeInput(BaseModel):
+    transcript: str = Field(title="Transcrição", min_length=1, max_length=100_000, json_schema_extra={"format": "textarea", "description": "Use 'Nome: fala' em cada linha para calcular participação."})
+    focusSpeaker: str = Field(default="", title="Participante em foco (opcional)", max_length=60)
+
+
+class ChangelogGenerateInput(BaseModel):
+    commits: str = Field(title="Mensagens de commit", min_length=1, max_length=50_000, json_schema_extra={"format": "textarea", "description": "Uma por linha; prefixos feat, fix, perf, security e docs são reconhecidos."})
+    version: str = Field(default="Unreleased", title="Versão ou período", min_length=1, max_length=60)
+
+
+class RandomPickInput(BaseModel):
+    entries: str = Field(title="Participantes", min_length=1, max_length=20_000, json_schema_extra={"format": "textarea", "description": "Um por linha ou separados por vírgula."})
+    count: int = Field(default=1, title="Quantidade de vencedores", ge=1, le=100)
+    exclusions: str = Field(default="", title="Exclusões (opcional)", max_length=20_000, json_schema_extra={"format": "textarea", "description": "Participantes que não podem ser sorteados."})
+
+
+class EngineeringBaseInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class EngineeringSpecInput(EngineeringBaseInput):
+    title: str = Field(title="Nome da iniciativa", min_length=1, max_length=120)
+    objective: str = Field(title="Objetivo e motivação", min_length=3, max_length=5_000, json_schema_extra={"format": "textarea"})
+    users: str = Field(title="Usuários e beneficiários", min_length=1, max_length=1_000)
+    requirements: str = Field(title="Requisitos, um por linha", min_length=1, max_length=12_000, json_schema_extra={"format": "textarea"})
+    acceptance: str = Field(title="Critérios de aceite, um por linha", min_length=1, max_length=12_000, json_schema_extra={"format": "textarea"})
+    constraints: str = Field(default="", title="Restrições (opcional)", max_length=5_000, json_schema_extra={"format": "textarea"})
+    openQuestions: str = Field(default="", title="Questões abertas (opcional)", max_length=5_000, json_schema_extra={"format": "textarea"})
+
+
+class EngineeringPlanInput(EngineeringBaseInput):
+    title: str = Field(title="Nome da iniciativa", min_length=1, max_length=120)
+    requirements: str = Field(title="Fatias verticais, uma por linha", min_length=1, max_length=12_000, json_schema_extra={"format": "textarea", "description": "Cada linha deve ser uma capacidade funcional verificável."})
+    dependencies: str = Field(default="", title="Dependências (opcional)", max_length=2_000, json_schema_extra={"format": "textarea", "description": "Ex.: 2:1 significa que a fatia 2 depende da fatia 1."})
+    testCommand: str = Field(default="npm test", title="Comando de teste (somente documentação)", min_length=1, max_length=160)
+    buildCommand: str = Field(default="npm run build", title="Comando de build (somente documentação)", min_length=1, max_length=160)
+
+
+class EngineeringTestsInput(EngineeringBaseInput):
+    title: str = Field(title="Nome da funcionalidade", min_length=1, max_length=120)
+    acceptance: str = Field(title="Critérios de aceite, um por linha", min_length=1, max_length=12_000, json_schema_extra={"format": "textarea"})
+    risks: str = Field(default="", title="Riscos (opcional)", max_length=5_000, json_schema_extra={"format": "textarea"})
+    testCommand: str = Field(default="npm test", title="Comando de teste (somente documentação)", min_length=1, max_length=160)
+
+
+class EngineeringReviewInput(EngineeringBaseInput):
+    code: str = Field(title="Trecho de código", min_length=1, max_length=50_000, json_schema_extra={"format": "textarea", "description": "O trecho é analisado localmente e nunca executado."})
+    language: Literal["python", "javascript", "typescript", "jsx", "tsx"] = Field(title="Linguagem", json_schema_extra={"enumLabels": ["Python", "JavaScript", "TypeScript", "JSX", "TSX"]})
+    changedLines: int = Field(default=0, title="Linhas alteradas no change (opcional)", ge=0, le=100_000)
+
+
+class EngineeringThreatInput(EngineeringBaseInput):
+    feature: str = Field(title="Funcionalidade", min_length=1, max_length=160)
+    assets: str = Field(title="Ativos, um por linha", min_length=1, max_length=4_000, json_schema_extra={"format": "textarea", "description": "Ex.: credenciais, dados pessoais, ações administrativas."})
+    boundaries: str = Field(title="Fronteiras de confiança, uma por linha", min_length=1, max_length=4_000, json_schema_extra={"format": "textarea", "description": "Ex.: upload multipart, chamada ao provedor, webhook."})
+
+
+class EngineeringWebVitalsInput(EngineeringBaseInput):
+    lcpMs: float = Field(title="LCP em milissegundos", ge=0, le=120_000)
+    inpMs: float = Field(title="INP em milissegundos", ge=0, le=60_000)
+    cls: float = Field(title="CLS", ge=0, le=10)
+    source: Literal["lab", "field"] = Field(default="lab", title="Origem da medição", json_schema_extra={"enumLabels": ["Laboratório / Lighthouse", "Campo / RUM"]})
+    sampleSize: int = Field(default=0, title="Amostra de campo (0 se laboratório)", ge=0, le=1_000_000_000)
+
+
+class EngineeringAdrInput(EngineeringBaseInput):
+    identifier: str = Field(default="ADR-XXX", title="Identificador", min_length=1, max_length=30)
+    title: str = Field(title="Decisão", min_length=1, max_length=180)
+    status: Literal["Proposed", "Accepted"] = Field(default="Proposed", title="Status")
+    context: str = Field(title="Contexto e forças", min_length=3, max_length=8_000, json_schema_extra={"format": "textarea"})
+    decision: str = Field(title="Decisão escolhida", min_length=3, max_length=5_000, json_schema_extra={"format": "textarea"})
+    alternatives: str = Field(title="Alternativas, uma por linha", min_length=1, max_length=8_000, json_schema_extra={"format": "textarea", "description": "Formato: Nome | prós | contras | motivo da rejeição"})
+    consequences: str = Field(title="Consequências, uma por linha", min_length=1, max_length=8_000, json_schema_extra={"format": "textarea"})
+
+
+class EngineeringReleaseInput(EngineeringBaseInput):
+    release: str = Field(title="Release ou mudança", min_length=1, max_length=120)
+    testsPassed: bool = Field(default=False, title="Testes aprovados")
+    buildPassed: bool = Field(default=False, title="Build e tipagem aprovados")
+    reviewApproved: bool = Field(default=False, title="Revisão humana aprovada")
+    securityChecked: bool = Field(default=False, title="Segredos e dependências verificados")
+    performanceChecked: bool = Field(default=False, title="Performance verificada")
+    rollbackReady: bool = Field(default=False, title="Rollback preparado")
+    monitoringReady: bool = Field(default=False, title="Monitoramento preparado")
+    documentationUpdated: bool = Field(default=False, title="Documentação atualizada")
+    userFacing: bool = Field(default=True, title="Mudança afeta usuários na interface")
+    evidence: str = Field(default="", title="Evidências e links", max_length=10_000, json_schema_extra={"format": "textarea", "description": "Cole comandos e resultados ou links; o JARVIS não os verifica automaticamente."})
+
+
+LegalDocumentId = Literal["constituicao", "codigo-civil", "codigo-penal", "clt", "eca", "cdc", "lgpd", "marco-civil"]
+LegalDocumentFilter = Literal["", "constituicao", "codigo-civil", "codigo-penal", "clt", "eca", "cdc", "lgpd", "marco-civil"]
+_LEGAL_DOCUMENT_LABELS = [
+    "Constituição Federal", "Código Civil", "Código Penal", "CLT", "ECA",
+    "Código de Defesa do Consumidor", "LGPD", "Marco Civil da Internet",
+]
+
+
+class LegalSearchInput(BaseModel):
+    query: str = Field(title="Tema jurídico", min_length=2, max_length=240, description="Ex.: direito de arrependimento")
+    documentId: LegalDocumentFilter = Field(
+        default="",
+        title="Documento",
+        json_schema_extra={"enumLabels": ["Todos os documentos", *_LEGAL_DOCUMENT_LABELS]},
+    )
+    limit: int = Field(default=6, title="Quantidade de resultados", ge=1, le=12)
+
+
+class LegalArticleInput(BaseModel):
+    documentId: LegalDocumentId = Field(title="Documento", json_schema_extra={"enumLabels": _LEGAL_DOCUMENT_LABELS})
+    article: str = Field(title="Artigo", min_length=1, max_length=24, description="Ex.: 5, 49, 1.046 ou 6-A")
+
+
+class ReversePathInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(title="Artefato", min_length=1, max_length=200, description="Caminho relativo dentro da área de engenharia reversa.")
+
+
+class ReverseStringsInput(ReversePathInput):
+    min_length: int = Field(default=6, alias="minLength", title="Tamanho mínimo", ge=4, le=128)
+    encoding: Literal["ascii", "utf16le", "both"] = Field(default="both", title="Codificação", json_schema_extra={"enumLabels": ["ASCII", "UTF-16LE", "Ambas"]})
+    limit: int = Field(default=200, title="Máximo de strings", ge=1, le=1000)
+    offset: int = Field(default=0, title="Deslocamento inicial", ge=0, le=25_000_000)
+    length: int = Field(default=0, title="Comprimento da janela (0 = até o fim)", ge=0, le=25_000_000)
+    contains: str = Field(default="", title="Filtrar por texto", max_length=120, description="Correspondência sem diferenciar maiúsculas.")
+
+
+class ReverseEntropyInput(ReversePathInput):
+    block_size: int = Field(default=4096, alias="blockSize", title="Tamanho do bloco", ge=256, le=65536, description="Potência de dois entre 256 e 65536.")
+    offset: int = Field(default=0, title="Deslocamento inicial", ge=0, le=25_000_000)
+    length: int = Field(default=0, title="Comprimento da janela (0 = até o fim)", ge=0, le=25_000_000)
+
+
+class ReverseJavascriptInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(default="", title="Arquivo ou árvore", max_length=200, description="Caminho na área reversa. Deixe vazio para analisar o código colado.")
+    source: str = Field(default="", title="Código colado", max_length=500_000, json_schema_extra={"format": "textarea", "description": "Alternativa ao arquivo. Limite de 1 MB em UTF-8; nada é executado."})
+    include_node_modules: bool = Field(default=False, alias="includeNodeModules", title="Incluir node_modules")
+    max_files: int = Field(default=500, alias="maxFiles", title="Máximo de arquivos", ge=10, le=2000)
+
+
+class ReverseCompareInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    left: str = Field(title="Artefato de referência", min_length=1, max_length=200)
+    right: str = Field(title="Artefato comparado", min_length=1, max_length=200)
+
+
+class LeanLadderInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível", description="lite cita a opção menor; full é o padrão; ultra questiona o pedido antes de construir.")
+    task: str = Field(title="Tarefa", min_length=3, max_length=4000, json_schema_extra={"format": "textarea"})
+    proposal: str = Field(default="", title="Proposta atual", max_length=8000, json_schema_extra={"format": "textarea", "description": "O que você pensa em construir. Opcional."})
+    reuse_fit: Literal["none", "partial", "full"] = Field(default="none", alias="reuseFit", title="Já existe no projeto?", json_schema_extra={"enumLabels": ["Não sei / não existe", "Cobre em parte", "Cobre por completo"]})
+    reuse_evidence: str = Field(default="", alias="reuseEvidence", title="Evidência do projeto", max_length=2000, description="Caminho do helper, componente ou padrão existente.")
+    stdlib_fit: Literal["none", "partial", "full"] = Field(default="none", alias="stdlibFit", title="Biblioteca padrão ou nativo?", json_schema_extra={"enumLabels": ["Não sei / não existe", "Cobre em parte", "Cobre por completo"]})
+    stdlib_evidence: str = Field(default="", alias="stdlibEvidence", title="Evidência da plataforma", max_length=2000, description="API nativa ou da biblioteca padrão, com o nome exato.")
+    dependency_fit: Literal["none", "partial", "full"] = Field(default="none", alias="dependencyFit", title="Dependência já instalada?", json_schema_extra={"enumLabels": ["Não sei / não existe", "Cobre em parte", "Cobre por completo"]})
+    dependency_evidence: str = Field(default="", alias="dependencyEvidence", title="Evidência da dependência", max_length=2000, description="Pacote que já está no projeto, com o caminho do manifesto.")
+    one_liner: bool = Field(default=False, alias="oneLiner", title="Cabe em uma linha legível?")
+    estimated_lines: int = Field(default=1, alias="estimatedLines", title="Linhas estimadas", ge=1, le=5000)
+    unrequested: str = Field(default="", title="O que ninguém pediu", max_length=4000, json_schema_extra={"format": "textarea", "description": "Um item por linha: tema, opção, flexibilidade futura."})
+    reach: str = Field(default="", title="Alcance da mudança", max_length=4000, json_schema_extra={"format": "textarea", "description": "Um por linha: callers, testes, fixtures, config, exports."})
+
+
+class LeanReviewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff ou trecho", min_length=1, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Diff unificado (---/+++/@@) ou código colado. Nada é executado."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    notes: str = Field(default="", title="Contexto", max_length=4000, json_schema_extra={"format": "textarea", "description": "O que a mudança deveria fazer."})
+
+
+class LeanDebtInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(default="", title="Pasta de código", max_length=200, description="Pasta na área de código. Deixe vazio para colar um trecho.")
+    code: str = Field(default="", title="Código colado", max_length=500_000, json_schema_extra={"format": "textarea", "description": "Alternativa à pasta. Limite de 500.000 caracteres."})
+    marker: str = Field(default="shortcut", title="Marcador", max_length=21, description="Convenção do projeto, como shortcut ou ponytail.")
+    include_legacy: bool = Field(default=True, alias="includeLegacy", title="Aceitar marcador antigo ponytail:")
+
+
+class LeanAuditInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(title="Pasta de código", min_length=1, max_length=200, description="Pasta na área de código; subpastas são varridas sem seguir symlinks.")
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    max_files: int = Field(default=400, alias="maxFiles", title="Máximo de arquivos", ge=10, le=400)
+
+
+class AgencyRosterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    roster: str = Field(
+        title="Equipe declarada",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por agente: nome | papel | responde a | orçamento mensal | permissões | estado. Use board no topo. Linhas com # são comentários."},
+    )
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class AgencyBoardInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tasks: str = Field(
+        title="Quadro declarado",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por tarefa: id | título | dono | estado | objetivo | bloqueadores | evidência | atualizado. Evidência e objetivo podem ficar vazios."},
+    )
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    wip_limit: int = Field(default=5, alias="wipLimit", title="Limite de WIP", ge=1, le=50, description="Tarefas simultâneas em andamento ou revisão.")
+    stale_days: int = Field(default=3, alias="staleDays", title="Dias para considerar parado", ge=1, le=90)
+    reference_date: str = Field(default="", alias="referenceDate", title="Data de referência", max_length=10, description="AAAA-MM-DD. Vazio usa o dia atual em UTC.")
+
+
+class AgencyBudgetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entries: str = Field(
+        title="Orçamentos declarados",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por agente: agente | limite | gasto | alerta% | parada automática (sim/não)."},
+    )
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    company_budget: str = Field(default="", alias="companyBudget", title="Teto da empresa", max_length=40, description="Opcional. Mesma unidade dos limites individuais.")
+    currency: str = Field(default="US$", title="Moeda", max_length=8, description="Rótulo exibido; não há conversão.")
+    period_day: int = Field(default=0, alias="periodDay", title="Dia do período", ge=0, le=31, description="Dia de consumo decorrido. 0 desliga a projeção linear.")
+    days_in_month: int = Field(default=30, alias="daysInMonth", title="Dias no mês", ge=28, le=31)
+
+
+class AgencyWatchdogInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    watched: str = Field(title="Tarefa observada", min_length=1, max_length=80, description="ID da raiz cuja subárvore será verificada.")
+    tasks: str = Field(
+        title="Subárvore declarada",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por tarefa: id | estado | dono | evidência | bloqueador | interação pendente | atualizado."},
+    )
+    instructions: str = Field(default="", title="Instruções do watchdog", max_length=4000, json_schema_extra={"format": "textarea", "description": "Podem estreitar o mandato; nunca ampliá-lo."})
+    exclude: str = Field(default="", title="IDs fora do recorte", max_length=1000, description="IDs de tarefas do próprio watchdog, separados por vírgula, que não entram na árvore.")
+    last_fingerprint: str = Field(default="", alias="lastFingerprint", title="Impressão digital anterior", max_length=64, pattern=r"^([a-fA-F0-9]{64})?$", description="Se a parada não mudou, a revisão é suprimida.")
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class AgencyPermissionsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entries: str = Field(
+        title="Permissões declaradas",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por agente: agente | concedidas | negadas | flags. Flags: baixa_confianca, gerenciado, cota:N, criados:N, adapter/comando/cwd/env/sandbox."},
+    )
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    low_trust: bool = Field(default=False, alias="lowTrust", title="Tratar todos como baixa confiança")
+    managed: bool = Field(default=False, title="Tratar todos como agentes gerenciados")
+
+
+class StudioContractInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    manifest: str = Field(default="", title="manifest.json", max_length=20_000, json_schema_extra={"format": "textarea", "description": "Manifesto do pacote de design. Opcional se você enviar DESIGN.md e tokens.css."})
+    design: str = Field(default="", title="DESIGN.md", max_length=120_000, json_schema_extra={"format": "textarea", "description": "Contrato em prosa: tema, cor, tipografia, espaçamento, componentes, movimento, acessibilidade e antíteses."})
+    tokens: str = Field(default="", title="tokens.css", max_length=120_000, json_schema_extra={"format": "textarea", "description": "CSS compilado com o bloco :root e os temas. Nada é compilado ou aplicado."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class StudioContrastInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pairs: str = Field(
+        title="Pares de contraste",
+        min_length=3,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por par: rótulo | cor da frente | cor do fundo | corpo ou grande. Use hexadecimal de 3 ou 6 dígitos."},
+    )
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class StudioCritiqueInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entries: str = Field(
+        title="Notas por dimensão",
+        min_length=5,
+        max_length=50_000,
+        json_schema_extra={"format": "textarea", "description": "Uma linha por dimensão: filosofia|hierarquia|detalhe|função|inovação | nota 0–10 | evidência com referência."},
+    )
+    keep: str = Field(default="", title="Manter", max_length=8000, json_schema_extra={"format": "textarea", "description": "Um item por linha: o que está funcionando e não deve ser quebrado."})
+    fix: str = Field(default="", title="Corrigir", max_length=8000, json_schema_extra={"format": "textarea", "description": "Um item por linha, ordenado por custo visual economizado."})
+    quick_wins: str = Field(default="", alias="quickWins", title="Ganhos rápidos", max_length=8000, json_schema_extra={"format": "textarea", "description": "Um item por linha com o tempo entre parênteses, como (10 min)."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class StudioArtifactInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    artifact: str = Field(title="HTML do artefato", min_length=20, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Arquivo único: HTML, CSS e JS no mesmo documento. Nada é renderizado ou executado."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+SkillHandler = Callable[[BaseModel, bool], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class SkillDefinition:
+    id: str
+    name: str
+    description: str
+    category: str
+    input_model: type[BaseModel]
+    handler: SkillHandler
+    side_effects: bool = False
+    dry_run_supported: bool = False
+    requires_confirmation: bool = False
+    timeout_seconds: int = 8
+
+    def public(self) -> dict[str, Any]:
+        schema = self.input_model.model_json_schema()
+        schema.pop("$defs", None)
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "inputSchema": schema,
+            "sideEffects": self.side_effects,
+            "dryRunSupported": self.dry_run_supported,
+            "requiresConfirmation": self.requires_confirmation,
+            "runtime": "python",
+        }
+
+
+_STOPWORDS = {
+    "a", "o", "e", "de", "do", "da", "dos", "das", "um", "uma", "para", "com", "em", "no", "na",
+    "nos", "nas", "que", "se", "por", "como", "mais", "menos", "seu", "sua", "seus", "suas", "ao", "aos",
+    "à", "às", "é", "são", "the", "and", "of", "to", "in", "is", "are",
+}
+
+
+def analyze_text(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+    assert isinstance(data, TextAnalyzeInput)
+    text = data.text.strip()
+    words = re.findall(r"[^\W\d_]+(?:['’-][^\W\d_]+)*|\d+(?:[.,]\d+)?", text, re.UNICODE)
+    normalized = [unicodedata.normalize("NFKC", word).lower() for word in words]
+    useful = [word for word in normalized if len(word) >= 3 and word not in _STOPWORDS]
+    sentences = len([part for part in re.split(r"[.!?]+(?:\s|$)", text) if part.strip()])
+    return {
+        "words": len(words),
+        "characters": len(text),
+        "charactersWithoutSpaces": len(re.sub(r"\s", "", text)),
+        "sentences": sentences,
+        "estimatedReadingMinutes": max(1, math.ceil(len(words) / 200)) if words else 0,
+        "topTerms": [{"term": term, "count": count} for term, count in Counter(useful).most_common(6)],
+    }
+
+
+def transform_text(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+    assert isinstance(data, TextTransformInput)
+    if data.operation == "upper":
+        transformed = data.text.upper()
+    elif data.operation == "lower":
+        transformed = data.text.lower()
+    elif data.operation == "title":
+        transformed = data.text.title()
+    else:
+        ascii_text = unicodedata.normalize("NFKD", data.text).encode("ascii", "ignore").decode()
+        transformed = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
+    return {"operation": data.operation, "result": transformed, "characters": len(transformed)}
+
+
+_BINARY_OPERATORS: dict[type[ast.operator], Callable[[float, float], float]] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_UNARY_OPERATORS: dict[type[ast.unaryop], Callable[[float], float]] = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _safe_math(node: ast.AST) -> float:
+    if isinstance(node, ast.Expression):
+        return _safe_math(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return float(node.value)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPERATORS:
+        return _UNARY_OPERATORS[type(node.op)](_safe_math(node.operand))
+    if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPERATORS:
+        left = _safe_math(node.left)
+        right = _safe_math(node.right)
+        if isinstance(node.op, (ast.Div, ast.Mod)) and right == 0:
+            raise SkillError("Não é possível dividir por zero.")
+        if isinstance(node.op, ast.Pow) and (abs(right) > 100 or abs(left) > 1e30):
+            raise SkillError("Potência fora dos limites de segurança.")
+        return _BINARY_OPERATORS[type(node.op)](left, right)
+    raise SkillError("Use somente números, parênteses e operadores matemáticos.")
+
+
+def calculate(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+    assert isinstance(data, CalculateInput)
+    expression = data.expression.replace(",", ".").replace("×", "*").replace("÷", "/")
+    try:
+        tree = ast.parse(expression, mode="eval")
+        result = _safe_math(tree)
+    except SkillError:
+        raise
+    except (SyntaxError, ValueError, TypeError, OverflowError) as exc:
+        raise SkillError("Não reconheci essa expressão matemática.") from exc
+    if not math.isfinite(result) or abs(result) > 1e100:
+        raise SkillError("O resultado ultrapassa o limite numérico.")
+    return {"expression": data.expression, "result": round(result, 10)}
+
+
+def _safe_path(root: Path, relative: str, *, allow_root: bool = False) -> Path:
+    try:
+        return workspace_path(root, relative, allow_root=allow_root)
+    except ValueError as exc:
+        raise SkillError(str(exc)) from exc
+
+
+def build_registry(files_root: Path) -> "SkillRegistry":
+    files_root.mkdir(parents=True, exist_ok=True)
+    files_root = files_root.resolve()
+    legal_corpus = LegalCorpus(Path(__file__).resolve().with_name("legal_data"))
+
+    def legal_search(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LegalSearchInput)
+        try:
+            return legal_corpus.search(data.query, data.documentId, data.limit)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def legal_article(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LegalArticleInput)
+        try:
+            return legal_corpus.article(data.documentId, data.article)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def legal_sources(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return legal_corpus.sources()
+
+    def document_read_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DocumentReadInput)
+        try:
+            return read_document(files_root, data.path)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+        except Exception as exc:
+            raise SkillError("Não foi possível extrair o texto. Confira o formato e a integridade do documento.") from exc
+
+    def document_create_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DocumentCreateInput)
+        try:
+            title = data.title.strip()
+            if not title:
+                raise ValueError("Informe um título válido.")
+            return create_document(files_root, data.format, data.path, title, data.content, data.overwrite, dry_run)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+        except Exception as exc:
+            raise SkillError("Não foi possível criar o documento com os dados informados.") from exc
+
+    def pdf_merge_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PdfMergeInput)
+        try:
+            return merge_pdfs(files_root, data.paths, data.output, data.overwrite, dry_run)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+        except Exception as exc:
+            raise SkillError("Não foi possível mesclar esses PDFs. Confira os arquivos de entrada.") from exc
+
+    def meeting_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MeetingAnalyzeInput)
+        try:
+            return analyze_meeting(data.transcript, data.focusSpeaker)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def changelog_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ChangelogGenerateInput)
+        try:
+            version = data.version.strip()
+            if not version:
+                raise ValueError("Informe uma versão ou período válido.")
+            return generate_changelog(data.commits, version)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def random_pick_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RandomPickInput)
+        try:
+            return pick_winners(data.entries, data.count, data.exclusions)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_spec_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringSpecInput)
+        try:
+            return create_spec(data.title, data.objective, data.users, data.requirements, data.acceptance, data.constraints, data.openQuestions)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_plan_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringPlanInput)
+        try:
+            return create_plan(data.title, data.requirements, data.dependencies, data.testCommand, data.buildCommand)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_tests_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringTestsInput)
+        try:
+            return design_tests(data.title, data.acceptance, data.risks, data.testCommand)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_review_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringReviewInput)
+        return review_code(data.code, data.language, data.changedLines)
+
+    def engineering_threat_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringThreatInput)
+        try:
+            return threat_model(data.feature, data.assets, data.boundaries)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_webvitals_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringWebVitalsInput)
+        return evaluate_webvitals(data.lcpMs, data.inpMs, data.cls, data.source, data.sampleSize)
+
+    def engineering_adr_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringAdrInput)
+        try:
+            return create_adr(data.identifier, data.title, data.status, data.context, data.decision, data.alternatives, data.consequences)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def engineering_release_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EngineeringReleaseInput)
+        checks = {name: bool(getattr(data, name)) for name in (
+            "testsPassed", "buildPassed", "reviewApproved", "securityChecked", "performanceChecked",
+            "rollbackReady", "monitoringReady", "documentationUpdated",
+        )}
+        return release_gate(data.release, checks, data.userFacing, data.evidence)
+
+    def list_files(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FileListInput)
+        directory = _safe_path(files_root, data.path, allow_root=True)
+        if not directory.exists() or not directory.is_dir():
+            raise SkillError("A subpasta informada não existe.")
+        files: list[dict[str, Any]] = []
+        for item in sorted(directory.rglob("*")):
+            if item.is_symlink() or not item.is_file() or item.suffix.lower() not in VISIBLE_EXTENSIONS:
+                continue
+            if any(part.startswith(".") for part in item.relative_to(files_root).parts):
+                continue
+            stat = item.stat()
+            files.append({
+                "path": item.relative_to(files_root).as_posix(),
+                "bytes": stat.st_size,
+                "modifiedAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                "downloadUrl": download_url(item.relative_to(files_root).as_posix()),
+            })
+            if len(files) >= 200:
+                break
+        return {"root": "Área isolada do JARVIS", "files": files, "count": len(files), "limit": 200}
+
+    def read_file(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FileReadInput)
+        path = _safe_path(files_root, data.path)
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            raise SkillError("Formato não permitido. Use TXT, MD, JSON, CSV ou LOG.")
+        if not path.is_file() or path.is_symlink():
+            raise SkillError("Arquivo não encontrado na área do JARVIS.")
+        if path.stat().st_size > 200_000:
+            raise SkillError("O arquivo excede o limite de leitura de 200 KB.")
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise SkillError("O arquivo não é um texto UTF-8 válido.") from exc
+        return {"path": path.relative_to(files_root).as_posix(), "content": content, "bytes": path.stat().st_size}
+
+    def write_file(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FileWriteInput)
+        path = _safe_path(files_root, data.path)
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            raise SkillError("Formato não permitido. Use TXT, MD, JSON, CSV ou LOG.")
+        if path.exists() and (not path.is_file() or path.is_symlink()):
+            raise SkillError("O destino existe, mas não é um arquivo de texto regular.")
+        if path.exists() and not data.overwrite:
+            raise SkillError("O arquivo já existe. Ative 'Permitir sobrescrever' para substituí-lo.")
+        relative = path.relative_to(files_root).as_posix()
+        encoded_size = len(data.content.encode("utf-8"))
+        if dry_run:
+            return {"dryRun": True, "wouldWrite": relative, "bytes": encoded_size, "overwrite": path.exists()}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data.content, encoding="utf-8")
+        return {"dryRun": False, "written": relative, "bytes": encoded_size}
+
+    def organize_files(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FileOrganizeInput)
+        directory = _safe_path(files_root, data.path, allow_root=True)
+        if not directory.is_dir():
+            raise SkillError("A subpasta informada não existe.")
+        categories = {
+            ".pdf": "documentos", ".docx": "documentos", ".txt": "documentos", ".md": "documentos",
+            ".xlsx": "planilhas", ".csv": "planilhas", ".pptx": "apresentacoes", ".json": "dados", ".log": "dados",
+        }
+        moves: list[dict[str, str]] = []
+        for source in sorted(directory.iterdir()):
+            category = categories.get(source.suffix.lower())
+            if not category or source.is_symlink() or not source.is_file():
+                continue
+            destination = _safe_path(files_root, f"{source.relative_to(files_root).parent.as_posix()}/{category}/{source.name}")
+            if destination.exists():
+                raise SkillError(f"Organização interrompida: o destino já existe para {source.name}. Nada será sobrescrito.")
+            moves.append({
+                "from": source.relative_to(files_root).as_posix(),
+                "to": destination.relative_to(files_root).as_posix(),
+            })
+        if dry_run:
+            return {"dryRun": True, "moves": moves, "count": len(moves), "deletes": 0}
+        for move in moves:
+            source = _safe_path(files_root, move["from"])
+            destination = _safe_path(files_root, move["to"])
+            if not source.is_file() or source.is_symlink() or destination.exists():
+                raise SkillError("Os arquivos mudaram desde a simulação. Revise o plano antes de continuar.")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            source.rename(destination)
+        return {"dryRun": False, "moves": moves, "count": len(moves), "deletes": 0}
+
+    def system_status(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return {
+            "python": platform.python_version(),
+            "system": platform.system(),
+            "serverTime": datetime.now(timezone.utc).isoformat(),
+            "filesRoot": "Área isolada do JARVIS",
+        }
+
+    def planning_create_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PlanningCreateInput)
+        try:
+            return create_persistent_plan(files_root, data.plan_id, data.title, data.goal, data.phases, data.requirements, dry_run)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def planning_list_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return list_plans(files_root)
+
+    def planning_resume_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PlanningIdInput)
+        try:
+            return resume_plan(files_root, data.plan_id)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def planning_update_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PlanningUpdateInput)
+        try:
+            return update_plan(files_root, data.plan_id, data.expected_sha256, data.phase, data.status, data.next_step, data.evidence, data.note_type, data.note, dry_run)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def planning_gate_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PlanningIdInput)
+        try:
+            return completion_gate(files_root, data.plan_id)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_inspect_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReversePathInput)
+        try:
+            return inspect_artifact(files_root, data.path)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_layout_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReversePathInput)
+        try:
+            return inspect_layout(files_root, data.path)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_strings_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReverseStringsInput)
+        try:
+            return extract_strings(files_root, data.path, data.min_length, data.encoding, data.limit, data.offset, data.length, data.contains)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_entropy_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReverseEntropyInput)
+        if data.block_size < 256 or data.block_size > 65536 or data.block_size & (data.block_size - 1):
+            raise SkillError("O tamanho do bloco deve ser uma potência de dois entre 256 e 65536.")
+        try:
+            return byte_entropy(files_root, data.path, data.block_size, data.offset, data.length)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_javascript_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReverseJavascriptInput)
+        if bool(data.path.strip()) == bool(data.source):
+            raise SkillError("Informe exatamente um alvo: um caminho na área reversa ou um código-fonte colado.")
+        if data.source and len(data.source.encode("utf-8")) > 1_000_000:
+            raise SkillError("O código colado excede 1 MB em UTF-8.")
+        try:
+            return analyze_javascript(files_root, data.path.strip(), data.source, data.include_node_modules, data.max_files)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def reverse_compare_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReverseCompareInput)
+        try:
+            return compare_artifacts(files_root, data.left, data.right)
+        except ValueError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def lean_ladder_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LeanLadderInput)
+        try:
+            return evaluate_ladder(
+                mode=data.mode,
+                task=data.task,
+                proposal=data.proposal,
+                reuse_fit=data.reuse_fit,
+                reuse_evidence=data.reuse_evidence,
+                stdlib_fit=data.stdlib_fit,
+                stdlib_evidence=data.stdlib_evidence,
+                dependency_fit=data.dependency_fit,
+                dependency_evidence=data.dependency_evidence,
+                one_liner=data.one_liner,
+                estimated_lines=data.estimated_lines,
+                unrequested=data.unrequested,
+                reach=data.reach,
+            )
+        except LeanError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def lean_review_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LeanReviewInput)
+        try:
+            return review_change(diff=data.diff, mode=data.mode, notes=data.notes)
+        except LeanError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def lean_audit_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LeanAuditInput)
+        try:
+            return audit_tree(files_root=files_root, path=data.path, mode=data.mode, max_files=data.max_files)
+        except LeanError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def lean_debt_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LeanDebtInput)
+        try:
+            return harvest_debt(files_root=files_root, code=data.code, path=data.path, marker=data.marker, include_legacy=data.include_legacy)
+        except LeanError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_roster_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgencyRosterInput)
+        try:
+            return audit_roster(roster=data.roster, mode=data.mode)
+        except AgencyError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_board_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgencyBoardInput)
+        try:
+            return audit_board(
+                tasks=data.tasks, mode=data.mode, wip_limit=data.wip_limit,
+                stale_days=data.stale_days, reference_date=data.reference_date,
+            )
+        except AgencyError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_budget_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgencyBudgetInput)
+        try:
+            return audit_budget(
+                entries=data.entries, mode=data.mode, company_budget=data.company_budget,
+                currency=data.currency, period_day=data.period_day, days_in_month=data.days_in_month,
+            )
+        except AgencyError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_watchdog_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgencyWatchdogInput)
+        try:
+            return verify_watchdog(
+                watched=data.watched, tasks=data.tasks, instructions=data.instructions,
+                exclude=data.exclude, last_fingerprint=data.last_fingerprint, mode=data.mode,
+            )
+        except AgencyError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_permissions_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgencyPermissionsInput)
+        try:
+            return audit_permissions(entries=data.entries, low_trust=data.low_trust, managed=data.managed, mode=data.mode)
+        except AgencyError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agency_defaults_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return default_permissions()
+
+
+    def studio_contract_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, StudioContractInput)
+        try:
+            return audit_contract(manifest=data.manifest, design=data.design, tokens=data.tokens, mode=data.mode)
+        except StudioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def studio_contrast_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, StudioContrastInput)
+        try:
+            return audit_contrast(pairs=data.pairs, mode=data.mode)
+        except StudioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def studio_critique_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, StudioCritiqueInput)
+        try:
+            return critique(entries=data.entries, keep=data.keep, fix=data.fix, quick_wins=data.quick_wins, mode=data.mode)
+        except StudioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def studio_artifact_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, StudioArtifactInput)
+        try:
+            return audit_artifact(artifact=data.artifact, mode=data.mode)
+        except StudioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def studio_defaults_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return design_reference()
+
+    definitions = [
+        SkillDefinition("text.analyze", "Analisar texto", "Conta palavras, caracteres, frases, tempo de leitura e termos frequentes.", "Texto", TextAnalyzeInput, analyze_text),
+        SkillDefinition("text.transform", "Transformar texto", "Converte maiúsculas, minúsculas, formato de título ou slug para URLs.", "Texto", TextTransformInput, transform_text),
+        SkillDefinition("data.calculate", "Calculadora Python", "Resolve expressões por uma árvore sintática segura, sem executar código.", "Dados", CalculateInput, calculate),
+        SkillDefinition("files.list", "Listar arquivos", "Lista os documentos da área isolada, sem acessar outras pastas.", "Arquivos", FileListInput, list_files),
+        SkillDefinition("files.read", "Ler arquivo", "Lê um documento de texto permitido da área isolada.", "Arquivos", FileReadInput, read_file),
+        SkillDefinition("files.write", "Gravar arquivo", "Cria um documento na área isolada, com simulação e confirmação.", "Arquivos", FileWriteInput, write_file, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("system.status", "Status do núcleo Python", "Consulta versão e horário do ambiente sem expor variáveis ou credenciais.", "Sistema", EmptyInput, system_status),
+        SkillDefinition("legal.search", "Pesquisar legislação", "Busca temas nos textos de oito normas brasileiras, sem usar IA para criar referências.", "Legislação", LegalSearchInput, legal_search),
+        SkillDefinition("legal.article", "Consultar artigo de lei", "Retorna um artigo exato do corpus local, com texto e link da fonte oficial.", "Legislação", LegalArticleInput, legal_article),
+        SkillDefinition("legal.sources", "Fontes da legislação", "Lista documentos, quantidade de artigos, origem do recorte e fontes oficiais.", "Legislação", EmptyInput, legal_sources),
+        SkillDefinition("document.read", "Ler documento Office ou PDF", "Extrai texto de DOCX, XLSX, PPTX e PDF confinados, com limites de expansão.", "Documentos", DocumentReadInput, document_read_handler),
+        SkillDefinition("document.create", "Criar documento", "Cria DOCX, XLSX, PPTX ou PDF localmente, com simulação e confirmação.", "Documentos", DocumentCreateInput, document_create_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("pdf.merge", "Mesclar PDFs", "Combina de 2 a 10 PDFs da área isolada em um novo documento confirmado.", "Documentos", PdfMergeInput, pdf_merge_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("files.organize", "Organizar arquivos por tipo", "Planeja e move arquivos para subpastas por categoria, sem excluir ou sobrescrever.", "Arquivos", FileOrganizeInput, organize_files, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("meeting.analyze", "Analisar transcrição de reunião", "Calcula participação, perguntas, vícios de linguagem e ações sem inferências psicológicas.", "Produtividade", MeetingAnalyzeInput, meeting_handler),
+        SkillDefinition("changelog.generate", "Organizar changelog", "Agrupa mensagens de commit em Markdown sem criar mudanças ou usar IA.", "Produtividade", ChangelogGenerateInput, changelog_handler),
+        SkillDefinition("random.pick", "Sortear participantes", "Seleciona vencedores sem reposição com aleatoriedade criptográfica e registro local.", "Produtividade", RandomPickInput, random_pick_handler),
+        SkillDefinition("planning.create", "Criar plano persistente", "Cria task_plan.md, findings.md e progress.md com fases e critérios verificáveis.", "Produtividade", PlanningCreateInput, planning_create_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("planning.list", "Listar planos", "Lista planos válidos ou inválidos sem selecionar nenhum automaticamente.", "Produtividade", EmptyInput, planning_list_handler),
+        SkillDefinition("planning.resume", "Retomar plano por ID", "Lê somente os três arquivos do plano explícito e reconstrói objetivo, fase e próximo passo.", "Produtividade", PlanningIdInput, planning_resume_handler),
+        SkillDefinition("planning.update", "Atualizar plano persistente", "Atualiza fases, próximo passo, evidências e anotações com verificação otimista do bundle.", "Produtividade", PlanningUpdateInput, planning_update_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("planning.gate", "Verificar gate do plano", "Confere deterministicamente fases e critérios sem executar comandos do Markdown.", "Produtividade", PlanningIdInput, planning_gate_handler),
+        SkillDefinition("engineering.spec", "Criar especificação", "Organiza objetivo, requisitos, aceite e limites em um rascunho que exige aprovação humana.", "Engenharia", EngineeringSpecInput, engineering_spec_handler),
+        SkillDefinition("engineering.plan", "Planejar fatias verticais", "Ordena tarefas e dependências, detecta ciclos e inclui checkpoints sem executar comandos.", "Engenharia", EngineeringPlanInput, engineering_plan_handler),
+        SkillDefinition("engineering.tests", "Desenhar matriz de testes", "Transforma critérios em casos unitários, negativos, integração e regressão; não executa testes.", "Engenharia", EngineeringTestsInput, engineering_tests_handler),
+        SkillDefinition("engineering.review", "Revisar código estaticamente", "Encontra padrões conhecidos com linha e severidade, sem executar código ou declarar aprovação.", "Engenharia", EngineeringReviewInput, engineering_review_handler),
+        SkillDefinition("engineering.threat-model", "Criar modelo de ameaças", "Aplica STRIDE às fronteiras declaradas e gera casos de abuso para revisão.", "Engenharia", EngineeringThreatInput, engineering_threat_handler),
+        SkillDefinition("engineering.webvitals", "Avaliar Core Web Vitals", "Classifica LCP, INP e CLS informados e distingue laboratório de dados de campo.", "Engenharia", EngineeringWebVitalsInput, engineering_webvitals_handler),
+        SkillDefinition("engineering.adr", "Criar ADR", "Documenta contexto, decisão, alternativas e consequências em Markdown para revisão.", "Engenharia", EngineeringAdrInput, engineering_adr_handler),
+        SkillDefinition("engineering.release", "Avaliar gate de release", "Bloqueia checklists incompletos e organiza evidências sem executar deploy ou verificações.", "Engenharia", EngineeringReleaseInput, engineering_release_handler),
+        SkillDefinition("reverse.inspect", "Inspecionar artefato", "Identifica formato, SHA-256, entropia e contagens estruturais sem executar o arquivo.", "Engenharia reversa", ReversePathInput, reverse_inspect_handler, timeout_seconds=25),
+        SkillDefinition("reverse.layout", "Ler layout binário", "Lista seções, segmentos, entradas e imports de ELF, PE, Mach-O, ZIP/APK/ASAR, WASM e PDF.", "Engenharia reversa", ReversePathInput, reverse_layout_handler, timeout_seconds=25),
+        SkillDefinition("reverse.strings", "Extrair strings", "Localiza strings ASCII e UTF-16LE com offsets, sem interpretar ou executar o artefato.", "Engenharia reversa", ReverseStringsInput, reverse_strings_handler, timeout_seconds=25),
+        SkillDefinition("reverse.entropy", "Medir entropia por blocos", "Calcula entropia e classifica regiões comprimidas ou cifradas sem descompactar nada.", "Engenharia reversa", ReverseEntropyInput, reverse_entropy_handler, timeout_seconds=25),
+        SkillDefinition("reverse.javascript", "Analisar JavaScript/Electron", "Mapeia módulos, imports, rotas, IPC e fronteiras Electron por análise estática, sem executar código.", "Engenharia reversa", ReverseJavascriptInput, reverse_javascript_handler, timeout_seconds=30),
+        SkillDefinition("reverse.compare", "Comparar artefatos", "Compara identidade, seções, entradas, imports e strings sem alegar equivalência comportamental.", "Engenharia reversa", ReverseCompareInput, reverse_compare_handler, timeout_seconds=25),
+        SkillDefinition("lean.ladder", "Aplicar a escada lean", "Classifica o menor caminho declarado (reuso, plataforma, dependência, uma linha, mínimo) e cobra evidência por degrau.", "Engenharia enxuta", LeanLadderInput, lean_ladder_handler, timeout_seconds=10),
+        SkillDefinition("lean.review", "Revisar mudança lean", "Lê diff ou trecho e aponta risco, teste ausente, duplicação e reimplementação de plataforma, com correção e risco de ignorar.", "Engenharia enxuta", LeanReviewInput, lean_review_handler, timeout_seconds=15),
+        SkillDefinition("lean.audit", "Auditar código lean", "Varre uma pasta de código sem executar nada e ordena achados por correção, teste, duplicação e superfície morta.", "Engenharia enxuta", LeanAuditInput, lean_audit_handler, timeout_seconds=25),
+        SkillDefinition("lean.debt", "Levantar dívida de atalhos", "Coleta marcadores shortcut:/ponytail: e sinaliza os que não declaram quando revisar.", "Engenharia enxuta", LeanDebtInput, lean_debt_handler, timeout_seconds=15),
+        SkillDefinition("agency.roster", "Revisar equipe de agentes", "Confere linha de reporte, raiz humana, ciclos, orçamento declarado e permissões sensíveis de cada agente.", "Governança de agentes", AgencyRosterInput, agency_roster_handler, timeout_seconds=10),
+        SkillDefinition("agency.board", "Revisar quadro de trabalho", "Lê o quadro declarado e encontra tarefa sem dono, conclusão sem evidência, bloqueio sem causa e ciclo de dependências.", "Governança de agentes", AgencyBoardInput, agency_board_handler, timeout_seconds=15),
+        SkillDefinition("agency.budget", "Revisar orçamento de agentes", "Compara limite, gasto e alerta, aponta estouro, ausência de parada automática e projeção do mês.", "Governança de agentes", AgencyBudgetInput, agency_budget_handler, timeout_seconds=10),
+        SkillDefinition("agency.watchdog", "Verificar parada de trabalho", "Calcula a impressão digital de uma subárvore parada, verifica cada alegação e prepara uma única tarefa de revisão.", "Governança de agentes", AgencyWatchdogInput, agency_watchdog_handler, timeout_seconds=15),
+        SkillDefinition("agency.permissions", "Conferir permissões de agentes", "Compara grants e negações com a linha de base, sinaliza curinga, chave negada concedida e override de runtime.", "Governança de agentes", AgencyPermissionsInput, agency_permissions_handler, timeout_seconds=10),
+        SkillDefinition("agency.defaults", "Linha de base de permissões", "Mostra o que um agente recebe por padrão, o que é negado e quais exceções ficam de fora até revisão explícita.", "Governança de agentes", EmptyInput, agency_defaults_handler, timeout_seconds=5),
+        SkillDefinition("studio.contract", "Revisar contrato de design", "Confere manifesto, seções do DESIGN.md e os 56 slots do tokens.css, incluindo temas, cor bruta e movimento.", "Estúdio de design", StudioContractInput, studio_contract_handler, timeout_seconds=15),
+        SkillDefinition("studio.contrast", "Medir contraste", "Calcula a razão WCAG de pares de cor declarados e verifica AA e AAA para texto normal e grande.", "Estúdio de design", StudioContrastInput, studio_contrast_handler, timeout_seconds=10),
+        SkillDefinition("studio.critique", "Estruturar crítica de design", "Valida cinco notas de 0 a 10 com evidência, bandas nomeadas e as listas manter, corrigir e ganhos rápidos.", "Estúdio de design", StudioCritiqueInput, studio_critique_handler, timeout_seconds=10),
+        SkillDefinition("studio.artifact", "Revisar artefato HTML", "Varre um HTML de arquivo único e aponta gradiente roxo, ícone de emoji, métrica inventada, acessibilidade e dependência externa.", "Estúdio de design", StudioArtifactInput, studio_artifact_handler, timeout_seconds=15),
+        SkillDefinition("studio.defaults", "Referência de tokens e bandas", "Mostra o esquema de 56 tokens, as diretrizes de movimento e as bandas da crítica usados pelas revisões.", "Estúdio de design", EmptyInput, studio_defaults_handler, timeout_seconds=5),
+    ]
+    return SkillRegistry(definitions, files_root)
+
+
+class SkillRegistry:
+    def __init__(self, definitions: list[SkillDefinition], files_root: Path) -> None:
+        self._definitions = {definition.id: definition for definition in definitions}
+        self.files_root = files_root.resolve()
+
+    def list(self) -> list[dict[str, Any]]:
+        return [definition.public() for definition in self._definitions.values()]
+
+    def get(self, skill_id: str) -> SkillDefinition:
+        try:
+            return self._definitions[skill_id]
+        except KeyError as exc:
+            raise SkillError("Skill não encontrada ou não permitida.") from exc
+
+    async def execute(self, skill_id: str, parameters: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+        definition = self.get(skill_id)
+        if dry_run and not definition.dry_run_supported:
+            raise SkillError("Esta skill não possui modo de simulação.")
+        try:
+            validated = definition.input_model.model_validate(parameters)
+        except ValidationError as exc:
+            fields = [".".join(str(part) for part in error["loc"]) or "parameters" for error in exc.errors()]
+            raise SkillError(f"Parâmetros inválidos: {', '.join(fields)}.") from exc
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(definition.handler, validated, dry_run), timeout=definition.timeout_seconds)
+        except TimeoutError as exc:
+            raise SkillError("A skill excedeu o tempo limite de execução.") from exc

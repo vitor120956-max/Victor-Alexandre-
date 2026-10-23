@@ -1,0 +1,67 @@
+{
+  "upstream": {
+    "repository": "ctresb/leis",
+    "commit": "15eb09b618ff08a38c4dfee06a91bd139d093f5d",
+    "url": "https://github.com/ctresb/leis",
+    "description": "Legislação brasileira em Markdown, convertida de fontes oficiais."
+  },
+  "documents": [
+    {
+      "id": "constituicao",
+      "file": "constituicao.md",
+      "shortTitle": "Constituição Federal",
+      "aliases": ["constituição", "constituicao", "constituição federal", "cf"],
+      "source": "https://www.planalto.gov.br/ccivil_03/constituicao/constituicaocompilado.htm",
+      "upstreamPath": "constituicao.md"
+    },
+    {
+      "id": "codigo-civil",
+      "file": "codigo-civil.md",
+      "shortTitle": "Código Civil",
+      "aliases": ["código civil", "codigo civil", "civil", "lei 10406"],
+      "upstreamPath": "federal/leis-ordinarias/2002/lei-10406-2002-01-10.md"
+    },
+    {
+      "id": "codigo-penal",
+      "file": "codigo-penal.md",
+      "shortTitle": "Código Penal",
+      "aliases": ["código penal", "codigo penal", "penal", "lei 2848"],
+      "upstreamPath": "federal/decretos-lei/1940/del-2848-1940-12-07.md"
+    },
+    {
+      "id": "clt",
+      "file": "clt.md",
+      "shortTitle": "CLT",
+      "aliases": ["clt", "consolidação das leis do trabalho", "consolidacao das leis do trabalho", "lei 5452"],
+      "upstreamPath": "federal/decretos-lei/1943/del-5452-1943-05-01.md"
+    },
+    {
+      "id": "eca",
+      "file": "eca.md",
+      "shortTitle": "Estatuto da Criança e do Adolescente",
+      "aliases": ["eca", "estatuto da criança", "estatuto da crianca", "criança e adolescente", "crianca e adolescente", "lei 8069"],
+      "upstreamPath": "federal/leis-ordinarias/1990/lei-8069-1990-07-13.md"
+    },
+    {
+      "id": "cdc",
+      "file": "cdc.md",
+      "shortTitle": "Código de Defesa do Consumidor",
+      "aliases": ["cdc", "código de defesa do consumidor", "codigo de defesa do consumidor", "defesa do consumidor", "lei 8078"],
+      "upstreamPath": "federal/leis-ordinarias/1990/lei-8078-1990-09-11.md"
+    },
+    {
+      "id": "lgpd",
+      "file": "lgpd.md",
+      "shortTitle": "Lei Geral de Proteção de Dados",
+      "aliases": ["lgpd", "lei geral de proteção de dados", "lei geral de protecao de dados", "proteção de dados", "protecao de dados", "lei 13709"],
+      "upstreamPath": "federal/leis-ordinarias/2018/lei-13709-2018-08-14.md"
+    },
+    {
+      "id": "marco-civil",
+      "file": "marco-civil.md",
+      "shortTitle": "Marco Civil da Internet",
+      "aliases": ["marco civil", "marco civil da internet", "internet", "lei 12965"],
+      "upstreamPath": "federal/leis-ordinarias/2014/lei-12965-2014-04-23.md"
+    }
+  ]
+}

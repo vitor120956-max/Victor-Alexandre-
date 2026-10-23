@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.vite/
+.venv/
+__pycache__/
+.pytest_cache/
+coverage/
+storage/
+*.local
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Credenciais, sessões e cofres nunca entram no repositório.
+.env
+.env.*
+!.env.example
+cofre/
+uploads/
+*.key
+*cookies*.txt
+*session*.json
+*sessao*.json
+
+# Pacotes e mídias temporárias do workspace legado.
+google_drive/
+*.zip
+/tmp-pr/
