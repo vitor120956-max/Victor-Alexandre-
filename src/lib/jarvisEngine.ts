@@ -58,6 +58,7 @@ export type Intent =
   | { type: 'taste:workspace' }
   | { type: 'diagram:workspace' }
   | { type: 'career:workspace' }
+  | { type: 'office:workspace' }
   | { type: 'browser:workspace' }
   | { type: 'meeting:analyze'; transcript: string }
   | { type: 'changelog:generate'; commits: string; version: string }
@@ -244,6 +245,9 @@ export function parseCommand(rawInput: string): Intent {
   }
   if (/^(?:abrir (?:navegador|browser)|navegador|browser|ler snapshot|snapshot(?: da p[áa]gina)?|resolver alvo|locator|roteiro de navega[çc][ãa]o|rodadas de navegador|checar plano de navegador|recibos de execu[çc][ãa]o|limites do navegador)$/.test(text)) {
     return { type: 'browser:workspace' };
+  }
+  if (/^(?:abrir (?:escrit[óo]rio)|escrit[óo]rio|google workspace|workspace|montar comando gws|comando gws|gws|receita gws|paginar resultados|ler p[áa]ginas|planejar lote|revisar escopos|escopos do google|triar erro gws|erro do gws)$/.test(text)) {
+    return { type: 'office:workspace' };
   }
 
   const engineeringReview = raw.match(/^(?:revisar|revise|analisar|analis[ae])\s+c[óo]digo\s+(python|javascript|typescript|jsx|tsx)\s*:\s*([\s\S]+)$/i);

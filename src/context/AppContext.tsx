@@ -533,6 +533,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? 'Abra a página Navegador para ler o snapshot, resolver o alvo, montar o roteiro de rodadas, checar o plano, ler os recibos e classificar os limites. Tudo é estático: nada de app, binário ou skill do upstream; nenhum navegador é aberto.'
           : 'O navegador assistido precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
         break;
+      case 'office:workspace':
+        reply = backendOnline
+          ? 'Abra a página Escritório para montar o comando `gws`, planejar receitas, ler páginas, dividir lotes, comparar escopos e triar erros. Tudo é estático: o CLI não é instalado, nenhuma credencial é lida e nada é enviado ao Google.'
+          : 'O escritório assistido precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi calculado.';
+        break;
       case 'career:workspace':
         reply = backendOnline
           ? 'Abra a página Carreira para triar a vaga com nota 1–5 e evidência declarada, checar o ATS, auditar bullets, rascunhar a carta, planejar a entrevista e ler o funil. Tudo é estático: nada de portal, candidatura, PDF ou plugin do upstream.'

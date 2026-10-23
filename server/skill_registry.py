@@ -70,6 +70,16 @@ from .navegador import (
     resolver_alvo,
     read_snapshot as ler_snapshot,
 )
+from .escritorio import (
+    EscritorioError,
+    escritorio_catalog,
+    ler_paginas,
+    montar_comando,
+    planejar_escopos,
+    planejar_lote,
+    planejar_receita,
+    triar_erro,
+)
 from .taste import (
     TasteError,
     audit_argument,
@@ -621,6 +631,67 @@ class NavegadorRecibosInput(BaseModel):
 class NavegadorLimitesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     acoes: str = Field(title="Ações pretendidas", min_length=3, max_length=40_000, json_schema_extra={"format": "textarea", "description": "Uma por linha. A classificação é léxica: bloqueado, confirmar ou liberado."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioComandoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    servico: str = Field(title="Serviço", min_length=2, max_length=40, json_schema_extra={"description": "drive, gmail, calendar, sheets, docs, chat, admin…"})
+    recurso: str = Field(default="", max_length=80, title="Recurso", json_schema_extra={"description": "Nome da descoberta, como `files`, `users.messages` ou `spreadsheets.values`."})
+    metodo: str = Field(title="Método", min_length=1, max_length=80, json_schema_extra={"description": "`list`, `get`, `create`, `batchUpdate`… ou um ajudante como `+send`."})
+    params: str = Field(default="", max_length=20_000, title="Parâmetros", json_schema_extra={"format": "textarea", "description": "Objeto JSON do `--params`. Caminhos e consultas entram aqui."})
+    corpo: str = Field(default="", max_length=40_000, title="Corpo", json_schema_extra={"format": "textarea", "description": "Objeto JSON do `--json`. Obrigatório em escrita."})
+    argumentos: str = Field(default="", max_length=2_000, title="Argumentos do ajudante", json_schema_extra={"description": "Só para `+nome`: `--to ana@exemplo.com --subject Oi`."})
+    paginas: bool = Field(default=False, title="Paginar", json_schema_extra={"description": "Liga `--page-all` (NDJSON, uma linha por página)."})
+    limite_paginas: int = Field(default=10, ge=1, le=5000, title="Limite de páginas")
+    atraso_pagina: int = Field(default=100, ge=0, le=60_000, title="Atraso entre páginas (ms)")
+    simular: bool = Field(default=False, title="Simular", json_schema_extra={"description": "Acrescenta `--dry-run` em escrita."})
+    upload: str = Field(default="", max_length=500, title="Upload", json_schema_extra={"description": "Caminho do binário; só em `drive files create`/`update`."})
+    sanitizar: str = Field(default="", max_length=300, title="Template do Model Armor", json_schema_extra={"description": "`projects/P/locations/L/templates/T`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioReceitaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    receita: str = Field(title="Receita", min_length=2, max_length=80, json_schema_extra={"description": "ID do catálogo: `enviar-email`, `subir-arquivo`, `agenda-do-dia`…"})
+    entradas: str = Field(default="{}", max_length=20_000, title="Entradas", json_schema_extra={"format": "textarea", "description": "Objeto JSON com os nomes das entradas, como `{\"PARA\": \"ana@exemplo.com\"}`."})
+    simular: bool = Field(default=True, title="Ensaiar", json_schema_extra={"description": "Marca as escritas com `--dry-run`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioPaginasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    paginas: str = Field(title="Páginas", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Uma página JSON, um NDJSON (uma por linha) ou um array de páginas."})
+    chave_itens: str = Field(default="", max_length=40, title="Chave dos itens", json_schema_extra={"description": "Deixe vazio para detectar (`files`, `messages`, `values`…)."})
+    campo_id: str = Field(default="id", max_length=40, title="Campo de ID")
+    comando_base: str = Field(default="", max_length=200, title="Comando base", json_schema_extra={"description": "Opcional: `gws drive files list` para montar a próxima chamada."})
+    params_base: str = Field(default="", max_length=20_000, title="Parâmetros base", json_schema_extra={"description": "Objeto JSON que recebe o `pageToken`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioLoteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operacao: str = Field(title="Operação", min_length=3, max_length=40, json_schema_extra={"description": "sheets.valores, sheets.requisicoes, docs.requisicoes, gmail.ids, drive.permissoes ou calendar.eventos."})
+    itens: str = Field(title="Itens", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Array JSON de itens no formato da operação."})
+    parametros: str = Field(default="", max_length=20_000, title="Parâmetros do envelope", json_schema_extra={"format": "textarea", "description": "Campos extras do corpo, como `{\"valueInputOption\": \"USER_ENTERED\"}`."})
+    limite: int = Field(default=0, ge=0, le=1000, title="Itens por chamada", json_schema_extra={"description": "Zero usa o teto curado da operação."})
+    simular: bool = Field(default=True, title="Ensaiar")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioEscoposInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operacoes: str = Field(title="Operações", min_length=3, max_length=20_000, json_schema_extra={"format": "textarea", "description": "Uma por linha: `gmail users.messages list`, `sheets +append`, `drive files create`."})
+    concedidos: str = Field(default="", max_length=8_000, title="Escopos concedidos", json_schema_extra={"description": "Chaves ou URLs separadas por vírgula."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EscritorioErrosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    codigo: int = Field(default=1, ge=0, le=5, title="Código de saída", json_schema_extra={"description": "0 sucesso, 1 API, 2 auth, 3 validação, 4 descoberta, 5 interno."})
+    mensagem: str = Field(default="", max_length=20_000, title="Mensagem de erro", json_schema_extra={"format": "textarea", "description": "O JSON do erro ou o stderr completo."})
+    tentativas: int = Field(default=0, ge=0, le=10, title="Tentativas já feitas")
+    idempotente: bool = Field(default=True, title="Operação idempotente", json_schema_extra={"description": "Desligue em escrita: repetir pode duplicar o efeito."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -1397,6 +1468,51 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def navegador_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return navegador_catalog()
 
+    def escritorio_comando_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioComandoInput)
+        try:
+            return montar_comando(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_receita_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioReceitaInput)
+        try:
+            return planejar_receita(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_paginas_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioPaginasInput)
+        try:
+            return ler_paginas(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_lote_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioLoteInput)
+        try:
+            return planejar_lote(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_escopos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioEscoposInput)
+        try:
+            return planejar_escopos(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_erros_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EscritorioErrosInput)
+        try:
+            return triar_erro(**data.model_dump())
+        except EscritorioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def escritorio_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return escritorio_catalog()
+
 
     definitions = [
         SkillDefinition("text.analyze", "Analisar texto", "Conta palavras, caracteres, frases, tempo de leitura e termos frequentes.", "Texto", TextAnalyzeInput, analyze_text),
@@ -1478,6 +1594,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("navegador.checagem", "Checar plano e actionability", "Varre o JavaScript em busca de 15 padrões que quebram a rodada e classifica os passos por estado do alvo: oculto, desabilitado, coberto, ambíguo, destacado.", "Navegador", NavegadorChecagemInput, navegador_checagem_handler, timeout_seconds=10),
         SkillDefinition("navegador.recibos", "Ler recibos e fechamento", "Normaliza o log em recibos, separa despacho de verificação e cobra popup, diálogo, download salvo, keep enxuto e finish único no fim.", "Navegador", NavegadorRecibosInput, navegador_recibos_handler, timeout_seconds=10),
         SkillDefinition("navegador.limites", "Classificar limites e consentimento", "Marca cada ação pretendida como bloqueada, para confirmar ou liberada, com motivo e o handoff que devolve o controle ao usuário.", "Navegador", NavegadorLimitesInput, navegador_limites_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.comando", "Montar comando gws", "Monta a invocação de descoberta com `--params`, `--json`, paginação e ensaio, e aponta parâmetro faltando, corpo indevido e escopo necessário.", "Escritório", EscritorioComandoInput, escritorio_comando_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.receita", "Planejar receita", "Transforma uma receita do catálogo em passos ordenados com ensaio, verificação, escopos e saída de emergência — sem executar nada.", "Escritório", EscritorioReceitaInput, escritorio_receita_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.paginas", "Ler páginas", "Lê uma página, um NDJSON ou um array, detecta a chave dos itens, conta únicos e duplicados e monta a próxima chamada com `pageToken`.", "Escritório", EscritorioPaginasInput, escritorio_paginas_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.lote", "Planejar lote", "Divide itens em chamadas de `batchUpdate`/`batchModify`, valida o formato de cada item e avisa quando o lote é atômico ou não tem lote.", "Escritório", EscritorioLoteInput, escritorio_lote_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.escopos", "Revisar escopos", "Mapeia operações para escopos mínimos, compara com o que foi concedido, aponta falta e sobra e monta o `gws auth login --scopes`.", "Escritório", EscritorioEscoposInput, escritorio_escopos_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.erros", "Triar erro do gws", "Classifica código de saída, status e `reason` em causa, ação e política de repetição — sem repetir escrita às cegas.", "Escritório", EscritorioErrosInput, escritorio_erros_handler, timeout_seconds=10),
+        SkillDefinition("escritorio.regras", "Catálogo do escritório", "Mostra serviços, ajudantes, flags, códigos de saída, escopos, presets, receitas, lotes e motivos de erro usados pelas skills.", "Escritório", EmptyInput, escritorio_library_handler, timeout_seconds=5),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)

@@ -22,6 +22,7 @@ const pageNames: Record<string, string> = {
   '/diagramas': 'Diagramas',
   '/carreira': 'Carreira',
   '/navegador': 'Navegador',
+  '/escritorio': 'Escritório',
   '/skills': 'Skills',
   '/configuracoes': 'Configurações',
 };

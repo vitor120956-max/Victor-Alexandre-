@@ -63,6 +63,11 @@ describe('roteador de comandos do JARVIS', () => {
     expect(parseCommand('resolver alvo')).toEqual({ type: 'browser:workspace' });
     expect(parseCommand('roteiro de navegação')).toEqual({ type: 'browser:workspace' });
     expect(parseCommand('limites do navegador')).toEqual({ type: 'browser:workspace' });
+    expect(parseCommand('abrir escritório')).toEqual({ type: 'office:workspace' });
+    expect(parseCommand('google workspace')).toEqual({ type: 'office:workspace' });
+    expect(parseCommand('montar comando gws')).toEqual({ type: 'office:workspace' });
+    expect(parseCommand('revisar escopos')).toEqual({ type: 'office:workspace' });
+    expect(parseCommand('triar erro gws')).toEqual({ type: 'office:workspace' });
   });
 
   it('direciona análise de texto e status para as skills Python', () => {

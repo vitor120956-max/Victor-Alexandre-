@@ -500,8 +500,8 @@ def test_library_lists_the_whole_vocabulary() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.14.0"
-    assert health["skills"] == 79
+    assert health["version"] == "0.15.0"
+    assert health["skills"] == 86
 
 
 def test_api_runs_every_taste_skill(client: TestClient) -> None:

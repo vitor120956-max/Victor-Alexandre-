@@ -107,6 +107,12 @@ As rotas são `/api/skills/diagram.type`, `diagram.spec`, `diagram.layout`, `dia
 
 As rotas são `/api/skills/navegador.snapshot`, `navegador.alvo`, `navegador.roteiro`, `navegador.checagem`, `navegador.recibos`, `navegador.limites` e `navegador.regras`. Nenhuma abre navegador, executa JavaScript, instala o app do upstream ou grava arquivo; todas marcam `executed: false` e `readOnly: true`. A página `/navegador` só envia o texto colado. Detalhes em [`NAVEGADOR.md`](NAVEGADOR.md).
 
+## Escritório assistido
+
+`server/escritorio.py` implementa sete operações determinísticas inspiradas em `googleworkspace/cli` (Apache-2.0). O módulo monta a invocação de descoberta com `--params`/`--json`, valida parâmetro de caminho obrigatório, classifica risco e liga o ensaio; planeja quinze receitas com passos, verificação, escopos e rollback; lê páginas em JSON, NDJSON ou array, detecta chave de itens, deduplica e monta a próxima chamada; divide lotes nos tetos de Sheets, Docs, Gmail, Drive e Calendar; compara operações com escopos concedidos, inclusive superconjunto; e tria código de saída, status e `reason` em causa, ação e política de repetição. Reaproveita `server/review.py` para achados, contagens, veredito e Markdown.
+
+As rotas são `/api/skills/escritorio.comando`, `escritorio.receita`, `escritorio.paginas`, `escritorio.lote`, `escritorio.escopos`, `escritorio.erros` e `escritorio.regras`. Nenhuma autentica, chama o Google, lê credencial, instala o CLI ou grava arquivo; todas marcam `executado: false`. A página `/escritorio` só envia o texto colado. Detalhes em [`ESCRITORIO.md`](ESCRITORIO.md).
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:
