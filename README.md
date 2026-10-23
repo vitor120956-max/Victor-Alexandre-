@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.12.0.**
+**Versão atual: 0.13.0.**
 
 ## Executar em desenvolvimento
 
@@ -115,6 +115,20 @@ O desenho sai em **HTML autocontido com SVG inline**, sem script, fonte remota o
 
 Nada do upstream é instalado ou executado: sem `npx skills add`, `archify.zip`, `bin/archify.mjs`, `finalize`, `visual-check`, plugins DSH ou Chrome de inspeção. Consulte [`docs/DIAGRAMAS.md`](docs/DIAGRAMAS.md) e a licença MIT em [`docs/licenses/tt-a1i-archify.txt`](docs/licenses/tt-a1i-archify.txt).
 
+## Carreira
+
+A página **Carreira** (`/carreira`) adapta [`career-ops-hq/career-ops`](https://github.com/career-ops-hq/career-ops) em sete skills locais. O upstream é um agente de busca de emprego que roda no CLI de IA do usuário: avalia vagas antes de candidatar, adapta o currículo para ATS, escreve carta, prepara entrevista e mantém um tracker. Aqui fica o que sobrevive sem portal, navegador ou IA: **triagem com evidência, ATS, bullets, carta, entrevista, funil e catálogo**.
+
+A nota não é média. Cada requisito recebe uma banda de importância (`critical`, `high`, `meaningful`, `preferred`, `low_signal`) e um nível de evidência (`stated`, `structural`, `inferred`) — uma inferência nunca sobe para obrigatório. Cinco dimensões entram com peso declarado (aderência 45%, alvo 20%, remuneração 15%, cultura 10%, risco 10%) e tetos nomeados limitam o resultado: regra dura do perfil → 2,0, dois requisitos centrais ausentes → 3,5, contradição cultural → 3,4, anúncio suspeito → 2,5. A confiança é derivada: alta só com as cinco dimensões sustentadas; baixa quando falta currículo, alvo ou duas dimensões. As faixas seguem o upstream: **≥4,5 aplicar agora; 4,0–4,4 vale aplicar; 3,5–3,9 hesitar; <3,5 não aplicar**. A linha ética de 4,0 é decisão declarada, não probabilidade.
+
+A legitimidade do anúncio é lida por treze sinais catalogados (idade, faixa larga, PJ, cobrança de candidato, jornada, requisito protegido, triagem automática…), devolve um tier — alta confiança, cautela ou suspeito — com nota 0–100 e **não altera a nota 1–5**. Cada sinal é observação sobre o texto, nunca acusação.
+
+O ATS tem duas etapas: lints de payload (empresa no cargo, parêntese no nome da empresa, duas faixas de data na mesma entrada, competências duplicadas) e um placar de **100 pontos com pesos fixos** sobre o HTML — 15 texto, 20 cabeçalhos, 15 e-mail no corpo, 20 coluna única, 10 imagem, 10 fonte, 5 UTF-8, 5 texto oculto — com nota A–F. Sem HTML, o placar é parcial e a letra não é emitida. Nada é reescrito.
+
+A carta só existe com três insumos: vaga, currículo com conquista verificável e pesquisa da empresa. Com eles, monta três ou quatro parágrafos citando só números que existem no currículo ou no perfil, e checa clichê, tamanho, marcador, número sem origem e nome da empresa. A entrevista transforma os seis requisitos principais em perguntas por tipo, cruza com um banco de histórias STAR e separa perguntas para a empresa dos sinais a esclarecer. O funil lê tabela, TSV ou CSV e calcula conversão, coortes e candidaturas paradas, declarando censura e amostra pequena.
+
+Nada do upstream é instalado ou executado: sem `npx @santifer/career-ops init`, plugins de CLI, os ~200 scripts Node, o dashboard Go, o runner de batch ou workflows. Consulte [`docs/CARREIRA.md`](docs/CARREIRA.md) e a licença MIT em [`docs/licenses/career-ops-hq-career-ops.txt`](docs/licenses/career-ops-hq-career-ops.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -199,12 +213,19 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `diagram.legend` | Compõe legenda e presets com contraste |
 | `diagram.delivery` | Roda os gates e para no primeiro erro |
 | `diagram.library` | Publica tipos, vocabulários e limites |
+| `carreira.triagem` | Nota 1–5 com bandas, evidência, tetos e legitimidade |
+| `carreira.ats` | Lints de payload e placar ATS de pesos fixos |
+| `carreira.bullets` | Audita abertura, métrica, voz e clichê de cada bullet |
+| `carreira.carta` | Rascunha carta só com conquista e número de origem |
+| `carreira.entrevista` | Converte requisitos em perguntas e cruza histórias STAR |
+| `carreira.funil` | Calcula conversão, coortes e candidaturas paradas |
+| `carreira.regras` | Publica bandas, dimensões, estados e pesos |
 | `system.status` | Versão e horário do ambiente, sem variáveis ou credenciais |
 | `legal.search` | Busca por tema nos textos do recorte jurídico |
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **65 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **72 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -235,6 +256,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Estúdio com contrato de design, contraste WCAG, crítica em cinco dimensões e linter anti-clichê;
 - página Direção com sorteio de direções, argumento, deck de copy, linter, tells datados e júri ponderado;
 - página Diagramas com tipo, IR validado, layout medido, desenho portátil, legenda e contrato de entrega;
+- página Carreira com triagem 1–5, ATS, bullets, carta, entrevista, funil e catálogo;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -249,7 +271,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, e provedor de IA com respostas simuladas. O estado desta versão tem **40 testes web e 261 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 312 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -273,6 +295,7 @@ src/                         # interface React e estado local
 ├── pages/AgencyPage.tsx     # equipe, quadro, orçamento, parada e permissões
 ├── pages/EstudioPage.tsx    # contrato, contraste, crítica e anti-clichê
 ├── pages/TastePage.tsx      # direção, argumento, copy, regras, tells e júri
+├── pages/CareerPage.tsx     # triagem, ATS, bullets, carta, entrevista, funil e catálogo
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -289,10 +312,11 @@ server/
 ├── taste.py                 # direções, argumento, júri e biblioteca
 ├── taste_rules.py           # copy, 29 regras lexicais e registro de tells
 ├── diagram.py               # IR, layout medido, SVG e contrato de entrega
+├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 58 skills
+├── skill_registry.py        # allowlist, Pydantic e 72 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -314,6 +338,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Engenharia enxuta é estática: a escada avalia só o que foi declarado, a revisão e a auditoria produzem candidatos que exigem confirmação no código real. Execução, carga, testes e chamadores fora da árvore não são verificados; o histórico do Git não é lido.
 - Estúdio de design é estático: não compila tokens, não lê o repositório do pacote, não renderiza o HTML nem publica artefato. O esquema de 56 slots é embutido, o parser de CSS cobre blocos simples e o linter é lexical, sujeito a falso positivo.
 - Diagramas são gerados a partir do que você declara: sem navegador, o piso de texto e o overflow são estimativas, e Mermaid/DOT são exportados como texto, não renderizados aqui.
+- Carreira é triagem declarada: não lê portais, LinkedIn, e-mail ou calendário, não envia candidatura e não altera o currículo. A nota vem só do texto colado; legitimidade é sinal, não acusação, e percentual do funil com menos de oito linhas é contagem, não tendência.
 - Direção de arte é estática e declarada: a ficha não é desenhada, o sorteio não vê imagens, a quebra de linha do título é estimada por caracteres e as notas do júri vêm de quem revisa. Toda varredura é lexical e pode ter falso positivo.
 - Governo de agentes é declarativo: não executa agentes, não lê runtime, banco, identidade ou fatura e não altera permissões. Orçamento não converte moeda nem incorpora retries; a projeção é linear. A impressão digital cobre a parada e as instruções, não arquivos ou anexos, e a varredura de instruções é lexical.
 - Rotinas agendadas dependem do aplicativo aberto; não há worker 24 horas.

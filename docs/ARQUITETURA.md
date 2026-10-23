@@ -97,6 +97,10 @@ Nenhum script Node, navegador, plugin, `npx skills`, `draw.mjs`, `inspect.mjs` o
 
 As rotas são `/api/skills/diagram.type`, `diagram.spec`, `diagram.layout`, `diagram.render`, `diagram.legend`, `diagram.delivery` e `diagram.library`. Nenhuma abre navegador, baixa template, executa CLI ou grava arquivo. A página `/diagramas` consome essas respostas e mostra a prévia do HTML em um `iframe` com `sandbox=""`. `docs/DIAGRAMAS.md` documenta o IR, os dez tipos e os limites.
 
+## Carreira
+
+`server/career.py` implementa sete operações determinísticas inspiradas em `career-ops-hq/career-ops` (MIT). O módulo lê a vaga como texto e como dado — nunca como instrução —, extrai requisitos com banda e nível de evidência, classifica empresa e faixa salarial sem adivinhar moeda ou período, e calcula a nota em cinco dimensões com tetos nomeados. A legitimidade do anúncio roda em paralelo, em treze sinais catalogados, e não altera a nota. O ATS tem lints de payload e placar de 100 pontos com pesos fixos; sem HTML, a letra não é emitida. A carta exige vaga, currículo e pesquisa, e só cita número que tenha origem no currículo ou no perfil. O plano de entrevista cruza requisitos com histórias STAR. O funil lê tabela, TSV ou CSV, normaliza dez estados e declara censura e amostra pequena. O módulo reaproveita `server/review.py` para achados, contagens, veredito e Markdown, e não chama IA nem grava arquivo.
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:

@@ -51,6 +51,15 @@ describe('roteador de comandos do JARVIS', () => {
     expect(parseCommand('exportar mermaid')).toEqual({ type: 'diagram:workspace' });
   });
 
+  it('abre a carreira sem enviar candidatura', () => {
+    expect(parseCommand('abrir carreira')).toEqual({ type: 'career:workspace' });
+    expect(parseCommand('triagem de vaga')).toEqual({ type: 'career:workspace' });
+    expect(parseCommand('checar ats')).toEqual({ type: 'career:workspace' });
+    expect(parseCommand('auditar bullets')).toEqual({ type: 'career:workspace' });
+    expect(parseCommand('carta de apresentação')).toEqual({ type: 'career:workspace' });
+    expect(parseCommand('funil de candidaturas')).toEqual({ type: 'career:workspace' });
+  });
+
   it('direciona análise de texto e status para as skills Python', () => {
     expect(parseCommand('analisar texto O núcleo executa ações')).toEqual({ type: 'python:analyze', text: 'O núcleo executa ações' });
     expect(parseCommand('python status').type).toBe('python:status');

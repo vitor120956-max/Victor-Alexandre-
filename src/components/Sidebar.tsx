@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Blocks,
   Brain,
+  Briefcase,
   CheckSquare2,
   FileText,
   Fingerprint,
@@ -38,11 +39,12 @@ const navigation = [
   { to: '/estudio', label: 'Estúdio', icon: SwatchBook },
   { to: '/direcao', label: 'Direção', icon: Palette },
   { to: '/diagramas', label: 'Diagramas', icon: Workflow },
+  { to: '/carreira', label: 'Carreira', icon: Briefcase },
   { to: '/skills', label: 'Skills', icon: Blocks },
 ];
 
 export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
-  const { tasks, focus } = useApp();
+  const { tasks, focus, backendVersion } = useApp();
   const pending = tasks.filter((task) => !task.completed).length;
   return (
     <>
@@ -73,7 +75,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <Settings size={19} strokeWidth={1.7} />
           <span>Configurações</span>
         </NavLink>
-        <div className="sidebar-version"><span>JARVIS OS</span><span>v.0.11.0</span></div>
+        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.13.0"}</span></div>
       </aside>
       {mobileOpen && <button className="sidebar-scrim" onClick={onClose} aria-label="Fechar menu" />}
     </>
