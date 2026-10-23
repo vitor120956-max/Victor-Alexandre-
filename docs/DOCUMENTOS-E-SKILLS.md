@@ -23,7 +23,7 @@ Não foram habilitados Composio, SaaS, downloads de vídeo, credenciais de terce
 | `changelog.generate` | Agrupa mensagens por prefixos e regras determinísticas | Sem gravar; sem acessar o Git |
 | `random.pick` | Sorteia participantes com `secrets.SystemRandom` | Sem gravar; sem IA |
 
-O catálogo completo tem **51 skills Python**: as 36 anteriores (incluindo os oito workflows de engenharia documentados em [`ENGENHARIA.md`](ENGENHARIA.md) e as seis de análise reversa em [`ENGENHARIA-REVERSA.md`](ENGENHARIA-REVERSA.md)), quatro de engenharia enxuta em [`LEAN.md`](LEAN.md), seis de governo de agentes em [`AGENTES.md`](AGENTES.md) e cinco de estúdio de design em [`ESTUDIO.md`](ESTUDIO.md). Todas continuam registradas manualmente na allowlist de `server/skill_registry.py`, com entrada validada por Pydantic. Não existe operação para executar shell, importar uma skill por nome ou carregar código arbitrário.
+O catálogo completo tem **58 skills Python**: as 36 anteriores (incluindo os oito workflows de engenharia documentados em [`ENGENHARIA.md`](ENGENHARIA.md) e as seis de análise reversa em [`ENGENHARIA-REVERSA.md`](ENGENHARIA-REVERSA.md)), quatro de engenharia enxuta em [`LEAN.md`](LEAN.md), seis de governo de agentes em [`AGENTES.md`](AGENTES.md), cinco de estúdio de design em [`ESTUDIO.md`](ESTUDIO.md) e sete de direção de arte em [`DIRECAO.md`](DIRECAO.md). Todas continuam registradas manualmente na allowlist de `server/skill_registry.py`, com entrada validada por Pydantic. Não existe operação para executar shell, importar uma skill por nome ou carregar código arbitrário.
 
 ## Página Documentos
 

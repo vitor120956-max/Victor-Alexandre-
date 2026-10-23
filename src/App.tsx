@@ -13,6 +13,7 @@ import { ReversePage } from './pages/ReversePage';
 import { LeanPage } from './pages/LeanPage';
 import { AgencyPage } from './pages/AgencyPage';
 import { EstudioPage } from './pages/EstudioPage';
+import { TastePage } from './pages/TastePage';
 import { SkillsPage } from './pages/SkillsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="lean" element={<LeanPage />} />
         <Route path="agencia" element={<AgencyPage />} />
         <Route path="estudio" element={<EstudioPage />} />
+        <Route path="direcao" element={<TastePage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

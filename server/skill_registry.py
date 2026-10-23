@@ -40,6 +40,14 @@ from .studio import (
     critique,
     design_reference,
 )
+from .taste import (
+    TasteError,
+    audit_argument,
+    deal_direction,
+    direction_reference,
+    judge_page,
+)
+from .taste_rules import audit_copy, audit_tells, lint_page
 from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 
@@ -431,6 +439,57 @@ class StudioCritiqueInput(BaseModel):
 class StudioArtifactInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     artifact: str = Field(title="HTML do artefato", min_length=20, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Arquivo único: HTML, CSS e JS no mesmo documento. Nada é renderizado ou executado."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteDirectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Briefing", min_length=3, max_length=4_000, json_schema_extra={"format": "textarea", "description": "O que só este sujeito tem: nome, lugar, material, número, rito. Nada genérico."})
+    sector: str = Field(default="", title="Setor", max_length=80, json_schema_extra={"description": "alimentacao, software, portfolio, evento, varejo, servico, cultura, saude, imovel ou hospitalidade."})
+    sections: str = Field(default="", title="Seções na ordem", max_length=2_000, json_schema_extra={"format": "textarea", "description": "Papéis separados por vírgula: sobre, recursos, prova, preco, faq, contato."})
+    tone: str = Field(default="", title="Tom", max_length=80, json_schema_extra={"description": "quieto, ousado, quente, tecnico, ludico, luxo ou editorial."})
+    have: str = Field(default="", title="Ativos que você tem", max_length=400, json_schema_extra={"description": "fotografia, produto, interface, ilustracao, video — separados por vírgula."})
+    keep: str = Field(default="", title="Peças da marca", max_length=400, json_schema_extra={"description": "paleta e/ou tipografia: o que a direção não pode trocar."})
+    seed: str = Field(default="", title="Semente", max_length=32, json_schema_extra={"description": "Opcional: repete o mesmo sorteio. Minúsculas, números e hífen."})
+    direction: str = Field(default="", title="Direção escolhida", max_length=40, json_schema_extra={"description": "Id de uma das três opções, para receber a ficha completa."})
+    redraws: str = Field(default="", title="Redesenhos", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Uma linha por troca: peça | motivo com 20 caracteres ou mais. Peças: hero, type, palette, photos, scenes, direction ou section:<papel>."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteArgumentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Sujeito", min_length=3, max_length=4_000, json_schema_extra={"format": "textarea", "description": "Uma linha sobre o que está sendo argumentado."})
+    claims: str = Field(title="Afirmações e provas", min_length=3, max_length=50_000, json_schema_extra={"format": "textarea", "description": "Uma linha por seção: papel | o que a seção afirma | o que prova."})
+    headline: str = Field(default="", title="Título", max_length=400, json_schema_extra={"description": "O título da primeira tela, em texto puro."})
+    support: str = Field(default="", title="Linha de apoio", max_length=800, json_schema_extra={"description": "A frase concreta abaixo do título: o que é, para quem, por quanto."})
+    action: str = Field(default="", title="Ação principal", max_length=200, json_schema_extra={"description": "O rótulo do botão primário."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteCopyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    deck: str = Field(title="Deck de copy", min_length=5, max_length=50_000, json_schema_extra={"format": "textarea", "description": "Uma linha por peça: papel | texto. Papéis: manchete, apoio, corpo, acao, nav, legenda, statement, rotulo, eyebrow."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteLintInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(title="HTML ou CSS", min_length=20, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Página ou tela declarada. O que estiver em pre, code, tabelas, formulários e data-ui fica isento."})
+    surface: Literal["page", "app"] = Field(default="page", title="Superfície", json_schema_extra={"description": "page compara com landing page; app desliga fio, mono, numeração e fonte padrão."})
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteTellsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(title="Material", min_length=10, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Copy ou fonte da página, para confrontar com o registro datado de tells."})
+    kind: Literal["todos", "texto", "visual", "codigo"] = Field(default="todos", title="Tipo")
+    mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class TasteJudgeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scores: str = Field(title="Notas por dimensão", min_length=10, max_length=50_000, json_schema_extra={"format": "textarea", "description": "Uma linha por dimensão: design|usabilidade|criatividade|conteudo | nota 0–10 | evidência com referência."})
+    signals: str = Field(default="", title="Sinais de teto", max_length=20_000, json_schema_extra={"format": "textarea", "description": "Uma linha por sinal: sinal | sim/não. Ex.: manchete-longa | sim."})
     mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -976,6 +1035,58 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def studio_defaults_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return design_reference()
 
+    def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteDirectionInput)
+        try:
+            return deal_direction(
+                brief=data.brief, sector=data.sector, sections=data.sections, tone=data.tone,
+                have=data.have, keep=data.keep, seed=data.seed, direction=data.direction,
+                redraws=data.redraws, mode=data.mode,
+            )
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_argument_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteArgumentInput)
+        try:
+            return audit_argument(
+                brief=data.brief, claims=data.claims, headline=data.headline,
+                support=data.support, action=data.action, mode=data.mode,
+            )
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_copy_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteCopyInput)
+        try:
+            return audit_copy(deck=data.deck, mode=data.mode)
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_lint_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteLintInput)
+        try:
+            return lint_page(source=data.source, surface=data.surface, mode=data.mode)
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_tells_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteTellsInput)
+        try:
+            return audit_tells(text=data.text, kind=data.kind, mode=data.mode)
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_judge_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, TasteJudgeInput)
+        try:
+            return judge_page(scores=data.scores, signals=data.signals, mode=data.mode)
+        except TasteError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def taste_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return direction_reference()
+
     definitions = [
         SkillDefinition("text.analyze", "Analisar texto", "Conta palavras, caracteres, frases, tempo de leitura e termos frequentes.", "Texto", TextAnalyzeInput, analyze_text),
         SkillDefinition("text.transform", "Transformar texto", "Converte maiúsculas, minúsculas, formato de título ou slug para URLs.", "Texto", TextTransformInput, transform_text),
@@ -1028,6 +1139,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("studio.critique", "Estruturar crítica de design", "Valida cinco notas de 0 a 10 com evidência, bandas nomeadas e as listas manter, corrigir e ganhos rápidos.", "Estúdio de design", StudioCritiqueInput, studio_critique_handler, timeout_seconds=10),
         SkillDefinition("studio.artifact", "Revisar artefato HTML", "Varre um HTML de arquivo único e aponta gradiente roxo, ícone de emoji, métrica inventada, acessibilidade e dependência externa.", "Estúdio de design", StudioArtifactInput, studio_artifact_handler, timeout_seconds=15),
         SkillDefinition("studio.defaults", "Referência de tokens e bandas", "Mostra o esquema de 56 tokens, as diretrizes de movimento e as bandas da crítica usados pelas revisões.", "Estúdio de design", EmptyInput, studio_defaults_handler, timeout_seconds=5),
+        SkillDefinition("taste.direction", "Sortear direção de arte", "Sorteia três direções determinísticas por setor, tom e ativos e entrega a ficha da escolhida com seções, paleta, tipo, armadilhas e redesenhos justificados.", "Direção de arte", TasteDirectionInput, taste_direction_handler, timeout_seconds=15),
+        SkillDefinition("taste.argument", "Auditar o argumento", "Confere afirmações e provas seção a seção, o orçamento do título, a ação principal e o vocabulário de catálogo.", "Direção de arte", TasteArgumentInput, taste_argument_handler, timeout_seconds=10),
+        SkillDefinition("taste.copy", "Auditar deck de copy", "Mede título, apoio, corpo, ações e navegação, e aponta formas proibidas, micro-tipografia e texto de exemplo.", "Direção de arte", TasteCopyInput, taste_copy_handler, timeout_seconds=10),
+        SkillDefinition("taste.lint", "Varrer regras caseiras", "Aplica 29 regras lexicais de gosto a HTML ou CSS, com isenções para código, tabelas, formulários e data-ui, em modo página ou app.", "Direção de arte", TasteLintInput, taste_lint_handler, timeout_seconds=15),
+        SkillDefinition("taste.tells", "Confrontar com o registro de tells", "Reconhece motivos datados em três ondas (2023, 2024–2025, 2026) e devolve a onda dominante, a contramedida e o registro completo.", "Direção de arte", TasteTellsInput, taste_tells_handler, timeout_seconds=15),
+        SkillDefinition("taste.judge", "Calcular júri ponderado", "Pondera design 40, usabilidade 30, criatividade 20 e conteúdo 10, aplica os tetos declarados e devolve a banda, a perda e a ordem de correção.", "Direção de arte", TasteJudgeInput, taste_judge_handler, timeout_seconds=10),
+        SkillDefinition("taste.library", "Biblioteca de direção", "Mostra direções, setores, tons, papéis de seção, dimensões do júri, tetos e ondas de tells usados pelas skills.", "Direção de arte", EmptyInput, taste_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)
 

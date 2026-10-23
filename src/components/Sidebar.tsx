@@ -6,6 +6,7 @@ import {
   FileText,
   Fingerprint,
   Leaf,
+  Palette,
   ShieldCheck,
   SwatchBook,
   LayoutDashboard,
@@ -35,6 +36,7 @@ const navigation = [
   { to: '/lean', label: 'Enxuto', icon: Leaf },
   { to: '/agencia', label: 'Agentes', icon: ShieldCheck },
   { to: '/estudio', label: 'Estúdio', icon: SwatchBook },
+  { to: '/direcao', label: 'Direção', icon: Palette },
   { to: '/skills', label: 'Skills', icon: Blocks },
 ];
 
@@ -70,7 +72,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <Settings size={19} strokeWidth={1.7} />
           <span>Configurações</span>
         </NavLink>
-        <div className="sidebar-version"><span>JARVIS OS</span><span>v.0.10.0</span></div>
+        <div className="sidebar-version"><span>JARVIS OS</span><span>v.0.11.0</span></div>
       </aside>
       {mobileOpen && <button className="sidebar-scrim" onClick={onClose} aria-label="Fechar menu" />}
     </>

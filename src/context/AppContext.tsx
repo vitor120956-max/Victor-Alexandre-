@@ -523,6 +523,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? 'Abra a página Estúdio para revisar um pacote de design: manifesto, DESIGN.md e tokens.css, contraste WCAG, crítica em cinco dimensões e o linter anti-clichê do HTML. Nada é compilado, renderizado ou publicado, e nenhum daemon ou plugin do upstream é instalado.'
           : 'O estúdio de design precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
         break;
+      case 'taste:workspace':
+        reply = backendOnline
+          ? 'Abra a página Direção para sortear três direções, auditar o argumento e o deck de copy, varrer as regras caseiras, confrontar o registro datado de tells e fechar a nota com tetos. Tudo é estático: nenhum script Node, navegador ou plugin do upstream é executado.'
+          : 'A direção de arte precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+        break;
       case 'greeting':
         reply = `Olá, ${preferences.name}. Estou por aqui. Você pode me pedir uma tarefa, uma anotação, um cálculo ou dizer “ajuda”.`;
         break;

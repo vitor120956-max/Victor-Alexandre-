@@ -35,6 +35,14 @@ describe('roteador de comandos do JARVIS', () => {
     expect(parseCommand('criticar design')).toEqual({ type: 'studio:workspace' });
   });
 
+  it('abre a direção de arte sem executar o upstream', () => {
+    expect(parseCommand('abrir direção')).toEqual({ type: 'taste:workspace' });
+    expect(parseCommand('direção de arte')).toEqual({ type: 'taste:workspace' });
+    expect(parseCommand('revisar copy')).toEqual({ type: 'taste:workspace' });
+    expect(parseCommand('registro de tells')).toEqual({ type: 'taste:workspace' });
+    expect(parseCommand('júri de design')).toEqual({ type: 'taste:workspace' });
+  });
+
   it('direciona análise de texto e status para as skills Python', () => {
     expect(parseCommand('analisar texto O núcleo executa ações')).toEqual({ type: 'python:analyze', text: 'O núcleo executa ações' });
     expect(parseCommand('python status').type).toBe('python:status');

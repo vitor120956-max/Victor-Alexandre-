@@ -85,6 +85,12 @@ A revisão estática não inclui os valores de possíveis segredos no relatório
 
 Nenhum daemon, CLI, plugin, MCP, runtime de agente ou provedor do upstream é instalado ou executado. O HTML não é renderizado e o CSS não é compilado. Todos os resultados são somente leitura e marcam `executed: false`. Detalhes e limites estão em [`ESTUDIO.md`](ESTUDIO.md).
 
+## Direção de arte
+
+`server/taste.py` e `server/taste_rules.py` implementam sete operações determinísticas inspiradas em `Leonxlnx/taste-skill` (MIT). O sorteio de direções usa SHA-256 do briefing, setor, tom e seções; o argumento exige prova por seção; o deck de copy e o linter aplicam limites e regras lexicais; o registro de tells é datado em três ondas; o júri pondera quatro dimensões e aplica 16 tetos. Os dois módulos reaproveitam `server/review.py` para achados, contagens, veredito e Markdown.
+
+Nenhum script Node, navegador, plugin, `npx skills`, `draw.mjs`, `inspect.mjs` ou `scenes.mjs` do upstream é instalado ou executado. Nada é renderizado, compilado ou publicado, e todos os resultados marcam `executed: false`. Detalhes e limites estão em [`DIRECAO.md`](DIRECAO.md).
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:

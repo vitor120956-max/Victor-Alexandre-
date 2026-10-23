@@ -11,6 +11,7 @@ import {
   Leaf,
   LayoutDashboard,
   ListChecks,
+  Palette,
   MessageSquareText,
   ShieldCheck,
   Scale,
@@ -58,6 +59,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     { id: 'lean', label: 'Abrir engenharia enxuta', group: 'Navegação', icon: Leaf, keywords: 'lean ponytail escada diff divida atalho auditoria enxuto', run: () => navigate('/lean') },
     { id: 'agency', label: 'Abrir governo de agentes', group: 'Navegação', icon: ShieldCheck, keywords: 'agentes equipe orcamento watchdog hierarquia permissao paperclip governanca heartbeat', run: () => navigate('/agencia') },
     { id: 'studio', label: 'Abrir estúdio de design', group: 'Navegação', icon: SwatchBook, keywords: 'design sistema tokens contraste wcag critica artefato clichê open-design studio', run: () => navigate('/estudio') },
+    { id: 'taste', label: 'Abrir direção de arte', group: 'Navegação', icon: Palette, keywords: 'direção arte gosto taste slop tells copy linter júri manchete argumento', run: () => navigate('/direcao') },
     { id: 'skills', label: 'Explorar skills', group: 'Navegação', icon: Blocks, keywords: 'ferramentas modulos', run: () => navigate('/skills') },
   ], [exportBackup, navigate, openTaskModal, runAutomation, startFocus]);
 

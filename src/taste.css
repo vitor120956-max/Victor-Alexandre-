@@ -1,0 +1,191 @@
+/* Direção de arte: sorteio, argumento, copy, linter, tells e júri. */
+.taste-page { min-width: 0; }
+.taste-intro { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; padding: 18px 20px; }
+.taste-intro-icon { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid rgba(var(--accent-rgb), .16); border-radius: 12px; background: rgba(var(--accent-rgb), .04); color: var(--accent); }
+.taste-intro > div { min-width: 0; flex: 1 1 300px; }
+.taste-intro .eyebrow { margin-bottom: 4px; font-size: 7px; }
+.taste-intro h2 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.taste-intro p { max-width: 760px; margin-top: 6px; color: var(--muted); font-size: 9px; line-height: 1.65; }
+.taste-laws { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: 100%; margin: 4px 0 0; padding: 0; list-style: none; }
+.taste-laws li { min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.taste-laws strong { display: block; color: var(--text-soft); font-size: 8.2px; font-weight: 560; }
+.taste-laws span { display: block; margin-top: 3px; color: var(--muted); font-size: 7.2px; line-height: 1.55; }
+
+.taste-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.taste-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.012); color: var(--muted); text-align: left; transition: border-color 150ms, color 150ms, background 150ms; }
+.taste-tabs button:hover { border-color: var(--line-strong); color: var(--text-soft); }
+.taste-tabs button.is-active { border-color: rgba(var(--accent-rgb), .32); background: rgba(var(--accent-rgb), .045); color: var(--accent); }
+.taste-tabs button > span { display: flex; flex-direction: column; gap: 2px; font-size: 8.5px; font-weight: 560; }
+.taste-tabs button small { color: var(--muted-2); font-family: var(--mono); font-size: 6px; font-weight: 400; }
+.taste-tabs button.is-active small { color: var(--accent-soft); }
+
+.taste-layout { display: grid; grid-template-columns: minmax(0, .94fr) minmax(320px, 1.06fr); align-items: start; gap: 18px; }
+.taste-form, .taste-result { min-width: 0; padding: 18px; }
+.taste-form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.taste-form-head .eyebrow { margin-bottom: 4px; font-size: 6.5px; }
+.taste-form-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+.taste-level { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.taste-level > span { color: var(--muted-2); font-family: var(--mono); font-size: 6px; letter-spacing: .07em; }
+.taste-level select { padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: #101512; color: var(--text-soft); font-size: 8px; }
+.taste-level-note { margin-bottom: 14px; color: var(--muted-2); font-size: 7.5px; line-height: 1.5; }
+.taste-form .field textarea { min-height: 70px; }
+.taste-form .field textarea.taste-mono { font-family: var(--mono); font-size: 7.2px; line-height: 1.7; }
+.taste-form .field textarea.taste-short { min-height: 56px; }
+.taste-form .button-primary { min-width: 176px; justify-content: center; }
+.taste-form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.taste-form-actions .button-primary { margin-left: auto; }
+.taste-sample { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px dashed var(--line-strong); border-radius: 6px; color: var(--muted); font-size: 7.4px; }
+.taste-sample:hover { border-color: rgba(var(--accent-rgb), .34); color: var(--accent); }
+.taste-note { color: var(--muted); font-size: 7.6px; line-height: 1.6; }
+.taste-note code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.8px; }
+.taste-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.taste-error { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px; padding: 9px 11px; border: 1px solid rgba(255,140,126,.28); border-radius: 7px; background: rgba(255,140,126,.04); color: var(--danger); font-size: 8px; line-height: 1.55; }
+.taste-error svg { flex: 0 0 auto; margin-top: 1px; }
+.taste-form-static { display: flex; flex-direction: column; gap: 12px; }
+
+.taste-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.taste-chip { padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-family: var(--mono); font-size: 6.4px; letter-spacing: .02em; }
+.taste-chip.is-on { border-color: rgba(var(--accent-rgb), .4); background: rgba(var(--accent-rgb), .07); color: var(--accent); }
+.taste-chip.is-wave { border-radius: 5px; }
+.taste-chip.is-wave-1 { border-color: rgba(160,170,165,.24); }
+.taste-chip.is-wave-2 { border-color: rgba(230,187,112,.26); color: var(--warning); }
+.taste-chip.is-wave-3 { border-color: rgba(255,140,126,.28); color: var(--danger); }
+.taste-chip small { margin-left: 4px; color: var(--muted-2); font-size: 5.6px; }
+
+.taste-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.taste-result-head .eyebrow { margin-bottom: 4px; font-size: 6.5px; }
+.taste-result-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+.taste-result-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.taste-readonly { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-family: var(--mono); font-size: 6px; letter-spacing: .05em; text-transform: uppercase; }
+.taste-copy { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 6.8px; }
+.taste-copy:hover { border-color: rgba(var(--accent-rgb), .3); color: var(--accent); }
+.taste-placeholder { display: flex; flex-direction: column; gap: 7px; padding: 24px 4px 8px; }
+.taste-placeholder > span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); }
+.taste-placeholder strong { color: var(--text-soft); font-size: 9.5px; font-weight: 570; }
+.taste-placeholder p { color: var(--muted); font-size: 7.8px; line-height: 1.6; }
+.taste-placeholder ul { display: flex; flex-direction: column; gap: 4px; padding-left: 14px; list-style: disc; }
+.taste-placeholder li { color: var(--muted-2); font-size: 7.2px; line-height: 1.5; }
+
+.taste-view { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.taste-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.taste-metrics article { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.012); }
+.taste-metrics span { display: block; color: var(--muted-2); font-family: var(--mono); font-size: 5.6px; letter-spacing: .06em; }
+.taste-metrics strong { display: block; margin-top: 5px; color: var(--text-soft); font-size: 12px; font-weight: 560; overflow-wrap: anywhere; }
+.taste-metrics article.is-ok strong { color: var(--accent); }
+.taste-metrics article.is-warning strong { color: var(--warning); }
+.taste-metrics article.is-danger strong { color: var(--danger); }
+.taste-verdict { display: flex; align-items: baseline; gap: 6px; padding: 8px 10px; border: 1px solid rgba(var(--accent-rgb), .24); border-radius: 6px; color: var(--accent-soft); font-family: var(--mono); font-size: 7px; line-height: 1.55; }
+.taste-verdict svg { flex: 0 0 auto; align-self: center; }
+
+.taste-scroll { max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; scrollbar-width: thin; }
+.taste-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 6.8px; }
+.taste-table th { position: sticky; top: 0; padding: 6px 8px; border-bottom: 1px solid var(--line-strong); background: var(--surface); color: var(--muted-2); font-weight: 500; letter-spacing: .05em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.taste-table td { max-width: 230px; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--muted); vertical-align: middle; overflow-wrap: anywhere; }
+.taste-table tr:last-child td { border-bottom: 0; }
+.taste-table code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.4px; }
+.taste-table strong { color: var(--text-soft); font-weight: 560; }
+.taste-state { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; font-size: 5.8px; text-transform: uppercase; white-space: nowrap; }
+.taste-state.is-ok { border-color: rgba(var(--accent-rgb), .34); color: var(--accent); }
+.taste-state.is-warning { border-color: rgba(230,187,112,.3); color: var(--warning); }
+.taste-state.is-danger { border-color: rgba(255,140,126,.3); color: var(--danger); }
+
+.taste-options { display: flex; flex-direction: column; gap: 8px; }
+.taste-option { padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.012); }
+.taste-option.is-selected { border-color: rgba(var(--accent-rgb), .38); background: rgba(var(--accent-rgb), .04); }
+.taste-option header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.taste-option header strong { color: var(--text-soft); font-size: 10px; font-weight: 570; }
+.taste-option header code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.2px; }
+.taste-option header button { margin-left: auto; padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--muted); font-family: var(--mono); font-size: 6px; text-transform: uppercase; }
+.taste-option header button:hover { border-color: rgba(var(--accent-rgb), .34); color: var(--accent); }
+.taste-option p { margin-top: 5px; color: var(--muted); font-size: 7.6px; line-height: 1.6; }
+.taste-option ul { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding-left: 12px; list-style: disc; }
+.taste-option li { color: var(--muted-2); font-size: 7px; line-height: 1.5; }
+.taste-option li.is-tension { color: var(--warning); }
+
+.taste-sheet { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid rgba(var(--accent-rgb), .22); border-radius: 8px; }
+.taste-sheet h3 { color: var(--text-soft); font-size: 11px; font-weight: 570; }
+.taste-sheet h3 code { margin-left: 6px; color: var(--muted-2); font-family: var(--mono); font-size: 6px; }
+.taste-sheet-idea { padding: 8px 10px; border-left: 2px solid rgba(var(--accent-rgb), .5); color: var(--accent-soft); font-size: 7.8px; line-height: 1.6; }
+.taste-sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.taste-sheet-grid section { min-width: 0; padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px; }
+.taste-sheet-grid h4 { color: var(--muted-2); font-family: var(--mono); font-size: 5.8px; letter-spacing: .06em; text-transform: uppercase; }
+.taste-sheet-grid p { margin-top: 4px; color: var(--muted); font-size: 7.2px; line-height: 1.55; }
+.taste-palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.taste-palette span { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-family: var(--mono); font-size: 6px; }
+.taste-traps { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 13px; list-style: disc; }
+.taste-traps li { color: var(--muted); font-size: 7.2px; line-height: 1.5; }
+
+.taste-note-card { padding: 12px 13px; border: 1px solid var(--line); border-radius: 8px; }
+.taste-note-card h4 { color: var(--muted-2); font-family: var(--mono); font-size: 6px; letter-spacing: .06em; text-transform: uppercase; }
+.taste-note-card p { margin-top: 5px; color: var(--muted); font-size: 7.6px; line-height: 1.6; }
+.taste-score { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid rgba(var(--accent-rgb), .24); border-radius: 8px; background: rgba(var(--accent-rgb), .03); }
+.taste-score strong { color: var(--accent); font-family: var(--mono); font-size: 30px; font-weight: 500; letter-spacing: -.04em; line-height: 1; }
+.taste-score div { min-width: 0; }
+.taste-score span { display: block; color: var(--text-soft); font-size: 9px; font-weight: 570; }
+.taste-score small { display: block; margin-top: 3px; color: var(--muted); font-size: 7.2px; line-height: 1.5; }
+.taste-score em { display: block; margin-top: 5px; color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-style: normal; }
+.taste-weights { display: flex; flex-direction: column; gap: 6px; }
+.taste-weight > div:first-child { display: flex; align-items: baseline; gap: 6px; }
+.taste-weight span { flex: 1 1 auto; color: var(--text-soft); font-size: 8px; font-weight: 560; }
+.taste-weight strong { color: var(--text-soft); font-family: var(--mono); font-size: 7.4px; }
+.taste-weight em { color: var(--muted-2); font-family: var(--mono); font-size: 6px; font-style: normal; text-transform: uppercase; }
+.taste-track { height: 4px; margin-top: 3px; border-radius: 999px; background: rgba(255,255,255,.05); overflow: hidden; }
+.taste-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(var(--accent-rgb), .45), rgba(var(--accent-rgb), .9)); }
+.taste-order { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; counter-reset: taste-order; }
+.taste-order li { display: flex; align-items: baseline; gap: 7px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 7.2px; line-height: 1.5; }
+.taste-order li.is-active { border-color: rgba(230,187,112,.28); color: var(--text-soft); }
+.taste-order li > span { flex: 0 0 auto; color: var(--muted-2); font-family: var(--mono); font-size: 6px; }
+.taste-order li.is-active > span { color: var(--warning); }
+
+.taste-wave { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.taste-wave section { min-width: 0; padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px; }
+.taste-wave header { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; }
+.taste-wave header strong { color: var(--text-soft); font-size: 7.4px; font-weight: 560; }
+.taste-wave header span { color: var(--accent); font-family: var(--mono); font-size: 8px; }
+.taste-wave p { margin-top: 4px; color: var(--muted-2); font-size: 6.6px; line-height: 1.45; }
+.taste-wave ul { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; padding: 0; list-style: none; }
+.taste-wave li { color: var(--muted); font-size: 6.4px; }
+.taste-wave li.is-found { color: var(--warning); }
+
+.taste-findings { display: flex; flex-direction: column; gap: 8px; }
+.taste-finding { padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.01); }
+.taste-finding.is-must { border-color: rgba(255,140,126,.24); background: rgba(255,140,126,.025); }
+.taste-finding.is-should { border-color: rgba(230,187,112,.2); }
+.taste-finding header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+.taste-finding header strong { flex: 1 1 180px; color: var(--text-soft); font-size: 8.6px; font-weight: 570; }
+.taste-finding header code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.4px; overflow-wrap: anywhere; }
+.taste-group { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted-2); font-family: var(--mono); font-size: 5.6px; text-transform: uppercase; }
+.taste-finding.is-must .taste-group { border-color: rgba(255,140,126,.32); color: var(--danger); }
+.taste-finding.is-should .taste-group { border-color: rgba(230,187,112,.3); color: var(--warning); }
+.taste-finding dl { display: grid; gap: 4px; }
+.taste-finding dl > div { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 6px; }
+.taste-finding dt { color: var(--muted-2); font-family: var(--mono); font-size: 5.8px; letter-spacing: .04em; text-transform: uppercase; }
+.taste-finding dd { margin: 0; color: var(--muted); font-size: 7.6px; line-height: 1.55; overflow-wrap: anywhere; }
+.taste-limitations { margin-top: 14px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.01); }
+.taste-limitations strong { color: var(--muted-2); font-family: var(--mono); font-size: 5.8px; letter-spacing: .07em; }
+.taste-limitations ul { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding-left: 12px; list-style: disc; }
+.taste-limitations li { color: var(--muted); font-size: 7.2px; line-height: 1.5; }
+.taste-json { margin-top: 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0,0,0,.1); }
+.taste-json > summary { padding: 8px 10px; color: var(--muted); font-family: var(--mono); font-size: 6.6px; cursor: pointer; }
+.taste-json pre { max-height: 320px; overflow: auto; margin: 0; padding: 9px 11px; border-top: 1px solid var(--line); color: #c6d0c9; font-family: var(--mono); font-size: 6.8px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-width: thin; }
+.taste-empty { display: flex; align-items: center; gap: 6px; padding: 12px; border: 1px dashed var(--line); border-radius: 7px; color: var(--muted-2); font-size: 7.6px; line-height: 1.6; }
+.taste-spin { animation: taste-rotate 900ms linear infinite; }
+@keyframes taste-rotate { to { transform: rotate(360deg); } }
+
+@media (max-width: 1100px) {
+  .taste-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .taste-metrics { grid-template-columns: 1fr 1fr; }
+  .taste-laws { grid-template-columns: 1fr; }
+  .taste-form-head { flex-direction: column; }
+  .taste-level { width: 100%; }
+  .taste-level select { width: 100%; }
+  .taste-split { grid-template-columns: 1fr; }
+  .taste-form .button-primary { width: 100%; }
+  .taste-form-actions { flex-direction: column-reverse; align-items: stretch; }
+  .taste-form-actions .button-primary { margin-left: 0; }
+  .taste-tabs button { flex: 1 1 calc(50% - 6px); }
+  .taste-sheet-grid, .taste-wave { grid-template-columns: 1fr; }
+  .taste-finding dl > div { grid-template-columns: 1fr; gap: 1px; }
+}

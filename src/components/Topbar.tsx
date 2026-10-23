@@ -18,6 +18,7 @@ const pageNames: Record<string, string> = {
   '/lean': 'Enxuto',
   '/agencia': 'Agentes',
   '/estudio': 'Estúdio',
+  '/direcao': 'Direção',
   '/skills': 'Skills',
   '/configuracoes': 'Configurações',
 };
