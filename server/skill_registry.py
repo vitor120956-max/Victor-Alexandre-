@@ -60,6 +60,16 @@ from .career import (
     read_funnel,
     triage_job,
 )
+from .navegador import (
+    NavegadorError,
+    checar_limites,
+    checar_plano,
+    ler_recibos,
+    montar_roteiro,
+    navegador_catalog,
+    resolver_alvo,
+    read_snapshot as ler_snapshot,
+)
 from .taste import (
     TasteError,
     audit_argument,
@@ -566,6 +576,51 @@ class CareerFunnelInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     aplicacoes: str = Field(title="Candidaturas", min_length=20, max_length=60_000, json_schema_extra={"format": "textarea", "description": "Tabela, TSV ou CSV com Data | Empresa | Cargo | Status | Nota. Uma linha por candidatura."})
     janela: int = Field(default=90, ge=0, le=3_650, title="Janela em dias", json_schema_extra={"description": "0 usa todas as linhas; 90 é o padrão."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorSnapshotInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot: str = Field(title="Snapshot", min_length=10, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Árvore copiada de page.snapshot(): `root`, depois `papel \"nome\" [ref=N, loc=...]`, dois espaços por nível."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorAlvoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot: str = Field(title="Snapshot", min_length=10, max_length=200_000, json_schema_extra={"format": "textarea", "description": "A árvore onde o alvo será resolvido."})
+    alvo: str = Field(title="Alvo", min_length=1, max_length=400, json_schema_extra={"description": "`@21`, `text=\"Salvar\"`, `loc=role:button[name=\"Entrar\"]`, `loc=css:#email`, `loc=href:...` ou CSS."})
+    acao: str = Field(default="clicar", max_length=40, title="Ação", json_schema_extra={"description": "clicar, preencher, selecionar, focar, teclar, enviar-arquivo, esperar, pairar…"})
+    valor: str = Field(default="", max_length=400, title="Valor", json_schema_extra={"description": "Texto do campo ou opção; vazio vira `<valor>` no comando."})
+    rotulo: str = Field(default="", max_length=120, title="Rótulo do cursor", json_schema_extra={"description": "Só para click, dblclick, hover, dragAndDrop e mouse.*: 3 a 6 palavras."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorRoteiroInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    objetivo: str = Field(title="Objetivo", min_length=4, max_length=2_000, json_schema_extra={"format": "textarea", "description": "O que deve estar verdadeiro no fim da tarefa, em uma frase."})
+    url: str = Field(default="", title="URL de partida", max_length=2_000, json_schema_extra={"description": "http:// ou https://. A space nova começa em branco."})
+    snapshot: str = Field(default="", title="Snapshot atual", max_length=200_000, json_schema_extra={"format": "textarea", "description": "Sem ele, a rodada de ação só localiza o alvo."})
+    orcamento: int = Field(default=4, ge=2, le=8, title="Rodadas", json_schema_extra={"description": "Entre 2 e 8; o roteiro usa 3 quando há ação e verificação."})
+    dia: str = Field(default="", max_length=20, title="Data do nome", json_schema_extra={"description": "Opcional: sufixo YYYYMMDD do nome da space. Vazio usa 20261023."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorChecagemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(default="", max_length=40_000, title="Plano em JavaScript", json_schema_extra={"format": "textarea", "description": "Código que o agente pretende rodar no ego-browser. Opcional se houver passos."})
+    passos: str = Field(default="", max_length=40_000, title="Passos", json_schema_extra={"format": "textarea", "description": "Uma linha por passo: `ação | alvo | estado`. Estados: oculto, desabilitado, coberto, ambíguo…"})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorRecibosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    log: str = Field(title="Log de execução", min_length=5, max_length=40_000, json_schema_extra={"format": "textarea", "description": "Uma linha por passo: ação, alvo, resultado e efeitos (`popup=`, `dialogo=`, `baixei=`, `salvei=`)."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class NavegadorLimitesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acoes: str = Field(title="Ações pretendidas", min_length=3, max_length=40_000, json_schema_extra={"format": "textarea", "description": "Uma por linha. A classificação é léxica: bloqueado, confirmar ou liberado."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -1297,6 +1352,52 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def career_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return career_catalog()
 
+    def navegador_snapshot_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorSnapshotInput)
+        try:
+            return ler_snapshot(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_alvo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorAlvoInput)
+        try:
+            return resolver_alvo(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_roteiro_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorRoteiroInput)
+        try:
+            return montar_roteiro(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_checagem_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorChecagemInput)
+        try:
+            return checar_plano(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_recibos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorRecibosInput)
+        try:
+            return ler_recibos(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_limites_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorLimitesInput)
+        try:
+            return checar_limites(data.model_dump())
+        except NavegadorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def navegador_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return navegador_catalog()
+
+
     definitions = [
         SkillDefinition("text.analyze", "Analisar texto", "Conta palavras, caracteres, frases, tempo de leitura e termos frequentes.", "Texto", TextAnalyzeInput, analyze_text),
         SkillDefinition("text.transform", "Transformar texto", "Converte maiúsculas, minúsculas, formato de título ou slug para URLs.", "Texto", TextTransformInput, transform_text),
@@ -1370,6 +1471,14 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("carreira.entrevista", "Planejar entrevista", "Transforma os requisitos em perguntas por tipo, cruza com o banco de histórias STAR, aponta lacunas e separa perguntas para a empresa de sinais a esclarecer.", "Carreira", CareerInterviewInput, career_interview_handler, timeout_seconds=15),
         SkillDefinition("carreira.funil", "Ler o funil de candidaturas", "Lê tabela, TSV ou CSV e calcula conversão, coortes mensais, candidaturas paradas e status ilegíveis, com os limites da amostra declarados.", "Carreira", CareerFunnelInput, career_funnel_handler, timeout_seconds=10),
         SkillDefinition("carreira.regras", "Regras da triagem", "Mostra bandas, dimensões, níveis de evidência, faixas de nota, estados do funil, pesos do ATS, tipos de empresa e sinais usados pelas skills.", "Carreira", EmptyInput, career_library_handler, timeout_seconds=5),
+
+        SkillDefinition("navegador.snapshot", "Ler o snapshot da página", "Converte a árvore de acessibilidade em índice de nós, refs, locators e frames, e aponta o que impede agir: ref repetida, alvo sem ref, locator instável e iframe sem referência.", "Navegador", NavegadorSnapshotInput, navegador_snapshot_handler, timeout_seconds=10),
+        SkillDefinition("navegador.alvo", "Resolver alvo", "Resolve @ref, texto, papel + nome, CSS e href contra o snapshot, aplica a regra do documento principal antes dos frames e monta o comando da ação sem adivinhar.", "Navegador", NavegadorAlvoInput, navegador_alvo_handler, timeout_seconds=10),
+        SkillDefinition("navegador.roteiro", "Montar roteiro de rodadas", "Transforma objetivo, URL e snapshot em três rodadas com código, alvos resolvidos, verificação observável, orçamento e ponto de confirmação humana.", "Navegador", NavegadorRoteiroInput, navegador_roteiro_handler, timeout_seconds=15),
+        SkillDefinition("navegador.checagem", "Checar plano e actionability", "Varre o JavaScript em busca de 15 padrões que quebram a rodada e classifica os passos por estado do alvo: oculto, desabilitado, coberto, ambíguo, destacado.", "Navegador", NavegadorChecagemInput, navegador_checagem_handler, timeout_seconds=10),
+        SkillDefinition("navegador.recibos", "Ler recibos e fechamento", "Normaliza o log em recibos, separa despacho de verificação e cobra popup, diálogo, download salvo, keep enxuto e finish único no fim.", "Navegador", NavegadorRecibosInput, navegador_recibos_handler, timeout_seconds=10),
+        SkillDefinition("navegador.limites", "Classificar limites e consentimento", "Marca cada ação pretendida como bloqueada, para confirmar ou liberada, com motivo e o handoff que devolve o controle ao usuário.", "Navegador", NavegadorLimitesInput, navegador_limites_handler, timeout_seconds=10),
+        SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)
 

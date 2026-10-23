@@ -58,6 +58,7 @@ export type Intent =
   | { type: 'taste:workspace' }
   | { type: 'diagram:workspace' }
   | { type: 'career:workspace' }
+  | { type: 'browser:workspace' }
   | { type: 'meeting:analyze'; transcript: string }
   | { type: 'changelog:generate'; commits: string; version: string }
   | { type: 'random:pick'; entries: string; count: number }
@@ -240,6 +241,9 @@ export function parseCommand(rawInput: string): Intent {
   }
   if (/^(?:abrir (?:carreira|triagem de vaga)|carreira|triagem de vaga|triar vaga|avaliar vaga|revisar curr[íi]culo|checar ats|auditar bullets|carta de apresenta[çc][ãa]o|plano de entrevista|funil de candidaturas)$/.test(text)) {
     return { type: 'career:workspace' };
+  }
+  if (/^(?:abrir (?:navegador|browser)|navegador|browser|ler snapshot|snapshot(?: da p[áa]gina)?|resolver alvo|locator|roteiro de navega[çc][ãa]o|rodadas de navegador|checar plano de navegador|recibos de execu[çc][ãa]o|limites do navegador)$/.test(text)) {
+    return { type: 'browser:workspace' };
   }
 
   const engineeringReview = raw.match(/^(?:revisar|revise|analisar|analis[ae])\s+c[óo]digo\s+(python|javascript|typescript|jsx|tsx)\s*:\s*([\s\S]+)$/i);

@@ -16,6 +16,7 @@ import { EstudioPage } from './pages/EstudioPage';
 import { TastePage } from './pages/TastePage';
 import { DiagramPage } from './pages/DiagramPage';
 import { CareerPage } from './pages/CareerPage';
+import { NavegadorPage } from './pages/NavegadorPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="direcao" element={<TastePage />} />
         <Route path="diagramas" element={<DiagramPage />} />
         <Route path="carreira" element={<CareerPage />} />
+        <Route path="navegador" element={<NavegadorPage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

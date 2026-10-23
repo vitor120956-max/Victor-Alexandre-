@@ -452,8 +452,8 @@ def test_permissions_reject_duplicates_and_empty_entries() -> None:
 
 def test_api_exposes_the_agency_catalog_and_baseline(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.13.0"
-    assert health["skills"] == 72
+    assert health["version"] == "0.14.0"
+    assert health["skills"] == 79
 
     catalog = client.get("/api/skills").json()["skills"]
     agency = {skill["id"] for skill in catalog if skill["id"].startswith("agency.")}

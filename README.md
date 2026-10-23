@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.13.0.**
+**Versão atual: 0.14.0.**
 
 ## Executar em desenvolvimento
 
@@ -129,6 +129,18 @@ A carta só existe com três insumos: vaga, currículo com conquista verificáve
 
 Nada do upstream é instalado ou executado: sem `npx @santifer/career-ops init`, plugins de CLI, os ~200 scripts Node, o dashboard Go, o runner de batch ou workflows. Consulte [`docs/CARREIRA.md`](docs/CARREIRA.md) e a licença MIT em [`docs/licenses/career-ops-hq-career-ops.txt`](docs/licenses/career-ops-hq-career-ops.txt).
 
+## Navegador assistido
+
+A página **Navegador** (`/navegador`) adapta [`citrolabs/ego-lite`](https://github.com/citrolabs/ego-lite) em sete skills locais. O upstream é um navegador próprio para agentes: cada tarefa roda numa *space* isolada, o agente escreve JavaScript contra uma API pequena e enxerga a página por um snapshot de acessibilidade com referências e locators estáveis. Aqui fica o que sobrevive sem navegador: **leitura do snapshot, resolução de alvo, roteiro de rodadas, checagem, recibos e limites**.
+
+O snapshot é uma árvore de dois espaços por nível (`root`, depois `papel "nome" [ref=N, loc=...]`). O parser aceita marcador, nome com escape e metadados com colchetes aninhados, distingue `[ref=…]` dentro do nome acessível de metadado real e guarda o caminho de frames. Nove achados cobrem referência repetida, árvore sem alvo acionável, recuo ímpar, locator instável, iframe sem referência e árvore densa. Nada é inferido do DOM: vale o que o snapshot declarou.
+
+O alvo aceita `@N`, `ref=N`, `text=` exato ou livre, `loc=role:`, `loc=css:`, `loc=href:`, CSS e `>> nth=N`; XPath é recusado com alternativa. A regra é a do upstream: **documento principal antes dos frames**, e dois matches no mesmo escopo são ambíguos — a skill devolve candidatos e não escolhe. O comando sai pronto (`await page.click("@21", { label: "entrar na conta" })`), com `label` só nas ações de ponteiro e 3 a 6 palavras.
+
+O roteiro tem três rodadas — abrir e observar, agir, verificar e fechar — com orçamento de 2 a 8, uma space por objetivo, `p1` reaproveitada e nenhum dado inventado: o que falta vira `<valor real>`. Verbo de risco (pagar, excluir, publicar) insere o ponto de confirmação e o `handOff`. A checagem aplica **15 padrões** (espera fixa, space nova, `finish` duplicado, `label` proibido, Playwright, caminho relativo, retry cego…) e classifica os passos por **dez estados** do alvo. Os recibos separam despacho de verificação e cobram popup, diálogo, download salvo e `finish` único. Os limites classificam cada ação como **bloqueada, para confirmar ou liberada**, com o handoff escrito.
+
+Nada do upstream é instalado ou executado: sem app, DMG/EXE, `npx skills add`, launcher, CDP, plugins de CLI ou SDK. Consulte [`docs/NAVEGADOR.md`](docs/NAVEGADOR.md) e a licença MIT em [`docs/licenses/citrolabs-ego-lite.txt`](docs/licenses/citrolabs-ego-lite.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -220,12 +232,19 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `carreira.entrevista` | Converte requisitos em perguntas e cruza histórias STAR |
 | `carreira.funil` | Calcula conversão, coortes e candidaturas paradas |
 | `carreira.regras` | Publica bandas, dimensões, estados e pesos |
+| `navegador.snapshot` | Indexa a árvore: papéis, refs, locators e frames |
+| `navegador.alvo` | Resolve @ref, texto, papel, CSS e href em comando |
+| `navegador.roteiro` | Monta três rodadas com orçamento e handoff |
+| `navegador.checagem` | Aplica 15 padrões e classifica dez estados do alvo |
+| `navegador.recibos` | Separa despacho de verificação e cobra o fechamento |
+| `navegador.limites` | Classifica ação em bloqueada, confirmar ou liberada |
+| `navegador.regras` | Publica papéis, alvos, ações, estados e limites |
 | `system.status` | Versão e horário do ambiente, sem variáveis ou credenciais |
 | `legal.search` | Busca por tema nos textos do recorte jurídico |
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **72 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **79 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -257,6 +276,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Direção com sorteio de direções, argumento, deck de copy, linter, tells datados e júri ponderado;
 - página Diagramas com tipo, IR validado, layout medido, desenho portátil, legenda e contrato de entrega;
 - página Carreira com triagem 1–5, ATS, bullets, carta, entrevista, funil e catálogo;
+- página Navegador com snapshot, alvo, roteiro, checagem, recibos, limites e catálogo;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -271,7 +291,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 312 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento e limites de navegação, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 381 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -316,7 +336,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 72 skills
+├── skill_registry.py        # allowlist, Pydantic e 79 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -339,6 +359,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Estúdio de design é estático: não compila tokens, não lê o repositório do pacote, não renderiza o HTML nem publica artefato. O esquema de 56 slots é embutido, o parser de CSS cobre blocos simples e o linter é lexical, sujeito a falso positivo.
 - Diagramas são gerados a partir do que você declara: sem navegador, o piso de texto e o overflow são estimativas, e Mermaid/DOT são exportados como texto, não renderizados aqui.
 - Carreira é triagem declarada: não lê portais, LinkedIn, e-mail ou calendário, não envia candidatura e não altera o currículo. A nota vem só do texto colado; legitimidade é sinal, não acusação, e percentual do funil com menos de oito linhas é contagem, não tendência.
+- Navegador é leitura declarada: não abre aba, não clica, não preenche, não paga e não baixa. O snapshot é uma foto, XPath/CSS/shadow DOM não são avaliados, o código gerado não é executado e a classificação de limites lê palavras, não intenção.
 - Direção de arte é estática e declarada: a ficha não é desenhada, o sorteio não vê imagens, a quebra de linha do título é estimada por caracteres e as notas do júri vêm de quem revisa. Toda varredura é lexical e pode ter falso positivo.
 - Governo de agentes é declarativo: não executa agentes, não lê runtime, banco, identidade ou fatura e não altera permissões. Orçamento não converte moeda nem incorpora retries; a projeção é linear. A impressão digital cobre a parada e as instruções, não arquivos ou anexos, e a varredura de instruções é lexical.
 - Rotinas agendadas dependem do aplicativo aberto; não há worker 24 horas.

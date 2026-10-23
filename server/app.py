@@ -59,7 +59,7 @@ def create_app(*, ai_provider: AIProvider | None = None, registry: SkillRegistry
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas e camada opcional de IA externa.",
-        version="0.13.0",
+        version="0.14.0",
     )
     application.state.rate_limiter = RateLimiter()
 
@@ -91,7 +91,7 @@ def create_app(*, ai_provider: AIProvider | None = None, registry: SkillRegistry
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.13.0",
+            "version": "0.14.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
         }

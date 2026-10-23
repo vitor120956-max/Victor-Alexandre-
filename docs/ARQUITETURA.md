@@ -101,6 +101,12 @@ As rotas são `/api/skills/diagram.type`, `diagram.spec`, `diagram.layout`, `dia
 
 `server/career.py` implementa sete operações determinísticas inspiradas em `career-ops-hq/career-ops` (MIT). O módulo lê a vaga como texto e como dado — nunca como instrução —, extrai requisitos com banda e nível de evidência, classifica empresa e faixa salarial sem adivinhar moeda ou período, e calcula a nota em cinco dimensões com tetos nomeados. A legitimidade do anúncio roda em paralelo, em treze sinais catalogados, e não altera a nota. O ATS tem lints de payload e placar de 100 pontos com pesos fixos; sem HTML, a letra não é emitida. A carta exige vaga, currículo e pesquisa, e só cita número que tenha origem no currículo ou no perfil. O plano de entrevista cruza requisitos com histórias STAR. O funil lê tabela, TSV ou CSV, normaliza dez estados e declara censura e amostra pequena. O módulo reaproveita `server/review.py` para achados, contagens, veredito e Markdown, e não chama IA nem grava arquivo.
 
+## Navegador assistido
+
+`server/navegador.py` implementa sete operações determinísticas inspiradas em `citrolabs/ego-lite` (MIT). O módulo faz o parsing da árvore de acessibilidade em dois espaços por nível, inclusive metadados com colchetes aninhados e frames; indexa papel, nome, `ref`, `loc` e URL; resolve alvos nos formatos `@N`, `ref=`, `text=`, `loc=role:`, `loc=css:`, `loc=href:`, CSS e `nth`, com o documento principal antes dos frames; monta um roteiro de três rodadas com orçamento; aplica quinze padrões de código e dez estados de alvo; normaliza recibos e cobra o fechamento; e classifica ações em bloqueada, confirmar ou liberada. Reaproveita `server/review.py` para achados, contagens, veredito e Markdown.
+
+As rotas são `/api/skills/navegador.snapshot`, `navegador.alvo`, `navegador.roteiro`, `navegador.checagem`, `navegador.recibos`, `navegador.limites` e `navegador.regras`. Nenhuma abre navegador, executa JavaScript, instala o app do upstream ou grava arquivo; todas marcam `executed: false` e `readOnly: true`. A página `/navegador` só envia o texto colado. Detalhes em [`NAVEGADOR.md`](NAVEGADOR.md).
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:
