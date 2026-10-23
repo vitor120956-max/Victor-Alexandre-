@@ -91,6 +91,12 @@ Nenhum daemon, CLI, plugin, MCP, runtime de agente ou provedor do upstream é in
 
 Nenhum script Node, navegador, plugin, `npx skills`, `draw.mjs`, `inspect.mjs` ou `scenes.mjs` do upstream é instalado ou executado. Nada é renderizado, compilado ou publicado, e todos os resultados marcam `executed: false`. Detalhes e limites estão em [`DIRECAO.md`](DIRECAO.md).
 
+## Diagramas
+
+`server/diagram.py` implementa sete operações inspiradas em `tt-a1i/archify` (MIT). O módulo lê o IR em PT-BR ou o IR do upstream, valida ids e pontas, posiciona os nós por faixa, raia, estágio, nível, matriz ou relógio, roteia as arestas em ortogonal e mede cruzamento, colisão, folga de rótulo, leque e preenchimento. O desenho sai como SVG inline dentro de um HTML autocontido, ou como SVG puro, Mermaid, texto e DOT. O contrato de entrega roda os gates em ordem e declara o que não foi verificado.
+
+As rotas são `/api/skills/diagram.type`, `diagram.spec`, `diagram.layout`, `diagram.render`, `diagram.legend`, `diagram.delivery` e `diagram.library`. Nenhuma abre navegador, baixa template, executa CLI ou grava arquivo. A página `/diagramas` consome essas respostas e mostra a prévia do HTML em um `iframe` com `sandbox=""`. `docs/DIAGRAMAS.md` documenta o IR, os dez tipos e os limites.
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:

@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.11.0.**
+**Versão atual: 0.12.0.**
 
 ## Executar em desenvolvimento
 
@@ -105,6 +105,16 @@ O sorteio é determinístico: semente SHA-256 do briefing, setor, tom e seções
 
 Nada é renderizado, compilado ou publicado. `npx skills add`, plugins de Claude/Codex, `install.sh`, `draw.mjs`, `inspect.mjs`, `assets.mjs` e `scenes.mjs` não são instalados nem executados. Consulte [`docs/DIRECAO.md`](docs/DIRECAO.md) e a licença MIT em [`docs/licenses/leonxlnx-taste-skill.txt`](docs/licenses/leonxlnx-taste-skill.txt).
 
+## Diagramas
+
+A página **Diagramas** (`/diagramas`) adapta [`tt-a1i/archify`](https://github.com/tt-a1i/archify) em sete skills locais. O upstream transforma uma ideia em um diagrama interativo de página única, com dez tipos, IR JSON validado, geometria medida e um contrato de entrega em gates. Aqui fica o recorte que sobrevive sem navegador: **tipo, IR, layout, desenho, legenda e entrega**.
+
+Os dez tipos são arquitetura, fluxo de trabalho, sequência, fluxo de dados, ciclo de vida, entidades, árvore, classes, linha do tempo e cascata. O IR é escrito em português (`tipo`, `titulo`, `componentes`, `conexoes`), mas também aceita o formato do upstream (`diagram_type`, `meta`, `components`, `connections`) e avisa quando converte. O layout é determinístico e mede **cruzamento, colisão, folga de rótulo, leque e preenchimento**; a folga de uma aresta horizontal é `6,5 px × caracteres + 21 px`, e um canvas acima de 1240 px — ou 1790 px se for 1,55× mais largo que alto — perde o piso de leitura.
+
+O desenho sai em **HTML autocontido com SVG inline**, sem script, fonte remota ou imagem externa, além de SVG puro, Mermaid, texto e DOT. Quatro presets (Clássico, Sinal, Planta e Editorial) mudam papel, tinta e acento sem mudar a topologia, e a legenda automática lista só as variantes que o desenho usa. O contrato de entrega roda **validar → entregar → checar → navegador → revisão visual**, para no primeiro gate falho e nunca marca como feito o que não foi: navegador, captura e revisão visual aparecem como não executados quando não aconteceram.
+
+Nada do upstream é instalado ou executado: sem `npx skills add`, `archify.zip`, `bin/archify.mjs`, `finalize`, `visual-check`, plugins DSH ou Chrome de inspeção. Consulte [`docs/DIAGRAMAS.md`](docs/DIAGRAMAS.md) e a licença MIT em [`docs/licenses/tt-a1i-archify.txt`](docs/licenses/tt-a1i-archify.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -182,16 +192,23 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `taste.tells` | Confronta o material com 25 tells datados em três ondas |
 | `taste.judge` | Pondera quatro dimensões, aplica tetos e devolve a ordem de correção |
 | `taste.library` | Publica direções, vocabulário, tetos e ondas |
+| `diagram.type` | Escolhe entre dez tipos e devolve esqueleto JSON |
+| `diagram.spec` | Valida o IR e devolve o IR normalizado |
+| `diagram.layout` | Mede cruzamentos, colisões, folga e canvas |
+| `diagram.render` | Gera HTML, SVG, Mermaid, texto ou DOT |
+| `diagram.legend` | Compõe legenda e presets com contraste |
+| `diagram.delivery` | Roda os gates e para no primeiro erro |
+| `diagram.library` | Publica tipos, vocabulários e limites |
 | `system.status` | Versão e horário do ambiente, sem variáveis ou credenciais |
 | `legal.search` | Busca por tema nos textos do recorte jurídico |
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **58 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **65 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
-1. O parser local verifica comandos determinísticos: tarefas, memória, foco, cálculo, legislação, documentos, engenharia, planos, análise reversa, engenharia enxuta, governo de agentes, estúdio de design, direção de arte, produtividade, pesquisa e automações.
+1. O parser local verifica comandos determinísticos: tarefas, memória, foco, cálculo, legislação, documentos, engenharia, planos, análise reversa, engenharia enxuta, governo de agentes, estúdio de design, direção de arte, diagramas, produtividade, pesquisa e automações.
 2. Comandos como `analisar texto ...`, `artigo 49 do CDC`, `ler PDF ...`, `revisar código python: ...`, `avaliar web vitals ...`, `retomar plano ID`, `inspecionar artefato ...`, `revisar mudança: <diff>` e `auditar código app` são enviados à skill Python correspondente; `abrir agentes` leva à página de governo e `abrir estúdio` à página de design.
 3. Consultas jurídicas, leituras de arquivos, análises de artefatos, revisões de design, reuniões, revisões de código ou de mudança, auditorias, Web Vitals e recuperação de planos reconhecidos não são enviados à IA externa.
 4. `organizar arquivos` executa somente simulação no chat. Criação de documentos e gravação de planos orientam o uso das páginas dedicadas; nenhum comando contorna a confirmação visual.
@@ -217,6 +234,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Agentes com equipe, quadro, orçamento, verificação de parada e permissões;
 - página Estúdio com contrato de design, contraste WCAG, crítica em cinco dimensões e linter anti-clichê;
 - página Direção com sorteio de direções, argumento, deck de copy, linter, tells datados e júri ponderado;
+- página Diagramas com tipo, IR validado, layout medido, desenho portátil, legenda e contrato de entrega;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -231,7 +249,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, e provedor de IA com respostas simuladas. O estado desta versão tem **39 testes web e 189 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, e provedor de IA com respostas simuladas. O estado desta versão tem **40 testes web e 261 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -270,6 +288,7 @@ server/
 ├── studio.py                # contrato, contraste, crítica e linter de artefato
 ├── taste.py                 # direções, argumento, júri e biblioteca
 ├── taste_rules.py           # copy, 29 regras lexicais e registro de tells
+├── diagram.py               # IR, layout medido, SVG e contrato de entrega
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
@@ -294,6 +313,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Análise reversa é estática e baseada em parsers próprios: não descompila, não executa, não extrai contêineres e não cobre formatos sem parser dedicado. Evidência não substitui laudo pericial ou atestado de malware.
 - Engenharia enxuta é estática: a escada avalia só o que foi declarado, a revisão e a auditoria produzem candidatos que exigem confirmação no código real. Execução, carga, testes e chamadores fora da árvore não são verificados; o histórico do Git não é lido.
 - Estúdio de design é estático: não compila tokens, não lê o repositório do pacote, não renderiza o HTML nem publica artefato. O esquema de 56 slots é embutido, o parser de CSS cobre blocos simples e o linter é lexical, sujeito a falso positivo.
+- Diagramas são gerados a partir do que você declara: sem navegador, o piso de texto e o overflow são estimativas, e Mermaid/DOT são exportados como texto, não renderizados aqui.
 - Direção de arte é estática e declarada: a ficha não é desenhada, o sorteio não vê imagens, a quebra de linha do título é estimada por caracteres e as notas do júri vêm de quem revisa. Toda varredura é lexical e pode ter falso positivo.
 - Governo de agentes é declarativo: não executa agentes, não lê runtime, banco, identidade ou fatura e não altera permissões. Orçamento não converte moeda nem incorpora retries; a projeção é linear. A impressão digital cobre a parada e as instruções, não arquivos ou anexos, e a varredura de instruções é lexical.
 - Rotinas agendadas dependem do aplicativo aberto; não há worker 24 horas.

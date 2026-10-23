@@ -29,6 +29,16 @@ from .agency import (
 from .documents import create_document, merge_pdfs, read_document
 from .engineering import create_adr, create_plan, create_spec, design_tests, evaluate_webvitals, release_gate, review_code, threat_model
 from .lean import LeanError, audit_tree, evaluate_ladder, harvest_debt, review_change
+from .diagram import (
+    DiagramError,
+    diagram_delivery,
+    diagram_layout,
+    diagram_legend,
+    diagram_library,
+    diagram_render,
+    diagram_spec,
+    diagram_type,
+)
 from .legal_corpus import LegalCorpus
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
@@ -440,6 +450,50 @@ class StudioArtifactInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     artifact: str = Field(title="HTML do artefato", min_length=20, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Arquivo único: HTML, CSS e JS no mesmo documento. Nada é renderizado ou executado."})
     mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DiagramTypeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pedido: str = Field(title="O que precisa ser explicado", min_length=3, max_length=4_000, json_schema_extra={"format": "textarea", "description": "Uma frase sobre a pergunta que o desenho responde: componentes, ordem, chamadas, dados, estados, tabelas ou tempo."})
+    plateia: str = Field(default="", title="Quem lê", max_length=120, json_schema_extra={"description": "Opcional: quem precisa entender o desenho e o que já sabe."})
+    detalhe: Literal["resumo", "detalhe"] = Field(default="resumo", title="Profundidade do esqueleto")
+    seed: str = Field(default="", title="Semente", max_length=32, json_schema_extra={"description": "Opcional: mantém o mesmo recorte ao repetir o pedido."})
+
+
+class DiagramSpecInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    especificacao: str = Field(title="Especificação JSON", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O IR do diagrama em PT-BR: tipo, titulo, nos e as arestas do tipo. Também aceita o IR do archify."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DiagramLayoutInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    especificacao: str = Field(title="Especificação JSON", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O IR do diagrama. O layout é medido: coordenadas, cruzamentos, folgas e leques."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DiagramRenderInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    especificacao: str = Field(title="Especificação JSON", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O IR do diagrama. O desenho é determinístico: mesma especificação, mesmo SVG."})
+    formato: Literal["html", "svg", "mermaid", "ascii", "dot"] = Field(default="html", title="Formato")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DiagramLegendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tipo: str = Field(default="", title="Tipo de diagrama", max_length=40, json_schema_extra={"description": "architecture, workflow, sequence, dataflow, lifecycle, erd, tree, class, timeline ou waterfall."})
+    preset: str = Field(default="", title="Preset", max_length=40, json_schema_extra={"description": "classico, sinal, planta ou editorial."})
+    legenda: str = Field(default="", title="Modo de legenda", max_length=20, json_schema_extra={"description": "auto, tudo ou oculta."})
+    especificacao: str = Field(default="", title="Especificação JSON (opcional)", max_length=200_000, json_schema_extra={"format": "textarea", "description": "Com a especificação, a legenda lista só as variantes realmente usadas e aponta lacunas."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DiagramDeliveryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    especificacao: str = Field(title="Especificação JSON", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O IR do diagrama. O contrato para no primeiro gate falho e não finge ter aberto navegador."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    checagem_visual: Literal["nao-solicitada", "pedida"] = Field(default="nao-solicitada", title="Revisão visual")
+    captura: Literal["nao", "sim"] = Field(default="nao", title="Captura de tela")
 
 
 class TasteDirectionInput(BaseModel):
@@ -1035,7 +1089,59 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def studio_defaults_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return design_reference()
 
+    def diagram_type_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramTypeInput)
+        try:
+            return diagram_type(pedido=data.pedido, plateia=data.plateia, detalhe=data.detalhe, seed=data.seed)
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_spec_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramSpecInput)
+        try:
+            return diagram_spec(especificacao=data.especificacao, modo=data.modo)
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_layout_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramLayoutInput)
+        try:
+            return diagram_layout(especificacao=data.especificacao, modo=data.modo)
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_render_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramRenderInput)
+        try:
+            return diagram_render(especificacao=data.especificacao, formato=data.formato, modo=data.modo)
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_legend_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramLegendInput)
+        try:
+            return diagram_legend(
+                tipo=data.tipo, preset=data.preset, legenda=data.legenda,
+                especificacao=data.especificacao, modo=data.modo,
+            )
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_delivery_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramDeliveryInput)
+        try:
+            return diagram_delivery(
+                especificacao=data.especificacao, modo=data.modo,
+                checagem_visual=data.checagem_visual, captura=data.captura,
+            )
+        except DiagramError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def diagram_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return diagram_library()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+
         assert isinstance(data, TasteDirectionInput)
         try:
             return deal_direction(
@@ -1139,6 +1245,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("studio.critique", "Estruturar crítica de design", "Valida cinco notas de 0 a 10 com evidência, bandas nomeadas e as listas manter, corrigir e ganhos rápidos.", "Estúdio de design", StudioCritiqueInput, studio_critique_handler, timeout_seconds=10),
         SkillDefinition("studio.artifact", "Revisar artefato HTML", "Varre um HTML de arquivo único e aponta gradiente roxo, ícone de emoji, métrica inventada, acessibilidade e dependência externa.", "Estúdio de design", StudioArtifactInput, studio_artifact_handler, timeout_seconds=15),
         SkillDefinition("studio.defaults", "Referência de tokens e bandas", "Mostra o esquema de 56 tokens, as diretrizes de movimento e as bandas da crítica usados pelas revisões.", "Estúdio de design", EmptyInput, studio_defaults_handler, timeout_seconds=5),
+        SkillDefinition("diagram.type", "Escolher o tipo de diagrama", "Lê o pedido, pontua os dez tipos por sinal e devolve a escolha, os concorrentes e um esqueleto JSON para colar.", "Diagramas", DiagramTypeInput, diagram_type_handler, timeout_seconds=10),
+        SkillDefinition("diagram.spec", "Validar a especificação", "Confere título, ids, pontas, hierarquia, datas e orçamentos do IR e devolve achados em quatro partes com o IR normalizado.", "Diagramas", DiagramSpecInput, diagram_spec_handler, timeout_seconds=15),
+        SkillDefinition("diagram.layout", "Medir o layout", "Posiciona os nós de forma determinística e mede cruzamentos, colisões, folga de rótulo, leque e largura de canvas.", "Diagramas", DiagramLayoutInput, diagram_layout_handler, timeout_seconds=15),
+        SkillDefinition("diagram.render", "Desenhar o diagrama", "Gera HTML autocontido com SVG inline, SVG puro ou exporta Mermaid, texto e DOT — sem navegador e sem runtime.", "Diagramas", DiagramRenderInput, diagram_render_handler, timeout_seconds=20),
+        SkillDefinition("diagram.legend", "Compor legenda e preset", "Lista as quatro variantes de relação, os quatro presets com contraste medido e aponta legenda oculta ou movimento em excesso.", "Diagramas", DiagramLegendInput, diagram_legend_handler, timeout_seconds=10),
+        SkillDefinition("diagram.delivery", "Rodar o contrato de entrega", "Executa os gates validar, entregar e checar em ordem, para no primeiro erro e declara o que não foi verificado.", "Diagramas", DiagramDeliveryInput, diagram_delivery_handler, timeout_seconds=20),
+        SkillDefinition("diagram.library", "Catálogo de diagramas", "Mostra os dez tipos com orçamento, os vocabulários de nó, relação e preset, os formatos e os limites do IR.", "Diagramas", EmptyInput, diagram_library_handler, timeout_seconds=5),
         SkillDefinition("taste.direction", "Sortear direção de arte", "Sorteia três direções determinísticas por setor, tom e ativos e entrega a ficha da escolhida com seções, paleta, tipo, armadilhas e redesenhos justificados.", "Direção de arte", TasteDirectionInput, taste_direction_handler, timeout_seconds=15),
         SkillDefinition("taste.argument", "Auditar o argumento", "Confere afirmações e provas seção a seção, o orçamento do título, a ação principal e o vocabulário de catálogo.", "Direção de arte", TasteArgumentInput, taste_argument_handler, timeout_seconds=10),
         SkillDefinition("taste.copy", "Auditar deck de copy", "Mede título, apoio, corpo, ações e navegação, e aponta formas proibidas, micro-tipografia e texto de exemplo.", "Direção de arte", TasteCopyInput, taste_copy_handler, timeout_seconds=10),

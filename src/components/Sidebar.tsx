@@ -37,6 +37,7 @@ const navigation = [
   { to: '/agencia', label: 'Agentes', icon: ShieldCheck },
   { to: '/estudio', label: 'Estúdio', icon: SwatchBook },
   { to: '/direcao', label: 'Direção', icon: Palette },
+  { to: '/diagramas', label: 'Diagramas', icon: Workflow },
   { to: '/skills', label: 'Skills', icon: Blocks },
 ];
 
