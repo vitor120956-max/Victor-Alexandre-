@@ -7,6 +7,7 @@ import {
   CheckSquare2,
   Clock3,
   Cloud,
+  Cpu,
   Download,
   FileText,
   Fingerprint,
@@ -67,6 +68,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     { id: 'office', label: 'Abrir escritório (Google Workspace)', group: 'Navegação', icon: Cloud, keywords: 'escritório escritorio google workspace gws drive gmail calendar sheets docs comando params dry-run paginação escopo oauth erro', run: () => navigate('/escritorio') },
     { id: 'navigator', label: 'Abrir navegador assistido', group: 'Navegação', icon: MousePointerClick, keywords: 'navegador browser snapshot alvo locator ref roteiro rodadas recibos handoff limite captcha ego', run: () => navigate('/navegador') },
     { id: 'taste', label: 'Abrir direção de arte', group: 'Navegação', icon: Palette, keywords: 'direção arte gosto taste slop tells copy linter júri manchete argumento', run: () => navigate('/direcao') },
+    { id: 'estacao', label: 'Abrir estação do agente', group: 'Navegação', icon: Cpu, keywords: 'estação estacao agente permissão permissao allow ask deny aprovação aprovacao recibo recuperação queda agenda automação memória notas skills invisible dots', run: () => navigate('/estacao') },
     { id: 'skills', label: 'Explorar skills', group: 'Navegação', icon: Blocks, keywords: 'ferramentas modulos', run: () => navigate('/skills') },
   ], [exportBackup, navigate, openTaskModal, runAutomation, startFocus]);
 

@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.15.0.**
+**Versão atual: 0.16.0.**
 
 ## Executar em desenvolvimento
 
@@ -153,6 +153,18 @@ Os escopos saem do princípio do menor acesso: cada operação aponta o mínimo,
 
 Nada do upstream é instalado ou executado: sem release, `cargo install`, Homebrew, Nix, `npm install -g`, `gws auth setup`, service account, extensão do Gemini, `npx skills add` ou chamada ao Google. Consulte [`docs/ESCRITORIO.md`](docs/ESCRITORIO.md) e a licença Apache-2.0 em [`docs/licenses/googleworkspace-cli.txt`](docs/licenses/googleworkspace-cli.txt).
 
+## Estação do agente
+
+A página **Estação** (`/estacao`) adapta [`feder-cr/invisible_dots`](https://github.com/feder-cr/invisible_dots) em sete skills locais. O upstream é um agente self-hosted em que cada instância é uma máquina virtual Linux com desktop persistente, navegador próprio por identidade, memória em arquivos e um contrato de permissões `allow`/`ask`/`deny` decidido antes de cada chamada. Aqui fica o que sobrevive sem máquina, navegador, chave ou rede: **tarefa durável, matriz de permissões, execução e recuperação, agenda, limites e memória**.
+
+O plano de tarefa usa o laço **observar → agir → verificar → registrar**: o verbo do objetivo escolhe a ferramenta, mas ela só entra se estiver declarada; escrever, executar ou agendar exige uma leitura de volta; e a parada é a prova do objetivo, não o `ok` da chamada. O orçamento é o do upstream — 60 passos e US$ 1,00 por tarefa, com teto de 500 passos. A política tem **14 permissões** e **30 ferramentas**; `computer.*`, `files.*` e `browser.*` são `allow` por padrão, `browser.identity.delete` e `automations` são `ask`, e nome desconhecido é `deny`.
+
+`ask` não é um aviso: ele **para a rodada**, guarda a chamada com os argumentos completos, espera a decisão uma vez e libera aquela chamada uma única vez — por isso a auditoria reprova aprovação reaproveitada em mais de uma chamada. A auditoria de recibos separa despacho de verificação: chamada interrompida pode ter sido aplicada e pode ainda estar rodando, execução dupla é bloqueio e retomada sem `verificado=sim` também. A agenda valida cron de cinco campos, acha sobreposição, cobra presença na janela e mede quantas horas por dia ligam a máquina. A memória checa tamanho do `MEMORY.md`, segredo aparente, fato sem dia, regra absoluta e skill sem gatilho ou sem verificação.
+
+**Uma recusa declarada:** o upstream se anuncia como indetectável por anti-bots. Esse ponto não é adaptado. `estacao.limites` bloqueia evasão de detecção, fingerprint, CAPTCHA, proxy para furar limite, rotação de conta, desrespeito a termos e `robots.txt`, coleta de dado pessoal sem base legal e uso de credencial alheia — e apresenta a via oficial em cada caso.
+
+Nada do upstream é instalado ou executado: sem QEMU, imagem dourada, Firefox patchado, OpenRouter, PostgreSQL, MCP, Telegram ou WhatsApp. Consulte [`docs/ESTACAO.md`](docs/ESTACAO.md) e a licença MIT em [`docs/licenses/feder-cr-invisible-dots.txt`](docs/licenses/feder-cr-invisible-dots.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -263,7 +275,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **86 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **93 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -311,7 +323,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 484 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, limites de consentimento, memória e skills do agente, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 624 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -338,6 +350,7 @@ src/                         # interface React e estado local
 ├── pages/CareerPage.tsx     # triagem, ATS, bullets, carta, entrevista, funil e catálogo
 ├── pages/NavegadorPage.tsx  # snapshot, alvo, roteiro, checagem, recibos e limites
 ├── pages/EscritorioPage.tsx # comando gws, receitas, páginas, lotes, escopos e erros
+├── pages/EstacaoPage.tsx    # tarefa, permissões, execução, agenda, limites e memória
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -357,10 +370,11 @@ server/
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
 ├── escritorio.py            # comando gws, receitas, páginas, lotes, escopos e erros
+├── estacao.py               # tarefa, permissões, recibos, agenda, limites e memória
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 86 skills
+├── skill_registry.py        # allowlist, Pydantic e 93 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

@@ -70,6 +70,16 @@ from .navegador import (
     resolver_alvo,
     read_snapshot as ler_snapshot,
 )
+from .estacao import (
+    EstacaoError,
+    auditar_memoria,
+    auditar_permissoes,
+    auditar_recibos,
+    checar_limites as estacao_limites,
+    estacao_catalog,
+    planejar_agenda,
+    planejar_tarefa,
+)
 from .escritorio import (
     EscritorioError,
     escritorio_catalog,
@@ -94,6 +104,54 @@ from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_p
 
 class SkillError(Exception):
     """Erro esperado de uma skill, seguro para apresentar ao usuário."""
+
+
+class EstacaoTarefaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    objetivo: str = Field(title="Objetivo", min_length=8, max_length=2_000, json_schema_extra={"format": "textarea", "description": "O que deve estar verdadeiro no fim, em uma frase observável."})
+    ferramentas: str = Field(default="read_file, write_file", max_length=4_000, title="Ferramentas", json_schema_extra={"format": "textarea", "description": "Ferramentas oferecidas ao agente, separadas por vírgula (`exec`, `read_file`, `browser_click`…)."})
+    politica: str = Field(default="computer.exec=ask\nfiles.read=allow\nfiles.write=ask", max_length=4_000, title="Permissões", json_schema_extra={"format": "textarea", "description": "Uma por linha: `permissao=allow|ask|deny`."})
+    passos_max: int = Field(default=60, ge=3, le=500, title="Passos por tarefa")
+    orcamento: float = Field(default=1.0, ge=0.01, le=100, title="Custo máximo (US$)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EstacaoPermissoesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    politica: str = Field(title="Política", max_length=4_000, json_schema_extra={"format": "textarea", "description": "`computer.exec=ask`, `files.read=allow`, `mcp.planilhas=ask`…"})
+    ferramentas: str = Field(default="", max_length=4_000, title="Ferramentas em uso", json_schema_extra={"description": "Opcional: confere se cada ferramenta usada tem permissão."})
+    servidores_mcp: str = Field(default="", max_length=1_000, title="Servidores MCP", json_schema_extra={"description": "Nomes declarados, separados por vírgula."})
+    limite_passos: int = Field(default=60, ge=1, le=500, title="Passos máximos")
+    limite_custo: float = Field(default=1.0, ge=0.01, le=100, title="Custo por tarefa (US$)")
+    ocio_minutos: int = Field(default=15, ge=0, le=1_440, title="Ócio até dormir (min)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EstacaoRecibosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    log: str = Field(title="Recibos", max_length=40_000, json_schema_extra={"format": "textarea", "description": "Uma chamada por linha: `id=c1 tool=write_file status=ok result=…`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EstacaoAgendaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    automacoes: str = Field(title="Automações", max_length=8_000, json_schema_extra={"format": "textarea", "description": "`nome | cron | minutos | presenca` por linha."})
+    orcamento_diario: int = Field(default=8, ge=1, le=96, title="Acordadas por dia")
+    presenca: str = Field(default="9-18", max_length=60, title="Janela com presença", json_schema_extra={"description": "Ex.: `9-18`. Vazio desliga a checagem."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EstacaoLimitesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acoes: str = Field(title="Ações pretendidas", max_length=20_000, json_schema_extra={"format": "textarea", "description": "Uma por linha, no infinitivo: `ler o extrato`, `enviar e-mail`, `resolver captcha`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EstacaoMemoriaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    notas: str = Field(title="Notas", max_length=40_000, json_schema_extra={"format": "textarea", "description": "O conteúdo do MEMORY.md do agente."})
+    skills: str = Field(default="", max_length=20_000, title="Skills", json_schema_extra={"format": "textarea", "description": "Blocos separados por `---` com `nome:`, `gatilho:`, `passos:`, `verificacao:`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
 class EmptyInput(BaseModel):
@@ -1465,6 +1523,51 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except NavegadorError as exc:
             raise SkillError(str(exc)) from exc
 
+    def estacao_tarefa_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoTarefaInput)
+        try:
+            return planejar_tarefa(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_permissoes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoPermissoesInput)
+        try:
+            return auditar_permissoes(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_recibos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoRecibosInput)
+        try:
+            return auditar_recibos(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_agenda_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoAgendaInput)
+        try:
+            return planejar_agenda(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_limites_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoLimitesInput)
+        try:
+            return estacao_limites(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_memoria_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstacaoMemoriaInput)
+        try:
+            return auditar_memoria(**data.model_dump())
+        except EstacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estacao_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return estacao_catalog()
+
     def navegador_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return navegador_catalog()
 
@@ -1601,6 +1704,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("escritorio.escopos", "Revisar escopos", "Mapeia operações para escopos mínimos, compara com o que foi concedido, aponta falta e sobra e monta o `gws auth login --scopes`.", "Escritório", EscritorioEscoposInput, escritorio_escopos_handler, timeout_seconds=10),
         SkillDefinition("escritorio.erros", "Triar erro do gws", "Classifica código de saída, status e `reason` em causa, ação e política de repetição — sem repetir escrita às cegas.", "Escritório", EscritorioErrosInput, escritorio_erros_handler, timeout_seconds=10),
         SkillDefinition("escritorio.regras", "Catálogo do escritório", "Mostra serviços, ajudantes, flags, códigos de saída, escopos, presets, receitas, lotes e motivos de erro usados pelas skills.", "Escritório", EmptyInput, escritorio_library_handler, timeout_seconds=5),
+        SkillDefinition("estacao.tarefa", "Planejar tarefa durável", "Monta o laço observar/agir/verificar/registrar de uma tarefa, com ferramenta e permissão por passo, critérios de parada, orçamento e o que fazer depois de uma queda.", "Estação", EstacaoTarefaInput, estacao_tarefa_handler, timeout_seconds=10),
+        SkillDefinition("estacao.permissoes", "Auditar permissões", "Revisa a matriz allow/ask/deny, confere cada ferramenta usada, exige decisão para risco alto e explica o efeito de `ask` — parar a rodada, guardar os argumentos, valer uma vez.", "Estação", EstacaoPermissoesInput, estacao_permissoes_handler, timeout_seconds=10),
+        SkillDefinition("estacao.recibos", "Auditar execução e recuperação", "Lê o log de chamadas, acha chamada sem resultado, execução dupla, aprovação reaproveitada e retomada sem conferir o estado — o que um crash deixa para trás.", "Estação", EstacaoRecibosInput, estacao_recibos_handler, timeout_seconds=10),
+        SkillDefinition("estacao.agenda", "Planejar agenda", "Valida cron, mede disparos por semana, acha sobreposição, checa presença e orçamento de acordadas e diz o que acontece com a automação perdida.", "Estação", EstacaoAgendaInput, estacao_agenda_handler, timeout_seconds=10),
+        SkillDefinition("estacao.limites", "Checar limites e consentimento", "Classifica cada ação pretendida em liberada, confirmar ou bloqueada; recusa evasão de detecção, CAPTCHA e rotação de conta, e aponta a via oficial.", "Estação", EstacaoLimitesInput, estacao_limites_handler, timeout_seconds=10),
+        SkillDefinition("estacao.memoria", "Revisar notas e skills", "Checa as notas do agente (tamanho, segredo, fato sem dia, absoluto) e as skills que ele escreveu (gatilho, passos, verificação, gatilho repetido).", "Estação", EstacaoMemoriaInput, estacao_memoria_handler, timeout_seconds=10),
+        SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)

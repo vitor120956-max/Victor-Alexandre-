@@ -60,6 +60,7 @@ export type Intent =
   | { type: 'career:workspace' }
   | { type: 'office:workspace' }
   | { type: 'browser:workspace' }
+  | { type: 'estacao:workspace' }
   | { type: 'meeting:analyze'; transcript: string }
   | { type: 'changelog:generate'; commits: string; version: string }
   | { type: 'random:pick'; entries: string; count: number }
@@ -248,6 +249,9 @@ export function parseCommand(rawInput: string): Intent {
   }
   if (/^(?:abrir (?:escrit[óo]rio)|escrit[óo]rio|google workspace|workspace|montar comando gws|comando gws|gws|receita gws|paginar resultados|ler p[áa]ginas|planejar lote|revisar escopos|escopos do google|triar erro gws|erro do gws)$/.test(text)) {
     return { type: 'office:workspace' };
+  }
+  if (/^(?:abrir (?:esta[çc][ãa]o)|esta[çc][ãa]o|permiss[õo]es do agente|matriz de permiss[õo]es|pol[íi]tica do agente|aprova[çc][ãa]o (?:do agente|pendente)|recupera[çc][ãa]o ap[óo]s queda|recibos do agente|agenda de automa[çc][õo]es|limites do agente|mem[óo]ria do agente|auditar notas|revisar skills)$/.test(text)) {
+    return { type: 'estacao:workspace' };
   }
 
   const engineeringReview = raw.match(/^(?:revisar|revise|analisar|analis[ae])\s+c[óo]digo\s+(python|javascript|typescript|jsx|tsx)\s*:\s*([\s\S]+)$/i);

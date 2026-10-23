@@ -113,6 +113,12 @@ As rotas são `/api/skills/navegador.snapshot`, `navegador.alvo`, `navegador.rot
 
 As rotas são `/api/skills/escritorio.comando`, `escritorio.receita`, `escritorio.paginas`, `escritorio.lote`, `escritorio.escopos`, `escritorio.erros` e `escritorio.regras`. Nenhuma autentica, chama o Google, lê credencial, instala o CLI ou grava arquivo; todas marcam `executado: false`. A página `/escritorio` só envia o texto colado. Detalhes em [`ESCRITORIO.md`](ESCRITORIO.md).
 
+## Estação do agente
+
+`server/estacao.py` implementa sete operações determinísticas inspiradas em `feder-cr/invisible_dots` (MIT). O módulo planeja a tarefa como um laço observar/agir/verificar/registrar, com ferramenta, permissão e prova por passo, parada e orçamento; audita a matriz `allow`/`ask`/`deny` contra o catálogo de 30 ferramentas e 14 permissões, com risco alto liberado como bloqueio; lê recibos de execução e aponta chamada sem resultado, execução dupla, aprovação reaproveitada e retomada sem conferir o estado; valida cron de cinco campos, sobreposição, presença e acordadas por dia; classifica cada ação pretendida em liberada, confirmar ou bloqueada, recusando evasão de detecção, CAPTCHA e rotação de conta; e audita notas e skills quanto a tamanho, segredo, data, gatilho e verificação. Reaproveita `server/review.py` para achados, contagens, veredito e Markdown.
+
+As rotas são `/api/skills/estacao.tarefa`, `estacao.permissoes`, `estacao.recibos`, `estacao.agenda`, `estacao.limites`, `estacao.memoria` e `estacao.regras`. Nenhuma abre máquina, navegador, canal ou conexão; todas marcam `executado: false` e `readOnly: true`. A página `/estacao` só envia o texto colado. Detalhes em [`ESTACAO.md`](ESTACAO.md).
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:

@@ -543,6 +543,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? 'Abra a página Carreira para triar a vaga com nota 1–5 e evidência declarada, checar o ATS, auditar bullets, rascunhar a carta, planejar a entrevista e ler o funil. Tudo é estático: nada de portal, candidatura, PDF ou plugin do upstream.'
           : 'A triagem de carreira precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
         break;
+      case 'estacao:workspace':
+        reply = backendOnline
+          ? 'Abra a página Estação para planejar a tarefa durável, revisar a matriz allow/ask/deny, auditar a execução e a recuperação após queda, checar a agenda, classificar limites e higienizar notas e skills. Tudo é estático: nenhuma VM, navegador ou programa do upstream é executado.'
+          : 'A estação do agente precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi calculado.';
+        break;
       case 'taste:workspace':
         reply = backendOnline
           ? 'Abra a página Direção para sortear três direções, auditar o argumento e o deck de copy, varrer as regras caseiras, confrontar o registro datado de tells e fechar a nota com tetos. Tudo é estático: nenhum script Node, navegador ou plugin do upstream é executado.'
