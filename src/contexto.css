@@ -1,0 +1,80 @@
+/* --- contexto ------------------------------------------------------------ */
+.contexto-page .diagram-laws strong { letter-spacing: .01em; }
+.contexto-page .diagram-tabs { flex-wrap: wrap; }
+.contexto-page .diagram-tabs button { flex: 0 1 auto; }
+.contexto-page .diagram-form textarea { min-height: 190px; font-family: var(--mono); font-size: 7.4px; line-height: 1.7; }
+.contexto-page .diagram-metrics article strong { word-break: break-word; }
+.contexto-page .ciencia-table-block code { overflow-wrap: anywhere; }
+
+.contexto-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 9px;
+}
+.contexto-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.contexto-field > span {
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.6px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.contexto-field > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 33px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .018);
+}
+.contexto-field > div:focus-within { border-color: rgba(var(--accent-rgb), .45); }
+.contexto-field input,
+.contexto-field select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  outline: none;
+}
+.contexto-field select { cursor: pointer; }
+.contexto-field em {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 7px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.contexto-bar { display: flex; flex-direction: column; gap: 5px; }
+.contexto-bar > div { display: flex; align-items: baseline; justify-content: space-between; }
+.contexto-bar span {
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .09em;
+}
+.contexto-bar strong { color: var(--text-soft); font-family: var(--mono); font-size: 10px; font-weight: 600; }
+.contexto-bar i {
+  display: block;
+  height: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .02);
+  overflow: hidden;
+}
+.contexto-bar b { display: block; height: 100%; border-radius: 999px; transition: width .35s ease; }
+.contexto-bar.is-baixo b { background: linear-gradient(90deg, #6fb98a, #9ad6a8); }
+.contexto-bar.is-moderado b { background: linear-gradient(90deg, #c9a227, #e6bb70); }
+.contexto-bar.is-alto b { background: linear-gradient(90deg, #d97746, #f0a06a); }
+.contexto-bar.is-critico b { background: linear-gradient(90deg, #b8423a, #ff8c7e); }
+
+@media (max-width: 640px) {
+  .contexto-fields { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+}

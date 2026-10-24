@@ -1,0 +1,43 @@
+ATRIBUIÇÃO — CherryHQ/cherry-studio
+==================================
+
+Obra original: https://github.com/CherryHQ/cherry-studio
+Titular: CherryHQ e colaboradores
+Licença: GNU Affero General Public License v3.0 (AGPL-3.0)
+Texto integral da licença: https://www.gnu.org/licenses/agpl-3.0.txt
+
+O QUE FOI USADO
+---------------
+Apenas o MECANISMO descrito publicamente no repositório, reimplementado em
+Python:
+
+- orçamento da janela com reserva de saída, precedência (chamada → assistente
+  → teto do modelo só no endpoint Anthropic) e piso de 20% para a entrada;
+- estimativa de imagem por dialeto (Anthropic 750 px por token com borda de
+  1.568 px e 1,15 MP; OpenAI 85 + 170 por ladrilho de 512 px; Google 258 por
+  recorte de 768 px; Ollama constante) e de áudio/vídeo por segundo;
+- agrupamento do histórico em turnos atômicos (assistente com chamadas mais
+  todos os resultados) e corte por turno com preservação do sistema;
+- invariantes de histórico: remover resultado órfão, injetar marcador para
+  chamada sem resultado e garantir que a primeira mensagem seja do usuário;
+- retenção por stub progressivo de saída de ferramenta (4.000 → 1.000 → 200 →
+  0 caracteres) e placeholder de anexo antes de resumir;
+- ancoragem do contexto por `total − entrada + inicial`, com o campo
+  `initialPromptTokenCount` do Gemini/Vertex.
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhum arquivo, função, tipo, prompt, texto de interface, esquema de banco ou
+recurso do catálogo do upstream foi copiado, traduzido ou adaptado. Nenhum
+tokenizador BPE do projeto (nem as tabelas de ranks de ~2,2 MB) é distribuído
+aqui: a estimativa do JARVIS é lexical e própria.
+
+A AGPL-3.0 é licença de código aberto com copyleft forte: usar, copiar ou
+derivar o código do upstream obrigaria esta obra a adotar a mesma licença.
+Como o JARVIS não adota, a implementação de `server/contexto.py` foi escrita do
+zero a partir das regras documentadas e dos testes públicos, sem leitura de
+código-fonte para transcrição. O que se preserva é a regra técnica (fórmula,
+invariante, ordem de precedência), não a expressão.
+
+Nenhum modelo de linguagem, serviço de nuvem ou dado de usuário do upstream é
+consultado em tempo de execução.

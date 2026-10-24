@@ -89,6 +89,16 @@ from .marketing import (
     marketing_catalogo,
     revisar_anuncio,
 )
+from .contexto import (
+    ContextoError,
+    contabilizar_uso,
+    contexto_catalogo,
+    cortar_historico,
+    estimar_conversa,
+    planejar_orcamento,
+    resumir_historico,
+    sanear_historico,
+)
 from .confianca import (
     ConfiancaError,
     analisar_ficha,
@@ -930,6 +940,69 @@ class ConfiancaDuplicataInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     texto: str = Field(title="Índice ou lista", min_length=40, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Índice em Markdown ou linhas `nome;url;descrição`."})
     modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+MODOS_CONTEXTO = Literal["lite", "full", "ultra"]
+
+
+class ContextoOrcamentoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    janela: int = Field(default=200_000, title="Janela de contexto", ge=1_000, le=10_000_000, description="Tokens que o modelo aceita na entrada e na saída somadas.")
+    mensagens: str = Field(default="", max_length=200_000, title="Conversa (opcional)", json_schema_extra={"format": "textarea", "description": "Uma linha por mensagem (`papel: conteúdo`), `assistant(tools): c1=nome` para chamada e `tool(c1): resultado`, ou JSON com role/content."})
+    dialeto: Literal["anthropic", "openai", "google", "ollama"] = Field(default="anthropic", title="Dialeto")
+    reserva: int | None = Field(default=None, title="Reserva de saída", ge=0, le=10_000_000, description="O `max_tokens` desta chamada. Vazio = nenhuma reserva.")
+    max_saida_modelo: int | None = Field(default=None, title="Teto do modelo", ge=0, le=10_000_000, description="Só é reservado no endpoint Anthropic.")
+    saida_assistente: int | None = Field(default=None, title="Limite do assistente", ge=0, le=10_000_000)
+    assistente_habilitado: bool = Field(default=False, title="Usar o limite do assistente")
+    margem: int = Field(default=0, title="Margem de segurança (%)", ge=0, le=20)
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
+
+
+class ContextoTokensInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagens: str = Field(title="Conversa", min_length=5, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Uma linha por mensagem, ou JSON. Marcadores `[imagem 1024x768]`, `[áudio 90s]`, `[vídeo 30s]` e `[documento 12000]` entram na conta."})
+    dialeto: Literal["anthropic", "openai", "google", "ollama"] = Field(default="anthropic", title="Dialeto")
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
+
+
+class ContextoCorteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagens: str = Field(title="Conversa", min_length=5, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Uma linha por mensagem, ou JSON."})
+    janela: int = Field(default=128_000, title="Janela de contexto", ge=1_000, le=10_000_000)
+    reserva: int | None = Field(default=None, title="Reserva de saída", ge=0, le=10_000_000)
+    dialeto: Literal["anthropic", "openai", "google", "ollama"] = Field(default="anthropic", title="Dialeto")
+    manter_ultimas: int = Field(default=6, title="Manter últimos turnos", ge=1, le=50, description="Um turno de ferramenta é a chamada mais todos os resultados dela.")
+    limite_mensagens: int | None = Field(default=None, title="Limite de mensagens", ge=1, le=400, description="Corte por contagem antes do orçamento. Vazio = sem limite.")
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
+
+
+class ContextoHigieneInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagens: str = Field(title="Conversa", min_length=5, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Uma linha por mensagem, ou JSON com role/content/tool_calls/tool_call_id."})
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
+
+
+class ContextoResumoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagens: str = Field(title="Trecho a resumir", min_length=5, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Uma linha por mensagem, ou JSON."})
+    limite: int = Field(default=2_000, title="Limite do resumo (tokens)", ge=100, le=20_000)
+    limiar: int = Field(default=4_000, title="Limiar de stub (caracteres)", ge=0, le=20_000, description="Saída de ferramenta acima disso vira marcador com nome e tamanho. Zero estuba tudo.")
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
+
+
+class ContextoUsoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entrada: int = Field(title="Tokens de entrada", ge=0, le=100_000_000)
+    saida: int = Field(title="Tokens de saída", ge=0, le=100_000_000)
+    total: int | None = Field(default=None, title="Tokens totais", ge=0, le=200_000_000)
+    cache: int = Field(default=0, title="Tokens lidos do cache", ge=0, le=100_000_000)
+    inicial: int | None = Field(default=None, title="Prompt inicial (Gemini)", ge=0, le=100_000_000, description="`initialPromptTokenCount`, quando o provedor reporta.")
+    preco_entrada: float = Field(default=0.0, title="Preço de entrada (US$ / 1M)", ge=0, le=10_000)
+    preco_saida: float = Field(default=0.0, title="Preço de saída (US$ / 1M)", ge=0, le=10_000)
+    preco_cache: float = Field(default=0.0, title="Preço de cache (US$ / 1M)", ge=0, le=10_000)
+    hops: int = Field(default=1, title="Hops de continuação", ge=1, le=20)
+    janela: int | None = Field(default=None, title="Janela de contexto", ge=1_000, le=10_000_000)
+    modo: MODOS_CONTEXTO = Field(default="full", title="Nível")
 
 
 class DiagramTypeInput(BaseModel):
@@ -2095,6 +2168,66 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def confianca_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return confianca_catalogo()
 
+    def contexto_orcamento_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoOrcamentoInput)
+        try:
+            return planejar_orcamento(
+                janela=data.janela, mensagens=data.mensagens, dialeto=data.dialeto,
+                reserva=data.reserva, max_saida_modelo=data.max_saida_modelo,
+                saida_assistente=data.saida_assistente,
+                assistente_habilitado=data.assistente_habilitado,
+                margem=data.margem, modo=data.modo,
+            )
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_tokens_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoTokensInput)
+        try:
+            return estimar_conversa(mensagens=data.mensagens, dialeto=data.dialeto, modo=data.modo)
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_corte_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoCorteInput)
+        try:
+            return cortar_historico(
+                mensagens=data.mensagens, janela=data.janela, reserva=data.reserva,
+                dialeto=data.dialeto, manter_ultimas=data.manter_ultimas,
+                limite_mensagens=data.limite_mensagens, modo=data.modo,
+            )
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_higiene_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoHigieneInput)
+        try:
+            return sanear_historico(mensagens=data.mensagens, modo=data.modo)
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_resumo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoResumoInput)
+        try:
+            return resumir_historico(mensagens=data.mensagens, limite=data.limite, limiar=data.limiar, modo=data.modo)
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_uso_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContextoUsoInput)
+        try:
+            return contabilizar_uso(
+                entrada=data.entrada, saida=data.saida, total=data.total, cache=data.cache,
+                inicial=data.inicial, preco_entrada=data.preco_entrada,
+                preco_saida=data.preco_saida, preco_cache=data.preco_cache,
+                hops=data.hops, janela=data.janela, modo=data.modo,
+            )
+        except ContextoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def contexto_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return contexto_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -2415,6 +2548,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("confianca.instalacao", "Caminho de instalação", "Lê a receita e aponta versão flutuante, download que executa, sudo, gancho de instalação, clone sem tag, host fora de registro conhecido, instalação global e material depreciado.", "Confiança", ConfiancaInstalacaoInput, confianca_instalacao_handler, timeout_seconds=10),
         SkillDefinition("confianca.indice", "Índice de skills", "Confere um índice em Markdown contra as regras do próprio repositório de origem: host canônico, descrição de até dez palavras, formato da linha, duplicata, nome em kebab-case, link válido, escopo declarado e contagem por categoria.", "Confiança", ConfiancaIndiceInput, confianca_indice_handler, timeout_seconds=15),
         SkillDefinition("confianca.duplicata", "Duplicata e clone", "Compara as entradas do índice por nome, distância de edição, sufixo de clone e descrição: aponta nome repetido, link repetido, nome parecido, variação de teste ao lado do original e descrição idêntica em skills diferentes.", "Confiança", ConfiancaDuplicataInput, confianca_duplicata_handler, timeout_seconds=15),
+        SkillDefinition("contexto.orcamento", "Orçamento da janela", "Divide a janela entre prompt e resposta com a precedência da reserva (explícita, assistente, teto do modelo só no Anthropic), aplica o piso de 20% da entrada e a margem, e diz se a conversa cabe com a pressão em relação ao limiar de compactação.", "Contexto", ContextoOrcamentoInput, contexto_orcamento_handler, timeout_seconds=10),
+        SkillDefinition("contexto.tokens", "Estimativa de tokens", "Mede a conversa com estimativa lexical e as fórmulas de imagem por dialeto (Anthropic, OpenAI, Google, Ollama) e de áudio/vídeo por segundo; aponta anexo em base64, imagem sem dimensão, mídia sem duração e mensagem acima de 20 mil tokens.", "Contexto", ContextoTokensInput, contexto_tokens_handler, timeout_seconds=10),
+        SkillDefinition("contexto.corte", "Corte do histórico", "Agrupa a conversa em turnos atômicos, preserva sistema e últimos turnos e remove do começo até caber na sala; nunca parte um turno de ferramenta e marca o bloco removido com o convite ao resumo.", "Contexto", ContextoCorteInput, contexto_corte_handler, timeout_seconds=10),
+        SkillDefinition("contexto.higiene", "Higiene do histórico", "Valida o que o provedor exige: remove resultado de ferramenta sem chamada, injeta marcador para chamada sem resultado, garante que a primeira mensagem seja do usuário e aponta id repetido, ferramenta sem id e mensagem vazia.", "Contexto", ContextoHigieneInput, contexto_higiene_handler, timeout_seconds=10),
+        SkillDefinition("contexto.resumo", "Resumo de retenção", "Prepara a memória que substitui o trecho cortado: estuba saídas de ferramenta acima do limiar, troca anexo por marcador e lista decisão, número, caminho e pendência que precisam sobreviver, dentro do orçamento do resumo.", "Contexto", ContextoResumoInput, contexto_resumo_handler, timeout_seconds=10),
+        SkillDefinition("contexto.uso", "Uso e custo", "Ancora o contexto a partir de entrada, saída e total (com o prompt inicial do Gemini), calcula custo por milhão e o custo repetido em hops, e aponta total menor que a entrada, cache acima da entrada e janela ultrapassada.", "Contexto", ContextoUsoInput, contexto_uso_handler, timeout_seconds=5),
+        SkillDefinition("contexto.regras", "Catálogo de contexto", "Publica dialetos, fórmulas de imagem e mídia, precedência da reserva, agrupamento em turnos, escalada de stub, marcadores, limites de texto e mensagens e o que ficou de fora.", "Contexto", EmptyInput, contexto_regras_handler, timeout_seconds=5),
         SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
         SkillDefinition("marketing.teste", "Dimensionar teste A/B", "Calcula amostra por variante e duração com duas proporções, alfa e poder declarados, corrige para múltiplas variantes e recusa teste que não cabe no prazo.", "Marketing", MarketingTesteInput, marketing_teste_handler, timeout_seconds=10),

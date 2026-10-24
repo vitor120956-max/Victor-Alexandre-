@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.22.0.**
+**Versão atual: 0.23.0.**
 
 ## Executar em desenvolvimento
 
@@ -213,6 +213,16 @@ Nada é aberto, baixado ou instalado, e o parecer não usa modelo de linguagem: 
 
 Consulte [`docs/CONFIANCA.md`](docs/CONFIANCA.md) e a licença MIT em [`docs/licenses/voltagent-awesome-openclaw-skills.txt`](docs/licenses/voltagent-awesome-openclaw-skills.txt).
 
+## Contexto de conversa
+
+A página **Contexto** (`/contexto`) parte do subsistema de contexto do [`CherryHQ/cherry-studio`](https://github.com/CherryHQ/cherry-studio) — **AGPL-3.0**, 52 mil estrelas — e reimplementa a regra em Python. Nenhuma linha do upstream foi copiada e nenhum tokenizador BPE é baixado: a estimativa é lexical e a conta é explícita.
+
+`server/contexto.py` divide a janela entre prompt e resposta com a precedência da reserva — chamada, assistente, teto do modelo só no Anthropic — e piso de 20% para a entrada; mede a conversa com 1 token por caractere CJK, 1 a cada 4 latinos e 1 a cada 3 em código, e aplica as fórmulas de imagem por dialeto (750 px por token no Anthropic, 85 + 170 por ladrilho no OpenAI, 258 por recorte no Google) e de áudio/vídeo por segundo. Corta o histórico por turno atômico, preservando sistema e últimos turnos, sem nunca partir uma chamada do resultado dela. Saneia o que o provedor recusa: resultado órfão, chamada sem retorno e histórico que não abre com o usuário. Prepara o resumo de retenção com decisão, número, caminho e pendência, estubando saída de ferramenta na escalada 4.000 → 1.000 → 200 → 0 caracteres. E ancora o contexto em `total − entrada + inicial`, com custo por milhão e custo repetido em hops.
+
+Nada é enviado a modelo: janela, preço e `usage` são os que você informa, e a fatura do provedor continua sendo a fonte.
+
+Consulte [`docs/CONTEXTO.md`](docs/CONTEXTO.md) e o aviso AGPL-3.0 em [`docs/licenses/cherryhq-cherry-studio.txt`](docs/licenses/cherryhq-cherry-studio.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -330,7 +340,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **127 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **134 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -413,6 +423,7 @@ src/                         # interface React e estado local
 ├── pages/MarketingPage.tsx  # funil, teste, campanha, e-mail, SEO, anúncio e regras
 ├── pages/CienciaPage.tsx    # amostra, estatística, desenho, repro, validação e manuscrito
 ├── pages/ConfiancaPage.tsx  # ficha, risco, permissão, instalação, índice, duplicata e regras
+├── pages/ContextoPage.tsx   # orçamento, tokens, corte, higiene, resumo, uso e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -433,6 +444,7 @@ server/
 ├── marketing.py            # funil, amostra, UTM, e-mail, SEO, anúncio e regras
 ├── ciencia.py              # poder, relato, desenho, reprodutibilidade, método e manuscrito
 ├── confianca.py             # ficha, risco, permissão, instalação, índice e duplicata
+├── contexto.py              # janela, tokens, corte por turno, higiene, resumo e uso
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -442,7 +454,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 127 skills
+├── skill_registry.py        # allowlist, Pydantic e 134 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
