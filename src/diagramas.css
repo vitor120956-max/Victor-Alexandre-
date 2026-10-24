@@ -228,3 +228,33 @@
 .diagram-vocab span.is-on { border-color: rgba(var(--accent-rgb), .3); color: var(--accent); }
 .diagram-hint { margin: 8px 0 0; color: var(--muted-2); font-size: 7px; line-height: 1.5; }
 @media (max-width: 1080px) { .diagram-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- camada editorial -------------------------------------------------- */
+.diagram-section { display: flex; flex-direction: column; min-width: 0; }
+.diagram-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.diagram-modes button { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.012); color: var(--muted); text-align: left; transition: border-color 150ms, color 150ms, background 150ms; }
+.diagram-modes button:hover { border-color: var(--line-strong); color: var(--text-soft); }
+.diagram-modes button.is-active { border-color: rgba(var(--accent-rgb), .34); background: rgba(var(--accent-rgb), .05); color: var(--accent); }
+.diagram-modes button > span { display: flex; flex-direction: column; gap: 2px; font-size: 9px; font-weight: 560; }
+.diagram-modes button small { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-weight: 400; }
+.diagram-modes button.is-active small { color: var(--accent-soft); }
+.diagram-check { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 8px; }
+.diagram-check input { width: 13px; height: 13px; accent-color: var(--accent); }
+.diagram-check span { line-height: 1.5; }
+.diagram-swatches { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 6.4px; }
+.diagram-swatches i { width: 12px; height: 12px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 3px; }
+.diagram-option-list { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border-top: 1px solid var(--line); }
+.diagram-option-list .diagram-option { padding: 9px 10px; }
+.diagram-option-list .diagram-option header strong { font-size: 8.6px; }
+.diagram-option-list .diagram-option p { font-size: 7.2px; }
+.diagram-orders { display: flex; flex-direction: column; gap: 6px; }
+.diagram-order li strong { color: var(--text-soft); font-size: 7.4px; font-weight: 560; }
+.diagram-order li em { color: var(--muted-2); font-family: var(--mono); font-size: 6.4px; font-style: normal; }
+.diagram-order li.is-active em { color: var(--warning); }
+.diagram-editorial-closing { margin-top: 18px; }
+.diagram-editorial-closing .diagram-vocab { margin-bottom: 0; }
+.diagram-editorial-closing .diagram-vocab span { display: inline-flex; align-items: center; gap: 4px; }
+
+@media (max-width: 760px) {
+  .diagram-modes { grid-template-columns: 1fr; }
+}

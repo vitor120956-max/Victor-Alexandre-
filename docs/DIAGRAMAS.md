@@ -1,8 +1,10 @@
 # Diagramas
 
-Dez tipos de diagrama com **especificação JSON própria**, validação estrutural, layout medido e entrega em **HTML autocontido**. A adaptação parte de [`tt-a1i/archify`](https://github.com/tt-a1i/archify) (MIT, 2026), mas o código é local: nenhum CLI, template, pacote, plugin ou navegador do upstream é instalado ou executado.
+O JARVIS desenha em duas camadas. O **IR** (0.12.0, de [`tt-a1i/archify`](https://github.com/tt-a1i/archify)) tem especificação JSON própria, validação estrutural, layout medido e entrega em **HTML autocontido**. A **camada editorial** (0.18.0, de [`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design)) decide o tipo e o orçamento antes do traço, mede a marca, confere as seis regras de conector e escreve o recibo do que foi cortado numa importação.
 
-O upstream transforma uma ideia, plano ou repositório em um diagrama interativo de página única. O valor que sobrevive sem navegador é o **IR validado**, o **roteador de tipos**, as **regras de geometria** e o **contrato de entrega**. É isso que a versão 0.12.0 traz, em português e com vocabulário próprio.
+As duas adaptações são estáticas: nenhum CLI, template, pacote, plugin, navegador ou script do upstream é instalado ou executado. O desenho continua saindo do Python deste repositório.
+
+O valor que sobrevive sem navegador no archify é o **IR validado**, o **roteador de tipos**, as **regras de geometria** e o **contrato de entrega**. No diagram-design é o **vocabulário editorial**: 45 tipos com orçamento, nove padrões semânticos, papéis de cor com contrato de contraste e o recibo de fidelidade.
 
 ---
 
@@ -99,7 +101,7 @@ A leitura aceita o formato do upstream — `schema_version`, `diagram_type`, `me
 
 ---
 
-## As sete skills
+## As sete skills do IR
 
 | Skill | Entra | Sai |
 |---|---|---|
@@ -112,6 +114,207 @@ A leitura aceita o formato do upstream — `schema_version`, `diagram_type`, `me
 | `diagram.library` | nada | catálogo de tipos, vocabulários, presets e limites |
 
 Todas devolvem `executed: false` e `readOnly: true`. Nenhuma grava arquivo, abre processo, instala dependência ou chama provedor.
+
+---
+
+## A camada editorial
+
+A camada editorial não desenha: ela decide **antes** do traço e confere **depois** do arquivo. São sete verbos, todos estáticos, que respondem a perguntas que o IR sozinho não faz.
+
+### O que foi adaptado
+
+| Do upstream | Aqui |
+|---|---|
+| 45 tipos com `type-<nome>.md` e orçamento por tipo | `editorial.tipo` pontua os 45 tipos e devolve orçamento, preset e rampa |
+| Tokens semânticos com contrato de contraste WCAG | `editorial.marca` resolve 11 papéis e propõe o menor ajuste que passa |
+| `lint-render.py` com navegador e 12 anti-padrões | `editorial.lint` aplica os mesmos 12 anti-padrões ao texto do arquivo |
+| `verify-geometry.py` sobre o SVG renderizado | `editorial.conector` mede as 6 regras na geometria **declarada** |
+| `drawio_extract.py`, `mermaid_extract.py`, `excalidraw_extract.py` + Playwright | `editorial.importar` lê os três formatos como texto e redesenha com recibo |
+| `self_check.py`, `lint-render.py --all`, `export_svg.py`, `export_png.py` | `editorial.entrega` confere acessibilidade, viewBox, `min-width`, impressão e rampa |
+| Marketplace `npx skills add` e o CLI de agente | **Não adaptado**: nada é instalado; a página Diagramas chama a API local |
+
+### Os 45 tipos
+
+Cada tipo carrega a pergunta que responde, a família de layout e o orçamento de nós e setas. O catálogo completo está em `editorial.catalogo` e na aba **Catálogo**.
+
+| Família | Tipos |
+|---|---|
+| Arquitetura (6) | `arquitetura`, `delta-arquitetura`, `estado-atual-ti`, `alto-nivel`, `implantacao`, `dependencia` |
+| Fluxo (3) | `fluxograma`, `sequencia`, `maquina-estado` |
+| Processo (10) | `linha-tempo`, `raia`, `loop`, `gantt`, `processo`, `espinha-peixe`, `kanban`, `jornada`, `blueprint`, `story-map` |
+| Hierarquia (5) | `aninhado`, `arvore`, `organograma`, `camadas`, `piramide` |
+| Comparação (11) | `quadrante`, `radar`, `polar`, `venn`, `barras`, `cascata`, `treemap`, `mapa-calor`, `linha`, `dispersao`, `wardley` |
+| Dados (8) | `er`, `medalhao`, `fluxo-dados`, `integracao-dp`, `matriz-seguranca`, `sankey`, `uml-classe`, `esquema-bd` |
+| Objeto (2) | `explodido`, `planta` |
+
+Duas famílias ganham variantes de eixo em vez de tipos novos: `linha` cobre **slopegraph**, **ridgeline**, **streamgraph** e **bump**; `dispersao` cobre **bolha** e **enxame**. As variantes continuam dentro do mesmo orçamento.
+
+Os tetos seguem o upstream: `arquitetura` 8 nós, `raia` 9, `camadas` 6, `linha` 5 séries, `dispersao` 30 pontos, `gantt` 12 tarefas, `sankey` 8 nós e 12 fluxos. Acima do teto do tipo — ou de 9 nós em qualquer tipo — o veredito **bloqueia** e pede divisão em visão geral + detalhe.
+
+### Os nove padrões semânticos
+
+O padrão descreve **o que o sistema faz**; o tipo descreve **como a informação é arranjada**. Escolher o padrão primeiro evita o desenho bonito que responde à pergunta errada.
+
+| O leitor precisa entender | Padrão | Tipo mais próximo |
+|---|---|---|
+| Muitas chegadas competindo por capacidade finita | `fila` | fluxo de dados |
+| Perguntas, entradas, controles e saídas repetidos por estágio | `estagios` | processo |
+| Uma conversa virando registro durável | `entrada-estruturada` | fluxo de dados |
+| Por que duas decisões de política diferem | `traços-política` | fluxograma |
+| Quais rotas cruzam a fronteira de confiança | `estrada` | arquitetura |
+| Quais controles valem em cada superfície | `catálogo-controles` | camadas |
+| Como defesas reduzem risco e o que sobra | `defesas` | camadas |
+| Em que subelementos o sistema se divide, cada um citável | `blocos` | árvore |
+| Como um sujeito percorre fases, esperas e desfechos | `ciclo-vida` | máquina de estados |
+
+O casamento é por palavra inteira: `id` não casa dentro de `pedido`. Quando o padrão aparece com dois sinais ou mais, ele **decide o tipo**; com um sinal só, fica como sugestão ao lado do tipo escolhido.
+
+### Papéis de cor e contraste
+
+O desenho referencia **papéis**, nunca hex. Trocar `accent` muda todos os diagramas de uma vez.
+
+| Papel | Claro | Escuro | Papel no desenho |
+|---|---|---|---|
+| `paper` | `#f5f5f5` | `#2d3142` | Fundo e preenchimento padrão |
+| `paper-2` | `#ececec` | `#393e53` | Contêiner, preenchimento secundário |
+| `ink` | `#2d3142` | `#f5f5f5` | Texto e traço primário |
+| `ink-strong` | `#111111` | `#111111` | Texto sobre preenchimento de acento |
+| `muted` | `#4f5d75` | `#bfc0c0` | Texto secundário, seta padrão |
+| `soft` | `#5a6580` | `#949eb2` | Sublabel e rótulo de fronteira |
+| `rule` | `rgba(45,49,66,.12)` | `rgba(245,245,245,.12)` | Fio de borda |
+| `rule-solid` | `#bfc0c0` | `rgba(191,192,192,.25)` | Borda forte, linha de base |
+| `accent` | `#bf4520` | `#f08a59` | Foco: 1–2 elementos por diagrama |
+| `accent-tint` | `rgba(191,69,32,.08)` | `rgba(240,138,89,.10)` | Preenchimento de caixa com borda de acento |
+| `link` | `#2e5aa8` | `#739fdf` | Chamada HTTP/API, sistema externo |
+
+O contrato é WCAG 2.x: **4,5:1** para texto (inclusive `soft`, `link` e `accent` usados como texto), **3:1** para marca essencial (linha, seta, borda, ponto), e nenhum mínimo para `rule`, `rule-solid`, `paper-2`, `accent-tint` — desde que nunca sejam o único portador de significado. Cor translúcida é composta sobre o papel **antes** de medir. `ink-strong` é medido contra o preenchimento de acento a 85%, não contra o papel.
+
+Quando um papel de texto não passa, o ajuste proposto muda a **luminosidade** e preserva o matiz: o acento da marca continua sendo o acento da marca, só legível.
+
+### Tipografia
+
+| Papel | Família | Tamanho | Uso |
+|---|---|---|---|
+| `title` | Instrument Serif | 1,75rem | H1 da página |
+| `node-name` | Geist (sans) 600 | 12px | Nome legível por gente |
+| `sublabel` | Geist Mono | 9px | Porta, protocolo, URL, tipo de campo |
+| `eyebrow` | Geist Mono 500 | 7–8px, 0,18em, caixa alta | Etiqueta de tipo e eixo |
+| `arrow-label` | Geist Mono | 8px, 0,06em | Anotação de seta |
+| `callout` | Instrument Serif itálico | 14px | Aparte editorial |
+
+Mono é para conteúdo **técnico**. Nome de componente é sans; título é serifa; itálico é para o aparte. `JetBrains Mono` é recusado pelo nome — é o atalho de "fonte de dev" que o guia não aceita.
+
+### Tamanhos, rampas e os quatro discos
+
+Todo desenho tem quatro discos: **formato**, **tamanho**, **detalhe** e **plateia**. Eles são escolhidos antes de desenhar porque mudam o deliverable, o `viewBox`, a rampa tipográfica e a contagem de nós.
+
+| Preset | `viewBox` | Rampa | Uso |
+|---|---|---|---|
+| `doc-inline` | 960 × 600 | standard | Diagrama na largura do corpo |
+| `doc-wide` | 1280 × 720 | standard | Documentação de largura total |
+| `slide-16x9` | 1280 × 720 | presentation | Slide projetado |
+| `slide-4x3` | 1024 × 768 | presentation | Template de slide antigo |
+| `social-og` | 1200 × 632 | presentation | Cartão de link |
+| `social-square` | 1080 × 1080 | presentation | Post de feed |
+| `print-a4-landscape` | 1120 × 792 | print | A4 paisagem |
+| `print-a3-landscape` | 1584 × 1120 | print | A3 paisagem |
+| `print-letter-landscape` | 1056 × 816 | print | Carta paisagem |
+| `fit` | derivado do conteúdo | standard | Handoff vetorial |
+
+Todos os valores são divisíveis por 4. A rampa acompanha o tamanho: nome a 12px no padrão, 16px na apresentação, 12px no impresso. Nome de 12px num `slide-16x9` é **bloqueio**, não preferência.
+
+| Detalhe | Nós | Arestas | Sublabel |
+|---|---|---|---|
+| `faithful` | ≤24, com zonas obrigatórias | ≤32 | todo port, protocolo e versão |
+| `balanced` | ≤12 | ≤16 | técnico em até 4 nós |
+| `simplified` | ≤7 | ≤9 | nenhum |
+
+| Plateia | Nome do nó | Sublabel | Rótulo de seta | Nunca |
+|---|---|---|---|---|
+| `engineer` | nome exato do serviço | protocolo, porta, versão | `POST /v2/orders` | "conecta com" |
+| `mixed` | componente, sigla expandida | tecnologia só quando muda a decisão | verifica, grava, avisa | porta, versão, codinome |
+| `executive` | capacidade e resultado | nenhum | aprova, paga | fornecedor, infraestrutura, protocolo |
+
+### As seis regras de conector
+
+O upstream chama as seis de não negociáveis. Elas são medidas, não opinadas.
+
+| # | Regra | Falha quando |
+|---|---|---|
+| 1 | Cotovelo ortogonal com `r=8` (`r=6` no aperto); reta só com os extremos no mesmo eixo | Conector diagonal |
+| 2 | Rótulo ≤14 caracteres, caixa alta, sobre máscara opaca, com 6–10px visíveis até o traço | Rótulo encostado, cortado ou sobre a própria linha |
+| 3 | Sem sobreposição: paralelos a ≥12px, cruzamento único com ponte | Traços empilhados |
+| 4 | Leque no ponto de encaixe: `L·k/(N+1)`, ≥12px entre vizinhos | Dois conectores no mesmo ponto |
+| 5 | Sem trânsito atrás de caixa que não seja ponta; se inevitável, tracejado `4,3` | Linha sumindo atrás de um nó |
+| 6 | Máscara do rótulo não sobrepõe nó desenhado depois | Rótulo cortado pela borda do nó |
+
+A entrada é a geometria declarada: `de`/`para` com `{x,y,w,h}` e `lado`, ou `pontos` explícitos; opcionalmente `rotulo`, `mascara`, `raio`, `tracejado`, `cruzaCaixa`, `setaNaIntermediaria` e `nosDepois`. A conta é feita em coordenada, sem renderizar.
+
+### Contrato de SVG acessível
+
+1. `<svg>` com `role="img"` e `aria-labelledby` apontando para título **e** descrição que existem.
+2. `<title>` é o primeiro filho de `<svg>`, antes de `<defs>`.
+3. IDs prefixados por diagrama e variante (`fila-title`, `fila-dark-desc`); `title` e `desc` puros são proibidos.
+4. `<title>` é o nome curto do assunto, até ~60 caracteres.
+5. `<desc>` é uma frase sobre o **conteúdo**, não sobre a geometria.
+6. SVG só decorativo leva `aria-hidden="true"`.
+
+`editorial.entrega` confere os seis no texto, mais o `viewBox` do preset, o `min-width` igual à largura do `viewBox`, o invólucro com `overflow-x: auto`, a liberação em `@media print` **depois** da regra do SVG, e a rampa tipográfica. Movimento é opcional: exige `prefers-reduced-motion` e um quadro estático completo.
+
+### Importar é redesenhar
+
+`editorial.importar` lê Mermaid (fluxograma, sequência, classe, estado, ER e Gantt), draw.io (`<mxCell>` com vértices, arestas e pais) e Excalidraw (`elements`, `text` com `containerId`, `arrow` com binding).
+
+O que atravessa: **componentes, relações, agrupamento e direção**.
+O que não atravessa: coordenada, paleta, fonte, o emaranhado de conectores do draw.io, o layout automático do Mermaid e a geometria à mão do Excalidraw.
+
+Quando a origem passa do teto do detalhe, a **escada de degradação** corta nesta ordem e para assim que cabe:
+
+1. células decorativas — nota adesiva, texto solto, legenda da própria fonte;
+2. duplicatas exatas — `Worker ×6` no lugar de seis nós;
+3. clusters de folhas — o contêiner engole os filhos;
+4. sumidouros de grau 1 — monitoração, bucket de log, camada de arquivo;
+5. infraestrutura transversal — log, métrica, segredo, CI;
+6. **ainda acima?** divide em visão geral + detalhe em vez de encolher.
+
+Tudo o que sai nos passos 2–6 aparece no **recibo de fidelidade**, no parecer e na aba Importar. O draw.io comprimido é detectado e não descomprimido: o recibo pede o XML do modelo.
+
+### Os doze anti-padrões
+
+Brilho ciano ou roxo no escuro, sombra, raio acima de 12, mono como fonte geral, JetBrains Mono, caixas todas idênticas, legenda dentro da área do desenho, rótulo de seta sem máscara, texto vertical, três cartões de resumo iguais, acento em três ou mais elementos e conector diagonal.
+
+Cada achado traz o que é, por que é genérico, como corrigir e o que acontece se ficar. O lint lê o texto do arquivo: ele não substitui o render.
+
+### As sete skills da camada editorial
+
+| Skill | Entra | Sai |
+|---|---|---|
+| `editorial.tipo` | pedido, plateia, destino, número de nós | tipo, padrão, orçamento, preset, rampa e plano |
+| `editorial.marca` | tokens `papel=valor`, tema | 11 papéis com contraste, mínimo, situação e proposta |
+| `editorial.lint` | HTML ou SVG | achados em quatro partes, os 12 anti-padrões |
+| `editorial.conector` | lista de conectores em JSON | seis regras medidas, por conector |
+| `editorial.importar` | origem draw.io/Mermaid/Excalidraw + 4 discos | nós, arestas, escada aplicada e recibo |
+| `editorial.entrega` | HTML + preset | acessibilidade, canvas, rolagem, impressão e rampa |
+| `editorial.catalogo` | nada | 45 tipos, 9 padrões, 12 papéis, 10 presets, 6 regras |
+
+Todas devolvem `executed: false` e `readOnly: true`, como as do IR.
+
+### A página `/diagramas`
+
+A página ganhou duas camadas, e a chave fica acima das abas:
+
+- **Desenho por IR** — as sete abas anteriores (Tipo, IR, Layout, Desenho, Legenda, Entrega, Catálogo);
+- **Camada editorial** — sete abas novas (Tipo, Marca, Lint, Conector, Importar, Entrega, Catálogo), cada uma com exemplo carregável, parecer, Markdown para copiar e JSON para baixar.
+
+A camada editorial fecha tipo, orçamento, marca e conectores; o esqueleto aprovado vira especificação na camada do IR, que mede o layout e entrega o HTML.
+
+### Limites da camada editorial
+
+- **Sem render:** o lint e a entrega leem texto; nenhuma sobreposição real é medida no pixel.
+- **Geometria declarada:** as seis regras valem sobre as coordenadas que você informa, não sobre um SVG renderizado.
+- **Sem descompressão:** draw.io comprimido é reconhecido e pede o XML.
+- **Escada heurística:** o corte é por rótulo, grau e palavra-chave; qual caminho é principal continua sendo julgamento humano.
+- **Sem fonte pública:** o upstream deriva a paleta de um site com `getComputedStyle`; aqui os tokens vêm do texto colado.
 
 ---
 
@@ -221,7 +424,7 @@ A prévia usa `<iframe sandbox="">`: nenhum script do artefato executa. O botão
 
 ```bash
 npm run dev
-curl -s http://localhost:8000/api/health   # 0.17.0, 93 skills
+curl -s http://localhost:8000/api/health   # 0.18.0, 100 skills
 curl -s -X POST http://localhost:8000/api/skills/diagram.type/execute \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"pedido":"onde o tempo foi num checkout lento"}}'
@@ -234,12 +437,15 @@ npx tsc --noEmit
 npm run build
 ```
 
-São **72 testes de diagrama** em `server/tests/test_diagram.py`: roteador nos dez tipos, IR válido e inválido, hierarquia, datas, orçamento, determinismo do layout, cruzamento medido, folga de rótulo, desenho dos dez tipos, escape de HTML, formatos, legenda, gates e API.
+São **72 testes de diagrama** em `server/tests/test_diagram.py` (roteador, IR válido e inválido, hierarquia, datas, orçamento, determinismo do layout, cruzamento medido, folga de rótulo, desenho dos dez tipos, escape de HTML, formatos, legenda, gates e API) e **42 testes editoriais** em `server/tests/test_editorial.py` (catálogo de 45 tipos, seleção por padrão, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada, o contrato de entrega e a API).
 
 ---
 
 ## Licença e atribuição
 
-O upstream é MIT: `Copyright (c) 2026 tt-a1i (Archify)` e `Copyright (c) 2025 Cocoon AI`. O texto integral está em [`licenses/tt-a1i-archify.txt`](licenses/tt-a1i-archify.txt).
+Dois upstreams, ambos MIT:
 
-A implementação deste repositório é independente: o código Python, o vocabulário em português, os presets, os textos das skills e o HTML gerado foram escritos aqui. O que veio do estudo foi o **recorte de valor** (tipos, IR validado, geometria medida, gates de entrega), não arquivos do projeto original.
+- [`tt-a1i/archify`](https://github.com/tt-a1i/archify) — `Copyright (c) 2026 tt-a1i (Archify)` e `Copyright (c) 2025 Cocoon AI`, texto integral em [`licenses/tt-a1i-archify.txt`](licenses/tt-a1i-archify.txt);
+- [`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design) — `Copyright (c) 2025 Cathryn Lavery`, texto integral em [`licenses/cathrynlavery-diagram-design.txt`](licenses/cathrynlavery-diagram-design.txt).
+
+A implementação deste repositório é independente: o código Python, o vocabulário em português, os presets, os textos das skills e o HTML gerado foram escritos aqui. O que veio dos estudos foi o **recorte de valor** — tipos, IR validado, geometria medida, gates de entrega, papéis de cor, orçamentos, as seis regras de conector e a escada de degradação —, não arquivos dos projetos originais.

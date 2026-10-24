@@ -39,6 +39,16 @@ from .diagram import (
     diagram_spec,
     diagram_type,
 )
+from .editorial import (
+    EditorialError,
+    checar_conectores,
+    checar_entrega,
+    editorial_catalog,
+    escolher_tipo,
+    lint_editorial,
+    planejar_importacao,
+    resolver_marca,
+)
 from .legal_corpus import LegalCorpus
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
@@ -538,6 +548,51 @@ class StudioArtifactInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     artifact: str = Field(title="HTML do artefato", min_length=20, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Arquivo único: HTML, CSS e JS no mesmo documento. Nada é renderizado ou executado."})
     mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialTipoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pedido: str = Field(title="O que o leitor precisa entender", min_length=8, max_length=2_000, json_schema_extra={"format": "textarea", "description": "Uma frase sobre a pergunta que o desenho responde, não sobre o tema."})
+    plateia: str = Field(default="", title="Quem lê", max_length=120, json_schema_extra={"description": "Opcional: quem precisa entender e o que já sabe (engenharia, executiva, misto)."})
+    destino: str = Field(default="", title="Onde o desenho vai aparecer", max_length=60, json_schema_extra={"description": "blog, readme, docs, wiki, deck, figma, social ou print. Define o preset e a rampa."})
+    nos: int = Field(default=0, ge=0, le=400, title="Quantos nós", json_schema_extra={"description": "Quantos componentes ou passos o desenho deve mostrar; 0 deixa a decisão aberta."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialMarcaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    marca: str = Field(title="Tokens da marca", min_length=3, max_length=4_000, json_schema_extra={"format": "textarea", "description": "Um papel por linha: `paper=#f5f5f5`, `ink=#2d3142`, `accent=#bf4520`. Aceita rgba()."})
+    escuro: bool = Field(default=False, title="Tema escuro")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialLintInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    html: str = Field(title="HTML ou SVG do diagrama", min_length=40, max_length=60_000, json_schema_extra={"format": "textarea", "description": "O arquivo autocontido. O lint lê o texto: não renderiza nem busca rede."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialConectorInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conectores: str = Field(title="Conectores em JSON", min_length=2, max_length=60_000, json_schema_extra={"format": "textarea", "description": "Lista com `id`, `de`/`para` como `{x,y,w,h}` ou `pontos`, e opcionalmente `rotulo`, `mascara`, `raio`, `tracejado`, `cruzaCaixa`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialImportarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fonte: str = Field(title="Arquivo de origem", min_length=2, max_length=60_000, json_schema_extra={"format": "textarea", "description": "Cole o draw.io (XML), o bloco Mermaid ou o JSON do Excalidraw. O resultado é redesenho, com recibo de fidelidade."})
+    formato: Literal["drawio", "mermaid", "excalidraw"] = Field(default="mermaid", title="Formato de origem")
+    tamanho: Literal["doc-inline", "doc-wide", "slide-16x9", "slide-4x3", "social-og", "social-square", "print-a4-landscape", "print-a3-landscape", "print-letter-landscape", "fit"] = Field(default="doc-inline", title="Tamanho")
+    detalhe: Literal["faithful", "balanced", "simplified"] = Field(default="balanced", title="Detalhe")
+    plateia: Literal["engineer", "mixed", "executive"] = Field(default="mixed", title="Plateia")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EditorialEntregaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    html: str = Field(title="HTML do diagrama", min_length=60, max_length=60_000, json_schema_extra={"format": "textarea", "description": "O arquivo autocontido. Verifica acessibilidade, viewBox, min-width, rolagem local, impressão e rampa."})
+    preset: Literal["doc-inline", "doc-wide", "slide-16x9", "slide-4x3", "social-og", "social-square", "print-a4-landscape", "print-a3-landscape", "print-letter-landscape", "fit"] = Field(default="doc-inline", title="Preset de tamanho")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
 class DiagramTypeInput(BaseModel):
@@ -1383,6 +1438,53 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def diagram_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return diagram_library()
 
+    def editorial_tipo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialTipoInput)
+        try:
+            return escolher_tipo(pedido=data.pedido, plateia=data.plateia, destino=data.destino,
+                                 nos=data.nos, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_marca_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialMarcaInput)
+        try:
+            return resolver_marca(marca=data.marca, escuro=data.escuro, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_lint_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialLintInput)
+        try:
+            return lint_editorial(html=data.html, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_conector_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialConectorInput)
+        try:
+            return checar_conectores(conectores=data.conectores, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_importar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialImportarInput)
+        try:
+            return planejar_importacao(fonte=data.fonte, formato=data.formato, tamanho=data.tamanho,
+                                       detalhe=data.detalhe, plateia=data.plateia, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_entrega_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EditorialEntregaInput)
+        try:
+            return checar_entrega(html=data.html, preset=data.preset, modo=data.modo)
+        except EditorialError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def editorial_catalogo_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return editorial_catalog()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -1676,6 +1778,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("diagram.legend", "Compor legenda e preset", "Lista as quatro variantes de relação, os quatro presets com contraste medido e aponta legenda oculta ou movimento em excesso.", "Diagramas", DiagramLegendInput, diagram_legend_handler, timeout_seconds=10),
         SkillDefinition("diagram.delivery", "Rodar o contrato de entrega", "Executa os gates validar, entregar e checar em ordem, para no primeiro erro e declara o que não foi verificado.", "Diagramas", DiagramDeliveryInput, diagram_delivery_handler, timeout_seconds=20),
         SkillDefinition("diagram.library", "Catálogo de diagramas", "Mostra os dez tipos com orçamento, os vocabulários de nó, relação e preset, os formatos e os limites do IR.", "Diagramas", EmptyInput, diagram_library_handler, timeout_seconds=5),
+        SkillDefinition("editorial.tipo", "Escolher tipo e padrão editoriais", "Lê o pedido, pontua os 45 tipos e os nove padrões semânticos, fixa orçamento, preset e rampa e devolve o plano antes de desenhar.", "Diagramas", EditorialTipoInput, editorial_tipo_handler, timeout_seconds=10),
+        SkillDefinition("editorial.marca", "Resolver marca em papéis", "Converte os tokens da marca em papéis semânticos e mede o contraste WCAG de cada um, propondo o menor ajuste que passa.", "Diagramas", EditorialMarcaInput, editorial_marca_handler, timeout_seconds=10),
+        SkillDefinition("editorial.lint", "Lint editorial do arquivo", "Aplica os doze anti-padrões ao HTML ou SVG: sombra, raio grande, mono total, rótulo sem máscara, diagonal e acento em excesso.", "Diagramas", EditorialLintInput, editorial_lint_handler, timeout_seconds=15),
+        SkillDefinition("editorial.conector", "Conferir regras de conector", "Mede as seis regras obrigatórias na geometria declarada: ortogonal, folga de rótulo, sobreposição, leque, trânsito e máscara.", "Diagramas", EditorialConectorInput, editorial_conector_handler, timeout_seconds=10),
+        SkillDefinition("editorial.importar", "Redesenhar com recibo", "Lê draw.io, Mermaid ou Excalidraw, aplica a escada de degradação e devolve o recibo de fidelidade com os quatro discos de saída.", "Diagramas", EditorialImportarInput, editorial_importar_handler, timeout_seconds=20),
+        SkillDefinition("editorial.entrega", "Aplicar contrato de entrega", "Verifica SVG acessível, viewBox do preset, min-width, rolagem local, impressão, rampa tipográfica e movimento opcional.", "Diagramas", EditorialEntregaInput, editorial_entrega_handler, timeout_seconds=15),
+        SkillDefinition("editorial.catalogo", "Catálogo editorial", "Mostra os 45 tipos com orçamento, os nove padrões, os doze papéis de cor, os presets, as rampas e as seis regras de conector.", "Diagramas", EmptyInput, editorial_catalogo_handler, timeout_seconds=5),
         SkillDefinition("taste.direction", "Sortear direção de arte", "Sorteia três direções determinísticas por setor, tom e ativos e entrega a ficha da escolhida com seções, paleta, tipo, armadilhas e redesenhos justificados.", "Direção de arte", TasteDirectionInput, taste_direction_handler, timeout_seconds=15),
         SkillDefinition("taste.argument", "Auditar o argumento", "Confere afirmações e provas seção a seção, o orçamento do título, a ação principal e o vocabulário de catálogo.", "Direção de arte", TasteArgumentInput, taste_argument_handler, timeout_seconds=10),
         SkillDefinition("taste.copy", "Auditar deck de copy", "Mede título, apoio, corpo, ações e navegação, e aponta formas proibidas, micro-tipografia e texto de exemplo.", "Direção de arte", TasteCopyInput, taste_copy_handler, timeout_seconds=10),

@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.17.0.**
+**Versão atual: 0.18.0.**
 
 ## Executar em desenvolvimento
 
@@ -113,7 +113,11 @@ Os dez tipos são arquitetura, fluxo de trabalho, sequência, fluxo de dados, ci
 
 O desenho sai em **HTML autocontido com SVG inline**, sem script, fonte remota ou imagem externa, além de SVG puro, Mermaid, texto e DOT. Quatro presets (Clássico, Sinal, Planta e Editorial) mudam papel, tinta e acento sem mudar a topologia, e a legenda automática lista só as variantes que o desenho usa. O contrato de entrega roda **validar → entregar → checar → navegador → revisão visual**, para no primeiro gate falho e nunca marca como feito o que não foi: navegador, captura e revisão visual aparecem como não executados quando não aconteceram.
 
-Nada do upstream é instalado ou executado: sem `npx skills add`, `archify.zip`, `bin/archify.mjs`, `finalize`, `visual-check`, plugins DSH ou Chrome de inspeção. Consulte [`docs/DIAGRAMAS.md`](docs/DIAGRAMAS.md) e a licença MIT em [`docs/licenses/tt-a1i-archify.txt`](docs/licenses/tt-a1i-archify.txt).
+Sobre esse motor entra a **camada editorial**, adaptada de [`cathrynlavery/diagram-design`](https://github.com/cathrynlavery/diagram-design) em outras sete skills. Ela decide **antes** do traço: escolhe entre **45 tipos** e **nove padrões semânticos**, fixa orçamento (`≤9 nós`, `≤12 setas`, `≤2 acentos`, `≤2 chamadas`), converte a marca em **11 papéis de cor** com contrato de contraste WCAG — 4,5:1 para texto, 3:1 para marca essencial — e propõe o menor ajuste de luminosidade que passa, preservando o matiz. Confere também **12 anti-padrões** no arquivo (brilho ciano, sombra, raio grande, mono total, rótulo sem máscara, diagonal) e as **seis regras de conector** medidas na geometria declarada: ortogonal com `r=8`, folga de rótulo de 6–10px, paralelos a ≥12px, leque `L·k/(N+1)`, trânsito tracejado e máscara que nunca sobrepõe um nó desenhado depois.
+
+Importar é redesenhar: Mermaid, draw.io e Excalidraw entram por parser próprio, a **escada de degradação** corta decorativo, duplicata, cluster de folha, sumidouro e infraestrutura transversal — e tudo o que sai aparece no **recibo de fidelidade**. A entrega confere o contrato de SVG acessível (`role="img"`, `<title>` primeiro filho, IDs prefixados, `<desc>` de conteúdo), o `viewBox` do preset, o `min-width` igual à largura, a rolagem local e a liberação na impressão.
+
+Nada dos dois upstreams é instalado ou executado: sem `npx skills add`, `archify.zip`, `bin/archify.mjs`, `finalize`, `visual-check`, plugins DSH, Chrome de inspeção, `verify-geometry.py`, `self_check.py`, `lint-render.py` ou `export_png.py`. Consulte [`docs/DIAGRAMAS.md`](docs/DIAGRAMAS.md), a licença MIT do archify em [`docs/licenses/tt-a1i-archify.txt`](docs/licenses/tt-a1i-archify.txt) e a do diagram-design em [`docs/licenses/cathrynlavery-diagram-design.txt`](docs/licenses/cathrynlavery-diagram-design.txt).
 
 ## Carreira
 
@@ -251,6 +255,13 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `diagram.legend` | Compõe legenda e presets com contraste |
 | `diagram.delivery` | Roda os gates e para no primeiro erro |
 | `diagram.library` | Publica tipos, vocabulários e limites |
+| `editorial.tipo` | Escolhe entre 45 tipos e 9 padrões, com orçamento e preset |
+| `editorial.marca` | Resolve 11 papéis de cor e mede o contraste WCAG |
+| `editorial.lint` | Aplica os 12 anti-padrões ao HTML ou SVG |
+| `editorial.conector` | Mede as 6 regras de conector na geometria |
+| `editorial.importar` | Lê draw.io/Mermaid/Excalidraw e escreve o recibo |
+| `editorial.entrega` | Confere SVG acessível, canvas, impressão e rampa |
+| `editorial.catalogo` | Publica tipos, padrões, papéis, presets e regras |
 | `carreira.triagem` | Nota 1–5 com bandas, evidência, tetos e legitimidade |
 | `carreira.ats` | Lints de payload e placar ATS de pesos fixos |
 | `carreira.bullets` | Audita abertura, métrica, voz e clichê de cada bullet |
@@ -277,7 +288,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **93 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **100 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -307,7 +318,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Agentes com equipe, quadro, orçamento, verificação de parada e permissões;
 - página Estúdio com contrato de design, contraste WCAG, crítica em cinco dimensões e linter anti-clichê;
 - página Direção com sorteio de direções, argumento, deck de copy, linter, tells datados e júri ponderado;
-- página Diagramas com tipo, IR validado, layout medido, desenho portátil, legenda e contrato de entrega;
+- página Diagramas em duas camadas: desenho por IR (tipo, IR validado, layout medido, desenho portátil, legenda, entrega) e camada editorial (tipo, marca, lint, conectores, importação e entrega);
 - página Carreira com triagem 1–5, ATS, bullets, carta, entrevista, funil e catálogo;
 - página Navegador com snapshot, alvo, roteiro, checagem, recibos, limites e catálogo;
 - página Escritório com comando, receita, páginas, lote, escopos, erros e catálogo;
@@ -325,7 +336,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas. O estado desta versão tem **41 testes web e 703 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade e o contrato de entrega. O estado desta versão tem **41 testes web e 745 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -369,6 +380,7 @@ server/
 ├── taste.py                 # direções, argumento, júri e biblioteca
 ├── taste_rules.py           # copy, 29 regras lexicais e registro de tells
 ├── diagram.py               # IR, layout medido, SVG e contrato de entrega
+├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
 ├── escritorio.py            # comando gws, receitas, páginas, lotes, escopos e erros
@@ -377,7 +389,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 93 skills
+├── skill_registry.py        # allowlist, Pydantic e 100 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -399,6 +411,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Engenharia enxuta é estática: a escada avalia só o que foi declarado, a revisão e a auditoria produzem candidatos que exigem confirmação no código real. Execução, carga, testes e chamadores fora da árvore não são verificados; o histórico do Git não é lido.
 - Estúdio de design é estático: não compila tokens, não lê o repositório do pacote, não renderiza o HTML nem publica artefato. O esquema de 56 slots é embutido, o parser de CSS cobre blocos simples e o linter é lexical, sujeito a falso positivo.
 - Diagramas são gerados a partir do que você declara: sem navegador, o piso de texto e o overflow são estimativas, e Mermaid/DOT são exportados como texto, não renderizados aqui.
+- A camada editorial também é estática: o lint e a entrega leem texto, as seis regras de conector valem sobre a geometria declarada, o draw.io comprimido pede o XML do modelo e a escada de degradação é heurística — qual caminho é principal continua sendo julgamento humano.
 - Carreira é triagem declarada: não lê portais, LinkedIn, e-mail ou calendário, não envia candidatura e não altera o currículo. A nota vem só do texto colado; legitimidade é sinal, não acusação, e percentual do funil com menos de oito linhas é contagem, não tendência.
 - Navegador é leitura declarada: não abre aba, não clica, não preenche, não paga e não baixa. O snapshot é uma foto, XPath/CSS/shadow DOM não são avaliados, o código gerado não é executado e a classificação de limites lê palavras, não intenção.
 - Escritório é planejamento declarado: não instala o CLI, não autentica, não lê credencial e não chama o Google. A descoberta não é consultada ao vivo, os parâmetros obrigatórios e os escopos vêm de tabelas curadas, e os tetos de lote são conservadores.

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SkillExecution } from '../lib/api';
+import { EditorialSection } from './EditorialSection';
 import '../diagramas.css';
 
 type DiagramTab = 'type' | 'spec' | 'layout' | 'render' | 'legend' | 'delivery' | 'library';
@@ -446,6 +447,7 @@ function LibraryView({ reference }: { reference: Row | null }) {
 
 export function DiagramPage() {
   const { backendOnline, executeSkill, pushToast } = useApp();
+  const [mode, setMode] = useState<'ir' | 'editorial'>('ir');
   const [tab, setTab] = useState<DiagramTab>('type');
   const [view, setView] = useState<DiagramTab>('type');
   const [level, setLevel] = useState<Level>('full');
@@ -595,12 +597,25 @@ export function DiagramPage() {
     <div className="diagram-page">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">DIAGRAMAS · IR VALIDADO, LAYOUT MEDIDO</span>
+          <span className="eyebrow">DIAGRAMAS · IR VALIDADO, CAMADA EDITORIAL</span>
           <h1>Um desenho que se explica <span>sem runtime</span></h1>
-          <p>Dez tipos de diagrama com especificação JSON própria, validação estrutural, layout medido e entrega em HTML autocontido. Também exporta SVG, Mermaid, texto e DOT — sem abrir navegador e sem instalar nada.</p>
+          <p>Duas camadas: o IR desenha com especificação JSON própria, layout medido e entrega em HTML autocontido; a camada editorial escolhe tipo e orçamento, mede a marca, confere conectores e escreve o recibo da importação. Nenhuma das duas abre navegador.</p>
         </div>
       </header>
 
+      <nav className="diagram-modes" aria-label="Camadas dos diagramas">
+        <button type="button" className={mode === 'ir' ? 'is-active' : undefined} onClick={() => setMode('ir')} aria-pressed={mode === 'ir'}>
+          <PenTool size={16} />
+          <span>Desenho por IR<small>especificação, layout e arquivo</small></span>
+        </button>
+        <button type="button" className={mode === 'editorial' ? 'is-active' : undefined} onClick={() => setMode('editorial')} aria-pressed={mode === 'editorial'}>
+          <Frame size={16} />
+          <span>Camada editorial<small>tipo, marca, conectores e recibo</small></span>
+        </button>
+      </nav>
+
+      {mode === 'editorial' ? <EditorialSection /> : (
+      <>
       <section className="panel diagram-intro">
         <span className="diagram-intro-icon"><Frame size={22} /></span>
         <div>
@@ -814,6 +829,8 @@ export function DiagramPage() {
           )}
         </section>
       </div>
+      </>
+      )}
     </div>
   );
 }
