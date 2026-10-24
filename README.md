@@ -376,6 +376,9 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Carreira com triagem 1–5, ATS, bullets, carta, entrevista, funil e catálogo;
 - página Navegador com snapshot, alvo, roteiro, checagem, recibos, limites e catálogo;
 - página Escritório com comando, receita, páginas, lote, escopos, erros e catálogo;
+- página Ciência com amostra, estatística, desenho, reprodutibilidade, validação, manuscrito e regras;
+- página Confiança com ficha, risco, permissão, instalação, índice, duplicata e regras;
+- página Contexto com orçamento, tokens, corte, higiene, resumo, uso e regras;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
