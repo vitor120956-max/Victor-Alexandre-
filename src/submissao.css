@@ -1,0 +1,81 @@
+/* --- submissão ----------------------------------------------------------- */
+.submissao-page .diagram-form textarea,
+.submissao-page .diagram-form input {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+.submissao-page .submissao-bundle {
+  min-height: 264px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.submissao-page .selecao-contador {
+  align-self: flex-end;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .04em;
+}
+.submissao-page .diagram-table td { vertical-align: top; }
+.submissao-page .diagram-table code { overflow-wrap: anywhere; }
+.submissao-page .diagram-table td:nth-child(1) code { word-break: break-all; }
+
+.submissao-page .submissao-check {
+  align-items: center;
+  flex-direction: row;
+  gap: 8px;
+}
+.submissao-page .submissao-check input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.submissao-decisao {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .012);
+  padding: 11px 12px;
+}
+.submissao-decisao span {
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.submissao-decisao p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 8.4px;
+  line-height: 1.55;
+}
+.submissao-decisao.is-ready-for-review { border-color: rgba(96, 208, 160, .38); }
+.submissao-decisao.is-ready-for-review span { color: #6fd0a0; }
+.submissao-decisao.is-awaiting-review { border-color: rgba(224, 186, 96, .38); }
+.submissao-decisao.is-awaiting-review span { color: #e0ba60; }
+.submissao-decisao.is-requires-submitter-fixes { border-color: rgba(232, 112, 112, .42); }
+.submissao-decisao.is-requires-submitter-fixes span { color: #e87070; }
+
+.submissao-origem {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 7.6px;
+  line-height: 1.55;
+}
+.submissao-origem code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.2px;
+}
+
+@media (max-width: 640px) {
+  .submissao-page .submissao-bundle { min-height: 190px; }
+}

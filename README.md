@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.25.0.**
+**Versão atual: 0.26.0.**
 
 ## Executar em desenvolvimento
 
@@ -243,6 +243,16 @@ O diff é o texto que você cola: nada é aplicado, o repositório não é lido 
 
 Consulte [`docs/REVISAO.md`](docs/REVISAO.md) e a atribuição Apache-2.0 em [`docs/licenses/alibaba-open-code-review.txt`](docs/licenses/alibaba-open-code-review.txt).
 
+## Submissão de artefatos
+
+A página **Submissão** (`/submissao`) parte do [`github/awesome-copilot`](https://github.com/github/awesome-copilot) — **MIT**, 40 mil estrelas — e responde, com conta explícita, o que todo catálogo de skill pergunta antes de ler o conteúdo: o arquivo está na pasta certa, o front matter tem `name` e `description`, o texto manda rodar `curl | sh`, a licença é SPDX e o link aponta para arquivo que veio no envio.
+
+`server/submissao.py` lê o front matter por tipo de artefato (skill, agente, instrução, hook, plugin, workflow e prompt) e confere nome, descrição, tags, semver e URL; valida a estrutura do envio — caminho absoluto, saída por `..`, asset acima de 5 MB, vizinho obrigatório, nome repetido, arquivo oculto e caixa alta; varre o texto com **nove regras de risco** (`curl | sh`, `npx -y`, `sudo rm -rf`, versão flutuante, segredo, caminho absoluto…) com trecho mascarado e truncado em 180 caracteres; lê a licença como **expressão SPDX** com `AND`/`OR`/`WITH`, 45 ids e 10 exceções, separando identificador desconhecido de sintaxe quebrada; e confere cada link do envio contra o próprio envio — arquivo, âncora e caixa. O portão junta as cinco checagens e devolve a decisão do rótulo: `requires-submitter-fixes` se houver bloqueio, `awaiting-review` se não houver conteúdo para conferir e `ready-for-review` quando o envio está limpo.
+
+O envio é o texto que você cola, com um cabeçalho `>>> caminho` por arquivo: nada é instalado, nenhum `vally lint` roda e nenhum rótulo é aplicado.
+
+Consulte [`docs/SUBMISSAO.md`](docs/SUBMISSAO.md) e a atribuição MIT em [`docs/licenses/awesome-copilot.txt`](docs/licenses/awesome-copilot.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -360,7 +370,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **148 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **155 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -401,6 +411,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Contexto com orçamento, tokens, corte, higiene, resumo, uso e regras;
 - página Seleção com briefing, busca, stack, plano, cobertura, catálogo e regras;
 - página Revisão com escopo, lotes, achados, posição, duplicatas, cobertura e regras;
+- página Submissão com ficha, estrutura, risco, licença, links, portão e regras;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -415,7 +426,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, e as dez checagens de higiene. O estado desta versão tem **41 testes web e 1.107 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, as dez checagens de higiene, o front matter por tipo de artefato, o cabeçalho `>>> caminho` do bundle, as nove regras de risco, o parser SPDX com `AND`/`OR`/`WITH`, a âncora e a caixa do link, o portão de três decisões e o catálogo da submissão. O estado desta versão tem **41 testes web e 1.203 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -450,6 +461,8 @@ src/                         # interface React e estado local
 ├── pages/ConfiancaPage.tsx  # ficha, risco, permissão, instalação, índice, duplicata e regras
 ├── pages/ContextoPage.tsx   # orçamento, tokens, corte, higiene, resumo, uso e regras
 ├── pages/SelecaoPage.tsx    # briefing, busca, stack, plano, cobertura, catálogo e regras
+├── pages/RevisaoPage.tsx    # escopo, lotes, achados, posição, duplicatas, cobertura e regras
+├── pages/SubmissaoPage.tsx  # ficha, estrutura, risco, licença, links, portão e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -472,6 +485,8 @@ server/
 ├── confianca.py             # ficha, risco, permissão, instalação, índice e duplicata
 ├── contexto.py              # janela, tokens, corte por turno, higiene, resumo e uso
 ├── selecao.py               # briefing, BM25, stack, plano, cobertura e catálogo
+├── revisao.py               # diff em hunks, escopo, lotes, âncora, duplicata e cobertura
+├── submissao.py             # front matter, estrutura, risco, SPDX, link e portão
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -481,7 +496,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 148 skills
+├── skill_registry.py        # allowlist, Pydantic e 155 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -498,6 +513,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Documentos são limitados a 25 MB; PDF não tem OCR e análise de reunião não transcreve áudio nem faz diagnóstico.
 - Changelog usa somente mensagens fornecidas, não o histórico do Git; o sorteio não possui auditoria pública externa.
 - Revisão de código é heurística; Web Vitals e gates usam valores declarados, sem coleta, teste ou deploy automático.
+- Submissão é lexical: o front matter é lido por um parser de subconjunto, o risco não pega frase reescrita e a licença é conferida por identificador SPDX, não pelo texto do arquivo `LICENSE`. Nada é publicado — o rótulo do GitHub continua com a revisão humana.
 - Planos são limitados a 100 KB por arquivo; o hash bloqueia escritores obsoletos, mas o lock local não é coordenação distribuída entre servidores.
 - Análise reversa é estática e baseada em parsers próprios: não descompila, não executa, não extrai contêineres e não cobre formatos sem parser dedicado. Evidência não substitui laudo pericial ou atestado de malware.
 - Engenharia enxuta é estática: a escada avalia só o que foi declarado, a revisão e a auditoria produzem candidatos que exigem confirmação no código real. Execução, carga, testes e chamadores fora da árvore não são verificados; o histórico do Git não é lido.

@@ -1,0 +1,76 @@
+ATRIBUIÇÃO — github/awesome-copilot
+===================================
+
+Obra original: https://github.com/github/awesome-copilot
+Titular: GitHub, Inc. e colaboradores
+Licença: MIT
+Versão de referência: `main` em 23/10/2026 (40.376 estrelas, JavaScript)
+
+O QUE FOI USADO
+---------------
+Apenas o DESENHO descrito publicamente no repositório e nos scripts de
+`eng/`, reimplementado em Python sem copiar nenhuma linha de JavaScript e
+sem adicionar dependência:
+
+- a esteira de validação de skill: nome `^[a-z0-9-]+$` de 1 a 64 caracteres
+  igual ao nome da pasta, `description` entre 10 e 1024 caracteres, asset de
+  até 5 MB por arquivo, nome duplicado como erro e pasta sem `SKILL.md` como
+  erro (`eng/validate-skills.mjs`, `eng/constants.mjs`);
+- a varredura de risco por linha do PR: texto que desliga guardrail, shell
+  remoto (`curl | sh`), execução com consentimento automático (`npx -y`),
+  execução de pacote, indicador de versão flutuante, script empacotado sob
+  `skills/`, caminho normalizado sem `..` e sem absoluto, binário com NUL
+  pulado, trecho mascarado e truncado em 180 caracteres e teto de 100 linhas
+  (`eng/pr-risk-scan.mjs`);
+- o parser de expressão SPDX com `AND`, `OR`, `WITH`, parênteses,
+  `LicenseRef-` e `DocumentRef-`, lista de identificadores conhecidos,
+  licença fora de SPDX como aviso e licença ausente como erro só quando
+  exigida (`eng/license.mjs`);
+- o vocabulário de estados do envio (`awaiting-review`, `ready-for-review`,
+  `requires-submitter-fixes`, `approved`, `rejected`, `re-review-due`,
+  `re-review-removed`) e a regra de que qualquer bloqueio devolve o envio
+  para quem submeteu (`CONTRIBUTING.md`, `eng/submission-gate`);
+- os campos da ficha por tipo de artefato e o formato de instalação
+  (`copilot plugin install <plugin>@<marketplace>`);
+- o esquema de `collection` (`id` até 50, `name` até 100, `description` até
+  500, até 10 tags e até 50 itens), usado só como referência de limite.
+
+O QUE NÃO FOI USADO
+-------------------
+- Nenhum arquivo de `agents/`, `instructions/`, `skills/`, `hooks/`,
+  `plugins/`, `cookbook/` ou `extensions/` do upstream foi copiado para este
+  repositório: a amostra da página `/submissao` é escrita aqui.
+- Nenhum código JavaScript de `eng/`, workflow, Action do GitHub ou página do
+  site `awesome-copilot.github.com` foi reproduzido.
+- Não há chamada de rede, `git`, `gh`, `vally lint` nem instalação de plugin:
+  a camada só lê o texto que você cola.
+
+AVISO
+-----
+Este projeto é uma reimplementação independente. Não é afiliado ao GitHub
+nem endossado por ele. Os nomes dos projetos são citados apenas para
+atribuição e comparação.
+
+TEXTO DA LICENÇA
+----------------
+MIT License
+
+Copyright GitHub, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

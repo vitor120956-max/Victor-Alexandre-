@@ -109,6 +109,16 @@ from .selecao import (
     selecao_catalogo,
     validar_stack,
 )
+from .submissao import (
+    SubmissaoError,
+    analisar_licenca,
+    conferir_links,
+    portao_submissao,
+    submissao_catalogo,
+    validar_estrutura,
+    validar_ficha,
+    varrer_risco,
+)
 from .revisao import (
     RevisaoError,
     analisar_escopo,
@@ -831,6 +841,48 @@ class RevisaoRegrasInput(BaseModel):
     diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O diff do PR: os caminhos viram `path` de cada regra."})
     convencoes: str = Field(default="", max_length=20_000, title="Convenções do projeto", json_schema_extra={"format": "textarea", "description": "O que este projeto exige e que não está no código: erro, log, teste, revisão."})
     max_regras: int = Field(default=20, ge=1, le=200, title="Regras")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoFichaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(min_length=1, max_length=300, title="Caminho", json_schema_extra={"description": "Ex.: `skills/minha-skill/SKILL.md`, `agents/meu.agent.md`, `plugins/meu/plugin.json`."})
+    texto: str = Field(default="", max_length=1_800_000, title="Conteúdo", json_schema_extra={"format": "textarea", "description": "O arquivo inteiro, com o bloco `---` do front matter (ou o JSON do plugin)."})
+    tipo: Literal["", "skill", "agent", "instruction", "hook", "plugin", "workflow", "prompt"] = Field(default="", title="Tipo", json_schema_extra={"description": "Vazio deduz pelo caminho."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoEstruturaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Um caminho por linha, opcionalmente seguido do tamanho em bytes; ou o bundle completo com `>>> caminho`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoRiscoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Bundle", json_schema_extra={"format": "textarea", "description": "Cada arquivo começa com `>>> caminho` e o conteúdo vem abaixo; aceita também o JSON com a chave arquivos."})
+    max_achados: int = Field(default=100, ge=1, le=1000, title="Achados por página")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoLicencaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    licenca: str = Field(default="", max_length=500, title="Licença", json_schema_extra={"description": "Expressão SPDX: `MIT`, `MIT OR Apache-2.0`, `GPL-3.0-only WITH Classpath-exception-2.0`."})
+    esperada: str = Field(default="MIT", max_length=200, title="Licença esperada", json_schema_extra={"description": "A da política do catálogo; divergência vira atenção."})
+    obrigatoria: bool = Field(default=False, title="Licença obrigatória")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoLinksInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Bundle", json_schema_extra={"format": "textarea", "description": "Arquivos com conteúdo, cada um começando com `>>> caminho`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SubmissaoGateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Bundle do envio", json_schema_extra={"format": "textarea", "description": "Todos os arquivos do PR, cada um começando com `>>> caminho`."})
+    esperada: str = Field(default="MIT", max_length=200, title="Licença esperada")
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2480,6 +2532,56 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except RevisaoError as exc:
             raise SkillError(str(exc)) from exc
 
+    def submissao_ficha_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoFichaInput)
+        try:
+            return validar_ficha(caminho=data.caminho, texto=data.texto, tipo=data.tipo, modo=data.modo)
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_estrutura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoEstruturaInput)
+        try:
+            return validar_estrutura(arquivos=data.arquivos, modo=data.modo)
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_risco_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoRiscoInput)
+        try:
+            return varrer_risco(arquivos=data.arquivos, max_achados=data.max_achados, modo=data.modo)
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_licenca_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoLicencaInput)
+        try:
+            return analisar_licenca(
+                licenca=data.licenca,
+                esperada=data.esperada,
+                obrigatoria=data.obrigatoria,
+                modo=data.modo,
+            )
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_links_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoLinksInput)
+        try:
+            return conferir_links(arquivos=data.arquivos, modo=data.modo)
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_gate_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoGateInput)
+        try:
+            return portao_submissao(arquivos=data.arquivos, esperada=data.esperada, modo=data.modo)
+        except SubmissaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def submissao_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return submissao_catalogo()
+
     def revisao_regras_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, RevisaoRegrasInput)
         try:
@@ -2832,6 +2934,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("revisao.duplicatas", "Duplicatas entre camadas", "Compara regra e agente por Jaccard de palavras no mesmo arquivo e perto da mesma linha, agrupa o mesmo problema repetido e bloqueia quando as duas fontes discordam da gravidade.", "Revisão", RevisaoDuplicatasInput, revisao_duplicatas_handler, timeout_seconds=20),
         SkillDefinition("revisao.cobertura", "Cobertura da revisão", "Compara os arquivos que o diff pede para revisar com os que a revisão abriu: cobertura contra o piso de 60%, risco alto esquecido, caminho declarado que não está no diff e revisão vazia.", "Revisão", RevisaoCoberturaInput, revisao_cobertura_handler, timeout_seconds=15),
         SkillDefinition("revisao.regras", "Regras por caminho", "Monta o `rule.json` do open-code-review: uma regra em prosa por caminho, mesclada ao prompt de sistema, com guia por classe de arquivo e as convenções declaradas do projeto.", "Revisão", RevisaoRegrasInput, revisao_regras_handler, timeout_seconds=20),
+        SkillDefinition("submissao.ficha", "Ficha do artefato", "Lê o front matter — ou o `plugin.json` — e confere os campos que o catálogo exige por tipo: nome em minúscula com hífen, descrição entre 10 e 1.024 caracteres, `applyTo` de instrução, versão semver, autor e tags do plugin.", "Submissão", SubmissaoFichaInput, submissao_ficha_handler, timeout_seconds=15),
+        SkillDefinition("submissao.estrutura", "Estrutura do envio", "Confere caminho, pasta, vizinho obrigatório e peso do asset: caminho absoluto, `..`, arquivo oculto, maiúscula, nome repetido, pasta funda e asset acima de 5 MB.", "Submissão", SubmissaoEstruturaInput, submissao_estrutura_handler, timeout_seconds=15),
+        SkillDefinition("submissao.risco", "Risco do texto", "Varre o conteúdo linha a linha atrás de guardrail desligado, shell remoto, execução com consentimento automático, versão flutuante, comando destrutivo, sudo, caminho absoluto e segredo — com o segredo mascarado no parecer.", "Submissão", SubmissaoRiscoInput, submissao_risco_handler, timeout_seconds=20),
+        SkillDefinition("submissao.licenca", "Licença SPDX", "Faz o parse da expressão SPDX (`AND`, `OR`, `WITH`, parênteses, `+`, `LicenseRef-`), reconhece identificador e exceção, sugere o identificador canônico de alias como `GPLv3` e avisa sobre copyleft na política permissiva.", "Submissão", SubmissaoLicencaInput, submissao_licenca_handler, timeout_seconds=10),
+        SkillDefinition("submissao.links", "Links e referências", "Confere link relativo, âncora de título pela regra de slug do GitHub, caixa do caminho, caminho absoluto, link que escapa da pasta, `http://` e texto genérico, além de asset empacotado sem referência.", "Submissão", SubmissaoLinksInput, submissao_links_handler, timeout_seconds=20),
+        SkillDefinition("submissao.gate", "Portão de submissão", "Roda ficha, estrutura, risco, licença e links sobre o bundle do PR e decide o estado: `requires-submitter-fixes` com qualquer bloqueio, `awaiting-review` sem conteúdo, `ready-for-review` sem bloqueio — com o rótulo a aplicar e o a remover.", "Submissão", SubmissaoGateInput, submissao_gate_handler, timeout_seconds=30),
+        SkillDefinition("submissao.regras", "Catálogo de submissão", "Publica os sete tipos de artefato com campos obrigatórios e opcionais, os limites, as nove regras de risco, os identificadores e operadores SPDX, as situações de link e a regra de decisão do portão.", "Submissão", EmptyInput, submissao_regras_handler, timeout_seconds=5),
         SkillDefinition("contexto.regras", "Catálogo de contexto", "Publica dialetos, fórmulas de imagem e mídia, precedência da reserva, agrupamento em turnos, escalada de stub, marcadores, limites de texto e mensagens e o que ficou de fora.", "Contexto", EmptyInput, contexto_regras_handler, timeout_seconds=5),
         SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
