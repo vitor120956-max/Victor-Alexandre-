@@ -102,7 +102,7 @@ O histórico precisa satisfazer três invariantes para ser aceito pela maioria d
 2. **Resultado faltante** — chamada sem `tool` correspondente recebe um marcador `[Sem resultado da ferramenta]`, com o nome da ferramenta preservado.
 3. **Abertura** — a primeira mensagem depois do sistema precisa ser do usuário; se não for, entra `[Conversa continua]`.
 
-Além disso: `id-duplicado` (should), `tool-sem-id` e `mensagem-vazia` (nice), `chamada-com-texto` (nice) e `historico-valido` quando não há nada a corrigir. A saída mostra cada correção com alvo e efeito, e o histórico saneado vem em bloco separado para copiar.
+Cada correção é um achado: `orfa-removida` e `tool-sem-id` (must), `resultado-injetado` e `id-duplicado` e `abertura-inserida` (should), `mensagem-vazia` e `chamada-com-texto` (nice) e `historico-valido` quando não há nada a corrigir. A saída mostra cada correção com alvo e efeito, e o histórico saneado vem em bloco separado para copiar.
 
 ## 5. O resumo
 
