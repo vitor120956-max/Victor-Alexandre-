@@ -1,0 +1,18 @@
+/* --- marketing ---
+.marketing-page .diagram-badge { padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .08em; text-transform: uppercase; }-------------------------------------------------------- */
+.marketing-page .diagram-laws strong { letter-spacing: .01em; }
+.marketing-table-block { display: flex; flex-direction: column; gap: 6px; }
+.marketing-table-block h4 { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.marketing-platforms { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.marketing-platforms article { padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.012); }
+.marketing-platforms header strong { color: var(--accent-soft); font-family: var(--mono); font-size: 6.8px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+.marketing-platforms p { margin: 6px 0 8px; color: var(--muted); font-size: 7.4px; line-height: 1.6; }
+.marketing-platforms ul { display: flex; flex-direction: column; gap: 4px; }
+.marketing-platforms li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.marketing-platforms li span { color: var(--muted-2); font-size: 7.2px; }
+.marketing-platforms li code { color: var(--text-soft); font-family: var(--mono); font-size: 6.2px; white-space: nowrap; }
+.marketing-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }
+.marketing-rules article { padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; }
+.marketing-rules span { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .06em; text-transform: uppercase; }
+.marketing-rules p { margin-top: 5px; }
+.marketing-rules code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.4px; line-height: 1.6; overflow-wrap: anywhere; }

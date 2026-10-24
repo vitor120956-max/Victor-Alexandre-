@@ -59,6 +59,16 @@ from .curadoria import (
     validar_entrada,
 )
 from .legal_corpus import LegalCorpus
+from .marketing import (
+    MarketingError,
+    auditar_email,
+    auditar_seo,
+    auditar_utm,
+    calcular_orcamento,
+    dimensionar_teste,
+    marketing_catalogo,
+    revisar_anuncio,
+)
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
 from .studio import (
@@ -658,6 +668,74 @@ class CuradoriaHigieneInput(BaseModel):
     categorias: str = Field(default="", title="Configuração de categorias (JSON)", max_length=40_000, json_schema_extra={"format": "textarea"})
     hoje: str = Field(default="", title="Data de referência", max_length=10)
     dias_para_checar: int = Field(default=90, ge=1, le=3650, title="Dias entre checagens")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingOrcamentoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    orcamento: float = Field(gt=0, le=100_000_000, title="Orçamento mensal", json_schema_extra={"description": "Quanto será investido por mês em mídia, na moeda escolhida."})
+    cpm: float = Field(gt=0, le=100_000, title="CPM", json_schema_extra={"description": "Custo por mil impressões."})
+    ctr: float = Field(gt=0, le=100, title="CTR (%)", json_schema_extra={"description": "Clique sobre impressão, em percentual. Acima de 10% vira achado."})
+    cvr: float = Field(gt=0, le=100, title="Conversão de clique em lead (%)", json_schema_extra={"description": "Percentual de cliques que viram lead."})
+    fechamento: float = Field(gt=0, le=100, title="Fechamento de lead em cliente (%)")
+    ticket: float = Field(gt=0, le=10_000_000, title="Ticket", json_schema_extra={"description": "Receita por cliente: mensal no plano de assinatura, única no plano de venda única."})
+    margem: float = Field(gt=0, le=100, title="Margem (%)", json_schema_extra={"description": "Margem bruta sobre o ticket."})
+    modelo: Literal["assinatura", "unica"] = Field(default="assinatura", title="Modelo")
+    vida_util_meses: float = Field(default=0, ge=0, le=600, title="Vida útil (meses)", json_schema_extra={"description": "Opcional: sem ela, o LTV é o retorno de um mês."})
+    cac_alvo: float = Field(default=0, ge=0, le=10_000_000, title="CAC alvo", json_schema_extra={"description": "Opcional: calcula quanto cada alavanca precisaria mudar para chegar nele."})
+    meta_arr: float = Field(default=0, ge=0, le=10_000_000_000, title="Meta de ARR", json_schema_extra={"description": "Opcional: orçamento por meta. Exige ARPC e retenção anual."})
+    arpc: float = Field(default=0, ge=0, le=10_000_000, title="ARPC", json_schema_extra={"description": "Receita média por cliente, por mês."})
+    retencao_anual: float = Field(default=0, ge=0, le=100, title="Retenção anual (%)")
+    moeda: Literal["BRL", "USD", "EUR"] = Field(default="BRL", title="Moeda")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingTesteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baseline: float = Field(gt=0, lt=100, title="Linha de base (%)", json_schema_extra={"description": "Conversão atual da página ou do fluxo."})
+    mde: float = Field(gt=0, le=500, title="Efeito mínimo detectável (%)", json_schema_extra={"description": "Menor ganho relativo que vale a decisão. Abaixo de 5% custa amostra em ordem de grandeza."})
+    trafego_diario: float = Field(gt=0, le=100_000_000, title="Tráfego diário", json_schema_extra={"description": "Unidades elegíveis por dia (visitantes, não pageviews)."})
+    variantes: int = Field(default=2, ge=2, le=6, title="Variantes")
+    alfa: float = Field(default=0.05, gt=0, lt=0.5, title="Alfa")
+    poder: float = Field(default=0.8, gt=0.5, lt=0.999, title="Poder")
+    exposicao: float = Field(default=100, gt=0, le=100, title="Exposição (%)")
+    tipo: Literal["b2c", "b2b"] = Field(default="b2c", title="Tipo de negócio", json_schema_extra={"description": "B2B exige duas semanas; B2C, uma."})
+    duracao_maxima: int = Field(default=56, ge=7, le=365, title="Duração máxima (dias)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingUtmInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    urls: str = Field(title="URLs de campanha", min_length=8, max_length=120_000, json_schema_extra={"format": "textarea", "description": "Uma por linha. A URL canônica volta normalizada em minúsculas com hífen."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingEmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assunto: str = Field(title="Assunto", min_length=1, max_length=200)
+    corpo: str = Field(title="Corpo em texto", min_length=20, max_length=20_000, json_schema_extra={"format": "textarea"})
+    preview: str = Field(default="", title="Pré-cabeçalho", max_length=300)
+    cta: str = Field(default="", title="Chamada principal", max_length=200)
+    tipo: Literal["lifecycle", "cold"] = Field(default="lifecycle", title="Tipo")
+    html: str = Field(default="", title="HTML do e-mail", max_length=200_000, json_schema_extra={"format": "textarea", "description": "Opcional: com HTML, a regra de descadastro é conferida no rodapé."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingSeoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    html: str = Field(title="HTML da página", min_length=60, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O arquivo entregue. A auditoria não executa JavaScript."})
+    palavra_chave: str = Field(default="", title="Palavra-chave principal", max_length=120)
+    url: str = Field(default="", title="URL da página", max_length=400, json_schema_extra={"description": "Opcional: usada para conferir o canonical e separar link interno de externo."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingAnuncioInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plataforma: Literal["google", "meta", "linkedin"] = Field(default="google", title="Plataforma")
+    titulos: str = Field(default="", title="Títulos", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Um por linha. Google aceita até 15, Meta e LinkedIn um."})
+    descricoes: str = Field(default="", title="Descrições", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Uma por linha."})
+    texto_principal: str = Field(default="", title="Texto principal", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Meta: 125 caracteres. LinkedIn: 150."})
+    url_final: str = Field(default="", title="URL final", max_length=400)
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -1601,6 +1679,66 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def curadoria_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return curadoria_catalogo()
 
+    def marketing_orcamento_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingOrcamentoInput)
+        try:
+            return calcular_orcamento(
+                orcamento=data.orcamento, cpm=data.cpm, ctr=data.ctr, cvr=data.cvr,
+                fechamento=data.fechamento, ticket=data.ticket, margem=data.margem,
+                modelo=data.modelo, vida_util_meses=data.vida_util_meses, cac_alvo=data.cac_alvo,
+                meta_arr=data.meta_arr, arpc=data.arpc, retencao_anual=data.retencao_anual,
+                moeda=data.moeda, modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_teste_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingTesteInput)
+        try:
+            return dimensionar_teste(
+                baseline=data.baseline, mde=data.mde, trafego_diario=data.trafego_diario,
+                variantes=data.variantes, alfa=data.alfa, poder=data.poder,
+                exposicao=data.exposicao, tipo=data.tipo,
+                duracao_maxima=data.duracao_maxima, modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_utm_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingUtmInput)
+        try:
+            return auditar_utm(urls=data.urls, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_email_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingEmailInput)
+        try:
+            return auditar_email(assunto=data.assunto, corpo=data.corpo, preview=data.preview,
+                                 cta=data.cta, tipo=data.tipo, html=data.html, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_seo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingSeoInput)
+        try:
+            return auditar_seo(html=data.html, palavra_chave=data.palavra_chave,
+                               url=data.url, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_anuncio_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingAnuncioInput)
+        try:
+            return revisar_anuncio(plataforma=data.plataforma, titulos=data.titulos,
+                                   descricoes=data.descricoes, texto_principal=data.texto_principal,
+                                   url_final=data.url_final, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return marketing_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -1901,6 +2039,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("editorial.importar", "Redesenhar com recibo", "Lê draw.io, Mermaid ou Excalidraw, aplica a escada de degradação e devolve o recibo de fidelidade com os quatro discos de saída.", "Diagramas", EditorialImportarInput, editorial_importar_handler, timeout_seconds=20),
         SkillDefinition("editorial.entrega", "Aplicar contrato de entrega", "Verifica SVG acessível, viewBox do preset, min-width, rolagem local, impressão, rampa tipográfica e movimento opcional.", "Diagramas", EditorialEntregaInput, editorial_entrega_handler, timeout_seconds=15),
         SkillDefinition("editorial.catalogo", "Catálogo editorial", "Mostra os 45 tipos com orçamento, os nove padrões, os doze papéis de cor, os presets, as rampas e as seis regras de conector.", "Diagramas", EmptyInput, editorial_catalogo_handler, timeout_seconds=5),
+        SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
+        SkillDefinition("marketing.teste", "Dimensionar teste A/B", "Calcula amostra por variante e duração com duas proporções, alfa e poder declarados, corrige para múltiplas variantes e recusa teste que não cabe no prazo.", "Marketing", MarketingTesteInput, marketing_teste_handler, timeout_seconds=10),
+        SkillDefinition("marketing.utm", "Higiene de campanha", "Confere as URLs de campanha: https, os três parâmetros obrigatórios, minúsculas, hífen, medium do vocabulário, duplicata, dado pessoal e encurtador; devolve a URL canônica.", "Marketing", MarketingUtmInput, marketing_utm_handler, timeout_seconds=10),
+        SkillDefinition("marketing.email", "E-mail antes do disparo", "Mede assunto, pré-cabeçalho, links e CTA; aponta abertura genérica, contraste de texto gerado, lista de negação, termo de spam e descadastro ausente no HTML.", "Marketing", MarketingEmailInput, marketing_email_handler, timeout_seconds=10),
+        SkillDefinition("marketing.seo", "Auditoria on-page", "Lê o HTML entregue e confere título, description, H1, hierarquia, alt, canonical, idioma, JSON-LD, links e os sinais que um motor de resposta extrai.", "Marketing", MarketingSeoInput, marketing_seo_handler, timeout_seconds=15),
+        SkillDefinition("marketing.anuncio", "Anúncio dentro do limite", "Conta caractere por peça nos limites de Google, Meta e LinkedIn, confere mínimo e máximo de peças e recusa afirmação não verificável.", "Marketing", MarketingAnuncioInput, marketing_anuncio_handler, timeout_seconds=10),
+        SkillDefinition("marketing.regras", "Catálogo de marketing", "Mostra limites por plataforma, vocabulário de medium, faixas de sanidade, fórmulas, a grade de amostra calculada e a rubrica de integridade da recomendação.", "Marketing", EmptyInput, marketing_regras_handler, timeout_seconds=5),
         SkillDefinition("curadoria.entrada", "Validar entrada de catálogo", "Checa os seis campos, a URL, a categoria, a elegibilidade (14 dias com atividade ou 100 estrelas), a licença e o estilo da descrição, e devolve a linha CSV com ID opaco.", "Curadoria", CuradoriaEntradaInput, curadoria_entrada_handler, timeout_seconds=10),
         SkillDefinition("curadoria.catalogo", "Agrupar catálogo", "Lê o CSV, valida categoria e subcategoria contra a configuração, encontra órfãs, vazias e nunca checadas, e devolve a árvore na ordem editorial.", "Curadoria", CuradoriaCatalogoInput, curadoria_catalogo_handler, timeout_seconds=10),
         SkillDefinition("curadoria.readme", "Gerar README do catálogo", "Deriva o README do CSV: sumário com âncoras do GitHub, seções na ordem da configuração, uma linha por recurso e rodapé com a data. Nada é editado à mão.", "Curadoria", CuradoriaReadmeInput, curadoria_readme_handler, timeout_seconds=10),

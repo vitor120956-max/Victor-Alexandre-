@@ -14,6 +14,7 @@ import {
   SwatchBook,
   LayoutDashboard,
   Library,
+  TrendingUp,
   ListChecks,
   MessageSquareText,
   MousePointerClick,
@@ -44,6 +45,7 @@ const navigation = [
   { to: '/direcao', label: 'Direção', icon: Palette },
   { to: '/diagramas', label: 'Diagramas', icon: Workflow },
   { to: '/curadoria', label: 'Curadoria', icon: Library },
+  { to: '/marketing', label: 'Marketing', icon: TrendingUp },
   { to: '/carreira', label: 'Carreira', icon: Briefcase },
   { to: '/navegador', label: 'Navegador', icon: MousePointerClick },
   { to: '/escritorio', label: 'Escritório', icon: Cloud },
@@ -83,7 +85,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <Settings size={19} strokeWidth={1.7} />
           <span>Configurações</span>
         </NavLink>
-        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.19.0"}</span></div>
+        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.20.0"}</span></div>
       </aside>
       {mobileOpen && <button className="sidebar-scrim" onClick={onClose} aria-label="Fechar menu" />}
     </>

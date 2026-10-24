@@ -21,7 +21,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.19.0"
+VERSAO = "0.20.0"
 MAX_TEXTO = 60_000
 MAX_NOS = 400
 
@@ -397,6 +397,11 @@ RAMPAS: dict[str, dict[str, Any]] = {
     "print": {"titulo": 32, "nome": 12, "sublabel": 9, "rotulo": 8, "eyebrow": 8, "caixa": 48, "folga": 24,
               "tamanhos": {32, 12, 9, 8}},
 }
+
+ESSENCIAL = re.compile(
+    r"(?i)\b(banco|base|postgres|postgresql|mysql|mariadb|sqlite|oracle|mongo|mongodb|dynamo|redis|"
+    r"memcached|s3|bucket|blob|storage|tabela|table|db|fila|queue|kafka|rabbit|pubsub|warehouse)\b"
+)
 
 DETALHES: dict[str, dict[str, Any]] = {
     "faithful": {"nos": 24, "arestas": 32, "sublabel": "todo port, protocolo e versão", "rotulo": "Fiel"},
@@ -1641,14 +1646,14 @@ def _digest(fonte: dict[str, Any], detalhe: str) -> dict[str, Any]:
         for chave in list(nos):
             if len(nos) <= limite["nos"]:
                 break
-            if grau.get(chave, 0) == 1:
-                remover(chave, "sumidouro de grau 1")
+            if re.search(r"(?i)log|metric|observ|monitor|trace|secret|ci\b|pipeline de build", nos[chave] or ""):
+                remover(chave, "infraestrutura transversal")
     if len(nos) > limite["nos"]:
         for chave in list(nos):
             if len(nos) <= limite["nos"]:
                 break
-            if re.search(r"(?i)log|metric|observ|monitor|secret|ci\b|pipeline de build", nos[chave] or ""):
-                remover(chave, "infraestrutura transversal")
+            if grau.get(chave, 0) == 1 and not ESSENCIAL.search(nos[chave] or ""):
+                remover(chave, "folha sem papel no recorte")
     arestas = [(a, b) for a, b in arestas if a in nos and b in nos]
     dividir = len(nos) > limite["nos"]
     return {

@@ -1,0 +1,55 @@
+ATRIBUIÇÃO — coreyhaines31/marketingskills
+==========================================
+
+Obra original: https://github.com/coreyhaines31/marketingskills
+Copyright (c) 2025 Corey Haines
+Licença: MIT
+
+Texto integral da licença
+-------------------------
+
+MIT License
+
+Copyright (c) 2025 Corey Haines
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+O QUE FOI USADO
+---------------
+A PARTE MENSURÁVEL, reimplementada em Python: as fórmulas públicas de funil e
+economia unitária (impressões, cliques, leads, clientes, CAC, ROAS, payback,
+LTV/CAC, orçamento por meta de ARR), a fórmula de amostra para duas proporções
+com alfa e poder declarados, a regra de duração mínima de teste e a correção
+para múltiplas variantes; o vocabulário de parâmetros de campanha, as regras de
+higiene de URL (minúsculas, hífen, uma grafia por fonte, sem PII) e os padrões
+de nomenclatura por tipo de colocação; as faixas de assunto e pré-cabeçalho de
+e-mail e a lista de marcas de texto gerado; as faixas de título, description,
+imagem e canonical da auditoria on-page; e os limites de caractere por
+plataforma de anúncio (Google, Meta e LinkedIn).
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhuma das 52 skills de redação do upstream (copy, criativo, plano de
+marketing, PR, social, pricing narrativo) foi portada, e nenhum texto do
+repositório — SKILL.md, references, evals — foi copiado ou adaptado. O JARVIS
+mede; não escreve anúncio nem promete resultado. As tabelas de tamanho de
+amostra do upstream se contradizem entre si, então a grade publicada em
+`marketing.regras` é CALCULADA na hora, não copiada.
+
+O código de server/marketing.py é implementação independente em Python.

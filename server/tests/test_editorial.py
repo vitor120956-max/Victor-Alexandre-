@@ -570,8 +570,8 @@ def test_delivery_rejects_bad_input() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.19.0"
-    assert health["skills"] == 106
+    assert health["version"] == "0.20.0"
+    assert health["skills"] == 113
 
 
 def test_api_runs_every_editorial_skill(client: TestClient) -> None:
@@ -633,3 +633,34 @@ def test_api_is_read_only_and_rejects_bad_parameters(client: TestClient) -> None
         "html": HTML_CLEAN, "preset": "doc-inline", "navegador": True,
     }})
     assert campo_extra.json()["ok"] is False
+
+
+CICLO_COM_BANCO = """flowchart LR
+  A[Cliente] --> B[Gateway]
+  B --> C[Conta]
+  C --> D[Carrinho]
+  D --> E[Checkout]
+  E --> F[Pedido]
+  F --> G[Cobrança]
+  G --> H[Fatura]
+  H --> A
+  H --> PG[(Postgres)]
+"""
+
+
+def test_import_never_cuts_a_data_store_to_fit() -> None:
+    """Banco é essencial: se só sobra ele para cortar, o diagrama divide em vez de perder o dado."""
+    resultado = planejar_importacao(fonte=CICLO_COM_BANCO, formato="mermaid", tamanho="doc-inline",
+                                    detalhe="simplified", plateia="mixed", modo="full")
+    assert resultado["metrics"]["origem_nos"] == 9
+    assert resultado["ledger"] == []
+    assert resultado["digest"]["dividir"] is True
+    assert "acima-do-teto" in kinds(resultado)
+
+
+def test_import_prefers_cross_cutting_infra_over_the_store() -> None:
+    fonte = CICLO_COM_BANCO.replace("  H --> PG[(Postgres)]\n", "  H --> PG[(Postgres)]\n  H --> L[Log de acesso]\n")
+    resultado = planejar_importacao(fonte=fonte, formato="mermaid", tamanho="doc-inline",
+                                    detalhe="simplified", plateia="mixed", modo="full")
+    assert [corte["corta"] for corte in resultado["ledger"]] == ["infraestrutura transversal"]
+    assert resultado["digest"]["dividir"] is True

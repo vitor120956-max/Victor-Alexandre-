@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.19.0.**
+**Versão atual: 0.20.0.**
 
 ## Executar em desenvolvimento
 
@@ -183,6 +183,16 @@ Nada é buscado na rede: elegibilidade, licença e atividade são o que o formul
 
 Consulte [`docs/CURADORIA.md`](docs/CURADORIA.md) e a atribuição em [`docs/licenses/hesreallyhim-awesome-claude-code.txt`](docs/licenses/hesreallyhim-awesome-claude-code.txt).
 
+## Marketing mensurável
+
+A página **Marketing** (`/marketing`) adapta [`coreyhaines31/marketingskills`](https://github.com/coreyhaines31/marketingskills) — **MIT** — e fica com a parte que se pode medir. O upstream tem 52 skills de redação; nenhuma foi portada, e nenhum texto de lá foi copiado: o JARVIS mede o que existe, não escreve anúncio nem promete resultado.
+
+`server/marketing.py` faz a conta do funil e da economia unitária — impressões, cliques, leads, clientes, CAC, ROAS, payback, LTV/CAC — com as taxas que você informa, e aponta quanto cada alavanca precisa mudar para chegar ao CAC alvo e qual verba a meta de ARR exige. Dimensiona teste A/B pela fórmula de duas proporções, com alfa corrigido para múltiplas variantes e duração que respeita o ciclo de compra. Confere a URL de campanha — minúsculas, hífen, `medium` do vocabulário, sem PII, sem encurtador — e devolve a URL canônica. Revisa o e-mail antes do disparo: assunto, pré-cabeçalho, CTA, descadastro e as marcas de texto gerado. Audita o HTML da página sem executar JavaScript: título, description, H1, hierarquia, alt, canonical, idioma, JSON-LD e os sinais que um motor de resposta extrai. E conta caractere por peça contra o limite de Google, Meta e LinkedIn, recusando afirmação não verificável.
+
+Nada é buscado na rede: nenhuma conta de anúncio, pixel, CRM ou ferramenta de análise é acessada, e o parecer declara isso em `limitations`. As tabelas de tamanho de amostra do upstream se contradizem entre si, então a grade publicada em `marketing.regras` é calculada na hora, não copiada.
+
+Consulte [`docs/MARKETING.md`](docs/MARKETING.md) e a licença MIT em [`docs/licenses/coreyhaines31-marketingskills.txt`](docs/licenses/coreyhaines31-marketingskills.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -300,7 +310,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **106 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **113 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -331,6 +341,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Estúdio com contrato de design, contraste WCAG, crítica em cinco dimensões e linter anti-clichê;
 - página Direção com sorteio de direções, argumento, deck de copy, linter, tells datados e júri ponderado;
 - página Curadoria com entrada, catálogo, README, ticker, higiene e regras;
+- página Marketing com orçamento, teste, campanha, e-mail, SEO, anúncio e regras;
 - página Diagramas em duas camadas: desenho por IR (tipo, IR validado, layout medido, desenho portátil, legenda, entrega) e camada editorial (tipo, marca, lint, conectores, importação e entrega);
 - página Carreira com triagem 1–5, ATS, bullets, carta, entrevista, funil e catálogo;
 - página Navegador com snapshot, alvo, roteiro, checagem, recibos, limites e catálogo;
@@ -379,6 +390,7 @@ src/                         # interface React e estado local
 ├── pages/EstacaoPage.tsx    # tarefa, permissões, execução, agenda, limites e memória
 ├── pages/DiagramPage.tsx    # IR, layout, desenho, legenda e camada editorial
 ├── pages/CuradoriaPage.tsx  # entrada, catálogo, README, ticker, higiene e regras
+├── pages/MarketingPage.tsx  # funil, teste, campanha, e-mail, SEO, anúncio e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -396,6 +408,7 @@ server/
 ├── taste_rules.py           # copy, 29 regras lexicais e registro de tells
 ├── diagram.py               # IR, layout medido, SVG e contrato de entrega
 ├── curadoria.py            # schema, elegibilidade, catálogo, README, ticker e higiene
+├── marketing.py            # funil, amostra, UTM, e-mail, SEO, anúncio e regras
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -405,7 +418,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 106 skills
+├── skill_registry.py        # allowlist, Pydantic e 113 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
