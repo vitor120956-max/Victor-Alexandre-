@@ -49,6 +49,15 @@ from .editorial import (
     planejar_importacao,
     resolver_marca,
 )
+from .curadoria import (
+    CuradoriaError,
+    auditar_higiene,
+    comparar_ticker,
+    curadoria_catalogo,
+    gerar_readme,
+    montar_catalogo,
+    validar_entrada,
+)
 from .legal_corpus import LegalCorpus
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
@@ -592,6 +601,63 @@ class EditorialEntregaInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     html: str = Field(title="HTML do diagrama", min_length=60, max_length=60_000, json_schema_extra={"format": "textarea", "description": "O arquivo autocontido. Verifica acessibilidade, viewBox, min-width, rolagem local, impressão e rampa."})
     preset: Literal["doc-inline", "doc-wide", "slide-16x9", "slide-4x3", "social-og", "social-square", "print-a4-landscape", "print-a3-landscape", "print-letter-landscape", "fit"] = Field(default="doc-inline", title="Preset de tamanho")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CuradoriaEntradaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nome: str = Field(title="Nome do recurso", min_length=2, max_length=80, json_schema_extra={"description": "Como aparece na lista, não como o README do projeto se chama."})
+    link: str = Field(title="Link principal", min_length=8, max_length=400, json_schema_extra={"description": "URL https canônica: repositório ou página do produto."})
+    autor: str = Field(title="Autor", min_length=1, max_length=120)
+    link_autor: str = Field(title="Link do autor", min_length=8, max_length=400)
+    categoria: str = Field(title="Categoria", min_length=2, max_length=80)
+    subcategoria: str = Field(default="", title="Subcategoria", max_length=80)
+    descricao: str = Field(title="Descrição em uma linha", min_length=10, max_length=500, json_schema_extra={"format": "textarea", "description": "O que o software faz, no presente. Sem falar com o leitor, sem emoji, sem superlativo."})
+    licenca: str = Field(default="", title="Licença", max_length=60, json_schema_extra={"description": "Identificador SPDX quando houver: MIT, Apache-2.0, CC-BY-4.0."})
+    dias_desde_o_primeiro_commit: int = Field(default=0, ge=0, le=20_000, title="Dias desde o primeiro commit")
+    commits_depois_do_primeiro_dia: int = Field(default=0, ge=0, le=1_000_000, title="Commits depois do primeiro dia")
+    estrelas: int = Field(default=0, ge=0, le=10_000_000, title="Estrelas")
+    exige_cadastro: bool = Field(default=False, title="Exige cadastro")
+    pago: bool = Field(default=False, title="Exige pagamento")
+    existentes: str = Field(default="", title="Já no catálogo", max_length=200_000, json_schema_extra={"format": "textarea", "description": "Opcional: um por linha, `link|nome`, para detectar duplicata."})
+    categorias: str = Field(default="", title="Configuração de categorias (JSON)", max_length=40_000, json_schema_extra={"format": "textarea", "description": "Opcional: lista `categorias` com nome, subcategorias e `submetivel`. Vazio usa o exemplo embutido."})
+    hoje: str = Field(default="", title="Data de referência", max_length=10, json_schema_extra={"description": "AAAA-MM-DD. Vazio usa o dia da execução."})
+    semente: str = Field(default="", title="Semente do ID", max_length=80, json_schema_extra={"description": "Opcional: torna o ID determinístico. Vazio gera um ID opaco aleatório."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CuradoriaCatalogoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    csv: str = Field(title="Catálogo em CSV", min_length=10, max_length=400_000, json_schema_extra={"format": "textarea", "description": "Cabeçalho de 12 colunas, em português ou no inglês do schema original. Uma linha por recurso."})
+    categorias: str = Field(default="", title="Configuração de categorias (JSON)", max_length=40_000, json_schema_extra={"format": "textarea", "description": "Opcional: ordem, descrição e subcategorias. Vazio usa o exemplo embutido."})
+    hoje: str = Field(default="", title="Data de referência", max_length=10)
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CuradoriaReadmeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    csv: str = Field(title="Catálogo em CSV", min_length=10, max_length=400_000, json_schema_extra={"format": "textarea", "description": "A mesma base do catálogo; o README é derivado, nunca editado à mão."})
+    categorias: str = Field(default="", title="Configuração de categorias (JSON)", max_length=40_000, json_schema_extra={"format": "textarea"})
+    titulo: str = Field(default="Recursos escolhidos", title="Título", max_length=90)
+    intro: str = Field(default="", title="Introdução", max_length=2_000, json_schema_extra={"format": "textarea", "description": "Uma ou duas frases sobre o critério da lista. Sem propaganda."})
+    hoje: str = Field(default="", title="Data de referência", max_length=10)
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CuradoriaTickerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    anterior: str = Field(title="Snapshot anterior", min_length=5, max_length=400_000, json_schema_extra={"format": "textarea", "description": "Uma linha por repositório: `dono/repo,estrelas`."})
+    atual: str = Field(title="Snapshot atual", min_length=5, max_length=400_000, json_schema_extra={"format": "textarea", "description": "Mesmo recorte, mais recente. Nada é consultado na rede."})
+    protecoes: str = Field(default="", title="Proteções (JSON)", max_length=20_000, json_schema_extra={"format": "textarea", "description": "Opcional: substitui os padrões de dono bloqueado e nome de imitação."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CuradoriaHigieneInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    csv: str = Field(title="Catálogo em CSV", min_length=10, max_length=400_000, json_schema_extra={"format": "textarea", "description": "A base inteira: ID, link, nome, datas, descrição, categoria."})
+    categorias: str = Field(default="", title="Configuração de categorias (JSON)", max_length=40_000, json_schema_extra={"format": "textarea"})
+    hoje: str = Field(default="", title="Data de referência", max_length=10)
+    dias_para_checar: int = Field(default=90, ge=1, le=3650, title="Dias entre checagens")
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -1485,6 +1551,56 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def editorial_catalogo_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return editorial_catalog()
 
+    def curadoria_entrada_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CuradoriaEntradaInput)
+        try:
+            return validar_entrada(
+                nome=data.nome, link=data.link, autor=data.autor, link_autor=data.link_autor,
+                categoria=data.categoria, subcategoria=data.subcategoria, descricao=data.descricao,
+                licenca=data.licenca,
+                dias_desde_o_primeiro_commit=data.dias_desde_o_primeiro_commit,
+                commits_depois_do_primeiro_dia=data.commits_depois_do_primeiro_dia,
+                estrelas=data.estrelas, exige_cadastro=data.exige_cadastro, pago=data.pago,
+                existentes=data.existentes, categorias=data.categorias, hoje=data.hoje,
+                semente=data.semente, modo=data.modo,
+            )
+        except CuradoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def curadoria_catalogo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CuradoriaCatalogoInput)
+        try:
+            return montar_catalogo(csv_texto=data.csv, categorias=data.categorias, hoje=data.hoje, modo=data.modo)
+        except CuradoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def curadoria_readme_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CuradoriaReadmeInput)
+        try:
+            return gerar_readme(csv_texto=data.csv, categorias=data.categorias, titulo=data.titulo,
+                                intro=data.intro, hoje=data.hoje, modo=data.modo)
+        except CuradoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def curadoria_ticker_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CuradoriaTickerInput)
+        try:
+            return comparar_ticker(anterior=data.anterior, atual=data.atual,
+                                   protecoes=data.protecoes, modo=data.modo)
+        except CuradoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def curadoria_higiene_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CuradoriaHigieneInput)
+        try:
+            return auditar_higiene(csv_texto=data.csv, categorias=data.categorias, hoje=data.hoje,
+                                   dias_para_checar=data.dias_para_checar, modo=data.modo)
+        except CuradoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def curadoria_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return curadoria_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -1785,6 +1901,12 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("editorial.importar", "Redesenhar com recibo", "Lê draw.io, Mermaid ou Excalidraw, aplica a escada de degradação e devolve o recibo de fidelidade com os quatro discos de saída.", "Diagramas", EditorialImportarInput, editorial_importar_handler, timeout_seconds=20),
         SkillDefinition("editorial.entrega", "Aplicar contrato de entrega", "Verifica SVG acessível, viewBox do preset, min-width, rolagem local, impressão, rampa tipográfica e movimento opcional.", "Diagramas", EditorialEntregaInput, editorial_entrega_handler, timeout_seconds=15),
         SkillDefinition("editorial.catalogo", "Catálogo editorial", "Mostra os 45 tipos com orçamento, os nove padrões, os doze papéis de cor, os presets, as rampas e as seis regras de conector.", "Diagramas", EmptyInput, editorial_catalogo_handler, timeout_seconds=5),
+        SkillDefinition("curadoria.entrada", "Validar entrada de catálogo", "Checa os seis campos, a URL, a categoria, a elegibilidade (14 dias com atividade ou 100 estrelas), a licença e o estilo da descrição, e devolve a linha CSV com ID opaco.", "Curadoria", CuradoriaEntradaInput, curadoria_entrada_handler, timeout_seconds=10),
+        SkillDefinition("curadoria.catalogo", "Agrupar catálogo", "Lê o CSV, valida categoria e subcategoria contra a configuração, encontra órfãs, vazias e nunca checadas, e devolve a árvore na ordem editorial.", "Curadoria", CuradoriaCatalogoInput, curadoria_catalogo_handler, timeout_seconds=10),
+        SkillDefinition("curadoria.readme", "Gerar README do catálogo", "Deriva o README do CSV: sumário com âncoras do GitHub, seções na ordem da configuração, uma linha por recurso e rodapé com a data. Nada é editado à mão.", "Curadoria", CuradoriaReadmeInput, curadoria_readme_handler, timeout_seconds=10),
+        SkillDefinition("curadoria.ticker", "Comparar estrelas", "Compara dois snapshots `dono/repo,estrelas`, aplica as proteções contra imitação de produto e cópia de código-fonte, e ordena por variação.", "Curadoria", CuradoriaTickerInput, curadoria_ticker_handler, timeout_seconds=10),
+        SkillDefinition("curadoria.higiene", "Auditar higiene da lista", "Confere ID único, link válido, duplicata, data de inclusão, checagem antiga, estagnação sem justificativa e o estilo de cada descrição.", "Curadoria", CuradoriaHigieneInput, curadoria_higiene_handler, timeout_seconds=15),
+        SkillDefinition("curadoria.regras", "Catálogo de curadoria", "Mostra o schema de 12 colunas, as categorias de exemplo, as regras de elegibilidade, estilo e licença, as proteções e o checklist de higiene.", "Curadoria", EmptyInput, curadoria_regras_handler, timeout_seconds=5),
         SkillDefinition("taste.direction", "Sortear direção de arte", "Sorteia três direções determinísticas por setor, tom e ativos e entrega a ficha da escolhida com seções, paleta, tipo, armadilhas e redesenhos justificados.", "Direção de arte", TasteDirectionInput, taste_direction_handler, timeout_seconds=15),
         SkillDefinition("taste.argument", "Auditar o argumento", "Confere afirmações e provas seção a seção, o orçamento do título, a ação principal e o vocabulário de catálogo.", "Direção de arte", TasteArgumentInput, taste_argument_handler, timeout_seconds=10),
         SkillDefinition("taste.copy", "Auditar deck de copy", "Mede título, apoio, corpo, ações e navegação, e aponta formas proibidas, micro-tipografia e texto de exemplo.", "Direção de arte", TasteCopyInput, taste_copy_handler, timeout_seconds=10),

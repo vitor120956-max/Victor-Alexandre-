@@ -1,0 +1,14 @@
+
+/* --- curadoria ----------------------------------------------------------- */
+.curadoria-page .diagram-laws strong { letter-spacing: .01em; }
+.curadoria-line { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.012); }
+.curadoria-line header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.curadoria-line header strong { color: var(--accent-soft); font-family: var(--mono); font-size: 6.4px; font-weight: 500; letter-spacing: .08em; }
+.curadoria-line header span { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; }
+.curadoria-line pre { margin: 0; padding: 11px 12px; overflow-x: auto; color: var(--text-soft); font-family: var(--mono); font-size: 7.2px; line-height: 1.7; white-space: pre; }
+.curadoria-copy { padding: 4px 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 6.2px; letter-spacing: .05em; text-transform: uppercase; }
+.curadoria-copy:hover { border-color: rgba(var(--accent-rgb), .34); color: var(--accent); }
+.curadoria-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-top: 14px; }
+.curadoria-rules article { padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; }
+.curadoria-rules span { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .06em; text-transform: uppercase; }
+.curadoria-rules p { margin-top: 5px; color: var(--muted); font-size: 7.4px; line-height: 1.6; }

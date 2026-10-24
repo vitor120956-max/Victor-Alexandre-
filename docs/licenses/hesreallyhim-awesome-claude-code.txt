@@ -1,0 +1,25 @@
+ATRIBUIÇÃO — hesreallyhim/awesome-claude-code
+=============================================
+
+Obra original: https://github.com/hesreallyhim/awesome-claude-code
+Copyright (c) 2026 hesreallyhim
+Licença: Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
+Texto integral da licença: https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+
+O QUE FOI USADO
+---------------
+Apenas o MECANISMO descrito publicamente no repositório: o schema de 12 colunas,
+as regras de elegibilidade (14 dias de desenvolvimento ativo ou 100 estrelas),
+o formato do formulário de recomendação, o uso de ID opaco como chave, a geração
+do README a partir de uma tabela CSV, a comparação de snapshots de estrelas e a
+auditoria de higiene de uma lista.
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhum recurso do catálogo curado, nenhuma descrição, nenhuma categoria, nenhum
+texto do README, do CONTRIBUTING ou da documentação do upstream foi copiado ou
+adaptado. A licença CC BY-NC-ND 4.0 não permite obras derivadas nem uso
+comercial, e é por isso que o catálogo de exemplo do JARVIS é próprio e as
+descrições das skills são escritas aqui.
+
+O código de server/curadoria.py é implementação independente em Python.
