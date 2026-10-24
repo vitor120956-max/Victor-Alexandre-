@@ -1,0 +1,13 @@
+/* --- confiança ---------------------------------------------------------- */
+.confianca-page .diagram-laws strong { letter-spacing: .01em; }
+.confianca-page .diagram-tabs button { flex: 0 1 auto; }
+.confianca-page .diagram-tabs { flex-wrap: wrap; }
+.confianca-page .diagram-form textarea { min-height: 210px; font-family: var(--mono); font-size: 7.4px; line-height: 1.7; }
+.confianca-score { height: 6px; margin: -4px 0 2px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, .02); overflow: hidden; }
+.confianca-score span { display: block; height: 100%; border-radius: 999px; transition: width .35s ease; }
+.confianca-score.is-baixo span { background: linear-gradient(90deg, #6fb98a, #9ad6a8); }
+.confianca-score.is-moderado span { background: linear-gradient(90deg, #c9a227, #e6bb70); }
+.confianca-score.is-alto span { background: linear-gradient(90deg, #d97746, #f0a06a); }
+.confianca-score.is-critico span { background: linear-gradient(90deg, #b8423a, #ff8c7e); }
+.confianca-page .diagram-metrics article strong { word-break: break-word; }
+.confianca-page .ciencia-table-block code { overflow-wrap: anywhere; }

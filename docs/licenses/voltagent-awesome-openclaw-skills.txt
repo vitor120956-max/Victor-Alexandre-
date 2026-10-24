@@ -1,0 +1,55 @@
+ATRIBUIÇÃO — VoltAgent/awesome-openclaw-skills
+============================================
+
+Obra original: https://github.com/VoltAgent/awesome-openclaw-skills
+Copyright (c) 2026 VoltAgent
+Licença: MIT
+
+Texto integral da licença
+-------------------------
+
+MIT License
+
+Copyright (c) 2026 VoltAgent
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+O QUE FOI USADO
+---------------
+O FORMATO DO ÍNDICE e as regras editoriais publicadas no CONTRIBUTING do
+repositório: a linha `- [nome](url) - descrição`, a exigência de link para o
+registro canônico `clawhub.ai` (nunca para espelho), a descrição de dez
+palavras ou menos, a proibição de duplicata e de skill com a mesma finalidade,
+o nome em kebab-case e a exclusão de crypto, blockchain, DeFi e finanças. O
+vocabulário de risco também parte do que a lista chama de skill: ficha em
+SKILL.md, ferramentas permitidas, requisitos de ambiente e binários,
+instalação por registro, e o alerta de segurança que o próprio repositório
+mantém sobre skills sinalizadas como suspeitas.
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhuma das 5.400+ skills indexadas foi baixada, importada ou executada, e
+nenhuma descrição, categoria ou lista de lá foi copiada. O catálogo de regras
+do JARVIS é escrito em Python e as contas são feitas sobre o texto que você
+cola — o índice do upstream serve de referência de formato, não de conteúdo.
+
+O código de server/confianca.py é implementação independente em Python; a
+varredura é lexical e numérica, não usa modelo de linguagem e não acessa a
+rede.

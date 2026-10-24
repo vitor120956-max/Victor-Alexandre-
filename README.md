@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.21.0.**
+**Versão atual: 0.22.0.**
 
 ## Executar em desenvolvimento
 
@@ -203,6 +203,16 @@ Nada é executado: nenhum repositório, DOI, registro ou dado é baixado, e nenh
 
 Consulte [`docs/CIENCIA.md`](docs/CIENCIA.md) e a licença MIT em [`docs/licenses/k-dense-ai-scientific-agent-skills.txt`](docs/licenses/k-dense-ai-scientific-agent-skills.txt).
 
+## Confiança em skill de terceiro
+
+A página **Confiança** (`/confianca`) parte de [`VoltAgent/awesome-openclaw-skills`](https://github.com/VoltAgent/awesome-openclaw-skills) — **MIT**, mais de 5.400 skills indexadas — e fica com a parte que se pode conferir antes de deixar uma skill rodar. Nenhuma das skills do índice foi baixada, importada ou executada: a leitura é lexical sobre o texto que você cola.
+
+`server/confianca.py` lê a ficha e cobra o que a faz utilizável: nome em kebab-case, descrição com gatilho, licença, versão, autoria e lista exata de ferramentas. Varre o risco em 15 classes — comando destrutivo, download executado, credencial, exfiltração, injeção, ofuscação, privilégio, persistência, segredo em claro — e nota de 0 a 100, com bloqueio para a combinação de credencial lida e enviada para fora. Compara a permissão declarada com a usada nas oito capacidades e aponta a ferramenta ociosa e a usada sem declaração. Confere a receita de instalação: versão fixa ou flutuante, download canalizado para o shell, `sudo`, escopo global e script de instalação. Audita o índice contra as dez regras do próprio repositório de origem — link para o registro canônico, descrição curta, nome kebab-case, sem duplicata — e caça variações de teste e descrições iguais.
+
+Nada é aberto, baixado ou instalado, e o parecer não usa modelo de linguagem: o veredito sai da soma dos pesos, e a ausência de padrão não é atestado de segurança — é o que o texto colado não tem.
+
+Consulte [`docs/CONFIANCA.md`](docs/CONFIANCA.md) e a licença MIT em [`docs/licenses/voltagent-awesome-openclaw-skills.txt`](docs/licenses/voltagent-awesome-openclaw-skills.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -320,7 +330,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **120 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **127 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -402,6 +412,7 @@ src/                         # interface React e estado local
 ├── pages/CuradoriaPage.tsx  # entrada, catálogo, README, ticker, higiene e regras
 ├── pages/MarketingPage.tsx  # funil, teste, campanha, e-mail, SEO, anúncio e regras
 ├── pages/CienciaPage.tsx    # amostra, estatística, desenho, repro, validação e manuscrito
+├── pages/ConfiancaPage.tsx  # ficha, risco, permissão, instalação, índice, duplicata e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -421,6 +432,7 @@ server/
 ├── curadoria.py            # schema, elegibilidade, catálogo, README, ticker e higiene
 ├── marketing.py            # funil, amostra, UTM, e-mail, SEO, anúncio e regras
 ├── ciencia.py              # poder, relato, desenho, reprodutibilidade, método e manuscrito
+├── confianca.py             # ficha, risco, permissão, instalação, índice e duplicata
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -430,7 +442,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 120 skills
+├── skill_registry.py        # allowlist, Pydantic e 127 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

@@ -550,6 +550,6 @@ def test_api_valida_parametros() -> None:
     assert client.post("/api/skills/diagram.render/execute", json={"parameters": "x"}).status_code == 422
 
 
-def test_registro_tem_cento_e_seis_skills() -> None:
+def test_registro_tem_cento_e_vinte_e_sete_skills() -> None:
     registry = build_registry(__import__("pathlib").Path("."))
-    assert len(registry.list()) == 120
+    assert len(registry.list()) == 127

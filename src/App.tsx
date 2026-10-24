@@ -18,6 +18,7 @@ import { DiagramPage } from './pages/DiagramPage';
 import { CuradoriaPage } from './pages/CuradoriaPage';
 import { MarketingPage } from './pages/MarketingPage';
 import { CienciaPage } from './pages/CienciaPage';
+import { ConfiancaPage } from './pages/ConfiancaPage';
 import { CareerPage } from './pages/CareerPage';
 import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="curadoria" element={<CuradoriaPage />} />
         <Route path="marketing" element={<MarketingPage />} />
         <Route path="ciencia" element={<CienciaPage />} />
+        <Route path="confianca" element={<ConfiancaPage />} />
         <Route path="carreira" element={<CareerPage />} />
         <Route path="navegador" element={<NavegadorPage />} />
         <Route path="escritorio" element={<EscritorioPage />} />

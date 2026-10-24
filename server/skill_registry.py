@@ -79,6 +79,26 @@ from .ciencia import (
     dimensionar_estudo,
     validar_metodo,
 )
+from .marketing import (
+    MarketingError,
+    auditar_email,
+    auditar_seo,
+    auditar_utm,
+    calcular_orcamento,
+    dimensionar_teste,
+    marketing_catalogo,
+    revisar_anuncio,
+)
+from .confianca import (
+    ConfiancaError,
+    analisar_ficha,
+    auditar_duplicatas,
+    auditar_indice,
+    auditar_instalacao,
+    auditar_risco,
+    confianca_catalogo,
+    conferir_permissao,
+)
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
 from .studio import (
@@ -803,6 +823,113 @@ class CienciaManuscritoInput(BaseModel):
     texto: str = Field(title="Manuscrito", min_length=200, max_length=120_000, json_schema_extra={"format": "textarea", "description": "O manuscrito ou o conjunto de seções. A conferência é do relato, não do desenho."})
     tipo: Literal["ensaio", "observacional", "diagnostico", "revisao", "animal"] = Field(default="ensaio", title="Tipo de estudo")
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingOrcamentoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    orcamento: float = Field(gt=0, le=1_000_000_000, title="Orçamento", description="Verba do período, na moeda informada.")
+    cpm: float = Field(gt=0, le=100_000, title="CPM")
+    ctr: float = Field(gt=0, le=25, title="CTR (%)", description="Cliques por impressão. Acima de 10% vira suspeita de medição.")
+    cvr: float = Field(gt=0, le=100, title="Conversão (%)", description="Lead por clique.")
+    fechamento: float = Field(default=100.0, gt=0, le=100, title="Fechamento (%)", description="Cliente por lead.")
+    ticket: float = Field(default=0, ge=0, title="Ticket", description="Receita média por cliente.")
+    margem: float = Field(default=100.0, gt=0, le=100, title="Margem (%)")
+    modelo: Literal["assinatura", "unica"] = Field(default="assinatura", title="Modelo")
+    vida_util_meses: float = Field(default=0, ge=0, le=600, title="Vida útil (meses)")
+    cac_alvo: float = Field(default=0, ge=0, title="CAC alvo")
+    meta_arr: float = Field(default=0, ge=0, title="Meta de ARR")
+    arpc: float = Field(default=0, ge=0, title="ARPC mensal")
+    retencao_anual: float = Field(default=0, ge=0, le=100, title="Retenção anual (%)")
+    moeda: Literal["BRL", "USD", "EUR"] = Field(default="BRL", title="Moeda")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingTesteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baseline: float = Field(gt=0, lt=100, title="Linha de base (%)")
+    mde: float = Field(gt=0, le=500, title="Efeito mínimo detectável (%)", description="Ganho relativo que precisa aparecer para o teste valer.")
+    trafego_diario: float = Field(gt=0, le=100_000_000, title="Tráfego por dia")
+    variantes: int = Field(default=2, ge=2, le=6, title="Variantes", description="Controle mais N variantes.")
+    alfa: float = Field(default=0.05, gt=0, lt=0.5, title="Alfa")
+    poder: float = Field(default=0.8, ge=0.5, lt=0.999, title="Poder")
+    exposicao: float = Field(default=100.0, gt=0, le=100, title="Exposição (%)", description="Fração do tráfego que entra no teste.")
+    tipo: Literal["b2b", "b2c"] = Field(default="b2c", title="Ciclo de compra")
+    duracao_maxima: int = Field(default=56, ge=1, le=365, title="Duração máxima (dias)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingUtmInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    urls: str = Field(min_length=8, max_length=60_000, title="URLs de campanha", json_schema_extra={"format": "textarea", "description": "Uma por linha. Cada uma é conferida e devolvida canônica."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingEmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assunto: str = Field(min_length=1, max_length=300, title="Assunto")
+    corpo: str = Field(min_length=1, max_length=40_000, title="Corpo", json_schema_extra={"format": "textarea"})
+    preview: str = Field(default="", max_length=300, title="Pré-cabeçalho")
+    cta: str = Field(default="", max_length=200, title="Chamada para ação")
+    tipo: Literal["lifecycle", "cold"] = Field(default="lifecycle", title="Tipo")
+    html: str = Field(default="", max_length=200_000, title="HTML do e-mail", json_schema_extra={"format": "textarea", "description": "Opcional: confere descadastro, imagem sem alt e texto puro."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingSeoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    html: str = Field(min_length=30, max_length=200_000, title="HTML da página", json_schema_extra={"format": "textarea", "description": "O HTML entregue. Nada é executado."})
+    palavra_chave: str = Field(default="", max_length=160, title="Palavra-chave")
+    url: str = Field(default="", max_length=300, title="URL")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MarketingAnuncioInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plataforma: Literal["google", "meta", "linkedin"] = Field(default="meta", title="Plataforma")
+    titulos: str = Field(default="", max_length=4_000, title="Títulos", json_schema_extra={"format": "textarea", "description": "Um por linha."})
+    descricoes: str = Field(default="", max_length=8_000, title="Descrições", json_schema_extra={"format": "textarea", "description": "Uma por linha."})
+    texto_principal: str = Field(default="", max_length=8_000, title="Texto principal", json_schema_extra={"format": "textarea"})
+    url_final: str = Field(default="", max_length=600, title="URL final")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+MODOS_CONFIANCA = Literal["lite", "full", "ultra"]
+
+
+class ConfiancaFichaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="SKILL.md", min_length=40, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O arquivo inteiro, com o cabeçalho `---` e o corpo."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+class ConfiancaRiscoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Skill ou receita", min_length=40, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Texto da skill, da receita de instalação ou do README do repositório."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+class ConfiancaPermissaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="SKILL.md", min_length=60, max_length=200_000, json_schema_extra={"format": "textarea", "description": "O arquivo inteiro: a ficha declara as ferramentas e o corpo indica o uso."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+class ConfiancaInstalacaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Receita de instalação", min_length=30, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Os comandos como estão escritos, um por linha."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+class ConfiancaIndiceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Índice em Markdown", min_length=40, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Linhas no formato `- [nome](url) - descrição`, com os títulos de categoria."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
+
+
+class ConfiancaDuplicataInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Índice ou lista", min_length=40, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Índice em Markdown ou linhas `nome;url;descrição`."})
+    modo: MODOS_CONFIANCA = Field(default="full", title="Nível")
 
 
 class DiagramTypeInput(BaseModel):
@@ -1861,6 +1988,113 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def ciencia_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return ciencia_catalogo()
 
+    def marketing_orcamento_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingOrcamentoInput)
+        try:
+            return calcular_orcamento(
+                orcamento=data.orcamento, cpm=data.cpm, ctr=data.ctr, cvr=data.cvr,
+                fechamento=data.fechamento, ticket=data.ticket, margem=data.margem,
+                modelo=data.modelo, vida_util_meses=data.vida_util_meses, cac_alvo=data.cac_alvo,
+                meta_arr=data.meta_arr, arpc=data.arpc, retencao_anual=data.retencao_anual,
+                moeda=data.moeda, modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_teste_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingTesteInput)
+        try:
+            return dimensionar_teste(
+                baseline=data.baseline, mde=data.mde, trafego_diario=data.trafego_diario,
+                variantes=data.variantes, alfa=data.alfa, poder=data.poder,
+                exposicao=data.exposicao, tipo=data.tipo, duracao_maxima=data.duracao_maxima,
+                modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_utm_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingUtmInput)
+        try:
+            return auditar_utm(urls=data.urls, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_email_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingEmailInput)
+        try:
+            return auditar_email(
+                assunto=data.assunto, corpo=data.corpo, preview=data.preview, cta=data.cta,
+                tipo=data.tipo, html=data.html, modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_seo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingSeoInput)
+        try:
+            return auditar_seo(html=data.html, palavra_chave=data.palavra_chave, url=data.url, modo=data.modo)
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_anuncio_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MarketingAnuncioInput)
+        try:
+            return revisar_anuncio(
+                plataforma=data.plataforma, titulos=data.titulos, descricoes=data.descricoes,
+                texto_principal=data.texto_principal, url_final=data.url_final, modo=data.modo,
+            )
+        except MarketingError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def marketing_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return marketing_catalogo()
+
+    def confianca_ficha_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaFichaInput)
+        try:
+            return analisar_ficha(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_risco_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaRiscoInput)
+        try:
+            return auditar_risco(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_permissao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaPermissaoInput)
+        try:
+            return conferir_permissao(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_instalacao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaInstalacaoInput)
+        try:
+            return auditar_instalacao(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_indice_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaIndiceInput)
+        try:
+            return auditar_indice(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_duplicata_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConfiancaDuplicataInput)
+        try:
+            return auditar_duplicatas(texto=data.texto, modo=data.modo)
+        except ConfiancaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def confianca_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return confianca_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -2168,6 +2402,20 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("ciencia.validacao", "Validação de método analítico", "Calcula recuperação e RSD por nível, separa repetibilidade de precisão intermediária, ajusta R², LOD e LOQ pela curva e compara com o critério do ICH M10 da modalidade ou com o limite informado.", "Ciência", CienciaValidacaoInput, ciencia_validacao_handler, timeout_seconds=15),
         SkillDefinition("ciencia.manuscrito", "Completude do manuscrito", "Confere seções IMRaD, itens da diretriz do tipo de estudo (CONSORT, STROBE, STARD, PRISMA, ARRIVE) e afirmações que excedem o desenho; declara que completude não é qualidade.", "Ciência", CienciaManuscritoInput, ciencia_manuscrito_handler, timeout_seconds=15),
         SkillDefinition("ciencia.regras", "Catálogo de ciência", "Publica benchmarks de efeito, critérios do ICH M10, fórmulas de poder, LOD e LOQ, diretrizes por tipo de estudo, itens de desenho e reprodutibilidade e a lista do que ficou de fora.", "Ciência", EmptyInput, ciencia_regras_handler, timeout_seconds=5),
+        SkillDefinition("marketing.orcamento", "Orçamento e economia unitária", "Faz a conta do funil com as taxas informadas (impressões, cliques, leads, clientes, CAC, ROAS, payback, LTV/CAC), aponta quanto cada alavanca precisa mudar para o CAC alvo e qual verba a meta de ARR exige; paga em moeda declarada e não usa benchmark.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=5),
+        SkillDefinition("marketing.teste", "Dimensionar teste A/B", "Calcula amostra por variante pela fórmula de duas proporções, corrige o alfa por Bonferroni para múltiplas variantes, converte em duração pelo tráfego e pela exposição e impõe o piso de sete dias B2C ou dois ciclos B2B.", "Marketing", MarketingTesteInput, marketing_teste_handler, timeout_seconds=5),
+        SkillDefinition("marketing.utm", "Higiene de campanha", "Lê a URL de campanha, exige utm_source, utm_medium e utm_campaign, aplica o vocabulário de medium, recusa maiúscula, espaço, underscore, PII, encurtador e parâmetro repetido, e devolve a URL canônica.", "Marketing", MarketingUtmInput, marketing_utm_handler, timeout_seconds=10),
+        SkillDefinition("marketing.email", "E-mail antes do disparo", "Confere assunto, pré-cabeçalho, corpo e CTA contra limites de leitura, lista negativa de spam, pergunta respondida, marcas de texto gerado, descadastro e link — sem escrever copy.", "Marketing", MarketingEmailInput, marketing_email_handler, timeout_seconds=10),
+        SkillDefinition("marketing.seo", "Auditoria on-page", "Lê o HTML entregue sem executar JavaScript e confere título, description, H1, hierarquia, alt, canonical, idioma, JSON-LD, links internos e os sinais que um motor de resposta extrai.", "Marketing", MarketingSeoInput, marketing_seo_handler, timeout_seconds=15),
+        SkillDefinition("marketing.anuncio", "Anúncio dentro do limite", "Confere peça por peça contra o limite de Google, Meta e LinkedIn, exige o número mínimo de títulos e descrições, e recusa afirmação não verificável sem o fato ao lado.", "Marketing", MarketingAnuncioInput, marketing_anuncio_handler, timeout_seconds=10),
+        SkillDefinition("marketing.regras", "Catálogo de marketing", "Publica limites por plataforma, vocabulário de medium, faixas de sanidade, fórmulas do funil, grade de amostra calculada na hora e a rubrica de integridade da recomendação.", "Marketing", EmptyInput, marketing_regras_handler, timeout_seconds=5),
+        SkillDefinition("confianca.ficha", "Ficha da skill", "Lê o SKILL.md e devolve a ficha normalizada: nome em kebab-case, descrição com gatilho, licença, versão, autoria, ferramentas, variáveis de ambiente e binários; aponta o que falta para a skill ser instalável e roteável.", "Confiança", ConfiancaFichaInput, confianca_ficha_handler, timeout_seconds=5),
+        SkillDefinition("confianca.risco", "Risco da skill", "Varre comando destrutivo, download que executa, leitura de credencial, envio para fora, injeção de instrução, ofuscação, desligamento de proteção, privilégio, persistência e segredo em claro; nota o risco de 0 a 100 e recusa promessa de oficial, auditoria, obrigação e milagre sem prova.", "Confiança", ConfiancaRiscoInput, confianca_risco_handler, timeout_seconds=10),
+        SkillDefinition("confianca.permissao", "Permissão declarada e usada", "Compara as ferramentas que a ficha concede com as capacidades que o corpo indica usar: execução, leitura, escrita, rede, navegador, mensagem e agendamento; aponta capacidade usada sem declaração, permissão ociosa e escopo total.", "Confiança", ConfiancaPermissaoInput, confianca_permissao_handler, timeout_seconds=10),
+        SkillDefinition("confianca.instalacao", "Caminho de instalação", "Lê a receita e aponta versão flutuante, download que executa, sudo, gancho de instalação, clone sem tag, host fora de registro conhecido, instalação global e material depreciado.", "Confiança", ConfiancaInstalacaoInput, confianca_instalacao_handler, timeout_seconds=10),
+        SkillDefinition("confianca.indice", "Índice de skills", "Confere um índice em Markdown contra as regras do próprio repositório de origem: host canônico, descrição de até dez palavras, formato da linha, duplicata, nome em kebab-case, link válido, escopo declarado e contagem por categoria.", "Confiança", ConfiancaIndiceInput, confianca_indice_handler, timeout_seconds=15),
+        SkillDefinition("confianca.duplicata", "Duplicata e clone", "Compara as entradas do índice por nome, distância de edição, sufixo de clone e descrição: aponta nome repetido, link repetido, nome parecido, variação de teste ao lado do original e descrição idêntica em skills diferentes.", "Confiança", ConfiancaDuplicataInput, confianca_duplicata_handler, timeout_seconds=15),
+        SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
         SkillDefinition("marketing.teste", "Dimensionar teste A/B", "Calcula amostra por variante e duração com duas proporções, alfa e poder declarados, corrige para múltiplas variantes e recusa teste que não cabe no prazo.", "Marketing", MarketingTesteInput, marketing_teste_handler, timeout_seconds=10),
         SkillDefinition("marketing.utm", "Higiene de campanha", "Confere as URLs de campanha: https, os três parâmetros obrigatórios, minúsculas, hífen, medium do vocabulário, duplicata, dado pessoal e encurtador; devolve a URL canônica.", "Marketing", MarketingUtmInput, marketing_utm_handler, timeout_seconds=10),
