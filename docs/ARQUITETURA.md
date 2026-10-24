@@ -119,6 +119,14 @@ As rotas são `/api/skills/escritorio.comando`, `escritorio.receita`, `escritori
 
 As rotas são `/api/skills/estacao.tarefa`, `estacao.permissoes`, `estacao.recibos`, `estacao.agenda`, `estacao.limites`, `estacao.memoria` e `estacao.regras`. Nenhuma abre máquina, navegador, canal ou conexão; todas marcam `executado: false` e `readOnly: true`. A página `/estacao` só envia o texto colado. Detalhes em [`ESTACAO.md`](ESTACAO.md).
 
+## Estação do agente
+
+`server/estacao.py` implementa sete operações de análise inspiradas em `feder-cr/invisible_dots` (MIT): plano de tarefa com laço observar/agir/verificar/registrar, auditoria da matriz `allow`/`ask`/`deny`, leitura de recibos, validação de agenda, classificação de efeito, higiene de notas e skills, e catálogo.
+
+`server/estacao_runtime.py` é o **executor real**: fila durável em SQLite com gate de permissão, seis ferramentas (`exec`, `read_file`, `write_file`, `list_dir`, `grep`, `cron`), aprovação que vale uma chamada e roda no máximo uma vez (reivindicação por `UPDATE ... WHERE estado='pendente'`), recibos por evento, recuperação que marca `executando` como `interrompido` e encerra o grupo de processos no timeout. Os caminhos ficam presos ao diretório de trabalho por `safe_path`; o subprocesso recebe ambiente mínimo, sem `JARVIS_*`. Não é isolamento de sistema operacional: a VM do upstream não existe aqui.
+
+As rotas operacionais são `/api/estacao/estado`, `executar`, `aprovacoes`, `aprovacoes/{id}/decidir`, `politica`, `chamadas`, `recibos`, `agenda` (GET/POST/DELETE), `agenda/tick` e `recuperar`. As de análise são `/api/skills/estacao.{tarefa,permissoes,recibos,agenda,limites,memoria,regras}`. A página `/estacao` tem uma aba Executor e sete de análise. Detalhes em [`ESTACAO.md`](ESTACAO.md).
+
 ## Corpus de legislação
 
 `LegalCorpus` carrega somente os oito documentos declarados em `server/legal_data/index.json`. Na inicialização do registry, o parser:

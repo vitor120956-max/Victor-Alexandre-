@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -13,20 +13,35 @@ import {
   ListChecks,
   LoaderCircle,
   MousePointerClick,
+  Play,
+  Power,
   Receipt,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Terminal,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { SkillExecution } from '../lib/api';
+import type { EstacaoEstado, SkillExecution } from '../lib/api';
+import {
+  alternarAutomacaoEstacao,
+  criarAutomacaoEstacao,
+  decidirEstacao,
+  definirPoliticaEstacao,
+  executarEstacao,
+  getEstacaoEstado,
+  recuperarEstacao,
+  removerAutomacaoEstacao,
+} from '../lib/api';
 import '../estacao.css';
 
-type EstacaoTab = 'tarefa' | 'permissoes' | 'recibos' | 'agenda' | 'limites' | 'memoria' | 'regras';
+type EstacaoTab = 'executor' | 'tarefa' | 'permissoes' | 'recibos' | 'agenda' | 'limites' | 'memoria' | 'regras';
 type Row = Record<string, unknown>;
 type Level = 'lite' | 'full' | 'ultra';
 
 const tabs: Array<{ id: EstacaoTab; label: string; hint: string; icon: typeof ListChecks }> = [
+  { id: 'executor', label: 'Executor', hint: 'Roda de verdade', icon: Play },
   { id: 'tarefa', label: 'Tarefa', hint: 'Objetivo → passos', icon: ListChecks },
   { id: 'permissoes', label: 'Permissões', hint: 'allow / ask / deny', icon: ShieldCheck },
   { id: 'recibos', label: 'Execução', hint: 'Chamada → recibo', icon: Receipt },
@@ -43,10 +58,10 @@ const levels: Array<{ id: Level; label: string }> = [
 ];
 
 const laws = [
-  ['Permissão declarada', 'Nenhuma ferramenta é oferecida sem uma permissão que a pessoa escreveu. Nome desconhecido é `deny`.'],
-  ['Aprovação que vale uma vez', '`ask` para a rodada, guarda os argumentos e executa uma única vez. A decisão fica registrada.'],
-  ['Chamada no máximo uma vez', 'Uma queda no meio deixa o resultado desconhecido. O agente relê o estado antes de repetir.'],
-  ['Limite não se contorna', 'Evasão de detecção, CAPTCHA, rotação de conta e desrespeito a termos ficam fora do que este núcleo prepara.'],
+  ['Permissão declarada', 'Nenhuma ferramenta roda sem uma decisão `allow`/`ask`/`deny` que você escreveu. Nome desconhecido é `deny`.'],
+  ['Aprovação que vale uma vez', '`ask` guarda a chamada com os argumentos e espera a decisão; aprovada, roda uma única vez.'],
+  ['Chamada no máximo uma vez', 'Uma queda no meio deixa o resultado desconhecido, e o registro diz isso em vez de repetir.'],
+  ['Recibo de tudo', 'Cada chamada gera `intent`, o desfecho e a hora. Você lê o que aconteceu, não o que devia ter acontecido.'],
 ];
 
 const samplePolitica = `computer.exec=ask
@@ -80,6 +95,25 @@ nome: cobranca-semanal
 gatilho: quando pedirem a cobrança da semana
 passos: listar faturas em aberto; montar lista de devedores
 verificacao: toda fatura tem estado`;
+const modelosDeArgumentos: Record<string, string> = {
+  exec: JSON.stringify({ comando: 'ls -la', timeout_s: 60 }, null, 2),
+  read_file: JSON.stringify({ caminho: 'README.md', limite_linhas: 40 }, null, 2),
+  write_file: JSON.stringify({ caminho: 'nota.txt', conteudo: 'linha 1\nlinha 2', simular: false }, null, 2),
+  list_dir: JSON.stringify({ caminho: '', recursivo: false }, null, 2),
+  grep: JSON.stringify({ padrao: 'TODO', caminho: '', limite: 20 }, null, 2),
+  cron: JSON.stringify({ nome: 'diario', cron: '0 9 * * 1-5', comando: 'echo oi', minutos: 10 }, null, 2),
+};
+
+const estadoLabel: Record<string, string> = {
+  pendente: 'aguardando aprovação',
+  executando: 'executando',
+  ok: 'ok',
+  erro: 'erro',
+  interrompido: 'interrompida',
+  recusado: 'recusada',
+  negado: 'negada pela política',
+};
+
 const memoryHygiene = [
   'Todo fato carrega o dia em que foi aprendido.',
   'Segredo fica no cofre do host; a nota cita só o nome da variável.',
@@ -374,14 +408,14 @@ function AgendaView({ result }: { result: Row }) {
 function LimitsView({ result }: { result: Row }) {
   const acoes = asRows(result.acoes);
   const metrics = asRow(result.metrics);
-  const bloqueadas = acoes.filter((item) => text(item.nivel) === 'bloqueado');
+  const bloqueadas = acoes.filter((item) => text(item.nivel) === 'irreversivel');
   return (
     <div className="estacao-view">
       <Verdict result={result} />
       <Metrics items={[
         { label: 'LIBERADAS', value: num(metrics.liberadas), tone: 'ok' },
         { label: 'CONFIRMAR', value: num(metrics.confirmar), tone: 'warning' },
-        { label: 'BLOQUEADAS', value: num(metrics.bloqueadas), tone: num(metrics.bloqueadas) ? 'danger' : 'ok' },
+        { label: 'IRREVERSÍVEIS', value: num(metrics.irreversiveis), tone: num(metrics.irreversiveis) ? 'danger' : 'ok' },
         { label: 'AÇÕES', value: num(metrics.acoes) },
       ]} />
       <section>
@@ -403,9 +437,9 @@ function LimitsView({ result }: { result: Row }) {
         </div>
       </section>
       {bloqueadas.length > 0 && (
-        <div className="estacao-callout is-block">
-          <strong>O que fica de fora</strong>
-          <p>O upstream se anuncia como indetectável por anti-bots. Este núcleo não adapta essa parte: esconder automação, vencer CAPTCHA, rotacionar contas e ignorar termos continuam bloqueados, com a via oficial indicada em cada linha.</p>
+        <div className="estacao-callout">
+          <strong>Efeito sem desfazer</strong>
+          <p>Estas ações não têm reversão automática. Confirme o alvo e o conteúdo; quando a ferramenta permitir, use o ensaio antes.</p>
         </div>
       )}
       <section>
@@ -462,6 +496,183 @@ function MemoryView({ result }: { result: Row }) {
   );
 }
 
+function ExecutorView({
+  estado, onPolitica, onDecidir, onRecuperar, onAlternar, onRemover, onCriar, ocupado,
+}: {
+  estado: EstacaoEstado | null;
+  onPolitica: (permissao: string, decisao: string) => void;
+  onDecidir: (id: string, aprovado: boolean) => void;
+  onRecuperar: () => void;
+  onAlternar: (nome: string, ativa: boolean) => void;
+  onRemover: (nome: string) => void;
+  onCriar: (input: { nome: string; cron: string; comando: string; minutos: number }) => void;
+  ocupado: boolean;
+}) {
+  const [novoNome, setNovoNome] = useState('diario');
+  const [novoCron, setNovoCron] = useState('0 9 * * 1-5');
+  const [novoComando, setNovoComando] = useState('echo oi');
+  if (!estado) {
+    return <div className="estacao-placeholder"><LoaderCircle size={22} className="is-spinning" /><strong>Lendo o executor…</strong><p>O estado vem de <code>/api/estacao/estado</code>.</p></div>;
+  }
+  return (
+    <div className="estacao-view">
+      <div className="estacao-callout">
+        <strong>Diretório de trabalho</strong>
+        <p><code>{estado.raiz}</code> · banco em <code>{estado.banco}</code> · v{estado.versao}</p>
+      </div>
+
+      <section>
+        <h3><ShieldCheck size={13} />Política</h3>
+        <div className="estacao-matrix">
+          {estado.permissoes.map((permissao) => (
+            <article className={`estacao-perm is-${estado.politica[permissao.nome] ?? 'deny'}`} key={permissao.nome}>
+              <header>
+                <code>{permissao.nome}</code>
+                <select
+                  className="estacao-select"
+                  value={estado.politica[permissao.nome] ?? 'deny'}
+                  disabled={ocupado}
+                  onChange={(event) => onPolitica(permissao.nome, event.target.value)}
+                >
+                  <option value="allow">allow</option>
+                  <option value="ask">ask</option>
+                  <option value="deny">deny</option>
+                </select>
+              </header>
+              <small>{permissao.rotulo} · risco {riskLabel[permissao.risco] ?? permissao.risco}</small>
+            </article>
+          ))}
+        </div>
+        <p className="estacao-note">Alterar a política grava no banco e vale para a próxima chamada. `ask` deixa a chamada pendente até alguém decidir.</p>
+      </section>
+
+      <section>
+        <h3><ShieldAlert size={13} />Fila de aprovação ({estado.pendentes.length})</h3>
+        {estado.pendentes.length === 0 ? (
+          <p className="estacao-empty"><CheckCircle2 size={14} />Nada esperando decisão.</p>
+        ) : (
+          <div className="estacao-steps">
+            {estado.pendentes.map((chamada) => (
+              <article className="estacao-step" key={chamada.id}>
+                <header>
+                  <strong>{chamada.ferramenta}</strong>
+                  <Badge kind="ask">aguardando</Badge>
+                  <em>{chamada.permissao}</em>
+                </header>
+                <pre className="estacao-args">{JSON.stringify(chamada.argumentos, null, 2)}</pre>
+                <div className="estacao-action-row">
+                  <button type="button" className="estacao-do" onClick={() => onDecidir(chamada.id, true)} disabled={ocupado}>
+                    <Play size={11} />Aprovar e rodar
+                  </button>
+                  <button type="button" className="estacao-ghost" onClick={() => onDecidir(chamada.id, false)} disabled={ocupado}>
+                    <Ban size={11} />Recusar
+                  </button>
+                  <span className="estacao-metric-inline">{chamada.criado_em}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h3><Receipt size={13} />Chamadas recentes</h3>
+        {estado.chamadas.length === 0 ? (
+          <p className="estacao-empty"><Receipt size={14} />Nenhuma chamada ainda.</p>
+        ) : (
+          <div className="estacao-steps">
+            {estado.chamadas.slice(0, 8).map((chamada) => (
+              <article className="estacao-step" key={chamada.id}>
+                <header>
+                  <strong>{chamada.ferramenta}</strong>
+                  <Badge kind={chamada.estado}>{estadoLabel[chamada.estado] ?? chamada.estado}</Badge>
+                  {chamada.duracao_ms > 0 && <em>{chamada.duracao_ms} ms</em>}
+                </header>
+                {Boolean(chamada.resultado?.saida) && (
+                  <pre className="estacao-args">{String(chamada.resultado.saida).slice(0, 1200)}</pre>
+                )}
+                {Boolean(chamada.resultado?.texto) && (
+                  <pre className="estacao-args">{String(chamada.resultado.texto).slice(0, 1200)}</pre>
+                )}
+                {Boolean(chamada.resultado?.mensagem) && (
+                  <p className="estacao-note">{String(chamada.resultado.mensagem)}</p>
+                )}
+                {Boolean(chamada.resultado?.erro) && (
+                  <p className="estacao-note is-danger">{String(chamada.resultado.erro)}</p>
+                )}
+                {Boolean(chamada.motivo_ignorada) && <p className="estacao-note">{chamada.motivo_ignorada}</p>}
+              </article>
+            ))}
+          </div>
+        )}
+        <div className="estacao-action-row">
+          <button type="button" className="estacao-sample" onClick={onRecuperar} disabled={ocupado}>
+            <Power size={11} />Recuperar chamadas interrompidas
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3><CalendarClock size={13} />Automações reais ({estado.automacoes.length})</h3>
+        <div className="estacao-inline">
+          <label className="field">
+            <span>Nome</span>
+            <input value={novoNome} onChange={(event) => setNovoNome(event.target.value)} spellCheck={false} />
+          </label>
+          <label className="field">
+            <span>Cron <em>5 campos</em></span>
+            <input value={novoCron} onChange={(event) => setNovoCron(event.target.value)} spellCheck={false} />
+          </label>
+        </div>
+        <label className="field">
+          <span>Comando</span>
+          <input value={novoComando} onChange={(event) => setNovoComando(event.target.value)} spellCheck={false} />
+        </label>
+        <div className="estacao-action-row">
+          <button
+            type="button"
+            className="estacao-do"
+            disabled={ocupado}
+            onClick={() => onCriar({ nome: novoNome, cron: novoCron, comando: novoComando, minutos: 10 })}
+          >
+            <CalendarClock size={11} />Criar automação
+          </button>
+          <span className="estacao-metric-inline">passa pelo mesmo gate: com `ask`, a execução também pede aprovação.</span>
+        </div>
+        {estado.automacoes.length === 0 ? (
+          <p className="estacao-empty"><CalendarClock size={14} />Nenhuma automação criada pelo executor.</p>
+        ) : (
+          <div className="estacao-table-wrap">
+            <table className="estacao-table">
+              <thead><tr><th>Nome</th><th>Cron</th><th>Próxima</th><th>Falhas</th><th>Ações</th></tr></thead>
+              <tbody>
+                {estado.automacoes.map((item) => (
+                  <tr key={item.nome}>
+                    <td><code>{item.nome}</code></td>
+                    <td className="is-mono">{item.cron}</td>
+                    <td className="is-mono">{item.proxima}</td>
+                    <td>{item.falhas}</td>
+                    <td>
+                      <div className="estacao-action-row">
+                        <button type="button" className="estacao-ghost" onClick={() => onAlternar(item.nome, !item.ativa)} disabled={ocupado}>
+                          {item.ativa ? 'pausar' : 'ativar'}
+                        </button>
+                        <button type="button" className="estacao-ghost" onClick={() => onRemover(item.nome)} disabled={ocupado}>
+                          <Trash2 size={11} />remover
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function ReferenceView({ reference }: { reference: Row | null }) {
   if (!reference) {
     return <div className="estacao-placeholder"><LoaderCircle size={22} className="is-spinning" /><strong>Lendo o catálogo…</strong><p>A biblioteca vem da skill `estacao.regras`.</p></div>;
@@ -469,7 +680,6 @@ function ReferenceView({ reference }: { reference: Row | null }) {
   const ferramentas = asRows(reference.ferramentas);
   const permissoes = asRows(reference.permissoes);
   const estados = asRows(reference.estados);
-  const evasao = asRows(reference.evasao);
   const limites = asRows(reference.limites);
   const orcamento = asRows(reference.orcamento);
   return (
@@ -514,15 +724,7 @@ function ReferenceView({ reference }: { reference: Row | null }) {
           ))}
         </section>
       </div>
-      <section>
-        <h3><Ban size={13} />Evasão — fora do escopo ({evasao.length})</h3>
-        {evasao.map((item) => (
-          <div className="estacao-rule" key={text(item.regra)}>
-            <code>{text(item.titulo)}</code>
-            <span>{text(item.porque)} <b>Alternativa:</b> {text(item.alternativa)}</span>
-          </div>
-        ))}
-      </section>
+
     </div>
   );
 }
@@ -560,8 +762,146 @@ export function EstacaoPage() {
   const [notas, setNotas] = useState(sampleNotas);
   const [skills, setSkills] = useState(sampleSkills);
 
+  const [estacao, setEstacao] = useState<EstacaoEstado | null>(null);
+  const [ferramenta, setFerramenta] = useState('exec');
+  const [argsTexto, setArgsTexto] = useState(modelosDeArgumentos.exec);
+  const [tarefaExec, setTarefaExec] = useState('');
+  const [executando, setExecutando] = useState(false);
+
   const result = execution?.ok ? asRow(execution.result) : null;
   const markdown = useMemo(() => text(result?.markdown), [result]);
+
+  const atualizarEstacao = useCallback(async () => {
+    if (!backendOnline) return;
+    try {
+      setEstacao(await getEstacaoEstado());
+    } catch {
+      /* mantém o último estado conhecido */
+    }
+  }, [backendOnline]);
+
+  useEffect(() => {
+    if (tab !== 'executor' || !backendOnline) return;
+    void atualizarEstacao();
+    const timer = window.setInterval(() => { void atualizarEstacao(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [tab, backendOnline, atualizarEstacao]);
+
+  const rodarFerramenta = async () => {
+    if (!backendOnline) {
+      setError('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi executado.');
+      return;
+    }
+    let argumentos: Record<string, unknown>;
+    try {
+      const bruto = JSON.parse(argsTexto || '{}') as unknown;
+      if (typeof bruto !== 'object' || bruto === null || Array.isArray(bruto)) throw new Error('objeto');
+      argumentos = bruto as Record<string, unknown>;
+    } catch {
+      setError('Os argumentos precisam ser um objeto JSON, por exemplo {"comando":"ls"}.');
+      return;
+    }
+    setExecutando(true);
+    setError('');
+    try {
+      const chamada = await executarEstacao(ferramenta, argumentos, tarefaExec);
+      pushToast(
+        chamada.estado === 'pendente' ? 'Chamada na fila de aprovação' : `Chamada ${estadoLabel[chamada.estado] ?? chamada.estado}`,
+        chamada.estado === 'ok' || chamada.estado === 'pendente' ? undefined : String(chamada.resultado?.erro ?? ''),
+        chamada.estado === 'ok' ? 'success' : chamada.estado === 'pendente' ? 'info' : 'warning',
+      );
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'O executor recusou a chamada.');
+    } finally {
+      setExecutando(false);
+    }
+  };
+
+  const mudarPolitica = async (permissao: string, decisao: string) => {
+    setExecutando(true);
+    setError('');
+    try {
+      const politica = await definirPoliticaEstacao(permissao, decisao);
+      setEstacao((atual) => (atual ? { ...atual, politica } : atual));
+      pushToast(`${permissao} = ${decisao}`, undefined, 'success');
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'A política não foi aceita.');
+    } finally {
+      setExecutando(false);
+    }
+  };
+
+  const decidir = async (id: string, aprovado: boolean) => {
+    setExecutando(true);
+    setError('');
+    try {
+      const chamada = await decidirEstacao(id, aprovado);
+      pushToast(
+        chamada.ignorada ? 'Decisão ignorada' : aprovado ? 'Aprovada e executada' : 'Recusada',
+        chamada.motivo_ignorada,
+        chamada.ignorada ? 'info' : 'success',
+      );
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'A decisão não foi aceita.');
+    } finally {
+      setExecutando(false);
+    }
+  };
+
+  const recuperar = async () => {
+    setExecutando(true);
+    try {
+      const resultado = await recuperarEstacao();
+      pushToast(
+        resultado.interrompidas ? `${resultado.interrompidas} chamada(s) marcada(s) como interrompida(s)` : 'Nada pendurado',
+        resultado.mensagem || undefined,
+        resultado.interrompidas ? 'info' : 'success',
+      );
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'A recuperação falhou.');
+    } finally {
+      setExecutando(false);
+    }
+  };
+
+  const alternarAutomacao = async (nome: string, ativa: boolean) => {
+    try {
+      await alternarAutomacaoEstacao(nome, ativa);
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'Não foi possível alternar a automação.');
+    }
+  };
+
+  const criarAutomacao = async (input: { nome: string; cron: string; comando: string; minutos: number }) => {
+    setExecutando(true);
+    setError('');
+    try {
+      const chamada = await criarAutomacaoEstacao(input);
+      pushToast(
+        chamada.estado === 'pendente' ? 'Automação na fila de aprovação' : 'Automação criada',
+        chamada.estado === 'pendente' ? 'Aprove na fila para gravar.' : undefined,
+        'info',
+      );
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'A agenda recusou a automação.');
+    } finally {
+      setExecutando(false);
+    }
+  };
+
+  const removerAutomacao = async (nome: string) => {
+    try {
+      await removerAutomacaoEstacao(nome);
+      await atualizarEstacao();
+    } catch (falha) {
+      setError(falha instanceof Error ? falha.message : 'Não foi possível remover a automação.');
+    }
+  };
 
   const loadReference = async () => {
     if (!backendOnline) return;
@@ -642,21 +982,26 @@ export function EstacaoPage() {
     setAcoes(sampleAcoes);
     setNotas(sampleNotas);
     setSkills(sampleSkills);
+    setFerramenta('exec');
+    setArgsTexto(modelosDeArgumentos.exec);
+    setTarefaExec('');
   };
 
-  const heading = tab === 'tarefa' ? 'Plano da tarefa'
+  const heading = tab === 'executor' ? 'Executor da Estação'
+    : tab === 'tarefa' ? 'Plano da tarefa'
     : tab === 'permissoes' ? 'Matriz de permissões'
       : tab === 'recibos' ? 'Execução e recuperação'
         : tab === 'agenda' ? 'Agenda de automações'
           : tab === 'limites' ? 'Limites e consentimento'
             : tab === 'memoria' ? 'Notas e skills' : 'Catálogo da estação';
-  const description = tab === 'tarefa' ? 'O objetivo vira passos com ferramenta, permissão e prova; a parada é a prova, não o recibo.'
+  const description = tab === 'executor' ? 'Roda de verdade no diretório da Estação, com a política decidindo cada chamada e recibo de tudo.'
+    : tab === 'tarefa' ? 'O objetivo vira passos com ferramenta, permissão e prova; a parada é a prova, não o recibo.'
     : tab === 'permissoes' ? 'Cada permissão recebe allow, ask ou deny; risco alto liberado sem revisão é bloqueio.'
       : tab === 'recibos' ? 'Chamada sem resultado, execução dupla, aprovação reaproveitada e retomada sem conferir.'
         : tab === 'agenda' ? 'Cron, sobreposição, presença e orçamento de acordadas por dia.'
           : tab === 'limites' ? 'O que é leitura, o que precisa de confirmação e o que este núcleo não prepara.'
             : tab === 'memoria' ? 'Segredo em nota, fato sem dia, skill sem gatilho ou sem verificação.'
-              : 'Ferramentas, permissões, estados, evasão e orçamentos do vocabulário.';
+              : 'Ferramentas, permissões, estados e orçamentos do vocabulário.';
 
   return (
     <div className="estacao-page">
@@ -666,8 +1011,9 @@ export function EstacaoPage() {
           <span className="eyebrow">AGENTE · COMPUTADOR PRÓPRIO</span>
           <h2>Estação</h2>
           <p>
-            Permissões, aprovação, recuperação depois de queda, agenda e memória de um agente que
-            trabalha num computador próprio. O contrato é texto: nada é instalado, autenticado ou executado aqui.
+            Um executor de verdade no diretório da Estação: comando, leitura, escrita, busca e agenda,
+            com a política decidindo cada chamada, fila de aprovação e recibo durável. As abas de
+            análise continuam só lendo texto.
           </p>
           <ul className="estacao-laws">
             {laws.map(([title, body]) => (
@@ -706,9 +1052,43 @@ export function EstacaoPage() {
 
           {tab === 'regras' && (
             <div className="estacao-about">
-              <p>O catálogo vem da skill <code>estacao.regras</code>: 30 ferramentas, 14 permissões, 6 estados e 8 regras de evasão.</p>
-              <p><b>Escopo:</b> inspirado em <code>feder-cr/invisible_dots</code> (MIT). Sem VM, sem QEMU, sem navegador e sem rede — só o contrato de governança.</p>
+              <p>O catálogo vem da skill <code>estacao.regras</code>: 30 ferramentas, 14 permissões, 6 estados e 6 regras de efeito.</p>
+              <p><b>Escopo:</b> inspirado em <code>feder-cr/invisible_dots</code> (MIT). O executor roda no diretório da Estação; a VM do upstream não existe aqui.</p>
             </div>
+          )}
+
+          {tab === 'executor' && (
+            <>
+              <div className="estacao-inline">
+                <label className="field">
+                  <span>Ferramenta</span>
+                  <select
+                    value={ferramenta}
+                    onChange={(event) => {
+                      const proxima = event.target.value;
+                      setFerramenta(proxima);
+                      setArgsTexto(modelosDeArgumentos[proxima] ?? '{}');
+                    }}
+                  >
+                    {(estacao?.ferramentas ?? [{ nome: 'exec', permissao: '', descricao: '', argumentos: [] }]).map((item) => (
+                      <option key={item.nome} value={item.nome}>{item.nome} — {item.permissao}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Tarefa <em>opcional</em></span>
+                  <input value={tarefaExec} onChange={(event) => setTarefaExec(event.target.value)} placeholder="fechamento do mês" />
+                </label>
+              </div>
+              <label className="field">
+                <span>Argumentos <em>JSON</em></span>
+                <textarea className="estacao-mono" rows={8} value={argsTexto} onChange={(event) => setArgsTexto(event.target.value)} spellCheck={false} />
+              </label>
+              <p className="estacao-note">
+                O comando roda no diretório de trabalho da Estação, com ambiente limpo (sem <code>JARVIS_*</code>).
+                Com a política em <code>ask</code>, a chamada fica na fila até alguém decidir.
+              </p>
+            </>
           )}
 
           {tab === 'tarefa' && (
@@ -819,9 +1199,16 @@ export function EstacaoPage() {
             {tab !== 'regras' && (
               <>
                 <button type="button" className="estacao-sample" onClick={loadSample}><RefreshCw size={11} />Preencher com o exemplo</button>
-                <button type="button" className="button-primary" onClick={() => void run()} disabled={!backendOnline || busy}>
-                  {busy ? <LoaderCircle size={13} className="is-spinning" /> : <ArrowRight size={13} />}
-                  {busy ? 'Calculando…' : 'Executar'}
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={() => void (tab === 'executor' ? rodarFerramenta() : run())}
+                  disabled={!backendOnline || busy || (tab === 'executor' && executando)}
+                >
+                  {busy || (tab === 'executor' && executando)
+                    ? <LoaderCircle size={13} className="is-spinning" />
+                    : tab === 'executor' ? <Play size={13} /> : <ArrowRight size={13} />}
+                  {tab === 'executor' ? (executando ? 'Rodando…' : 'Rodar') : busy ? 'Calculando…' : 'Executar'}
                 </button>
               </>
             )}
@@ -837,14 +1224,14 @@ export function EstacaoPage() {
           <header className="estacao-result-head">
             <div>
               <span className="eyebrow">RESULTADO</span>
-              <h2>{tab === 'regras' ? 'Catálogo da estação' : result ? heading : 'Aguardando execução'}</h2>
+              <h2>{tab === 'regras' ? 'Catálogo da estação' : tab === 'executor' ? heading : result ? heading : 'Aguardando execução'}</h2>
             </div>
             <div className="estacao-result-actions">
               {markdown && <button type="button" className="estacao-ghost" onClick={() => void copyReport()}><Clipboard size={12} />Copiar</button>}
             </div>
           </header>
 
-          {!result && tab !== 'regras' && (
+          {!result && tab !== 'regras' && tab !== 'executor' && (
             <div className="estacao-placeholder">
               <MousePointerClick size={22} />
               <strong>Preencha e rode a skill.</strong>
@@ -854,6 +1241,18 @@ export function EstacaoPage() {
           )}
 
           {tab === 'regras' && <ReferenceView reference={reference} />}
+          {tab === 'executor' && (
+            <ExecutorView
+              estado={estacao}
+              ocupado={executando}
+              onPolitica={(permissao, decisao) => void mudarPolitica(permissao, decisao)}
+              onDecidir={(id, aprovado) => void decidir(id, aprovado)}
+              onRecuperar={() => void recuperar()}
+              onAlternar={(nome, ativa) => void alternarAutomacao(nome, ativa)}
+              onRemover={(nome) => void removerAutomacao(nome)}
+              onCriar={(input) => void criarAutomacao(input)}
+            />
+          )}
           {result && tab === 'tarefa' && <TaskView result={result} />}
           {result && tab === 'permissoes' && <PermissionsView result={result} />}
           {result && tab === 'recibos' && <ReceiptsView result={result} />}

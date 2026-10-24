@@ -220,3 +220,16 @@
 .estacao-empty svg { flex: 0 0 auto; }
 .estacao-result-head .estacao-ghost svg { flex: 0 0 auto; }
 .estacao-verdict.is-warning { border-color: rgba(232,176,90,.28); background: rgba(232,176,90,.04); color: #e8b05a; }
+
+/* Executor real */
+.estacao-select { padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(255,255,255,.02); color: var(--text-soft); font-family: var(--mono); font-size: 6.4px; }
+.estacao-do { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 1px solid rgba(120,220,170,.32); border-radius: 6px; background: rgba(120,220,170,.06); color: #86d9b0; font-size: 7.2px; }
+.estacao-do:hover { border-color: rgba(120,220,170,.5); }
+.estacao-do:disabled { opacity: .5; }
+.estacao-args { margin: 6px 0; padding: 8px 9px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #0b0f0d; color: #b9d6c5; font-family: var(--mono); font-size: 6.6px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.estacao-note.is-danger { color: #ff8c7e; }
+.estacao-note code { color: var(--accent-soft); font-family: var(--mono); font-size: .95em; }
+.estacao-badge.is-ok { border-color: rgba(120,220,170,.32); color: #86d9b0; }
+.estacao-badge.is-erro, .estacao-badge.is-interrompido, .estacao-badge.is-recusado, .estacao-badge.is-negado { border-color: rgba(255,140,126,.32); color: #ff8c7e; }
+.estacao-badge.is-pendente, .estacao-badge.is-ask, .estacao-badge.is-executando { border-color: rgba(232,176,90,.32); color: #e8b05a; }
+.estacao-badge.is-observar, .estacao-badge.is-verificar, .estacao-badge.is-registrar, .estacao-badge.is-agir { border-color: rgba(var(--accent-rgb), .3); color: var(--accent-soft); }

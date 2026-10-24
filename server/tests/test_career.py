@@ -6,6 +6,8 @@ chamado ou executado. As fixtures são texto puro colado, como no JARVIS.
 """
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -216,7 +218,7 @@ def test_parse_job_reads_title_company_and_declared_comp() -> None:
     assert job.modelo == "remoto"
     assert job.comp["declarada"] is True
     assert job.comp["moeda"] == "BRL"
-    assert job.publicado == 13
+    assert job.publicado == (date.today() - date(2026, 10, 10)).days
     assert "python" in job.termos
 
 
@@ -588,7 +590,7 @@ def test_registry_registers_seven_read_only_career_skills() -> None:
 
 def test_health_reports_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.16.0"
+    assert health["version"] == "0.17.0"
     assert health["skills"] == 93
 
 

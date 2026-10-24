@@ -81,7 +81,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <Settings size={19} strokeWidth={1.7} />
           <span>Configurações</span>
         </NavLink>
-        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.16.0"}</span></div>
+        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.17.0"}</span></div>
       </aside>
       {mobileOpen && <button className="sidebar-scrim" onClick={onClose} aria-label="Fechar menu" />}
     </>

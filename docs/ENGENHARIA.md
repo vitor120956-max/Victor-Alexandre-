@@ -6,7 +6,7 @@ A versão 0.5.0 adapta oito capacidades inspiradas em [`addyosmani/agent-skills`
 
 O JARVIS não instala o plugin, não clona o catálogo em runtime e não executa seus hooks, scripts, comandos de Git ou agentes. Os workflows abaixo são implementações próprias em `server/engineering.py`, com contratos Pydantic e saídas locais. O aviso de licença MIT está preservado em [`licenses/addyosmani-agent-skills.txt`](licenses/addyosmani-agent-skills.txt).
 
-Oito workflows foram adaptados; os 25 documentos do catálogo upstream não foram importados como um pacote. Na versão 0.5.0, o número **25 skills** correspondia às 17 skills anteriores mais estes oito módulos locais; o catálogo atual tem 93 skills, incluindo as quatro de engenharia enxuta, as seis de governo de agentes, as cinco de estúdio de design, as sete de direção de arte, as sete de diagramas, as sete de carreira, as sete de navegação assistida, as sete de escritório assistido e as sete de estação do agente.
+Oito workflows foram adaptados; os 25 documentos do catálogo upstream não foram importados como um pacote. Na versão 0.5.0, o número **25 skills** correspondia às 17 skills anteriores mais estes oito módulos locais; o catálogo atual tem 93 skills, incluindo as quatro de engenharia enxuta, as seis de governo de agentes, as cinco de estúdio de design, as sete de direção de arte, as sete de diagramas, as sete de carreira, as sete de navegação assistida, as sete de escritório assistido e as sete de estação do agente; a 0.17.0 acrescentou o executor real da Estação, que não é skill.
 
 ## Catálogo adicionado
 

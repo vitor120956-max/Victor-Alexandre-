@@ -256,3 +256,111 @@ export async function requestAIChat(input: {
 }): Promise<{ ok: boolean; content: string; provider: string; external: boolean }> {
   return apiFetch('/api/ai/chat', { method: 'POST', body: JSON.stringify(input) });
 }
+
+// ---------------------------------------------------------------- estação (executor real)
+
+export interface EstacaoChamada {
+  id: string;
+  tarefa: string;
+  ferramenta: string;
+  permissao: string;
+  decisao: 'allow' | 'ask' | 'deny';
+  estado: 'pendente' | 'executando' | 'ok' | 'erro' | 'interrompido' | 'recusado' | 'negado';
+  argumentos: Record<string, unknown>;
+  resultado: Record<string, unknown>;
+  duracao_ms: number;
+  criado_em: string;
+  atualizado_em: string;
+  executou: boolean;
+  ignorada?: boolean;
+  motivo_ignorada?: string;
+}
+
+export interface EstacaoAutomacao {
+  nome: string;
+  cron: string;
+  comando: string;
+  minutos: number;
+  ativa: boolean;
+  proxima: string;
+  ultima: string;
+  falhas: number;
+}
+
+export interface EstacaoEstado {
+  raiz: string;
+  banco: string;
+  politica: Record<string, 'allow' | 'ask' | 'deny'>;
+  permissoes: Array<{ nome: string; risco: string; padrao: string; rotulo: string }>;
+  ferramentas: Array<{ nome: string; permissao: string; descricao: string; argumentos: string[] }>;
+  chamadas: EstacaoChamada[];
+  pendentes: EstacaoChamada[];
+  automacoes: EstacaoAutomacao[];
+  contagem: Record<string, number>;
+  versao: string;
+  executado: boolean;
+}
+
+export async function getEstacaoEstado(): Promise<EstacaoEstado> {
+  const resposta = await apiFetch<{ ok: boolean; result: EstacaoEstado }>('/api/estacao/estado');
+  return resposta.result;
+}
+
+export async function executarEstacao(
+  ferramenta: string,
+  argumentos: Record<string, unknown>,
+  tarefa = '',
+): Promise<EstacaoChamada> {
+  const resposta = await apiFetch<{ ok: boolean; result: EstacaoChamada; error?: { message?: string } }>(
+    '/api/estacao/executar',
+    { method: 'POST', body: JSON.stringify({ ferramenta, argumentos, tarefa }) },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'O executor recusou a chamada.', 200, 'ESTACAO_ERROR');
+  return resposta.result;
+}
+
+export async function decidirEstacao(chamadaId: string, aprovado: boolean, nota = ''): Promise<EstacaoChamada> {
+  const resposta = await apiFetch<{ ok: boolean; result: EstacaoChamada; error?: { message?: string } }>(
+    `/api/estacao/aprovacoes/${encodeURIComponent(chamadaId)}/decidir`,
+    { method: 'POST', body: JSON.stringify({ aprovado, nota }) },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'A decisão não foi aceita.', 200, 'ESTACAO_ERROR');
+  return resposta.result;
+}
+
+export async function definirPoliticaEstacao(permissao: string, decisao: string): Promise<Record<string, 'allow' | 'ask' | 'deny'>> {
+  const resposta = await apiFetch<{ ok: boolean; result: { politica: Record<string, 'allow' | 'ask' | 'deny'> }; error?: { message?: string } }>(
+    '/api/estacao/politica',
+    { method: 'PUT', body: JSON.stringify({ permissao, decisao }) },
+  );
+  if (!resposta.ok) throw new ApiError(resposta.error?.message ?? 'A política não foi aceita.', 200, 'ESTACAO_ERROR');
+  return resposta.result.politica;
+}
+
+export async function criarAutomacaoEstacao(input: { nome: string; cron: string; comando: string; minutos: number }): Promise<EstacaoChamada> {
+  const resposta = await apiFetch<{ ok: boolean; result: EstacaoChamada; error?: { message?: string } }>(
+    '/api/estacao/agenda',
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'A agenda recusou a automação.', 200, 'ESTACAO_ERROR');
+  return resposta.result;
+}
+
+export async function alternarAutomacaoEstacao(nome: string, ativa: boolean): Promise<EstacaoAutomacao> {
+  const resposta = await apiFetch<{ ok: boolean; result: EstacaoAutomacao }>(
+    `/api/estacao/agenda/${encodeURIComponent(nome)}/alternar?ativa=${ativa}`,
+    { method: 'POST' },
+  );
+  return resposta.result;
+}
+
+export async function removerAutomacaoEstacao(nome: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/estacao/agenda/${encodeURIComponent(nome)}`, { method: 'DELETE' });
+}
+
+export async function recuperarEstacao(): Promise<{ interrompidas: number; mensagem: string }> {
+  const resposta = await apiFetch<{ ok: boolean; result: { interrompidas: number; mensagem: string } }>(
+    '/api/estacao/recuperar', { method: 'POST' },
+  );
+  return resposta.result;
+}

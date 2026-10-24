@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import threading
 import tempfile
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -17,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
+from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
 from .skill_registry import SkillError, SkillRegistry, build_registry
 from .workspace import MAX_DOCUMENT_BYTES, VISIBLE_EXTENSIONS, download_url, regular_file, safe_path
@@ -34,6 +37,64 @@ class ExecuteRequest(BaseModel):
     confirmed: bool = False
 
 
+class EstacaoExecutarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ferramenta: str = Field(min_length=2, max_length=40)
+    argumentos: dict[str, Any] = Field(default_factory=dict)
+    tarefa: str = Field(default="", max_length=200)
+
+
+class EstacaoDecidirRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    aprovado: bool
+    nota: str = Field(default="", max_length=400)
+
+
+class EstacaoPoliticaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    permissao: str = Field(min_length=3, max_length=40)
+    decisao: str = Field(min_length=3, max_length=8)
+
+
+class EstacaoAutomacaoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str = Field(min_length=1, max_length=40)
+    cron: str = Field(min_length=9, max_length=80)
+    comando: str = Field(min_length=1, max_length=8_000)
+    minutos: int = Field(default=10, ge=1, le=60)
+
+
+def _estacao_lifespan(runtime: EstacaoRuntime):
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
+        runtime.recuperar()
+        parar = threading.Event()
+
+        def laco() -> None:
+            while not parar.wait(30):
+                try:
+                    runtime.tick()
+                except Exception:  # noqa: BLE001 - o agendador não pode derrubar a API
+                    continue
+
+        thread = threading.Thread(target=laco, daemon=True, name="estacao-agenda")
+        thread.start()
+        try:
+            yield
+        finally:
+            parar.set()
+
+    return lifespan
+
+
+def _estacao_erro(mensagem: str) -> dict[str, Any]:
+    return {"ok": False, "error": {"code": "ESTACAO_ERROR", "message": mensagem}}
+
+
 class RateLimiter:
     def __init__(self) -> None:
         self.buckets: dict[str, deque[float]] = defaultdict(deque)
@@ -49,18 +110,26 @@ class RateLimiter:
         return True
 
 
-def create_app(*, ai_provider: AIProvider | None = None, registry: SkillRegistry | None = None) -> FastAPI:
+def create_app(
+    *,
+    ai_provider: AIProvider | None = None,
+    registry: SkillRegistry | None = None,
+    estacao: EstacaoRuntime | None = None,
+) -> FastAPI:
     load_dotenv(PROJECT_ROOT / ".env")
     provider = ai_provider or OpenAICompatibleProvider()
     files_root_value = os.getenv("JARVIS_FILES_ROOT", "").strip()
     files_root = Path(files_root_value).expanduser() if files_root_value else PROJECT_ROOT / "storage" / "user-files"
     skill_registry = registry or build_registry(files_root)
+    estacao_runtime = estacao or EstacaoRuntime(root=skill_registry.files_root)
 
     application = FastAPI(
         title="JARVIS Skills API",
-        description="Skills Python validadas e camada opcional de IA externa.",
-        version="0.16.0",
+        description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
+        version="0.17.0",
+        lifespan=_estacao_lifespan(estacao_runtime),
     )
+    application.state.estacao = estacao_runtime
     application.state.rate_limiter = RateLimiter()
 
     @application.middleware("http")
@@ -91,7 +160,7 @@ def create_app(*, ai_provider: AIProvider | None = None, registry: SkillRegistry
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.16.0",
+            "version": "0.17.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
         }
@@ -266,6 +335,92 @@ def create_app(*, ai_provider: AIProvider | None = None, registry: SkillRegistry
         except Exception:
             return JSONResponse(status_code=502, content={"ok": False, "error": {"code": "AI_UNAVAILABLE", "message": "A camada de IA não conseguiu concluir a resposta."}})
         return {"ok": True, "content": content, "provider": provider.status()["provider"], "external": True}
+
+    # ------------------------------------------------------------ estação real
+
+    @application.get("/api/estacao/estado")
+    def estacao_estado() -> dict[str, Any]:
+        return {"ok": True, "result": estacao_runtime.estado()}
+
+    @application.post("/api/estacao/executar")
+    def estacao_executar(payload: EstacaoExecutarRequest) -> dict[str, Any]:
+        try:
+            chamada = estacao_runtime.solicitar(payload.ferramenta, payload.argumentos, payload.tarefa)
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": chamada}
+
+    @application.get("/api/estacao/aprovacoes")
+    def estacao_aprovacoes() -> dict[str, Any]:
+        return {"ok": True, "result": {"pendentes": estacao_runtime.pendentes()}}
+
+    @application.post("/api/estacao/aprovacoes/{chamada_id}/decidir")
+    def estacao_decidir(chamada_id: str, payload: EstacaoDecidirRequest) -> dict[str, Any]:
+        try:
+            chamada = estacao_runtime.aprovar(chamada_id, payload.aprovado, payload.nota)
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": chamada}
+
+    @application.get("/api/estacao/chamadas")
+    def estacao_chamadas(limite: int = Query(default=30, ge=1, le=500)) -> dict[str, Any]:
+        return {"ok": True, "result": {"chamadas": estacao_runtime.chamadas(limite)}}
+
+    @application.get("/api/estacao/recibos")
+    def estacao_recibos(
+        chamada: str = Query(default="", max_length=40),
+        limite: int = Query(default=200, ge=1, le=1_000),
+    ) -> dict[str, Any]:
+        return {"ok": True, "result": {"recibos": estacao_runtime.recibos(chamada, limite)}}
+
+    @application.put("/api/estacao/politica")
+    def estacao_politica(payload: EstacaoPoliticaRequest) -> dict[str, Any]:
+        try:
+            politica = estacao_runtime.definir_politica(payload.permissao, payload.decisao)
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": {"politica": politica}}
+
+    @application.get("/api/estacao/agenda")
+    def estacao_agenda() -> dict[str, Any]:
+        return {"ok": True, "result": {"automacoes": estacao_runtime.automacoes()}}
+
+    @application.post("/api/estacao/agenda")
+    def estacao_criar_agenda(payload: EstacaoAutomacaoRequest) -> dict[str, Any]:
+        try:
+            chamada = estacao_runtime.solicitar(
+                "cron",
+                {"nome": payload.nome, "cron": payload.cron, "comando": payload.comando,
+                 "minutos": payload.minutos},
+                tarefa="agenda",
+            )
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": chamada}
+
+    @application.post("/api/estacao/agenda/{nome}/alternar")
+    def estacao_alternar_agenda(nome: str, ativa: bool = Query(default=True)) -> dict[str, Any]:
+        try:
+            automacao = estacao_runtime.alternar_automacao(nome, ativa)
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": automacao}
+
+    @application.delete("/api/estacao/agenda/{nome}")
+    def estacao_remover_agenda(nome: str) -> dict[str, Any]:
+        try:
+            removida = estacao_runtime.remover_automacao(nome)
+        except EstacaoRuntimeError as exc:
+            return _estacao_erro(str(exc))
+        return {"ok": True, "result": removida}
+
+    @application.post("/api/estacao/agenda/tick")
+    def estacao_tick() -> dict[str, Any]:
+        return {"ok": True, "result": estacao_runtime.tick()}
+
+    @application.post("/api/estacao/recuperar")
+    def estacao_recuperar() -> dict[str, Any]:
+        return {"ok": True, "result": estacao_runtime.recuperar()}
 
     dist = PROJECT_ROOT / "dist"
 

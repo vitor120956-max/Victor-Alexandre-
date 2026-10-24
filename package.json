@@ -1,7 +1,7 @@
 {
   "name": "jarvis-nucleo-pessoal",
   "private": true,
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names API,WEB --prefix-colors yellow,green \"npm:dev:api\" \"npm:dev:web\"",

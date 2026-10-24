@@ -545,7 +545,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         break;
       case 'estacao:workspace':
         reply = backendOnline
-          ? 'Abra a página Estação para planejar a tarefa durável, revisar a matriz allow/ask/deny, auditar a execução e a recuperação após queda, checar a agenda, classificar limites e higienizar notas e skills. Tudo é estático: nenhuma VM, navegador ou programa do upstream é executado.'
+          ? 'Abra a página Estação para rodar comandos de verdade no diretório dela, decidir a fila de aprovação, auditar a execução e a recuperação após queda, checar a agenda e higienizar notas e skills. O executor é local; a VM e o navegador do upstream não existem aqui.'
           : 'A estação do agente precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi calculado.';
         break;
       case 'taste:workspace':

@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .review import common, finalize, finding
@@ -30,7 +30,7 @@ class EstacaoError(ValueError):
     """Erro de entrada da estação; a API devolve 200 com `ok:false`."""
 
 
-VERSAO = "0.16.0"
+VERSAO = "0.17.0"
 MAX_TEXTO = 40_000
 MAX_LISTA = 60
 
@@ -132,62 +132,6 @@ ESTADOS = {
     "dormindo": "Computador desligado por ócio; acorda com mensagem, tarefa ou automação.",
     "interrompida": "O processo caiu ou foi parado durante uma chamada; o resultado é desconhecido.",
     "falhou": "A tarefa estourou passos, orçamento ou erros repetidos.",
-}
-
-# A linha que este projeto recusa reproduzir.
-EVASAO: dict[str, dict[str, str]] = {
-    "indetectavel": {
-        "titulo": "Ficar indetectável",
-        "porque": "Alterar fingerprint ou esconder automação para não ser reconhecido fere os termos da maioria dos sites.",
-        "alternativa": "Use a API oficial, um canal autorizado ou peça acesso ao responsável pelo site.",
-    },
-    "fingerprint": {
-        "titulo": "Falsificar impressão digital",
-        "porque": "Forjar canvas, WebGL, fuso e fontes é evasão de controle de acesso.",
-        "alternativa": "Mantenha o navegador padrão e identifique-se quando o site pedir.",
-    },
-    "captcha": {
-        "titulo": "Resolver CAPTCHA automaticamente",
-        "porque": "O CAPTCHA existe para separar pessoa de programa; vencê-lo é burlar o controle.",
-        "alternativa": "Pare, avise a pessoa e deixe ela concluir o desafio.",
-    },
-    "limite": {
-        "titulo": "Furar limite de requisições",
-        "porque": "Rotação de proxy ou de conta para escapar de 429 sobrecarrega o serviço e viola o contrato.",
-        "alternativa": "Respeite `Retry-After`, reduza o volume e peça aumento de cota.",
-    },
-    "contas": {
-        "titulo": "Rotacionar contas",
-        "porque": "Várias contas para o mesmo fim contornam limite e banimento.",
-        "alternativa": "Uma conta por pessoa, com o consentimento do titular.",
-    },
-    "termos": {
-        "titulo": "Ignorar termos ou robots.txt",
-        "porque": "O contrato do site vale mesmo quando tecnicamente é possível.",
-        "alternativa": "Leia os termos e o robots.txt; existindo API, use a API.",
-    },
-    "dados": {
-        "titulo": "Coletar dados pessoais em massa",
-        "porque": "Raspar dado pessoal sem base legal viola LGPD e equivalentes.",
-        "alternativa": "Colete o mínimo necessário e registre a base legal.",
-    },
-    "credencial": {
-        "titulo": "Usar credencial de outra pessoa",
-        "porque": "Acesso com conta alheia é apropriação de identidade, mesmo com senha em mãos.",
-        "alternativa": "Peça ao titular que faça o login ou delegue acesso formalmente.",
-    },
-}
-
-REGRAS_LIMITE: dict[str, dict[str, str]] = {
-    "exclusao": {"nivel": "confirmar", "porque": "Apagar arquivo, identidade ou histórico não tem desfazer."},
-    "pagamento": {"nivel": "confirmar", "porque": "Dinheiro sai da conta e a confirmação costuma ser irreversível."},
-    "envio": {"nivel": "confirmar", "porque": "Mensagem enviada não volta; o destinatário é externo."},
-    "publicacao": {"nivel": "confirmar", "porque": "Publicar expõe conteúdo em nome da pessoa."},
-    "instalacao": {"nivel": "confirmar", "porque": "Instalar programa muda o que o agente pode executar."},
-    "permissao": {"nivel": "confirmar", "porque": "Mudar allow/ask/deny amplia o próprio poder do agente."},
-    "conta": {"nivel": "bloqueado", "porque": "Criar conta exige identidade e aceite de termos por uma pessoa."},
-    "captcha": {"nivel": "bloqueado", "porque": "Vencer desafio anti-bot é evasão, não automação."},
-    "evasao": {"nivel": "bloqueado", "porque": "Esconder a automação fere o contrato do site."},
 }
 
 # ------------------------------------------------------------------ utilidades
@@ -1092,6 +1036,30 @@ def planejar_agenda(
     }
 
 
+def proxima_execucao(expressao: str, depois: datetime) -> datetime:
+    """Primeiro instante >= `depois + 1 min` que casa com o cron (semana genérica)."""
+    if depois.tzinfo is None:
+        depois = depois.replace(tzinfo=timezone.utc)
+    slots = _slots(expressao)
+    por_dia: dict[int, set[int]] = {}
+    for dia, minuto in slots:
+        por_dia.setdefault(dia, set()).add(minuto)
+    if not por_dia:
+        raise EstacaoError("O cron não produz nenhum disparo.")
+    inicio = (depois + timedelta(minutes=1)).replace(second=0, microsecond=0)
+    for passo in range(0, 400):
+        base = inicio + timedelta(days=passo)
+        minutos = por_dia.get(base.weekday())
+        if not minutos:
+            continue
+        for minuto in sorted(minutos):
+            hora, resto = divmod(minuto, 60)
+            alvo = base.replace(hour=hora, minute=resto)
+            if alvo >= inicio:
+                return alvo
+    raise EstacaoError("Não foi possível achar o próximo disparo em 400 dias.")
+
+
 def _janela_presenca(texto: str) -> tuple[int, int] | None:
     achado = re.search(r"(\d{1,2})h?\s*(?:-|a|às|as)\s*(\d{1,2})h?", texto.strip().lower())
     if not achado:
@@ -1116,27 +1084,29 @@ LIMITES_AGENDA = [
 
 # ------------------------------------------------------------------- limites
 
-PADROES_LIMITE: list[tuple[str, str, str]] = [
-    (r"indetect|anti-?bot|stealth|furtiv|invisí|invisi", "evasao", "indetectavel"),
-    (r"fingerprint|impress[aã]o digital|canvas|webgl|user-?agent", "evasao", "fingerprint"),
-    (r"captcha|recaptcha|hcaptcha|cloudflare|turnstile", "captcha", "captcha"),
-    (r"rate.?limit|limite de requisi|429|throttl", "evasao", "limite"),
-    (r"rotacion|proxy|v[aá]rias contas|multi.?conta|burner", "evasao", "contas"),
-    (r"robots\.txt|termos de uso|tos\b|bypass", "evasao", "termos"),
-    (r"raspar|scrap|coletar .*e-?mails|lista de contatos", "evasao", "dados"),
-    (r"senha de|credencial de|token de outra|conta de outra pessoa", "evasao", "credencial"),
-    (r"pagar|pagamento|comprar|cobran|pix|cart[aã]o", "pagamento", ""),
-    (r"apagar|excluir|deletar|remover permanent", "exclusao", ""),
-    (r"enviar|mandar|publicar|postar|responder", "envio", ""),
-    (r"instalar|apt install|npm i -g|baixar e executar", "instalacao", ""),
-    (r"mudar permiss|allow|deny|permiss[aã]o", "permissao", ""),
-    (r"criar conta|cadastr", "conta", ""),
+PADROES_EFEITO: list[tuple[str, str]] = [
+    (r"\b(apagar|excluir|deletar|remover|sobrescrever|formatar)\b", "exclusao"),
+    (r"\b(pagar|pagamento|comprar|cobranca|pix|cartao|assinatura|contratar)\b", "pagamento"),
+    (r"\b(enviar|mandar|publicar|postar|responder|compartilhar|convidar)\b", "envio"),
+    (r"\b(instalar|desinstalar|atualizar)\b", "instalacao"),
+    (r"\b(permissao|permissões|allow|deny|conceder|revogar)\b", "permissao"),
+    (r"\b(conta|senha|credencial|token|login|cadastro|login)\b", "conta"),
 ]
 
-ALLOW_LIMITE = re.compile(r"\b(ler|abrir|navegar|consultar|listar|baixar|conferir|buscar|pesquisar)\b")
+REGRAS_EFEITO: dict[str, dict[str, str]] = {
+    "pagamento": {"nivel": "irreversivel", "porque": "O dinheiro sai e a confirmação costuma não ter desfazer."},
+    "exclusao": {"nivel": "irreversivel", "porque": "Apagar não tem desfazer; o conteúdo não volta sozinho."},
+    "envio": {"nivel": "confirmar", "porque": "Uma vez enviado, o destinatário já recebeu."},
+    "instalacao": {"nivel": "confirmar", "porque": "Instalar muda o que existe na máquina."},
+    "permissao": {"nivel": "confirmar", "porque": "Mudar permissão altera quem pode o quê."},
+    "conta": {"nivel": "confirmar", "porque": "Conta e credencial falam em nome de alguém."},
+}
+
+ALLOW_LIMITE = re.compile(r"\b(ler|abrir|navegar|consultar|listar|baixar|conferir|buscar|pesquisar|ver|medir|contar)\b")
 
 
 def checar_limites(*, acoes: str, modo: str) -> dict[str, Any]:
+    """Classifica cada ação pelo efeito declarado, sem julgar o tema."""
     linhas = _linhas(acoes)
     if not linhas:
         raise EstacaoError("Liste ao menos uma ação pretendida, uma por linha.")
@@ -1148,74 +1118,47 @@ def checar_limites(*, acoes: str, modo: str) -> dict[str, Any]:
         normal = _normal(linha)
         nivel = "liberado"
         regra = ""
-        motivo = "Leitura ou navegação sem efeito externo declarado."
-        alternativa = ""
-        for padrao, grupo, detalhe in PADROES_LIMITE:
+        motivo = "Leitura: não muda o estado fora do agente."
+        for padrao, grupo in PADROES_EFEITO:
             if re.search(padrao, normal):
-                if grupo == "evasao":
-                    nivel, regra = "bloqueado", detalhe or "evasao"
-                    motivo = EVASAO[detalhe]["porque"] if detalhe else REGRAS_LIMITE["evasao"]["porque"]
-                    alternativa = EVASAO[detalhe]["alternativa"] if detalhe else "Use a via oficial do site."
-                elif grupo == "captcha":
-                    nivel, regra = "bloqueado", "captcha"
-                    motivo = REGRAS_LIMITE["captcha"]["porque"]
-                    alternativa = EVASAO["captcha"]["alternativa"]
-                elif grupo == "conta":
-                    nivel, regra = "bloqueado", "conta"
-                    motivo = REGRAS_LIMITE["conta"]["porque"]
-                    alternativa = "Peça à pessoa que crie a conta e entregue o acesso."
-                else:
-                    nivel, regra = "confirmar", grupo
-                    motivo = REGRAS_LIMITE[grupo]["porque"] if grupo in REGRAS_LIMITE else "Ação com efeito externo."
-                    alternativa = "Descreva o efeito e espere a confirmação da pessoa."
+                nivel = REGRAS_EFEITO[grupo]["nivel"]
+                regra = grupo
+                motivo = REGRAS_EFEITO[grupo]["porque"]
                 break
         if nivel == "liberado" and not ALLOW_LIMITE.search(normal):
             nivel, regra = "confirmar", "indefinido"
-            motivo = "A ação não foi reconhecida como leitura; a classificação é conservadora."
-            alternativa = "Reescreva a ação com verbo de leitura ou trata como confirmação."
-        rows.append({
-            "acao": linha, "nivel": nivel, "regra": regra, "motivo": motivo,
-            "alternativa": alternativa,
-        })
-        if nivel == "bloqueado":
-            titulo = EVASAO.get(regra, {}).get("titulo", "Ação bloqueada")
+            motivo = "Não há verbo de leitura; o efeito não está declarado."
+        rows.append({"acao": linha, "nivel": nivel, "regra": regra, "motivo": motivo})
+        if nivel == "irreversivel":
             achados.append(finding(
-                "must", "bloqueado", f"Bloqueado: {titulo}", linha,
-                motivo,
-                "Não há configuração de permissão que torne isso aceitável.",
-                alternativa,
-                "O agente passa a contornar um controle que existe por um motivo.",
+                "must", "irreversivel", "Efeito sem desfazer", linha, motivo,
+                "Não existe reversão automática para esta ação.",
+                "Confirme o alvo e o conteúdo antes; prefira um ensaio quando houver.",
+                "O resultado não volta atrás.",
             ))
         elif nivel == "confirmar" and modo != "lite":
             achados.append(finding(
-                "should", "confirmar", "Precisa de confirmação", linha,
-                motivo,
-                "A pessoa precisa ver o efeito antes de acontecer.",
-                alternativa,
-                "A ação acontece em nome de alguém sem aval.",
+                "should", "confirmar", "Efeito externo declarado", linha, motivo,
+                "A ação alcança algo fora do agente.",
+                "Mostre o alvo e o conteúdo a quem vai autorizar.",
+                "A ação acontece em nome de alguém sem revisão.",
             ))
 
     metrics = {
         "acoes": len(rows),
-        "bloqueadas": sum(1 for item in rows if item["nivel"] == "bloqueado"),
+        "irreversiveis": sum(1 for item in rows if item["nivel"] == "irreversivel"),
         "confirmar": sum(1 for item in rows if item["nivel"] == "confirmar"),
         "liberadas": sum(1 for item in rows if item["nivel"] == "liberado"),
     }
-    perguntas = ["Quem é a pessoa que confirma as ações e como ela vê o efeito?"]
-    if metrics["bloqueadas"]:
-        perguntas.append("Qual é o caminho oficial para o que a ação bloqueada tentava fazer?")
+    perguntas = ["Quem confirma cada efeito externo e como vê o alvo antes?"]
     achados, counts, veredito, perguntas = finalize(achados, modo, perguntas)
     extra = ["", "## Veredito por ação", ""]
     for item in rows:
-        extra += [f"- **{item['nivel']}** · {item['acao']}",
-                  f"   - Motivo: {item['motivo']}",
-                  f"   - Alternativa: {item['alternativa']}", ""]
-    extra += ["## O que este projeto não faz", "",
-              "O upstream se anuncia como indetectável por anti-bots. Aqui isso fica de fora:",
+        extra += [f"- **{item['nivel']}** · {item['acao']}", f"   - Motivo: {item['motivo']}", ""]
+    extra += ["## Como ler", "",
+              "A classificação é por **efeito declarado**, não por tema: leitura é liberada, efeito externo pede confirmação e o que não tem desfazer é marcado como irreversível.",
+              "Nada aqui aplica uma política que você não escreveu: o nível é informativo, e a decisão de executar fica com a permissão da ferramenta.",
               ""]
-    extra += [f"- **{dado['titulo']}** — {dado['porque']} Alternativa: {dado['alternativa']}"
-              for dado in EVASAO.values()]
-    extra += [""]
     return {
         **common(
             analysis="estacao.limites",
@@ -1223,9 +1166,9 @@ def checar_limites(*, acoes: str, modo: str) -> dict[str, Any]:
             title="Limites e consentimento",
             summary=[
                 f"{metrics['acoes']} ações: {metrics['liberadas']} liberada(s), "
-                f"{metrics['confirmar']} para confirmar, {metrics['bloqueadas']} bloqueada(s).",
-                "Evasão de detecção, CAPTCHA, rotação de conta e desrespeito a termos são bloqueados por definição.",
-                "A pessoa decide o que tem efeito externo; o agente não contorna controle.",
+                f"{metrics['confirmar']} para confirmar, {metrics['irreversiveis']} irreversível(is).",
+                "A classificação é por efeito, não por assunto.",
+                "A política que decide a execução é a sua, na matriz de permissões.",
             ],
             findings=achados,
             counts=counts,
@@ -1245,7 +1188,7 @@ LIMITES_LIMITES = [
     "A classificação é lexical e conservadora: o que não é leitura vira confirmação.",
     "Ela lê palavras, não intenção; um texto ambíguo pode cair no lado mais restritivo.",
     "Regras de empresa, termos do site e legislação local continuam valendo por cima disto.",
-    "Bloquear aqui não é sanção: é o limite do que este núcleo se dispõe a preparar.",
+    "O nível é informativo: quem decide executar é o gate de permissões do executor.",
 ]
 
 
@@ -1433,8 +1376,7 @@ def estacao_catalog() -> dict[str, Any]:
     return {
         "fonte": "feder-cr/invisible_dots (MIT)",
         "versao": VERSAO,
-        "principio": "Permissão declarada, aprovação registrada, chamada que roda no máximo uma vez e limite que não se contorna.",
-        "nao_adaptado": "A promessa de ser indetectável por anti-bots: fica de fora, com alternativa em cada caso.",
+        "principio": "Permissão declarada, aprovação registrada, chamada que roda no máximo uma vez.",
         "ferramentas": [
             {"id": chave, "permissao": valor["permissao"], "risco": valor["risco"],
              "efeito": valor["efeito"], "nota": valor["nota"]}
@@ -1447,14 +1389,9 @@ def estacao_catalog() -> dict[str, Any]:
         ],
         "decisoes": list(DECISOES),
         "estados": [{"estado": chave, "nota": valor} for chave, valor in ESTADOS.items()],
-        "evasao": [
-            {"regra": chave, "titulo": valor["titulo"], "porque": valor["porque"],
-             "alternativa": valor["alternativa"]}
-            for chave, valor in EVASAO.items()
-        ],
         "limites": [
             {"regra": chave, "nivel": valor["nivel"], "porque": valor["porque"]}
-            for chave, valor in REGRAS_LIMITE.items()
+            for chave, valor in REGRAS_EFEITO.items()
         ],
         "orcamento": [
             {"regra": "Passos por tarefa", "valor": f"padrão {PASSOS_MAX}, teto {PASSOS_TETO}"},

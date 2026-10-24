@@ -10,10 +10,10 @@ from server.estacao import (
     CUSTO_MAX,
     DECISOES,
     ESTADOS,
-    EVASAO,
     FERRAMENTAS,
     PASSOS_MAX,
     PERMISSOES,
+    REGRAS_EFEITO,
     EstacaoError,
     auditar_memoria,
     auditar_permissoes,
@@ -558,70 +558,59 @@ def test_limites_leitura_liberada() -> None:
     assert result["acoes"][0]["nivel"] == "liberado"
 
 
-def test_limites_captcha_bloqueado() -> None:
+def test_limites_captcha_nao_e_assunto_da_ferramenta() -> None:
     result = limites("resolver o captcha do login")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
-    assert result["counts"]["must"] == 1
+    assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["counts"]["must"] == 0
 
 
-def test_limites_indetectavel_bloqueado() -> None:
+def test_limites_indetectavel_nao_e_bloqueado() -> None:
     result = limites("ficar indetectável para o site")
-    assert result["acoes"][0]["regra"] == "indetectavel"
+    assert result["acoes"][0]["nivel"] == "confirmar"
 
 
-def test_limites_fingerprint_bloqueado() -> None:
+def test_limites_fingerprint_nao_e_bloqueado() -> None:
     result = limites("falsificar o fingerprint do navegador")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
+    assert result["acoes"][0]["nivel"] != "irreversivel"
 
 
-def test_limites_limite_de_requisicoes_bloqueado() -> None:
-    result = limites("contornar o rate limit com proxy")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
+def test_limites_apagar_e_irreversivel() -> None:
+    result = limites("apagar os comprovantes antigos")
+    assert result["acoes"][0]["nivel"] == "irreversivel"
+    assert result["acoes"][0]["regra"] == "exclusao"
 
 
-def test_limites_robots_bloqueado() -> None:
-    result = limites("ignorar o robots.txt")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
+def test_limites_pagar_e_irreversivel() -> None:
+    result = limites("pagar a fatura do cartão")
+    assert result["acoes"][0]["regra"] == "pagamento"
 
 
-def test_limites_raspagem_bloqueada() -> None:
-    result = limites("raspar e-mails do site")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
-
-
-def test_limites_credencial_bloqueada() -> None:
-    result = limites("usar a senha de outra pessoa")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
-
-
-def test_limites_envio_confirma() -> None:
+def test_limites_enviar_confirma() -> None:
     result = limites("enviar e-mail para o cliente")
     assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["acoes"][0]["regra"] == "envio"
 
 
-def test_limites_exclusao_confirma() -> None:
-    result = limites("apagar os arquivos antigos")
-    assert result["acoes"][0]["nivel"] == "confirmar"
-
-
-def test_limites_instalacao_confirma() -> None:
+def test_limites_instalar_confirma() -> None:
     result = limites("instalar o programa auxiliar")
-    assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["acoes"][0]["regra"] == "instalacao"
 
 
 def test_limites_permissao_confirma() -> None:
     result = limites("mudar permissão para allow")
-    assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["acoes"][0]["regra"] == "permissao"
 
 
-def test_limites_conta_bloqueada() -> None:
+def test_limites_conta_confirma() -> None:
     result = limites("criar conta no portal")
-    assert result["acoes"][0]["nivel"] == "bloqueado"
+    assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["acoes"][0]["regra"] == "conta"
 
 
 def test_limites_acao_desconhecida_confirma() -> None:
     result = limites("organizar a pasta")
     assert result["acoes"][0]["nivel"] == "confirmar"
+    assert result["acoes"][0]["regra"] == "indefinido"
 
 
 def test_limites_vazio_rejeitado() -> None:
@@ -630,25 +619,30 @@ def test_limites_vazio_rejeitado() -> None:
 
 
 def test_limites_modo_lite_so_must() -> None:
-    result = limites("enviar e-mail\nresolver captcha", modo="lite")
+    result = limites("enviar e-mail\napagar arquivos", modo="lite")
     assert all(item["group"] == "must" for item in result["findings"])
 
 
-def test_limites_sempre_tem_alternativa() -> None:
-    result = limites("resolver captcha")
-    assert result["acoes"][0]["alternativa"]
-
-
 def test_limites_metricas_somam() -> None:
-    result = limites("ler o site\nenviar e-mail\nresolver captcha")
-    total = result["metrics"]["liberadas"] + result["metrics"]["confirmar"] + result["metrics"]["bloqueadas"]
+    result = limites("ler o site\nenviar e-mail\napagar arquivos")
+    total = result["metrics"]["liberadas"] + result["metrics"]["confirmar"] + result["metrics"]["irreversiveis"]
     assert total == result["metrics"]["acoes"] == 3
 
 
-def test_limites_catalogo_lista_as_oito_evasoes() -> None:
+def test_limites_nao_tem_nivel_bloqueado() -> None:
+    result = limites("resolver captcha\nraspar e-mails\nignorar robots.txt")
+    assert {item["nivel"] for item in result["acoes"]} <= {"liberado", "confirmar", "irreversivel"}
+
+
+def test_limites_catalogo_tem_seis_regras_de_efeito() -> None:
     catalog = estacao_catalog()
-    assert len(catalog["evasao"]) == 8
-    assert {item["regra"] for item in catalog["evasao"]} == set(EVASAO)
+    assert len(catalog["limites"]) == 6
+    assert {item["regra"] for item in catalog["limites"]} == set(REGRAS_EFEITO)
+
+
+def test_limites_pagar_nao_casa_com_apagar() -> None:
+    assert limites("apagar a pasta")["acoes"][0]["regra"] == "exclusao"
+    assert limites("pagar a conta")["acoes"][0]["regra"] == "pagamento"
 
 
 # ------------------------------------------------------------------ memória
@@ -755,7 +749,7 @@ def test_catalogo_tem_as_chaves() -> None:
     catalog = estacao_catalog()
     assert {
         "fonte", "versao", "ferramentas", "permissoes", "decisoes", "estados",
-        "evasao", "limites", "orcamento", "principio", "nao_adaptado",
+        "limites", "orcamento", "principio",
     } <= set(catalog)
 
 
@@ -781,10 +775,11 @@ def test_toda_permissao_tem_risco_padrao_rotulo() -> None:
         assert dado["rotulo"], nome
 
 
-def test_catalogo_nao_exporta_evasao_como_recurso() -> None:
+def test_catalogo_nao_julga_tema() -> None:
     catalog = estacao_catalog()
-    assert "indetectável" in catalog["nao_adaptado"].lower()
-    assert all(item["alternativa"] for item in catalog["evasao"])
+    assert "evasao" not in catalog
+    assert "nao_adaptado" not in catalog
+    assert all(item["nivel"] in {"confirmar", "irreversivel"} for item in catalog["limites"])
 
 
 def test_catalogo_tres_decisoes() -> None:
@@ -803,7 +798,7 @@ def test_catalogo_orcamentos() -> None:
 
 
 def test_catalogo_versao_nova() -> None:
-    assert estacao_catalog()["versao"] == "0.16.0"
+    assert estacao_catalog()["versao"] == "0.17.0"
 
 
 def test_catalogo_e_somente_leitura() -> None:
@@ -823,12 +818,13 @@ def test_api_lista_as_skills_da_estacao(client: TestClient) -> None:
     assert "Estação" in {skill["category"] for skill in skills}
 
 
-def test_api_limites_recusa_captcha(client: TestClient) -> None:
+def test_api_limites_classifica_por_efeito(client: TestClient) -> None:
     response = client.post("/api/skills/estacao.limites/execute", json={
-        "parameters": {"acoes": "resolver captcha do login", "modo": "full"},
+        "parameters": {"acoes": "resolver captcha do login\napagar os comprovantes", "modo": "full"},
     }).json()
     assert response["ok"] is True
-    assert response["result"]["acoes"][0]["nivel"] == "bloqueado"
+    niveis = [item["nivel"] for item in response["result"]["acoes"]]
+    assert niveis == ["confirmar", "irreversivel"]
     assert response["result"]["executado"] is False
 
 
