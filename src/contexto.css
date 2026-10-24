@@ -78,3 +78,28 @@
 @media (max-width: 640px) {
   .contexto-fields { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 }
+
+.contexto-page .diagram-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 7px;
+  color: var(--muted-2);
+}
+.contexto-page .diagram-source strong { color: var(--text-soft); font-weight: 500; letter-spacing: .01em; }
+.contexto-page .ciencia-card h5 {
+  margin-top: 9px;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.2px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.contexto-page .ciencia-card p { margin-top: 7px; color: var(--muted-2); font-size: 8.4px; line-height: 1.6; }
+
+.contexto-page .diagram-layout.is-single { grid-template-columns: minmax(0, 1fr); }
+.contexto-page .contexto-reset { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--muted-2); font-size: 8px; }
+.contexto-page .contexto-reset:hover { color: var(--text-soft); }

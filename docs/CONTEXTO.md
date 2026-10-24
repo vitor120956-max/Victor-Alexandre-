@@ -64,7 +64,7 @@ Imagem e mídia não entram por caractere: entram pela fórmula documentada de c
 | Google | 258 se os dois lados têm até 384 px; senão 258 × recortes de `floor(min/1,5)` | 258 |
 | Ollama | constante | 1.000 |
 
-Áudio e vídeo são cobrados **por segundo**, nunca pelo base64: Gemini a 32 e 258 tokens/s, OpenAI a 32 e 170 tokens/s, Anthropic e Ollama na mesma forma. Sem duração, a conta usa 60 s de áudio ou 40 s de vídeo — piso, não adivinhação.
+Áudio e vídeo são cobrados **por segundo**, nunca pelo base64: Anthropic, Google e Ollama a 32 tokens/s de áudio e 258 de vídeo; OpenAI a 32 e 170. Sem duração, a conta usa 60 s de áudio ou 40 s de vídeo — piso, não adivinhação.
 
 | Achado | Peso | Quando |
 |---|---|---|
@@ -144,13 +144,13 @@ hops     = hops × (contexto/1M × preço_entrada + saída/1M × preço_saída)
 
 ## Exemplo
 
-Uma conversa de oito mensagens, com uma imagem de 1024×768 e um par de ferramenta, contra uma janela de 128.000 e reserva de 8.192:
+Uma conversa de oito mensagens, com uma imagem de 1024×768 e um par de ferramenta, no dialeto OpenAI, contra uma janela de 128.000 e reserva de 8.192:
 
-- `contexto.tokens` → **853 tokens**, dos quais 765 são a imagem e 19 o resultado da ferramenta.
+- `contexto.tokens` → **853 tokens**: 765 são a imagem, 19 o resultado da ferramenta e 10 o sistema. No dialeto Anthropic a mesma imagem custa **1.049** e o total sobe para **1.137**.
 - `contexto.orcamento` → sala de **119.808**, prompt de **853**, sobra de **118.955**, pressão de **0,7%** da sala.
 - `contexto.uso` com entrada 12.000, saída 800, total 12.800, cache 4.000 e preços 2,50 / 10,00 / 0,25 → contexto de **12.800**, custo de **US$ 0,039** e **US$ 0,08** em dois hops.
 
-Já um corte com janela de 4.000 e reserva de 2.000 numa conversa de 21 mensagens mantém 12 e remove 10, saindo de **386** para **196** tokens; com 61 mensagens e sala de 500, remove 45 por orçamento e aponta `corte-profundo` e `sem-resumo`.
+Já um corte com janela de 4.000 e reserva de 2.000 numa conversa de 21 mensagens serve 12 linhas e remove 10, saindo de **386** para **196** tokens; com 61 mensagens e sala de 500, remove 45 por orçamento e aponta `corte-profundo` e `sem-resumo`.
 
 ## O que ficou de fora
 

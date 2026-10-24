@@ -453,10 +453,7 @@ export function ContextoPage() {
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (tab === 'regras') {
-      setError('O catálogo é lido ao abrir a página.');
-      return;
-    }
+    if (tab === 'regras') return;
     void run(`contexto.${tab}`, parametros(tab));
   };
 
@@ -492,25 +489,24 @@ export function ContextoPage() {
         ))}
       </nav>
 
-      <div className="diagram-layout">
+      <div className={`diagram-layout${tab === 'regras' ? ' is-single' : ''}`}>
+        {tab !== 'regras' && (
         <section className="panel diagram-form">
           <header className="diagram-form-head">
             <div>
               <span className="eyebrow">{activeTab.label.toUpperCase()}</span>
               <h2>{activeTab.hint}</h2>
             </div>
-            {tab !== 'regras' && (
-              <label className="diagram-level">
-                <span>NÍVEL</span>
-                <select value={level} onChange={(event) => setLevel(event.target.value as Level)}>
-                  {levels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </select>
-              </label>
-            )}
+            <label className="diagram-level">
+              <span>NÍVEL</span>
+              <select value={level} onChange={(event) => setLevel(event.target.value as Level)}>
+                {levels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </label>
           </header>
 
           <form className="form-stack" onSubmit={submit}>
-            {tab !== 'regras' && tab !== 'uso' && (
+            {tab !== 'uso' && (
               <label className="field">
                 <span>{tab === 'higiene' ? 'Conversa com defeito' : tab === 'resumo' ? 'Trecho a resumir' : 'Conversa'}</span>
                 <textarea
@@ -574,24 +570,19 @@ export function ContextoPage() {
               </>
             )}
 
-            {tab === 'regras' && (
-              <p className="diagram-empty"><BookOpen size={14} />As regras vêm do servidor: dialetos, fórmulas de imagem e mídia, precedência da reserva, turnos, escalada de stub e limites.</p>
-            )}
-
-            {tab !== 'regras' && tab !== 'uso' && (
-              <button type="button" className="button ghost" onClick={() => setTextos((atual) => ({ ...atual, [tab]: iniciais[tab] }))}>
+            {tab !== 'uso' && (
+              <button type="button" className="button ghost contexto-reset" onClick={() => setTextos((atual) => ({ ...atual, [tab]: iniciais[tab] }))}>
                 Restaurar exemplo
               </button>
             )}
-            {tab !== 'regras' && (
-              <button className="button primary" type="submit" disabled={busy}>
-                {busy ? <LoaderCircle size={16} className="diagram-spin" /> : <Gauge size={16} />}
-                {busy ? 'Medindo…' : buttonLabel[tab]}
-              </button>
-            )}
+            <button className="button primary" type="submit" disabled={busy}>
+              {busy ? <LoaderCircle size={16} className="diagram-spin" /> : <Gauge size={16} />}
+              {busy ? 'Medindo…' : buttonLabel[tab]}
+            </button>
             {error && <p className="diagram-error" role="alert"><AlertTriangle size={14} />{error}</p>}
           </form>
         </section>
+        )}
 
         <section className="panel diagram-result">
           <header className="diagram-result-head">
@@ -641,15 +632,21 @@ function RegrasView({ regras }: { regras: Row | null }) {
   const resumo = asMap(regras.resumo);
   const ferramenta = asMap(regras.ferramenta);
   const limites = asMap(regras.limites);
+  const estimativa = asMap(regras.estimativa);
+  const limitacoes = ['orcamento', 'tokens', 'corte', 'higiene', 'resumo', 'uso']
+    .reduce((total, chave) => total + asList(limites[chave]).length, 0);
   return (
     <div className="diagram-view">
       <div className="diagram-metrics">
         <Metric label="DIALETOS" value={asList(regras.dialetos).length} />
         <Metric label="FÓRMULAS" value={Object.keys(formula).length} />
         <Metric label="ESCALADA DE STUB" value={asList(resumo.escalada_de_stub).length} />
-        <Metric label="LIMITES" value={Object.keys(limites).length - 2} />
+        <Metric label="LIMITES" value={limitacoes} />
+        <Metric label="TEXTO" value={`${count(limites.texto).toLocaleString('pt-BR')} chars`} />
+        <Metric label="MENSAGENS" value={count(limites.mensagens)} />
       </div>
       <p className="diagram-verdict"><CheckCircle2 size={14} />{text(regras.principio)}</p>
+      <p className="diagram-source"><strong>{text(regras.fonte)}</strong><span>catálogo v{text(regras.versao)}</span></p>
 
       <Tabela
         titulo="Imagem por dialeto"
@@ -670,8 +667,20 @@ function RegrasView({ regras }: { regras: Row | null }) {
       />
 
       <div className="ciencia-card">
-        <h4>Precedência da reserva</h4>
+        <h4>Orçamento</h4>
+        <ul>
+          <li><strong>Sala mínima</strong> — {Math.round(count(orcamento.sala_minima) * 100)}% da janela reservados para a entrada</li>
+          <li><strong>Limiar de compactação</strong> — {count(orcamento.limiar_compactacao)}% da sala</li>
+        </ul>
+        <h5>Precedência da reserva</h5>
         <ul>{asList(orcamento.precedencia_da_reserva).map((item, indice) => <li key={item}><strong>{indice + 1}.</strong> {item}</li>)}</ul>
+      </div>
+      <div className="ciencia-card">
+        <h4>Estimativa</h4>
+        <ul>
+          <li><strong>Regra</strong> — {text(estimativa.regra)}</li>
+          <li><strong>Teto</strong> — {text(estimativa.teto)}</li>
+        </ul>
       </div>
       <div className="ciencia-card">
         <h4>Corte por turno</h4>
