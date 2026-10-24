@@ -1,0 +1,69 @@
+/* --- revisão ------------------------------------------------------------- */
+.revisao-page .revisao-diff {
+  min-height: 196px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.revisao-page .diagram-form textarea {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+.revisao-page .selecao-contador {
+  align-self: flex-end;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .04em;
+}
+.revisao-page .diagram-metrics article strong { word-break: break-word; }
+.revisao-page .diagram-table td { vertical-align: top; }
+.revisao-page .diagram-table code { overflow-wrap: anywhere; }
+.revisao-page .diagram-table td:nth-child(1) code { word-break: break-all; }
+
+.revisao-json {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .012);
+  padding: 11px 12px;
+}
+.revisao-json header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.revisao-json h4 {
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.2px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.revisao-json .button.ghost {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-2);
+  font-size: 8px;
+}
+.revisao-json .button.ghost:hover { color: var(--text-soft); }
+.revisao-json pre {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.4px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+@media (max-width: 640px) {
+  .revisao-page .revisao-diff { min-height: 150px; }
+  .revisao-json pre { max-height: 220px; }
+}

@@ -1,0 +1,40 @@
+ATRIBUIÇÃO — alibaba/open-code-review
+=====================================
+
+Obra original: https://github.com/alibaba/open-code-review
+Titular: Alibaba Group e colaboradores
+Licença: Apache License, Version 2.0
+Texto integral da licença: https://www.apache.org/licenses/LICENSE-2.0
+Versão de referência: `main` em 22/10/2026 (48.156 estrelas, Go)
+
+O QUE FOI USADO
+---------------
+Apenas o DESENHO descrito publicamente no repositório, reimplementado em
+Python sem copiar nenhuma linha de Go e sem adicionar dependência:
+
+- parser de diff unificado com hunk (`@@ -a,b +c,d @@`), contagem omitida
+  valendo 1, `\ No newline at end of file` ignorado e renomeação lida pelo
+  cabeçalho `rename from`/`rename to`;
+- seleção e agrupamento de arquivos relacionados em bundle de revisão
+  (código com o seu teste, todas as locales do mesmo pacote);
+- módulo de posicionamento: conferir se o comentário cai em linha que existe
+  no diff e sugerir a âncora mais próxima;
+- regra por caminho em `.opencodereview/rule.json`, com `path`, `rule` em
+  prosa e `merge_system_rule`;
+- a distinção entre camada determinística (regra) e camada de leitura
+  (agente), usada na comparação de duplicata e de conflito de severidade.
+
+O QUE NÃO FOI USADO
+-------------------
+- Nenhum código Go, template, workflow de GitHub Action, plugin de IDE ou
+  página de documentação foi copiado.
+- O prompt do agente e o toolset do upstream não foram reproduzidos.
+- O catálogo de regras multilíngue (NPE, thread-safety, XSS, injeção de SQL)
+  não foi portado; as regras desta camada são geradas a partir do caminho,
+  da classe e das convenções declaradas por quem usa.
+
+AVISO
+-----
+Este projeto é uma reimplementação independente. Não é afiliado à Alibaba
+nem endossado por ela. Os nomes dos projetos são citados apenas para
+atribuição e comparação.

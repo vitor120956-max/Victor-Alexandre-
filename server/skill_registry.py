@@ -109,6 +109,16 @@ from .selecao import (
     selecao_catalogo,
     validar_stack,
 )
+from .revisao import (
+    RevisaoError,
+    analisar_escopo,
+    comparar_duplicatas,
+    medir_cobertura,
+    montar_lotes,
+    normalizar_achados,
+    propor_regras,
+    verificar_posicao,
+)
 from .confianca import (
     ConfiancaError,
     analisar_ficha,
@@ -769,6 +779,58 @@ class SelecaoCoberturaInput(BaseModel):
 class SelecaoCatalogoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     catalogo: str = Field(title="Catálogo", min_length=2, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O `skills_index.json` ou o objeto com a chave `skills`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoEscopoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "Diff unificado: `git diff`, `git show` ou `gh pr diff`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoLotesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O mesmo diff que vai para a revisão."})
+    max_arquivos: int = Field(default=12, ge=2, le=50, title="Arquivos por lote", json_schema_extra={"description": "Teto de arquivos por unidade de revisão."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoAchadosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    achados: str = Field(title="Achados", min_length=5, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "JSON com `findings`/`achados`/`comments` ou linhas `arquivo:linha | severidade | fonte | regra | mensagem`."})
+    limite: int = Field(default=50, ge=1, le=500, title="Achados por página")
+    severidade_minima: Literal["blocker", "major", "minor", "nit"] = Field(default="nit", title="Severidade mínima")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoPosicaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O diff em que os comentários serão ancorados."})
+    achados: str = Field(title="Achados", min_length=5, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "Comentários a posicionar, em JSON ou em linhas."})
+    tolerancia: int = Field(default=2, ge=0, le=50, title="Tolerância em linhas", json_schema_extra={"description": "Distância aceitável entre o comentário e a linha alterada."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoDuplicatasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    achados: str = Field(title="Achados", min_length=5, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "Saída das duas camadas, com `source`/`fonte` preenchido: regra ou agente."})
+    similaridade: float = Field(default=0.5, ge=0.1, le=1.0, title="Similaridade mínima", json_schema_extra={"description": "Jaccard de palavras para considerar o mesmo problema."})
+    tolerancia: int = Field(default=2, ge=0, le=50, title="Tolerância em linhas")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoCoberturaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O diff do PR: define quais arquivos eram revisáveis."})
+    revisados: str = Field(title="Arquivos revisados", max_length=400_000, json_schema_extra={"format": "textarea", "description": "Um caminho por linha (ou separados por vírgula) do que a revisão realmente abriu."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class RevisaoRegrasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(title="Diff", min_length=10, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O diff do PR: os caminhos viram `path` de cada regra."})
+    convencoes: str = Field(default="", max_length=20_000, title="Convenções do projeto", json_schema_extra={"format": "textarea", "description": "O que este projeto exige e que não está no código: erro, log, teste, revisão."})
+    max_regras: int = Field(default=20, ge=1, le=200, title="Regras")
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2294,7 +2356,7 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         try:
             return ler_brief(brief=data.brief, modo=data.modo)
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_buscar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SelecaoBuscarInput)
@@ -2309,7 +2371,7 @@ def build_registry(files_root: Path) -> "SkillRegistry":
                 modo=data.modo,
             )
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_stack_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SelecaoStackInput)
@@ -2324,7 +2386,7 @@ def build_registry(files_root: Path) -> "SkillRegistry":
                 modo=data.modo,
             )
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_plano_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SelecaoPlanoInput)
@@ -2337,7 +2399,7 @@ def build_registry(files_root: Path) -> "SkillRegistry":
                 modo=data.modo,
             )
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_cobertura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SelecaoCoberturaInput)
@@ -2349,17 +2411,86 @@ def build_registry(files_root: Path) -> "SkillRegistry":
                 modo=data.modo,
             )
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_catalogo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SelecaoCatalogoInput)
         try:
             return auditar_catalogo(catalogo=data.catalogo, modo=data.modo)
         except SelecaoError as exc:
-            return _skill_error(str(exc))
+            raise SkillError(str(exc)) from exc
 
     def selecao_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return selecao_catalogo()
+
+    def revisao_escopo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoEscopoInput)
+        try:
+            return analisar_escopo(diff=data.diff, modo=data.modo)
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_lotes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoLotesInput)
+        try:
+            return montar_lotes(diff=data.diff, max_arquivos=data.max_arquivos, modo=data.modo)
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_achados_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoAchadosInput)
+        try:
+            return normalizar_achados(
+                achados=data.achados,
+                limite=data.limite,
+                severidade_minima=data.severidade_minima,
+                modo=data.modo,
+            )
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_posicao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoPosicaoInput)
+        try:
+            return verificar_posicao(
+                diff=data.diff,
+                achados=data.achados,
+                tolerancia=data.tolerancia,
+                modo=data.modo,
+            )
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_duplicatas_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoDuplicatasInput)
+        try:
+            return comparar_duplicatas(
+                achados=data.achados,
+                similaridade=data.similaridade,
+                tolerancia=data.tolerancia,
+                modo=data.modo,
+            )
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_cobertura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoCoberturaInput)
+        try:
+            return medir_cobertura(diff=data.diff, revisados=data.revisados, modo=data.modo)
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def revisao_regras_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, RevisaoRegrasInput)
+        try:
+            return propor_regras(
+                diff=data.diff,
+                convencoes=data.convencoes,
+                max_regras=data.max_regras,
+                modo=data.modo,
+            )
+        except RevisaoError as exc:
+            raise SkillError(str(exc)) from exc
 
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
@@ -2694,6 +2825,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("selecao.cobertura", "Cobertura do catálogo", "Mapeia cada dimensão do briefing contra o catálogo: quantas entradas a tocam, as melhores candidatas e a lacuna quando nenhuma serve; aponta dimensão escassa, saturada e briefing de uma dimensão só.", "Seleção", SelecaoCoberturaInput, selecao_cobertura_handler, timeout_seconds=20),
         SkillDefinition("selecao.catalogo", "Auditoria do catálogo", "Audita o índice: entrada sem descrição, id repetido, caminho fora de `skills/`, nome divergente, risco indefinido, descrição longa, alvo ausente e categoria de uma entrada só.", "Seleção", SelecaoCatalogoInput, selecao_catalogo_handler, timeout_seconds=20),
         SkillDefinition("selecao.regras", "Catálogo de seleção", "Publica as dez dimensões e o léxico, os pesos do BM25, os pontos de risco, o teto de 128 skills, os artefatos e checagens do plano e a lista do que ficou de fora.", "Seleção", EmptyInput, selecao_regras_handler, timeout_seconds=5),
+        SkillDefinition("revisao.escopo", "Escopo do diff", "Lê o diff unificado e separa o que precisa de revisão do que só ocupa espaço: classe por caminho, churn, risco, segredo em linha nova, migration sem rollback e arquivo binário.", "Revisão", RevisaoEscopoInput, revisao_escopo_handler, timeout_seconds=15),
+        SkillDefinition("revisao.lotes", "Lotes de revisão", "Agrupa arquivos relacionados em unidades de revisão — código com o seu teste, bundle de tradução com as outras locales — respeitando teto de 12 arquivos e 20 mil tokens por lote.", "Revisão", RevisaoLotesInput, revisao_lotes_handler, timeout_seconds=15),
+        SkillDefinition("revisao.achados", "Achados normalizados", "Padroniza severidade (blocker, major, minor, nit) e fonte, junta repetido exato, calcula a inflação de bloqueios e ordena o que o autor lê primeiro, com limite por página.", "Revisão", RevisaoAchadosInput, revisao_achados_handler, timeout_seconds=15),
+        SkillDefinition("revisao.posicao", "Posição do comentário", "Confere cada comentário contra os hunks do diff: linha adicionada, de contexto, a até duas linhas da adição, fora do hunk, removida ou inexistente; mede a precisão de ancoragem contra o piso de 80%.", "Revisão", RevisaoPosicaoInput, revisao_posicao_handler, timeout_seconds=20),
+        SkillDefinition("revisao.duplicatas", "Duplicatas entre camadas", "Compara regra e agente por Jaccard de palavras no mesmo arquivo e perto da mesma linha, agrupa o mesmo problema repetido e bloqueia quando as duas fontes discordam da gravidade.", "Revisão", RevisaoDuplicatasInput, revisao_duplicatas_handler, timeout_seconds=20),
+        SkillDefinition("revisao.cobertura", "Cobertura da revisão", "Compara os arquivos que o diff pede para revisar com os que a revisão abriu: cobertura contra o piso de 60%, risco alto esquecido, caminho declarado que não está no diff e revisão vazia.", "Revisão", RevisaoCoberturaInput, revisao_cobertura_handler, timeout_seconds=15),
+        SkillDefinition("revisao.regras", "Regras por caminho", "Monta o `rule.json` do open-code-review: uma regra em prosa por caminho, mesclada ao prompt de sistema, com guia por classe de arquivo e as convenções declaradas do projeto.", "Revisão", RevisaoRegrasInput, revisao_regras_handler, timeout_seconds=20),
         SkillDefinition("contexto.regras", "Catálogo de contexto", "Publica dialetos, fórmulas de imagem e mídia, precedência da reserva, agrupamento em turnos, escalada de stub, marcadores, limites de texto e mensagens e o que ficou de fora.", "Contexto", EmptyInput, contexto_regras_handler, timeout_seconds=5),
         SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),

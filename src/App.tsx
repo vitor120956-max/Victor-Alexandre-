@@ -21,6 +21,7 @@ import { CienciaPage } from './pages/CienciaPage';
 import { ConfiancaPage } from './pages/ConfiancaPage';
 import { ContextoPage } from './pages/ContextoPage';
 import { SelecaoPage } from './pages/SelecaoPage';
+import { RevisaoPage } from './pages/RevisaoPage';
 import { CareerPage } from './pages/CareerPage';
 import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="confianca" element={<ConfiancaPage />} />
         <Route path="contexto" element={<ContextoPage />} />
         <Route path="selecao" element={<SelecaoPage />} />
+        <Route path="revisao" element={<RevisaoPage />} />
         <Route path="carreira" element={<CareerPage />} />
         <Route path="navegador" element={<NavegadorPage />} />
         <Route path="escritorio" element={<EscritorioPage />} />

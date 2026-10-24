@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.24.0.**
+**Versão atual: 0.25.0.**
 
 ## Executar em desenvolvimento
 
@@ -233,6 +233,16 @@ O catálogo é o JSON que você cola — o índice completo tem 2,1 MB e o forma
 
 Consulte [`docs/SELECAO.md`](docs/SELECAO.md) e a licença MIT em [`docs/licenses/sickn33-agentic-awesome-skills.txt`](docs/licenses/sickn33-agentic-awesome-skills.txt).
 
+## Revisão de código
+
+A página **Revisão** (`/revisao`) parte do [`alibaba/open-code-review`](https://github.com/alibaba/open-code-review) — **Apache-2.0**, 48 mil estrelas — e trata as três falhas conhecidas de revisão feita só por agente: cobertura incompleta em diff grande, comentário na linha errada e qualidade que varia com o prompt.
+
+`server/revisao.py` lê o diff unificado com hunks, classifica cada caminho em **doze classes** com peso e decisão de revisar (lockfile e arquivo gerado ficam fora), agrupa o que se lê junto — código com o seu teste, todas as locales do mesmo pacote — com teto de 12 arquivos e 20 mil tokens, normaliza a severidade dos comentários em quatro níveis e duas fontes, confere se cada comentário cai em linha que existe no hunk (precisão contra o piso de 80 %), compara regra e agente por Jaccard para achar o mesmo problema reportado duas vezes, mede a cobertura contra o que o diff pedia (piso de 60 %) e monta o `rule.json` com uma regra em prosa por caminho.
+
+O diff é o texto que você cola: nada é aplicado, o repositório não é lido e nenhum comentário é publicado.
+
+Consulte [`docs/REVISAO.md`](docs/REVISAO.md) e a atribuição Apache-2.0 em [`docs/licenses/alibaba-open-code-review.txt`](docs/licenses/alibaba-open-code-review.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -350,7 +360,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **141 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **148 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -390,6 +400,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Confiança com ficha, risco, permissão, instalação, índice, duplicata e regras;
 - página Contexto com orçamento, tokens, corte, higiene, resumo, uso e regras;
 - página Seleção com briefing, busca, stack, plano, cobertura, catálogo e regras;
+- página Revisão com escopo, lotes, achados, posição, duplicatas, cobertura e regras;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -404,7 +415,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, e as dez checagens de higiene. O estado desta versão tem **41 testes web e 784 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, e as dez checagens de higiene. O estado desta versão tem **41 testes web e 1.107 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -470,7 +481,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 141 skills
+├── skill_registry.py        # allowlist, Pydantic e 148 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
