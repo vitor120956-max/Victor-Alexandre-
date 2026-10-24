@@ -1,0 +1,22 @@
+/* --- ciência ------------------------------------------------------------ */
+.ciencia-page .diagram-laws strong { letter-spacing: .01em; }
+.ciencia-page .diagram-badge { padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .08em; text-transform: uppercase; }
+.ciencia-table-block { display: flex; flex-direction: column; gap: 6px; }
+.ciencia-table-block h4 { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.ciencia-formulas { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin-top: 12px; }
+.ciencia-formulas article { padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; }
+.ciencia-formulas span { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .06em; text-transform: uppercase; }
+.ciencia-formulas p { margin-top: 5px; }
+.ciencia-formulas code { color: var(--accent-soft); font-family: var(--mono); font-size: 6.4px; line-height: 1.6; overflow-wrap: anywhere; }
+.ciencia-card { padding: 11px 12px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.012); }
+.ciencia-card h4 { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.ciencia-card ul { display: flex; flex-direction: column; gap: 5px; margin-top: 7px; }
+.ciencia-card li { color: var(--muted); font-size: 7.4px; line-height: 1.6; }
+.ciencia-card code { color: var(--text-soft); font-family: var(--mono); font-size: 6.6px; }
+.ciencia-diretrizes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.ciencia-diretrizes article { padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; }
+.ciencia-diretrizes header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ciencia-diretrizes header strong { color: var(--accent-soft); font-family: var(--mono); font-size: 6.6px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; }
+.ciencia-diretrizes header span { color: var(--muted-2); font-family: var(--mono); font-size: 5.7px; text-transform: uppercase; }
+.ciencia-diretrizes ul { display: flex; flex-direction: column; gap: 4px; margin-top: 7px; }
+.ciencia-diretrizes li { color: var(--muted); font-size: 7.2px; line-height: 1.55; }

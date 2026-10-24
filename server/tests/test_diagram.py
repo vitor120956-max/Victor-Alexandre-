@@ -552,4 +552,4 @@ def test_api_valida_parametros() -> None:
 
 def test_registro_tem_cento_e_seis_skills() -> None:
     registry = build_registry(__import__("pathlib").Path("."))
-    assert len(registry.list()) == 113
+    assert len(registry.list()) == 120

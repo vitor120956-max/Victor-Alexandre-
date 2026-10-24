@@ -478,8 +478,8 @@ def test_hygiene_rejects_an_out_of_range_interval() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.20.0"
-    assert health["skills"] == 113
+    assert health["version"] == "0.21.0"
+    assert health["skills"] == 120
 
 
 def test_api_runs_every_curadoria_skill(client: TestClient) -> None:

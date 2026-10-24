@@ -17,6 +17,7 @@ import { TastePage } from './pages/TastePage';
 import { DiagramPage } from './pages/DiagramPage';
 import { CuradoriaPage } from './pages/CuradoriaPage';
 import { MarketingPage } from './pages/MarketingPage';
+import { CienciaPage } from './pages/CienciaPage';
 import { CareerPage } from './pages/CareerPage';
 import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="diagramas" element={<DiagramPage />} />
         <Route path="curadoria" element={<CuradoriaPage />} />
         <Route path="marketing" element={<MarketingPage />} />
+        <Route path="ciencia" element={<CienciaPage />} />
         <Route path="carreira" element={<CareerPage />} />
         <Route path="navegador" element={<NavegadorPage />} />
         <Route path="escritorio" element={<EscritorioPage />} />

@@ -80,7 +80,7 @@ TOKENS = """:root {
   --container-gutter-tablet: 24px; --container-gutter-phone: 16px;
 }
 [data-theme="dark"] {
-  --bg: #111113; --fg: #fafafa; --surface: #18181b; --border: #27272a; --muted: #a1a1aa;
+  --bg: #111120; --fg: #fafafa; --surface: #18181b; --border: #27272a; --muted: #a1a1aa;
 }
 .card { padding: var(--space-4); border: 1px solid var(--border); background: var(--surface); }
 .button { background: var(--accent); color: var(--accent-on); transition: background var(--motion-fast) var(--ease-standard); }
@@ -213,12 +213,12 @@ def test_contract_checks_the_token_schema() -> None:
 
 
 def test_contract_checks_theme_parity_and_depth() -> None:
-    shallow = TOKENS.replace('[data-theme="dark"] {\n  --bg: #111113; --fg: #fafafa; --surface: #18181b; --border: #27272a; --muted: #a1a1aa;\n}',
-                             '[data-theme="dark"] { --bg: #111113; --fg: #fafafa; }')
+    shallow = TOKENS.replace('[data-theme="dark"] {\n  --bg: #111120; --fg: #fafafa; --surface: #18181b; --border: #27272a; --muted: #a1a1aa;\n}',
+                             '[data-theme="dark"] { --bg: #111120; --fg: #fafafa; }')
     result = audit_contract(tokens=shallow)
     assert "theme-shallow" in kinds(result)
 
-    without_fg = TOKENS.replace('[data-theme="dark"] {\n  --bg: #111113; --fg: #fafafa;', '[data-theme="dark"] {\n  --bg: #111113;')
+    without_fg = TOKENS.replace('[data-theme="dark"] {\n  --bg: #111120; --fg: #fafafa;', '[data-theme="dark"] {\n  --bg: #111120;')
     assert "theme-parity" in kinds(audit_contract(tokens=without_fg))
 
 
@@ -521,8 +521,8 @@ def test_reference_documents_the_schema() -> None:
 
 def test_api_exposes_the_studio_catalog_and_reference(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.20.0"
-    assert health["skills"] == 113
+    assert health["version"] == "0.21.0"
+    assert health["skills"] == 120
 
     catalog = client.get("/api/skills").json()["skills"]
     studio = {skill["id"] for skill in catalog if skill["id"].startswith("studio.")}

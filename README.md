@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.20.0.**
+**Versão atual: 0.21.0.**
 
 ## Executar em desenvolvimento
 
@@ -193,6 +193,16 @@ Nada é buscado na rede: nenhuma conta de anúncio, pixel, CRM ou ferramenta de 
 
 Consulte [`docs/MARKETING.md`](docs/MARKETING.md) e a licença MIT em [`docs/licenses/coreyhaines31-marketingskills.txt`](docs/licenses/coreyhaines31-marketingskills.txt).
 
+## Rigor científico
+
+A página **Ciência** (`/ciencia`) adapta [`K-Dense-AI/scientific-agent-skills`](https://github.com/K-Dense-AI/scientific-agent-skills) — **MIT**, 177 skills — e fica com a parte que se pode conferir no texto. Nenhum dos 177 pacotes foi importado e nenhum script do upstream é chamado: as contas vêm das fórmulas publicadas, e a leitura é lexical e numérica sobre o que você cola.
+
+`server/ciencia.py` dimensiona o estudo pelas quatro quantidades do poder — n, efeito, alfa e poder — com alocação desigual, correção de multiplicidade, perda esperada, efeito de desenho por cluster e a recusa explícita do poder observado. Confere o relato estatístico: p exato contra limiar, IC na ordem certa, média com dispersão, percentual com denominador e equivalência só com margem declarada. Audita o desenho em 14 itens ponderados por tipo — ensaio, observacional, diagnóstico e animal — e pega pseudorreplicação, confundimento por dia de execução e atribuição por conveniência. Checa os nove itens de reprodutibilidade, de dado e código a versão, semente, ambiente, registro e identificador. Valida método analítico contra o critério do ICH M10 (cromatográfico ou LBA): recuperação, RSD, R², LOD e LOQ por nível, com a folga do LLOQ. E lê o manuscrito contra CONSORT 2025, STROBE, STARD, PRISMA 2020 ou ARRIVE 2.0, apontando seção ausente e afirmação de cura, risco zero ou prova.
+
+Nada é executado: nenhum repositório, DOI, registro ou dado é baixado, e nenhum teste é reexecutado. O critério de aceitação é o que você declara — fixá-lo depois de ver o resultado é justamente o que a camada aponta.
+
+Consulte [`docs/CIENCIA.md`](docs/CIENCIA.md) e a licença MIT em [`docs/licenses/k-dense-ai-scientific-agent-skills.txt`](docs/licenses/k-dense-ai-scientific-agent-skills.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -310,7 +320,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **113 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **120 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -391,6 +401,7 @@ src/                         # interface React e estado local
 ├── pages/DiagramPage.tsx    # IR, layout, desenho, legenda e camada editorial
 ├── pages/CuradoriaPage.tsx  # entrada, catálogo, README, ticker, higiene e regras
 ├── pages/MarketingPage.tsx  # funil, teste, campanha, e-mail, SEO, anúncio e regras
+├── pages/CienciaPage.tsx    # amostra, estatística, desenho, repro, validação e manuscrito
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -409,6 +420,7 @@ server/
 ├── diagram.py               # IR, layout medido, SVG e contrato de entrega
 ├── curadoria.py            # schema, elegibilidade, catálogo, README, ticker e higiene
 ├── marketing.py            # funil, amostra, UTM, e-mail, SEO, anúncio e regras
+├── ciencia.py              # poder, relato, desenho, reprodutibilidade, método e manuscrito
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -418,7 +430,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 113 skills
+├── skill_registry.py        # allowlist, Pydantic e 120 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

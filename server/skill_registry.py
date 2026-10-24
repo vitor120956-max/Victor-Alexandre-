@@ -69,6 +69,16 @@ from .marketing import (
     marketing_catalogo,
     revisar_anuncio,
 )
+from .ciencia import (
+    CienciaError,
+    auditar_desenho,
+    auditar_estatistica,
+    auditar_manuscrito,
+    auditar_reprodutibilidade,
+    ciencia_catalogo,
+    dimensionar_estudo,
+    validar_metodo,
+)
 from .planning import completion_gate, create_plan as create_persistent_plan, list_plans, resume_plan, update_plan
 from .productivity import analyze_meeting, generate_changelog, pick_winners
 from .studio import (
@@ -736,6 +746,62 @@ class MarketingAnuncioInput(BaseModel):
     descricoes: str = Field(default="", title="Descrições", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Uma por linha."})
     texto_principal: str = Field(default="", title="Texto principal", max_length=8_000, json_schema_extra={"format": "textarea", "description": "Meta: 125 caracteres. LinkedIn: 150."})
     url_final: str = Field(default="", title="URL final", max_length=400)
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaAmostraInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    teste: Literal["proporcoes", "medias"] = Field(default="proporcoes", title="Teste")
+    alfa: float = Field(default=0.05, gt=0, lt=0.5, title="Alfa")
+    poder: float = Field(default=0.8, ge=0.5, lt=0.999, title="Poder")
+    alocacao: float = Field(default=1.0, gt=0, le=20, title="Alocação (n2/n1)")
+    perda: float = Field(default=0.0, ge=0, lt=1, title="Perda esperada (fração)")
+    comparacoes: int = Field(default=1, ge=1, le=100, title="Comparações")
+    baseline: float = Field(default=0, ge=0, le=100, title="Linha de base (%)", json_schema_extra={"description": "Proporção atual, em percentual. Só para o teste de proporções."})
+    efeito: float = Field(default=0, ge=-99, le=500, title="Efeito relativo (%)", json_schema_extra={"description": "Ganho relativo sobre a linha de base."})
+    media_controle: float = Field(default=0, title="Média do controle")
+    media_tratamento: float = Field(default=0, title="Média do tratamento")
+    desvio: float = Field(default=0, ge=0, title="Desvio-padrão")
+    cohen_d: float = Field(default=0, ge=0, le=10, title="d de Cohen", json_schema_extra={"description": "Alternativa às médias: informe o d direto."})
+    n_por_grupo: int = Field(default=0, ge=0, le=1_000_000, title="n por grupo", json_schema_extra={"description": "Opcional: com n fixo, devolve o poder realizado."})
+    tamanho_cluster: int = Field(default=0, ge=0, le=100_000, title="Unidades por cluster")
+    icc: float = Field(default=0.0, ge=0, lt=1, title="ICC")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaEstatisticaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Trecho de resultados", min_length=40, max_length=120_000, json_schema_extra={"format": "textarea", "description": "O parágrafo com p, n, médias e intervalos, como saiu do manuscrito."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaDesenhoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Métodos", min_length=120, max_length=120_000, json_schema_extra={"format": "textarea", "description": "O trecho de métodos: randomização, controle, unidade de inferência, desfecho."})
+    tipo: Literal["ensaio", "observacional", "diagnostico", "animal"] = Field(default="ensaio", title="Tipo de estudo")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaReprodutibilidadeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Métodos e disponibilidade", min_length=60, max_length=120_000, json_schema_extra={"format": "textarea", "description": "Métodos, declaração de dados, código, ambiente e registro."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaValidacaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dados: str = Field(title="Medições", min_length=12, max_length=60_000, json_schema_extra={"format": "textarea", "description": "Uma por linha: nivel,medido,alvo[,grupo]. O grupo é o fator de precisão intermediária (dia, analista)."})
+    curva: str = Field(default="", max_length=30_000, title="Curva de calibração", json_schema_extra={"format": "textarea", "description": "Opcional: concentracao,resposta por linha. Dela saem R², LOD e LOQ."})
+    tipo: Literal["cromatografico", "lba"] = Field(default="cromatografico", title="Modalidade")
+    limite_recuperacao: float = Field(default=0, ge=0, le=50, title="Limite de recuperação (%)", json_schema_extra={"description": "Vazio usa o critério do ICH M10 da modalidade."})
+    limite_rsd: float = Field(default=0, ge=0, le=50, title="Limite de RSD (%)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class CienciaManuscritoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Manuscrito", min_length=200, max_length=120_000, json_schema_extra={"format": "textarea", "description": "O manuscrito ou o conjunto de seções. A conferência é do relato, não do desenho."})
+    tipo: Literal["ensaio", "observacional", "diagnostico", "revisao", "animal"] = Field(default="ensaio", title="Tipo de estudo")
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -1739,6 +1805,62 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def marketing_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return marketing_catalogo()
 
+    def ciencia_amostra_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaAmostraInput)
+        try:
+            return dimensionar_estudo(
+                teste=data.teste, alfa=data.alfa, poder=data.poder, alocacao=data.alocacao,
+                perda=data.perda, comparacoes=data.comparacoes, baseline=data.baseline,
+                efeito=data.efeito, media_controle=data.media_controle,
+                media_tratamento=data.media_tratamento, desvio=data.desvio,
+                cohen_d=data.cohen_d, n_por_grupo=data.n_por_grupo,
+                tamanho_cluster=data.tamanho_cluster, icc=data.icc, modo=data.modo,
+            )
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_estatistica_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaEstatisticaInput)
+        try:
+            return auditar_estatistica(texto=data.texto, modo=data.modo)
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_desenho_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaDesenhoInput)
+        try:
+            return auditar_desenho(texto=data.texto, tipo=data.tipo, modo=data.modo)
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_reprodutibilidade_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaReprodutibilidadeInput)
+        try:
+            return auditar_reprodutibilidade(texto=data.texto, modo=data.modo)
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_validacao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaValidacaoInput)
+        try:
+            return validar_metodo(
+                dados=data.dados, curva=data.curva, tipo=data.tipo,
+                limite_recuperacao=data.limite_recuperacao, limite_rsd=data.limite_rsd,
+                modo=data.modo,
+            )
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_manuscrito_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CienciaManuscritoInput)
+        try:
+            return auditar_manuscrito(texto=data.texto, tipo=data.tipo, modo=data.modo)
+        except CienciaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def ciencia_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return ciencia_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -2039,6 +2161,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("editorial.importar", "Redesenhar com recibo", "Lê draw.io, Mermaid ou Excalidraw, aplica a escada de degradação e devolve o recibo de fidelidade com os quatro discos de saída.", "Diagramas", EditorialImportarInput, editorial_importar_handler, timeout_seconds=20),
         SkillDefinition("editorial.entrega", "Aplicar contrato de entrega", "Verifica SVG acessível, viewBox do preset, min-width, rolagem local, impressão, rampa tipográfica e movimento opcional.", "Diagramas", EditorialEntregaInput, editorial_entrega_handler, timeout_seconds=15),
         SkillDefinition("editorial.catalogo", "Catálogo editorial", "Mostra os 45 tipos com orçamento, os nove padrões, os doze papéis de cor, os presets, as rampas e as seis regras de conector.", "Diagramas", EmptyInput, editorial_catalogo_handler, timeout_seconds=5),
+        SkillDefinition("ciencia.amostra", "Dimensionar estudo", "Calcula amostra e poder para duas proporções ou duas médias, com razão de alocação, correção de Bonferroni, efeito de desenho por cluster e inflação por perda; recusa poder abaixo de 80% e efeito de convenção pequena.", "Ciência", CienciaAmostraInput, ciencia_amostra_handler, timeout_seconds=5),
+        SkillDefinition("ciencia.estatistica", "Relato estatístico", "Confere o parágrafo de resultados: p exato, p = 0 inexistente, estatística sem graus de liberdade, efeito e intervalo ausentes, n, percentual com amostra pequena, equivalência sem margem e intervalo invertido.", "Ciência", CienciaEstatisticaInput, ciencia_estatistica_handler, timeout_seconds=10),
+        SkillDefinition("ciencia.desenho", "Desenho do estudo", "Lê os métodos e cobra os itens que decidem validade: randomização, sigilo da alocação, cegamento, controle concorrente, unidade de inferência, desfecho primário, justificativa amostral e pré-registro; aponta pseudorreplicação.", "Ciência", CienciaDesenhoInput, ciencia_desenho_handler, timeout_seconds=10),
+        SkillDefinition("ciencia.reprodutibilidade", "Reprodutibilidade do material", "Confere dado, código, versões, semente, ambiente, registro, identificadores e licença no relato; aponta acesso apenas sob solicitação e restrição sem motivo declarado.", "Ciência", CienciaReprodutibilidadeInput, ciencia_reprodutibilidade_handler, timeout_seconds=10),
+        SkillDefinition("ciencia.validacao", "Validação de método analítico", "Calcula recuperação e RSD por nível, separa repetibilidade de precisão intermediária, ajusta R², LOD e LOQ pela curva e compara com o critério do ICH M10 da modalidade ou com o limite informado.", "Ciência", CienciaValidacaoInput, ciencia_validacao_handler, timeout_seconds=15),
+        SkillDefinition("ciencia.manuscrito", "Completude do manuscrito", "Confere seções IMRaD, itens da diretriz do tipo de estudo (CONSORT, STROBE, STARD, PRISMA, ARRIVE) e afirmações que excedem o desenho; declara que completude não é qualidade.", "Ciência", CienciaManuscritoInput, ciencia_manuscrito_handler, timeout_seconds=15),
+        SkillDefinition("ciencia.regras", "Catálogo de ciência", "Publica benchmarks de efeito, critérios do ICH M10, fórmulas de poder, LOD e LOQ, diretrizes por tipo de estudo, itens de desenho e reprodutibilidade e a lista do que ficou de fora.", "Ciência", EmptyInput, ciencia_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
         SkillDefinition("marketing.teste", "Dimensionar teste A/B", "Calcula amostra por variante e duração com duas proporções, alfa e poder declarados, corrige para múltiplas variantes e recusa teste que não cabe no prazo.", "Marketing", MarketingTesteInput, marketing_teste_handler, timeout_seconds=10),
         SkillDefinition("marketing.utm", "Higiene de campanha", "Confere as URLs de campanha: https, os três parâmetros obrigatórios, minúsculas, hífen, medium do vocabulário, duplicata, dado pessoal e encurtador; devolve a URL canônica.", "Marketing", MarketingUtmInput, marketing_utm_handler, timeout_seconds=10),

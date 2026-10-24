@@ -1,0 +1,64 @@
+ATRIBUIÇÃO — K-Dense-AI/scientific-agent-skills
+==============================================
+
+Obra original: https://github.com/K-Dense-AI/scientific-agent-skills
+Copyright (c) 2025 K-Dense Inc.
+Licença: MIT
+
+Texto integral da licença
+-------------------------
+
+MIT License
+
+Copyright (c) 2025 K-Dense Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+O QUE FOI USADO
+---------------
+A PARTE METODOLÓGICA, reimplementada em Python: as quatro quantidades do
+cálculo de poder (n, efeito, alfa e poder) e as fórmulas de duas proporções e
+de duas médias, com alocação desigual, correção de multiplicidade, perda
+esperada, efeito de desenho por cluster e benchmarks de tamanho de efeito; a
+árvore de desenho experimental resumida nos itens de randomização, sigilo de
+alocação, cegamento, controle concorrente, unidade de inferência, bloqueio,
+desfecho primário, justificativa amostral, pré-registro, elegibilidade, perdas
+e análise pré-especificada, mais os erros estruturais de pseudorreplicação,
+confundimento e atribuição por conveniência; as regras de relato estatístico
+(p exato, proibição de poder observado e de post hoc, tamanho de efeito e
+intervalo obrigatórios, equivalência só com margem declarada); a fronteira de
+validação analítica (framework e critério fixados antes do dado, repetibilidade
+versus precisão intermediária) e os critérios do ICH M10 para cromatográfico e
+LBA; os nove itens de reprodutibilidade; e as listas de relato CONSORT 2025,
+STROBE, STARD, PRISMA 2020 e ARRIVE 2.0, com as afirmações de risco (cura,
+risco zero e prova) que a revisão por pares trata como bloqueio.
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhum dos 177 pacotes de skill do upstream — bioinformática, química,
+genômica, imagem, machine learning, escrita e busca bibliográfica — foi
+importado, copiado ou adaptado. Nenhum script do repositório (power.py,
+simulate_power.py, randomization.py, doe_designs.py,
+check_accuracy_precision.py, scan_skills.py) é instalado ou chamado, e nada do
+upstream é executado em tempo de uso. Nenhum texto das SKILL.md, das
+references ou dos evals foi copiado.
+
+O código de server/ciencia.py é implementação independente em Python: as
+contas vêm das fórmulas publicadas e as conferências são lexicais e numéricas
+sobre o texto que você cola. Nenhum modelo de linguagem participa.
