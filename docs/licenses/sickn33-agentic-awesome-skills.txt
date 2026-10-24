@@ -1,0 +1,65 @@
+ATRIBUIÇÃO — sickn33/agentic-awesome-skills
+==========================================
+
+Obra original: https://github.com/sickn33/agentic-awesome-skills
+Titular: Antigravity User e colaboradores
+Licença: MIT
+Versão de referência: V19.15.0 (catálogo de 2.743 skills em 114 categorias)
+
+Texto integral da licença
+--------------------------
+
+MIT License
+
+Copyright (c) 2026 Antigravity User
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+O QUE FOI USADO
+---------------
+Apenas o MECANISMO descrito publicamente no repositório, reimplementado em
+Python:
+
+- o contrato de cobertura por capacidade, com as dez dimensões que o AAS Core
+  entrega aos clientes MCP (arquitetura/runtime, linguagens/frameworks,
+  domínio, dados, integrações, testes/qualidade, segurança/privacidade,
+  experiência/acessibilidade, deploy/operação, manutenção);
+- o limite técnico de 128 skills por manifesto;
+- o formato do `aas-stack.json` (lista de ids) e a validação em memória que o
+  `compose_stack` faz antes de qualquer instalação;
+- o vocabulário de risco do catálogo (`safe`, `none`, `unknown`, `offensive`,
+  `critical`) e os campos do índice (`id`, `path`, `category`, `name`,
+  `description`, `risk`, `source`, `plugin.targets`, `plugin.setup`);
+- a regra editorial de que o nome da skill casa com a pasta e o id, e de que a
+  descrição cabe em uma linha.
+
+O QUE NÃO FOI USADO
+-------------------
+Nenhuma skill, SKILL.md, descrição do catálogo, script, prompt, schema ou
+arquivo do upstream foi copiado ou traduzido para dentro deste repositório. O
+catálogo de exemplo da página é uma amostra de oito ids reais com descrições
+escritas aqui, em português, e serve para exercitar a conta — não é o catálogo
+do upstream.
+
+O AAS Core recusa pontuar e recomendar: seu `search_skills` devolve ordem
+estável sem score e o `compose_stack` só valida ids. A camada `server/selecao.py`
+faz o que o Core deliberadamente não faz — BM25 com pesos declarados, ranking,
+cobertura por dimensão e plano — e escreve a conta para que ela possa ser
+auditada. Nenhum arquivo do upstream é executado, baixado ou consultado em
+tempo de execução: o catálogo é o JSON que o usuário cola.

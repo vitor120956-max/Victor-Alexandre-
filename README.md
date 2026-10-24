@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.23.0.**
+**Versão atual: 0.24.0.**
 
 ## Executar em desenvolvimento
 
@@ -223,6 +223,16 @@ Nada é enviado a modelo: janela, preço e `usage` são os que você informa, e 
 
 Consulte [`docs/CONTEXTO.md`](docs/CONTEXTO.md) e o aviso AGPL-3.0 em [`docs/licenses/cherryhq-cherry-studio.txt`](docs/licenses/cherryhq-cherry-studio.txt).
 
+## Seleção de skills
+
+A página **Seleção** (`/selecao`) parte do **AAS Core** do [`sickn33/agentic-awesome-skills`](https://github.com/sickn33/agentic-awesome-skills) — **MIT**, 48 mil estrelas, 2.743 skills em 114 categorias — e faz o que o Core recusa fazer: pontuar. O `search_skills` de lá devolve ordem estável sem score e o `compose_stack` só valida ids; aqui a conta é explícita.
+
+`server/selecao.py` lê o briefing contra as **dez dimensões de capacidade** do contrato de cobertura do Core, ranqueia o catálogo com **BM25** (k1 1,2 e b 0,75, peso 3 no nome, 2 na categoria e 1 na descrição), valida a stack — id inexistente, repetido, acima de 128, alvo incompatível, lacuna de dimensão, sobreposição e orçamento de risco —, monta um plano com artefato, checagem de saída e portão de aprovação para skill crítica, mapeia a cobertura por dimensão e audita a saúde do índice.
+
+O catálogo é o JSON que você cola — o índice completo tem 2,1 MB e o formato compacto `id | categoria | risco | descrição`, 506 KB. Nada é instalado, composto ou gravado.
+
+Consulte [`docs/SELECAO.md`](docs/SELECAO.md) e a licença MIT em [`docs/licenses/sickn33-agentic-awesome-skills.txt`](docs/licenses/sickn33-agentic-awesome-skills.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -340,7 +350,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **134 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **141 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -379,6 +389,7 @@ As mensagens identificam `SKILL PYTHON` ou `IA EXTERNA` quando essas origens sã
 - página Ciência com amostra, estatística, desenho, reprodutibilidade, validação, manuscrito e regras;
 - página Confiança com ficha, risco, permissão, instalação, índice, duplicata e regras;
 - página Contexto com orçamento, tokens, corte, higiene, resumo, uso e regras;
+- página Seleção com briefing, busca, stack, plano, cobertura, catálogo e regras;
 - catálogo unificado de skills locais e Python;
 - `dryRun`, confirmação e resultado detalhado das skills;
 - paleta global com `Ctrl/Cmd + K`;
@@ -427,6 +438,7 @@ src/                         # interface React e estado local
 ├── pages/CienciaPage.tsx    # amostra, estatística, desenho, repro, validação e manuscrito
 ├── pages/ConfiancaPage.tsx  # ficha, risco, permissão, instalação, índice, duplicata e regras
 ├── pages/ContextoPage.tsx   # orçamento, tokens, corte, higiene, resumo, uso e regras
+├── pages/SelecaoPage.tsx    # briefing, busca, stack, plano, cobertura, catálogo e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -448,6 +460,7 @@ server/
 ├── ciencia.py              # poder, relato, desenho, reprodutibilidade, método e manuscrito
 ├── confianca.py             # ficha, risco, permissão, instalação, índice e duplicata
 ├── contexto.py              # janela, tokens, corte por turno, higiene, resumo e uso
+├── selecao.py               # briefing, BM25, stack, plano, cobertura e catálogo
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -457,7 +470,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 134 skills
+├── skill_registry.py        # allowlist, Pydantic e 141 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

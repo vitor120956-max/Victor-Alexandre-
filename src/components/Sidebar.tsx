@@ -12,6 +12,7 @@ import {
   Palette,
   ShieldAlert,
   Gauge,
+  Layers,
   ShieldCheck,
   SwatchBook,
   LayoutDashboard,
@@ -52,6 +53,7 @@ const navigation = [
   { to: '/ciencia', label: 'Ciência', icon: Microscope },
   { to: '/confianca', label: 'Confiança', icon: ShieldAlert },
   { to: '/contexto', label: 'Contexto', icon: Gauge },
+  { to: '/selecao', label: 'Seleção', icon: Layers },
   { to: '/carreira', label: 'Carreira', icon: Briefcase },
   { to: '/navegador', label: 'Navegador', icon: MousePointerClick },
   { to: '/escritorio', label: 'Escritório', icon: Cloud },
@@ -91,7 +93,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <Settings size={19} strokeWidth={1.7} />
           <span>Configurações</span>
         </NavLink>
-        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.23.0"}</span></div>
+        <div className="sidebar-version"><span>JARVIS OS</span><span>v.{backendVersion ?? "0.24.0"}</span></div>
       </aside>
       {mobileOpen && <button className="sidebar-scrim" onClick={onClose} aria-label="Fechar menu" />}
     </>

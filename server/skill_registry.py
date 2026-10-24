@@ -99,6 +99,16 @@ from .contexto import (
     resumir_historico,
     sanear_historico,
 )
+from .selecao import (
+    SelecaoError,
+    auditar_catalogo,
+    ler_brief,
+    mapear_cobertura,
+    montar_plano,
+    recomendar,
+    selecao_catalogo,
+    validar_stack,
+)
 from .confianca import (
     ConfiancaError,
     analisar_ficha,
@@ -711,6 +721,57 @@ class CuradoriaHigieneInput(BaseModel):
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
+class SelecaoBriefInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Briefing", min_length=40, max_length=20_000, json_schema_extra={"format": "textarea", "description": "O que precisa ser feito, para quem, com qual restrição e como saber que ficou pronto."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SelecaoBuscarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Briefing", min_length=20, max_length=20_000, json_schema_extra={"format": "textarea", "description": "Os termos que descrevem o trabalho; a busca casa com nome, categoria e descrição."})
+    catalogo: str = Field(title="Catálogo", min_length=2, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O `skills_index.json`, um objeto com `skills`, ou linhas `id | categoria | descrição`."})
+    categoria: str = Field(default="", max_length=120, title="Categoria", json_schema_extra={"description": "Filtro por trecho da categoria, sem acento e sem caixa."})
+    risco: str = Field(default="", max_length=40, title="Risco", json_schema_extra={"description": "safe, none, unknown, offensive ou critical."})
+    alvo: str = Field(default="", max_length=40, title="Alvo", json_schema_extra={"description": "claude ou codex: exige o alvo em `plugin.targets`."})
+    limite: int = Field(default=8, ge=1, le=50, title="Resultados")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SelecaoStackInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(default="", max_length=20_000, title="Briefing", json_schema_extra={"format": "textarea", "description": "Sem briefing não há cobertura para conferir: a validação vira só checagem de id."})
+    skills: str = Field(title="Stack", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "`aas-stack.json`, lista JSON de ids ou um id por linha."})
+    catalogo: str = Field(title="Catálogo", min_length=2, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O mesmo catálogo usado na escolha."})
+    alvo: str = Field(default="claude", max_length=40, title="Alvo", json_schema_extra={"description": "Host que vai carregar as skills."})
+    limite_risco: int = Field(default=4, ge=0, le=400, title="Limite de risco", json_schema_extra={"description": "Soma aceitável: safe 0, none/unknown 1, offensive 2, critical 3."})
+    max_skills: int = Field(default=128, ge=1, le=128, title="Teto de skills")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SelecaoPlanoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Briefing", min_length=20, max_length=20_000, json_schema_extra={"format": "textarea", "description": "O trabalho a planejar."})
+    skills: str = Field(title="Stack", min_length=2, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Ids escolhidos, em JSON ou um por linha."})
+    catalogo: str = Field(default="", max_length=1_800_000, title="Catálogo", json_schema_extra={"format": "textarea", "description": "Opcional: sem ele o plano usa só os ids e as dimensões do briefing."})
+    alvo: str = Field(default="claude", max_length=40, title="Alvo")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SelecaoCoberturaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: str = Field(title="Briefing", min_length=40, max_length=20_000, json_schema_extra={"format": "textarea", "description": "O trabalho; cada dimensão que ele toca é mapeada contra o catálogo."})
+    catalogo: str = Field(title="Catálogo", min_length=2, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O `skills_index.json` ou o objeto com a chave `skills`."})
+    limite_por_dimensao: int = Field(default=3, ge=1, le=10, title="Candidatas por dimensão")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SelecaoCatalogoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    catalogo: str = Field(title="Catálogo", min_length=2, max_length=1_800_000, json_schema_extra={"format": "textarea", "description": "O `skills_index.json` ou o objeto com a chave `skills`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
 class MarketingOrcamentoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     orcamento: float = Field(gt=0, le=100_000_000, title="Orçamento mensal", json_schema_extra={"description": "Quanto será investido por mês em mídia, na moeda escolhida."})
@@ -1114,7 +1175,7 @@ class CareerFunnelInput(BaseModel):
 
 class NavegadorSnapshotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    snapshot: str = Field(title="Snapshot", min_length=10, max_length=200_000, json_schema_extra={"format": "textarea", "description": "Árvore copiada de page.snapshot(): `root`, depois `papel \"nome\" [ref=N, loc=...]`, dois espaços por nível."})
+    snapshot: str = Field(title="Snapshot", min_length=10, max_length=200_000, json_schema_extra={"format": "textarea", "description": "A árvore onde o alvo será resolvido."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2228,6 +2289,78 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def contexto_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return contexto_catalogo()
 
+    def selecao_brief_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoBriefInput)
+        try:
+            return ler_brief(brief=data.brief, modo=data.modo)
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_buscar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoBuscarInput)
+        try:
+            return recomendar(
+                brief=data.brief,
+                catalogo=data.catalogo,
+                categoria=data.categoria,
+                risco=data.risco,
+                alvo=data.alvo,
+                limite=data.limite,
+                modo=data.modo,
+            )
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_stack_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoStackInput)
+        try:
+            return validar_stack(
+                brief=data.brief,
+                skills=data.skills,
+                catalogo=data.catalogo,
+                alvo=data.alvo,
+                limite_risco=data.limite_risco,
+                max_skills=data.max_skills,
+                modo=data.modo,
+            )
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_plano_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoPlanoInput)
+        try:
+            return montar_plano(
+                brief=data.brief,
+                skills=data.skills,
+                catalogo=data.catalogo,
+                alvo=data.alvo,
+                modo=data.modo,
+            )
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_cobertura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoCoberturaInput)
+        try:
+            return mapear_cobertura(
+                brief=data.brief,
+                catalogo=data.catalogo,
+                limite_por_dimensao=data.limite_por_dimensao,
+                modo=data.modo,
+            )
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_catalogo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SelecaoCatalogoInput)
+        try:
+            return auditar_catalogo(catalogo=data.catalogo, modo=data.modo)
+        except SelecaoError as exc:
+            return _skill_error(str(exc))
+
+    def selecao_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return selecao_catalogo()
+
     def taste_direction_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
 
         assert isinstance(data, TasteDirectionInput)
@@ -2554,6 +2687,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("contexto.higiene", "Higiene do histórico", "Valida o que o provedor exige: remove resultado de ferramenta sem chamada, injeta marcador para chamada sem resultado, garante que a primeira mensagem seja do usuário e aponta id repetido, ferramenta sem id e mensagem vazia.", "Contexto", ContextoHigieneInput, contexto_higiene_handler, timeout_seconds=10),
         SkillDefinition("contexto.resumo", "Resumo de retenção", "Prepara a memória que substitui o trecho cortado: estuba saídas de ferramenta acima do limiar, troca anexo por marcador e lista decisão, número, caminho e pendência que precisam sobreviver, dentro do orçamento do resumo.", "Contexto", ContextoResumoInput, contexto_resumo_handler, timeout_seconds=10),
         SkillDefinition("contexto.uso", "Uso e custo", "Ancora o contexto a partir de entrada, saída e total (com o prompt inicial do Gemini), calcula custo por milhão e o custo repetido em hops, e aponta total menor que a entrada, cache acima da entrada e janela ultrapassada.", "Contexto", ContextoUsoInput, contexto_uso_handler, timeout_seconds=5),
+        SkillDefinition("selecao.brief", "Briefing de seleção", "Lê o pedido e devolve as dez dimensões de capacidade que ele toca, os entregáveis, as restrições, o critério de sucesso e o público; bloqueia briefing curto ou sem objetivo.", "Seleção", SelecaoBriefInput, selecao_brief_handler, timeout_seconds=10),
+        SkillDefinition("selecao.buscar", "Recomendação de skills", "Ranqueia o catálogo contra o briefing com BM25 (k1 1,2 e b 0,75), peso 3 no nome, 2 na categoria e 1 na descrição; filtra por categoria, risco e alvo e explica os termos de cada posição.", "Seleção", SelecaoBuscarInput, selecao_buscar_handler, timeout_seconds=20),
+        SkillDefinition("selecao.stack", "Validação de stack", "Confere os ids escolhidos contra o catálogo: id inexistente, repetido, acima de 128, alvo incompatível, lacuna de dimensão, sobreposição, setup manual e orçamento de risco.", "Seleção", SelecaoStackInput, selecao_stack_handler, timeout_seconds=20),
+        SkillDefinition("selecao.plano", "Plano por dimensão", "Ordena as skills em fases pela dimensão da categoria, com artefato, checagem de saída e dependência; exige portão de aprovação quando há skill crítica e aponta dimensão descoberta.", "Seleção", SelecaoPlanoInput, selecao_plano_handler, timeout_seconds=15),
+        SkillDefinition("selecao.cobertura", "Cobertura do catálogo", "Mapeia cada dimensão do briefing contra o catálogo: quantas entradas a tocam, as melhores candidatas e a lacuna quando nenhuma serve; aponta dimensão escassa, saturada e briefing de uma dimensão só.", "Seleção", SelecaoCoberturaInput, selecao_cobertura_handler, timeout_seconds=20),
+        SkillDefinition("selecao.catalogo", "Auditoria do catálogo", "Audita o índice: entrada sem descrição, id repetido, caminho fora de `skills/`, nome divergente, risco indefinido, descrição longa, alvo ausente e categoria de uma entrada só.", "Seleção", SelecaoCatalogoInput, selecao_catalogo_handler, timeout_seconds=20),
+        SkillDefinition("selecao.regras", "Catálogo de seleção", "Publica as dez dimensões e o léxico, os pesos do BM25, os pontos de risco, o teto de 128 skills, os artefatos e checagens do plano e a lista do que ficou de fora.", "Seleção", EmptyInput, selecao_regras_handler, timeout_seconds=5),
         SkillDefinition("contexto.regras", "Catálogo de contexto", "Publica dialetos, fórmulas de imagem e mídia, precedência da reserva, agrupamento em turnos, escalada de stub, marcadores, limites de texto e mensagens e o que ficou de fora.", "Contexto", EmptyInput, contexto_regras_handler, timeout_seconds=5),
         SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
