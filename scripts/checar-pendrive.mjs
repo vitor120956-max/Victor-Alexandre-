@@ -241,6 +241,33 @@ const TIPOS = new Map([
   [0x794c7630, { nome: 'overlayfs (contêiner)', nota: 'aviso' }],
 ]);
 
+// No Windows o `statfs` do Node pode não distinguir o sistema de arquivos, e o
+// tipo do volume é justamente o detalhe que decide se dá para rodar do pendrive.
+// Por isso, no win32, a pergunta vai para o `Get-Volume` do PowerShell.
+function sistemaArquivosWindows() {
+  const letra = (RAIZ.match(/^([A-Za-z]):/) || [])[1];
+  if (!letra) return '';
+  try {
+    const saida = rodar('powershell', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `(Get-Volume -DriveLetter ${letra.toUpperCase()}).FileSystem`,
+    ]);
+    return saida.trim();
+  } catch {
+    return '';
+  }
+}
+
+const WINDOWS_FS = new Map([
+  ['NTFS', 'ok'],
+  ['ReFS', 'ok'],
+  ['exFAT', 'aviso'],
+  ['FAT32', 'aviso'],
+  ['FAT', 'aviso'],
+]);
+
 {
   try {
     const info = statfsSync(RAIZ);
@@ -254,7 +281,31 @@ const TIPOS = new Map([
     } else {
       registrar('espaco', 'Espaço livre', 'ok', `${gb(livre)} livres de ${gb(total)}`);
     }
-    if (tipo) {
+    if (platform() === 'win32') {
+      const nome = sistemaArquivosWindows();
+      const nota = WINDOWS_FS.get(nome.toUpperCase());
+      if (nota === 'ok') {
+        registrar('fs', 'Sistema de arquivos', 'ok', `${nome} (volume da letra do projeto)`);
+      } else if (nota === 'aviso') {
+        registrar(
+          'fs',
+          'Sistema de arquivos',
+          'aviso',
+          `${nome} — funciona para o projeto, mas não guarda permissão POSIX`,
+          nome.toUpperCase() === 'EXFAT'
+            ? 'Para um pendrive de uso permanente, formate em NTFS. exFAT serve, só falha em `chmod +x`.'
+            : 'FAT32 limita arquivo a 4 GB e ignora permissão. Para uso permanente, formate em NTFS.',
+        );
+      } else {
+        registrar(
+          'fs',
+          'Sistema de arquivos',
+          'aviso',
+          `não identifiquei a letra do volume${nome ? ` (${nome})` : ''}`,
+          'Confira no Explorador: botão direito no drive → Propriedades → Sistema de arquivos.',
+        );
+      }
+    } else if (tipo) {
       if (tipo.nota === 'ok') {
         registrar('fs', 'Sistema de arquivos', 'ok', `${tipo.nome} — guarda permissão e link simbólico`);
       } else if (tipo.nome.startsWith('overlay') || tipo.nome === 'tmpfs') {

@@ -50,7 +50,7 @@ Pronto para rodar. 1 aviso(s). Suba com: npm run dev
 | Arquivo `.env` | não existe |
 | Chave de IA | **aviso** quando vazia: as oito skills de perfil sem modelo funcionam, `distilar.persona` não |
 | Espaço livre | menos de 1 GB |
-| Sistema de arquivos | **aviso** em exFAT/FAT32; aceita ext4, btrfs, XFS, ZFS, F2FS e NTFS |
+| Sistema de arquivos | **aviso** em exFAT/FAT32; aceita ext4, btrfs, XFS, ZFS, F2FS e NTFS. No Windows a leitura é pelo `Get-Volume` do PowerShell, porque o Node não distingue o tipo de volume |
 | Git | **aviso** sem `.git`: a camada `evoluir.*` não promove sem repositório |
 | Portas 8000 e 5173 | **aviso** quando ocupadas (pode ser o próprio JARVIS) |
 
@@ -198,6 +198,62 @@ O GitHub entrega o repositório em ZIP, sem precisar de Git instalado:
 Medido: **2.327.810 bytes (2,3 MB)**, **272 arquivos**, pasta de raiz `Victor-Alexandre--arena-f26cfa7a-victor-alexandre/`. O ZIP **não traz `.git`**, então a camada `evoluir.*` fica indisponível — tudo o mais funciona.
 
 Ao extrair, renomeie a pasta para `JARVIS`: o nome original tem hífen duplo e o nome da branch, o que atrapalha na hora de digitar o caminho.
+
+### Windows 10 antigo (build 14393 / versão 1607)
+
+Algumas máquinas têm Windows 10 sem nenhuma das ferramentas modernas. Vale conferir a build antes de seguir:
+
+```bat
+winver
+```
+
+| Build | Versão | Tem `winget`? | Tem `tar.exe`? | O que usar |
+|---|---|---|---|---|
+| 14393 | 1607 | **não** (só 1809+) | **não** (só 1803+) | PowerShell + `Expand-Archive` |
+| 17134 | 1803 | não | sim | PowerShell ou `tar -xf` |
+| 17763 | 1809 | sim | sim | `winget` |
+
+Numa build 14393, os comandos que funcionam são os de PowerShell abaixo — `winget` e `tar` respondem “não é reconhecido” e não há como instalar o `winget` sem atualizar o Windows.
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$zip = "$env:TEMP\jarvis.zip"
+$temp = "$env:TEMP\jarvis-extraido"
+Invoke-WebRequest -Uri "https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre" -OutFile $zip
+if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }
+Expand-Archive -Path $zip -DestinationPath $temp -Force
+$pasta = Get-ChildItem $temp -Directory | Select-Object -First 1
+if (Test-Path "D:\JARVIS") {
+  Write-Host "ATENCAO: D:\JARVIS ja existe. Renomeie ou apague e rode de novo."
+} else {
+  Move-Item $pasta.FullName "D:\JARVIS"
+  Write-Host "Pronto: D:\JARVIS"
+}
+```
+
+Troque `D:` pela letra do seu pendrive. A linha de TLS 1.2 é obrigatória nessa build: sem ela, o `Invoke-WebRequest` falha com erro de conexão no GitHub.
+
+Confira o sistema de arquivos do pendrive — em FAT32 o projeto roda, mas a camada de sistema não consegue marcar arquivo como executável:
+
+```powershell
+Get-Volume -DriveLetter D | Select-Object DriveLetter,FileSystem,SizeRemaining,Size
+```
+
+### Python 3.15 e as dependências: nada precisa ser compilado
+
+O `pip` só instala sem compilador se existir **wheel pronta** para a versão do Python. Conferido no PyPI em 25/10/2026 para `cp315`/`win_amd64`:
+
+| Pacote | Wheel para Python 3.15 no Windows |
+|---|---|
+| `pydantic-core` 2.50.1 | sim |
+| `lxml` 6.1.3 (usado por `python-docx` e `python-pptx`) | sim |
+| `Pillow` 13.0.0 (usado por `python-pptx`) | sim |
+| `watchfiles` 1.3.0 | sim (`cp310-abi3`, vale para 3.15) |
+| `httptools` 0.9.0 | sim |
+| `websockets` 17.3 | sim |
+| `reportlab` 4.5.1 | sim (wheel `py3-none-any`, Python puro) |
+
+Ou seja: `pip install -r requirements-dev.txt` não precisa de Visual Studio Build Tools. Se algum dia precisar, o erro aparece como `error: Microsoft Visual C++ 14.0 or greater is required` — nesse caso use uma versão anterior do Python (3.13) em vez de instalar o compilador.
 
 ### Comandos que **não** funcionam no `cmd` do Windows
 
@@ -373,7 +429,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.2"` e `"skills": 209`.
+Esperado: `"version": "0.36.3"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -489,7 +545,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.2` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.3` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
