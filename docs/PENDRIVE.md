@@ -367,6 +367,66 @@ O `cd /d` é obrigatório quando o cmd está em outra unidade (`C:`) e o projeto
 
 Se `py` não existir, use `python`. Se o venv já existir e estiver quebrado, apague a pasta `.venv` e repita.
 
+### Quanto tempo demora o `npm install` (e como saber se travou)
+
+O `npm install` fica **em silêncio** por vários minutos. Isso é normal, não é travamento: ele resolve a árvore inteira, baixa tudo para o cache em `C:\Users\SEU_USUARIO\AppData\Local\npm-cache` e só então descompacta em `node_modules`.
+
+Números medidos deste projeto:
+
+| Medida | Valor |
+|---|---|
+| Pacotes no `package-lock.json` | **161** |
+| Pastas de primeiro nível em `node_modules` | **84** |
+| Arquivos descompactados | **9.198** |
+| Tamanho final em disco | **139 MB** |
+| Maior binário (esbuild) | **9,9 MB** |
+
+Num pendrive, o gargalo não é a internet — é **gravar 9.198 arquivos pequenos** e o antivírus lendo cada um deles na primeira gravação:
+
+| Cenário | Tempo esperado |
+|---|---|
+| USB 3.0 + internet rápida | 2 a 6 minutos |
+| USB 2.0 + internet razoável | 6 a 15 minutos |
+| USB 2.0 + Defender ativo + internet lenta | até 25 minutos |
+
+O `pip install` do passo seguinte é bem mais rápido: são ~30 pacotes e os wheels são arquivos grandes e poucos.
+
+#### Como saber se está trabalhando, sem cancelar
+
+Abra um **segundo** cmd (não feche o primeiro) e rode duas vezes, com um minuto de intervalo:
+
+```bat
+dir D:\JARVIS\node_modules /b | find /c /v ""
+```
+
+O número que aparece é a quantidade de entradas em `node_modules`. Se ele **cresce** entre uma medição e outra, a instalação está andando. Se o comando disser que a pasta não existe, o npm ainda está na fase de download — olhe o **Gerenciador de Tarefas → Desempenho → Rede**: se houver tráfego, está baixando.
+
+#### Se passar de 30 minutos parado
+
+1. **Não apague nada.** Se precisar, `Ctrl+C` é seguro: rode `npm install` de novo depois.
+2. Confira espaço em `D:` — precisa de ~300 MB livres.
+3. Rode com log detalhado para ver onde parou:
+
+```bat
+npm install --loglevel=http
+```
+
+Cada linha mostra o pacote sendo baixado. Se parar sempre no mesmo pacote, é rede ou proxy.
+
+4. Para reaproveitar o que já foi baixado (o cache em `C:` continua válido):
+
+```bat
+npm install --prefer-offline --no-audit --no-fund
+```
+
+| Erro que aparece | Causa | O que fazer |
+|---|---|---|
+| `ETIMEDOUT` / `ENOTFOUND` / `ECONNRESET` | rede, proxy ou antivírus interceptando | tente de novo; se persistir, `npm config set registry https://registry.npmjs.org/` |
+| `EPERM` / `EBUSY` / `EEXIST` | arquivo travado por antivírus ou indexador | feche o editor, rode de novo; em último caso apague `node_modules` e repita |
+| `ENOSPC` | sem espaço | libere espaço no pendrive |
+| `npm error code EJSONPARSE` | `package.json` corrompido na cópia | extraia o ZIP de novo |
+| nada acontece e o pendrive pisca sem parar | gravação de arquivos pequenos em USB 2.0 | espere; é o cenário mais lento da tabela |
+
 ### Linux / macOS
 
 ```bash
@@ -429,7 +489,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.3"` e `"skills": 209`.
+Esperado: `"version": "0.36.4"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -545,7 +605,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.3` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.4` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
