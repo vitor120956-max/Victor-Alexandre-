@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.37.6.**
+**Versão atual: 0.37.7.**
 
 ## O que ele faz sem chave de IA
 
@@ -26,7 +26,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **O que precisa de chave:** qualquer pergunta aberta — “quem foi Machado de Assis”, “explique a diferença entre X e Y”. Sem chave, o JARVIS responde que a IA externa não foi configurada e lembra que os comandos locais continuam valendo.
 
-**Pesquisa de verdade, sem chave:** a skill **`sistema.rede`** (Busca e leitura na web) consulta a web e lê o texto da página. Ela exige a rede ligada na subida (`JARVIS_HOST_REDE=1`) e o token de host de `storage/host-token.txt`. Roda pela página **Skills**, não pela conversa.
+**Pesquisa de verdade, sem chave:** a skill **`sistema.rede`** (Busca e leitura na web) consulta a web e lê o texto da página. Ela exige a rede ligada na subida (`JARVIS_HOST_REDE=1`) e o token de host de `storage/host-token.txt`. Roda pela página **Skills**, não pela conversa. Passo a passo, o que cada ação devolve e por que não há resumo automático: [`docs/PESQUISA.md`](docs/PESQUISA.md).
 
 ## Executar em desenvolvimento
 

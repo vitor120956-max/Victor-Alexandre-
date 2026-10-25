@@ -153,7 +153,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.37.6",
+        version="0.37.7",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -188,7 +188,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.37.6",
+            "version": "0.37.7",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",

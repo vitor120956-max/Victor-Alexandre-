@@ -1,4 +1,4 @@
-"""Testes do `configurar-chave.py` (0.37.6).
+"""Testes do `configurar-chave.py` (0.37.7).
 
 O script existe porque o Bloco de Notas do Windows 10 antigo (1607) não lê
 quebra de linha Unix e amassa o `.env`. Ele grava em CRLF, preserva as outras
@@ -295,3 +295,14 @@ def test_doc_cobre_maquina_antiga_e_noavx():
     assert "Core 2" in texto
     assert "Google Drive" in texto
     assert "armazenamento" in texto
+
+
+def test_doc_de_pesquisa_explica_o_que_existe_e_o_que_falta():
+    caminho = RAIZ / "docs" / "PESQUISA.md"
+    assert caminho.is_file()
+    texto = caminho.read_text(encoding="utf-8")
+    assert "JARVIS_HOST_REDE=1" in texto
+    assert "DuckDuckGo" in texto
+    assert "material" in texto, "o doc precisa dizer que o canal existe e nada o alimenta"
+    assert "não" in texto
+    assert "docs/PESQUISA.md" in (RAIZ / "README.md").read_text(encoding="utf-8")
