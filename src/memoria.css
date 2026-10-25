@@ -1,0 +1,59 @@
+/* --- memória ------------------------------------------------------------- */
+.memoria-page .diagram-form textarea,
+.memoria-page .diagram-form input,
+.memoria-page .diagram-form select {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+.memoria-page .memoria-conjunto {
+  min-height: 210px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.memoria-page .selecao-contador {
+  align-self: flex-end;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .04em;
+}
+.memoria-page .diagram-table td { vertical-align: top; }
+.memoria-page .diagram-table code { overflow-wrap: anywhere; }
+.memoria-page .diagram-table td:first-child code { word-break: break-all; }
+
+.memoria-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-2);
+  font-size: 7.8px;
+  line-height: 1.5;
+}
+.memoria-check input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.memoria-via,
+.memoria-origem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 7.6px;
+  line-height: 1.55;
+}
+.memoria-via code,
+.memoria-origem code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.2px;
+}
+
+@media (max-width: 640px) {
+  .memoria-page .memoria-conjunto { min-height: 160px; }
+}

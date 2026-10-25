@@ -1,4 +1,4 @@
-"""Testes da camada de submissão de artefatos (0.26.0).
+"""Testes da camada de submissão de artefatos (0.27.0).
 
 Inspirada no pipeline determinístico do `github/awesome-copilot` (MIT). As
 fixtures são bundles escritos à mão; nada é executado, baixado ou publicado.
@@ -721,7 +721,7 @@ def test_registro_tem_as_sete_skills_de_submissao(tmp_path) -> None:
     submissao = [item for item in itens if item["id"].startswith("submissao.")]
     assert len(submissao) == 7
     assert {item["category"] for item in submissao} == {"Submissão"}
-    assert len(itens) == 155
+    assert len(itens) == 162
     assert all(item["sideEffects"] is False for item in submissao)
 
 

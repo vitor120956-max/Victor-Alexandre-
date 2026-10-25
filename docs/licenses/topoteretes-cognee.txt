@@ -1,0 +1,69 @@
+ATRIBUIÇÃO — topoteretes/cognee
+================================
+
+Obra original: https://github.com/topoteretes/cognee
+Titular: Cognee e colaboradores
+Licença: Apache License, Version 2.0
+Texto integral da licença: https://www.apache.org/licenses/LICENSE-2.0
+Versão de referência: `main` em 23/10/2026 (32.723 estrelas, Python)
+
+O QUE FOI USADO
+---------------
+Apenas o DESENHO descrito publicamente no repositório e nos módulos citados,
+reimplementado em Python sem copiar nenhum arquivo do upstream e sem adicionar
+dependência:
+
+- as quatro operações públicas `remember`, `recall`, `improve` e `forget`
+  (`cognee/api/v1/`), usadas como vocabulário das sete skills desta camada;
+- o portão determinístico de skill do `recall()`
+  (`cognee/api/v1/recall/skill_gate.py`): regras de expressão regular com peso,
+  sinal forte que decide sozinho, sinal fraco que só soma, limiar de disparo e
+  janela de negação de 20 caracteres antes do casamento;
+- o vocabulário de vias de busca (`cognee/modules/search/types/SearchType.py`)
+  e o critério “em que cada tipo é bom” do prompt de seleção
+  (`cognee/infrastructure/llm/prompts/search_type_selector_prompt.txt`),
+  traduzidos para oito vias com peso lexical em vez de escolha por LLM;
+- o conjunto de nós por sessão e a destilação de lição da sessão em memória
+  permanente (`improve`, `SessionNodeSetEntry` em `cognee/memory/entries.py`);
+- o escopo de esquecimento do `forget()` — item, dataset, tudo — e a opção
+  `memory_only`, que remove grafo e vetor e preserva o arquivo bruto;
+- o formato de memória tipada com `type`, `id` e `dataset`, usado como
+  referência do formato `id | tipo | criado | fonte | dataset | texto`.
+
+O QUE NÃO FOI USADO
+-------------------
+- Nenhum arquivo Python, frontend, Dockerfile, conector, plugin ou servidor MCP
+  do upstream foi copiado para este repositório.
+- O pipeline de ingestão, o `cognify`, os bancos (Kuzu, pgvector, Postgres),
+  a API REST, o MCP e o plugin do Claude Code não foram reproduzidos.
+- Nenhum modelo de linguagem, embedding, extração com GLiNER ou avaliação
+  BEAM é chamado: a camada é lexical e determinística.
+- O formato COGX de migração de outras memórias (Mem0, Letta, Zep, Graphiti)
+  não foi portado.
+
+AVISO
+-----
+Este projeto é uma reimplementação independente. Não é afiliado à Cognee nem
+endossado por ela. Os nomes dos projetos são citados apenas para atribuição e
+comparação.
+
+TEXTO DA LICENÇA
+----------------
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+O texto integral está em https://www.apache.org/licenses/LICENSE-2.0 e no
+arquivo LICENSE do repositório de origem.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.

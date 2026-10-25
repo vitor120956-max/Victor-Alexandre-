@@ -119,6 +119,16 @@ from .submissao import (
     validar_ficha,
     varrer_risco,
 )
+from .memoria import (
+    MemoriaError,
+    consultar_memoria,
+    destilar_sessao,
+    esquecer,
+    extrair_entidades,
+    memoria_catalogo,
+    montar_grafo,
+    rotear_consulta,
+)
 from .revisao import (
     RevisaoError,
     analisar_escopo,
@@ -883,6 +893,52 @@ class SubmissaoGateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arquivos: str = Field(min_length=3, max_length=1_800_000, title="Bundle do envio", json_schema_extra={"format": "textarea", "description": "Todos os arquivos do PR, cada um começando com `>>> caminho`."})
     esperada: str = Field(default="MIT", max_length=200, title="Licença esperada")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaRoteamentoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consulta: str = Field(min_length=3, max_length=200_000, title="Consulta", json_schema_extra={"format": "textarea", "description": "A pergunta do agente, como ele a faria: o roteador olha a forma da frase."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaEntidadesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(min_length=3, max_length=1_800_000, title="Texto", json_schema_extra={"format": "textarea", "description": "Documento, nota ou transcrição: nome, sigla, código, arquivo, data, valor e local saem daqui."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaGrafoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arestas: str = Field(min_length=1, max_length=1_800_000, title="Arestas", json_schema_extra={"format": "textarea", "description": "Uma por linha: `A -> relação -> B`. Linha sozinha declara nó isolado; aceita JSON com `arestas` (`de`, `relacao`, `para`)."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaSessaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conversa: str = Field(min_length=3, max_length=1_800_000, title="Conversa", json_schema_extra={"format": "textarea", "description": "Turnos no formato `usuário: …` / `agente: …`; `feedback: 3` no turno conta para a nota."})
+    limiar: float = Field(default=4.0, ge=1, le=10, title="Limiar de promoção", json_schema_extra={"description": "Nota mínima para a lição virar memória permanente."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaRecallInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consulta: str = Field(min_length=3, max_length=200_000, title="Consulta", json_schema_extra={"format": "textarea", "description": "O que o agente quer lembrar."})
+    memorias: str = Field(min_length=3, max_length=1_800_000, title="Memórias", json_schema_extra={"format": "textarea", "description": "Uma por linha: `id | tipo | criado | fonte | dataset | texto`; ou JSON com `memorias`."})
+    via: Literal["", "chunks", "grafo", "hibrido", "resumo", "temporal", "codigo", "procedimento", "regras"] = Field(default="", title="Via", json_schema_extra={"description": "Vazio deixa o roteador escolher pela pergunta."})
+    dataset: str = Field(default="", max_length=120, title="Dataset", json_schema_extra={"description": "Filtra pelo nome do conjunto; vazio lê todos."})
+    limite: int = Field(default=10, ge=1, le=50, title="Resultados")
+    hoje: str = Field(default="", max_length=10, title="Hoje", json_schema_extra={"description": "Data de referência AAAA-MM-DD para o decaimento; vazio usa a data do servidor."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class MemoriaEsquecerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    memorias: str = Field(min_length=3, max_length=1_800_000, title="Memórias", json_schema_extra={"format": "textarea", "description": "O conjunto completo no mesmo formato do recall."})
+    ids: str = Field(default="", max_length=4_000, title="Ids", json_schema_extra={"description": "Ids separados por vírgula ou espaço; obrigatório no escopo `item`."})
+    dataset: str = Field(default="", max_length=120, title="Dataset", json_schema_extra={"description": "Obrigatório no escopo `dataset`."})
+    escopo: Literal["item", "dataset", "tudo"] = Field(default="item", title="Escopo")
+    somente_memoria: bool = Field(default=False, title="Só a memória", json_schema_extra={"description": "Remove grafo e vetor e mantém o arquivo bruto, como `memory_only` no cognee."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2582,6 +2638,66 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def submissao_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return submissao_catalogo()
 
+    def memoria_roteamento_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaRoteamentoInput)
+        try:
+            return rotear_consulta(consulta=data.consulta, modo=data.modo)
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_entidades_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaEntidadesInput)
+        try:
+            return extrair_entidades(texto=data.texto, modo=data.modo)
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_grafo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaGrafoInput)
+        try:
+            return montar_grafo(arestas=data.arestas, modo=data.modo)
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_sessao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaSessaoInput)
+        try:
+            return destilar_sessao(conversa=data.conversa, limiar=data.limiar, modo=data.modo)
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_recall_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaRecallInput)
+        try:
+            return consultar_memoria(
+                consulta=data.consulta,
+                memorias=data.memorias,
+                via=data.via,
+                dataset=data.dataset,
+                limite=data.limite,
+                hoje=data.hoje,
+                modo=data.modo,
+            )
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_esquecer_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaEsquecerInput)
+        try:
+            return esquecer(
+                memorias=data.memorias,
+                ids=data.ids,
+                dataset=data.dataset,
+                escopo=data.escopo,
+                somente_memoria=data.somente_memoria,
+                modo=data.modo,
+            )
+        except MemoriaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def memoria_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return memoria_catalogo()
+
     def revisao_regras_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, RevisaoRegrasInput)
         try:
@@ -2941,6 +3057,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("submissao.links", "Links e referências", "Confere link relativo, âncora de título pela regra de slug do GitHub, caixa do caminho, caminho absoluto, link que escapa da pasta, `http://` e texto genérico, além de asset empacotado sem referência.", "Submissão", SubmissaoLinksInput, submissao_links_handler, timeout_seconds=20),
         SkillDefinition("submissao.gate", "Portão de submissão", "Roda ficha, estrutura, risco, licença e links sobre o bundle do PR e decide o estado: `requires-submitter-fixes` com qualquer bloqueio, `awaiting-review` sem conteúdo, `ready-for-review` sem bloqueio — com o rótulo a aplicar e o a remover.", "Submissão", SubmissaoGateInput, submissao_gate_handler, timeout_seconds=30),
         SkillDefinition("submissao.regras", "Catálogo de submissão", "Publica os sete tipos de artefato com campos obrigatórios e opcionais, os limites, as nove regras de risco, os identificadores e operadores SPDX, as situações de link e a regra de decisão do portão.", "Submissão", EmptyInput, submissao_regras_handler, timeout_seconds=5),
+        SkillDefinition("memoria.roteamento", "Roteamento da consulta", "Escolhe a via de recuperação pela forma da pergunta — chunks, grafo, híbrido, resumo, temporal, código, procedimento ou regras — somando regras com peso, respeitando negação e declarando o limiar e a margem.", "Memória", MemoriaRoteamentoInput, memoria_roteamento_handler, timeout_seconds=10),
+        SkillDefinition("memoria.entidades", "Extrair entidades", "Tira do texto nome, sigla, código, arquivo, data, valor e local por padrão lexical, e lê as relações declaradas em `sujeito -> relação -> objeto` sem chamar modelo de linguagem.", "Memória", MemoriaEntidadesInput, memoria_entidades_handler, timeout_seconds=20),
+        SkillDefinition("memoria.grafo", "Grafo de memória", "Mede o grafo declarado: grau, componente conectado, ciclo, nó isolado, hub e densidade, com achado para cada ilha que a travessia não alcança.", "Memória", MemoriaGrafoInput, memoria_grafo_handler, timeout_seconds=20),
+        SkillDefinition("memoria.sessao", "Destilar a sessão", "Pontua cada turno como lição em potencial — marcador explícito, verbo de fato, repetição e feedback contra fala do agente, confirmação curta e feedback negativo — e diz o que promover para a memória permanente.", "Memória", MemoriaSessaoInput, memoria_sessao_handler, timeout_seconds=20),
+        SkillDefinition("memoria.recall", "Recall com lastro", "Recupera memória por via roteada ou declarada com BM25, afinidade de termos, decaimento por meia-vida e sinal da via, devolvendo a pontuação aberta e o lastro de cada resultado.", "Memória", MemoriaRecallInput, memoria_recall_handler, timeout_seconds=20),
+        SkillDefinition("memoria.esquecer", "Esquecer por escopo", "Planeja a remoção por item, por dataset ou total, com `somente_memoria` para preservar o bruto, e mede o raio de alcance antes de apagar o que outro item ainda cita.", "Memória", MemoriaEsquecerInput, memoria_esquecer_handler, timeout_seconds=15),
+        SkillDefinition("memoria.regras", "Catálogo de memória", "Publica as oito vias com prioridade, as regras de roteamento e seus pesos, os tipos de entidade, o formato de aresta, os pesos da destilação, a fórmula do recall e os escopos de esquecimento.", "Memória", EmptyInput, memoria_regras_handler, timeout_seconds=5),
         SkillDefinition("contexto.regras", "Catálogo de contexto", "Publica dialetos, fórmulas de imagem e mídia, precedência da reserva, agrupamento em turnos, escalada de stub, marcadores, limites de texto e mensagens e o que ficou de fora.", "Contexto", EmptyInput, contexto_regras_handler, timeout_seconds=5),
         SkillDefinition("confianca.regras", "Catálogo de confiança", "Publica hosts aceitos, vocabulário de ferramentas e capacidades, os quinze padrões de risco com peso, os quatro níveis, as afirmações que exigem prova, as dez regras do índice e o que ficou de fora.", "Confiança", EmptyInput, confianca_regras_handler, timeout_seconds=5),
         SkillDefinition("marketing.orcamento", "Plano de mídia e economia unitária", "Calcula impressões, cliques, leads, clientes, CAC, ROAS, payback e LTV/CAC a partir das taxas informadas; aponta alavanca para o CAC alvo e orçamento por meta de ARR.", "Marketing", MarketingOrcamentoInput, marketing_orcamento_handler, timeout_seconds=10),
