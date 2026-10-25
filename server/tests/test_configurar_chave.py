@@ -1,4 +1,4 @@
-"""Testes do `configurar-chave.py` (0.37.4).
+"""Testes do `configurar-chave.py` (0.37.5).
 
 O script existe porque o Bloco de Notas do Windows 10 antigo (1607) não lê
 quebra de linha Unix e amassa o `.env`. Ele grava em CRLF, preserva as outras
@@ -287,3 +287,11 @@ def test_doc_explica_ia_local_e_a_limitacao_do_windows_1607():
     assert "22H2" in texto
     assert "llama.cpp" in texto
     assert "não é obrigado" in texto.lower() or "não é obrigado" in texto
+
+
+def test_doc_cobre_maquina_antiga_e_noavx():
+    texto = (RAIZ / "docs" / "CONFIGURAR-IA.md").read_text(encoding="utf-8")
+    assert "noavx" in texto, "faltam instruções para CPU sem AVX"
+    assert "Core 2" in texto
+    assert "Google Drive" in texto
+    assert "armazenamento" in texto

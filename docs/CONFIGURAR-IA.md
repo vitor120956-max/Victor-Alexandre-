@@ -122,6 +122,36 @@ A primeira linha é a RAM em GB, a segunda o processador, a terceira quantos nú
 
 Regra de bolso: o arquivo do modelo ocupa mais ou menos **0,7 GB por bilhão de parâmetros** em 4 bits, e o programa precisa de mais ~1 GB para trabalhar.
 
+### Máquina antiga e pouca RAM: o que esperar
+
+Se a sua máquina tem **4 GB de RAM e um processador anterior a 2011**, o modelo local funciona, mas devagar — e vale saber os números antes de baixar 2 GB.
+
+| RAM total | Modelo que dá para tentar | Arquivo (4 bits) | Velocidade esperada |
+|---|---|---|---|
+| 4 GB | 0,5 bilhão de parâmetros | ~0,4 GB | 1 a 4 palavras por segundo |
+| 4 GB | 1 bilhão | ~0,7 GB | 1 a 2 palavras por segundo |
+| 8 GB | 1 a 3 bilhões | 0,7 a 2 GB | 3 a 8 palavras por segundo |
+| 16 GB | 7 a 8 bilhões | 4 a 5 GB | 8 a 15 palavras por segundo |
+
+São estimativas de CPU, não medições: dependem do modelo e de quanta memória o Windows já está usando. Some a isso o navegador aberto, que sozinho come 1 GB.
+
+**Processador sem AVX (Intel Core 2, Pentium, Athlon antigos):** os binários `avx2` e `avx` fecham com *"instrução ilegal"*. Baixe o pacote **`noavx`** do llama.cpp (`llama-bXXXX-bin-win-noavx-x64.zip`); ele é lento de propósito, mas não usa instrução que a máquina não tem. Core 2 Quad é de 2007–2008: **não tem AVX**, então é essa a versão.
+
+**Onde guardar o arquivo:** no disco com mais espaço livre, não necessariamente o do projeto. O `.gguf` é lido do disco local o tempo todo, então pendrive e rede deixam tudo mais lento.
+
+### Google Drive não resolve falta de RAM
+
+Vale dizer porque é uma confusão comum: o Drive é **armazenamento**, não memória nem processador. O modelo precisa ser carregado inteiro na RAM a cada resposta; deixar o arquivo no Drive só faz você baixá-lo de novo antes de rodar. Não existe "rodar o modelo direto do Drive".
+
+Onde o Drive ajuda de verdade neste projeto:
+
+| Uso | Como |
+|---|---|
+| **Backup** das suas memórias, tarefas e documentos | copiar a pasta `storage/` para o Drive de vez em quando |
+| **Fonte de arquivos** para a skill `files.import` | instalar o *Drive para desktop*, que cria uma unidade local; o JARVIS lê como qualquer pasta |
+
+O *Drive para desktop* pede Windows 10 64 bits e, desde a versão 117, o **WebView2** — que em Windows 10 muito antigo (1607, 1709) pode não instalar. Se não instalar, o caminho é baixar os arquivos pelo navegador e importar da pasta Downloads, que é o que a skill já faz.
+
 ### Apontar o JARVIS para o servidor local
 
 Suba o `llama-server` (ou o KoboldCpp) e, noutra janela:
