@@ -130,6 +130,97 @@ Alternativas ao winget, se ele não existir na sua máquina:
 | Scoop | `scoop install nodejs-lts python git` | `scoop` instalado; não exige administrador |
 | Instalador oficial | <https://nodejs.org> e <https://www.python.org/downloads/> | marcar “Add python.exe to PATH” |
 
+### Quando o `winget` também não existe
+
+É o caso mais comum em Windows antigo, em máquina reformatada ou em instalação sem a Microsoft Store. Sem winget, o caminho por comando continua existindo, mas cada peça vem de uma fonte diferente:
+
+| Ferramenta | De onde vem | Dá para fazer só por comando? |
+|---|---|---|
+| Node.js | `nodejs.org` | **sim** — a versão é descoberta na hora pelo índice oficial |
+| Python | `python.org` | **não com segurança** — o site não publica um índice estável de “última versão”; clique no link |
+| Git | GitHub (`git-for-windows/git`) | **sim** — o endereço do instalador é fixo por versão |
+| Projeto JARVIS | GitHub (arquivo ZIP) | **sim** — 2,3 MB, sem precisar de Git |
+
+#### Node.js por comando (PowerShell)
+
+Abra o **PowerShell** (Win + R, digite `powershell`, Enter) e cole o bloco inteiro:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$indice = Invoke-RestMethod 'https://nodejs.org/dist/index.json'
+$versao = ($indice | Where-Object { $_.lts -ne $false } | Select-Object -First 1).version
+$url = "https://nodejs.org/dist/$versao/node-$versao-x64.msi"
+$destino = Join-Path $env:TEMP 'node-lts.msi'
+Invoke-WebRequest -Uri $url -OutFile $destino
+Start-Process msiexec.exe -ArgumentList "/i `"$destino`" /qn /norestart" -Wait
+Write-Host "Node $versao instalado."
+```
+
+O bloco não tem versão escrita à mão: ele pergunta ao `nodejs.org` qual é a LTS atual e baixa o `.msi` correspondente. O instalador roda em silêncio (`/qn`).
+
+#### Git por comando (PowerShell)
+
+```powershell
+$url = 'https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/Git-2.56.0.3-64-bit.exe'
+$destino = Join-Path $env:TEMP 'git-setup.exe'
+Invoke-WebRequest -Uri $url -OutFile $destino
+Start-Process $destino -ArgumentList '/VERYSILENT /NORESTART' -Wait
+Write-Host 'Git instalado.'
+```
+
+Original **66,8 MB**, conferido no GitHub em 25/10/2026 (`v2.56.0.windows.3`). Se a versão tiver mudado, a página <https://github.com/git-for-windows/git/releases/latest> mostra o instalador atual com o mesmo formato de nome.
+
+#### Python: clique é mais seguro que comando
+
+Não existe um endereço fixo do tipo `python-latest.exe`; o nome do arquivo carrega a versão. Vá em <https://www.python.org/downloads/> e clique no botão amarelo **Download Python 3.x.y**. No primeiro ecrã do instalador:
+
+- marque **Add python.exe to PATH** (é a caixa de baixo; sem ela o comando não aparece no cmd);
+- escolha **Install Now**.
+
+Se preferir por comando e souber a versão exata (por exemplo 3.12.10):
+
+```powershell
+$versao = '3.12.10'
+$url = "https://www.python.org/ftp/python/$versao/python-$versao-amd64.exe"
+$destino = Join-Path $env:TEMP 'python-setup.exe'
+Invoke-WebRequest -Uri $url -OutFile $destino
+Start-Process $destino -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1' -Wait
+```
+
+`PrependPath=1` faz o papel da caixa “Add python.exe to PATH”.
+
+#### O projeto sem Git: arquivo ZIP
+
+O GitHub entrega o repositório em ZIP, sem precisar de Git instalado:
+
+<https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre>
+
+Medido: **2.327.810 bytes (2,3 MB)**, **272 arquivos**, pasta de raiz `Victor-Alexandre--arena-f26cfa7a-victor-alexandre/`. O ZIP **não traz `.git`**, então a camada `evoluir.*` fica indisponível — tudo o mais funciona.
+
+Ao extrair, renomeie a pasta para `JARVIS`: o nome original tem hífen duplo e o nome da branch, o que atrapalha na hora de digitar o caminho.
+
+### Comandos que **não** funcionam no `cmd` do Windows
+
+Vieram de exemplos Linux e falham com “não é reconhecido como um comando interno”:
+
+| Errado no Windows | Certo no Windows | Por quê |
+|---|---|---|
+| `python3 --version` | `py --version` ou `python --version` | o executável no Windows é `python.exe`/`py.exe`, não `python3` |
+| `.venv/bin/pip install ...` | `.venv\Scripts\pip install ...` | a estrutura do venv é `Scripts`, não `bin` |
+| `.venv/bin/python -m uvicorn ...` | `.venv\Scripts\python -m uvicorn ...` | idem |
+| `node --version · python --version` | um comando por linha | o `·` era separador da tabela, não faz parte do comando |
+| `cd E:\JARVIS` estando em `C:` | `cd /d E:\JARVIS` | sem `/d` o `cd` troca de pasta mas não de unidade |
+| `&&` entre comandos no cmd antigo | `&&` funciona no cmd atual; se falhar, rode um por vez | `&&` só existe em `cmd`/PowerShell recentes |
+
+Comando único, uma linha cada:
+
+```bat
+node --version
+npm --version
+py --version
+git --version
+```
+
 No Linux, o equivalente por distribuição:
 
 ```bash
@@ -175,7 +266,15 @@ Windows (PowerShell):
 git clone <url-do-seu-repositorio> E:\JARVIS
 ```
 
-### Opção B — cópia simples
+### Opção B — arquivo ZIP (sem Git instalado)
+
+Baixe o ZIP do repositório e extraia no pendrive:
+
+<https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre>
+
+São **2,3 MB** e 272 arquivos. Ao extrair, **renomeie a pasta para `JARVIS`** — o nome original vem com o nome da branch. O ZIP não traz `.git`: a camada `evoluir.*` fica indisponível, o resto funciona.
+
+### Opção C — cópia simples a partir de uma pasta já baixada
 
 Não copie `.venv`, `node_modules` nem `storage` se quiser começar limpo.
 
@@ -201,12 +300,16 @@ O `.venv` e o `node_modules` são específicos de cada máquina. Instale uma vez
 
 ### Windows
 
-```powershell
-cd E:\JARVIS
+```bat
+cd /d E:\JARVIS
 py -m venv .venv
 .venv\Scripts\pip install -r requirements-dev.txt
 npm install
 ```
+
+O `cd /d` é obrigatório quando o cmd está em outra unidade (`C:`) e o projeto está no pendrive (`E:`). Sem `/d`, o comando troca de pasta mas continua na unidade antiga.
+
+Se `py` não existir, use `python`. Se o venv já existir e estiver quebrado, apague a pasta `.venv` e repita.
 
 ### Linux / macOS
 
@@ -270,7 +373,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.1"` e `"skills": 209`.
+Esperado: `"version": "0.36.2"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -361,7 +464,10 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
+| `winget` não reconhecido | Windows sem App Installer, ou versão antiga | instalar pelo site oficial (§1) ou usar os blocos de PowerShell da §1 |
 | `node` não reconhecido | Node não instalado ou fora do PATH | instalar em <https://nodejs.org> e reabrir o terminal |
+| `python3` não reconhecido | no Windows o comando é `py` ou `python` | usar `py --version` |
+| `.venv/bin/pip` não existe | caminho de Linux | no Windows é `.venv\Scripts\pip` |
 | `python` não reconhecido (Windows) | Python sem PATH | reinstalar marcando “Add python.exe to PATH” |
 | `npm install` falha em pendrive FAT32 | sistema de arquivos sem suporte | formatar em NTFS ou ext4 |
 | `.venv` quebrou depois de trocar de porta USB | caminho absoluto mudou | apagar `.venv` e recriar na máquina |
@@ -377,11 +483,41 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] Node 22+ instalado (`node --version`)
 - [ ] Python 3.11+ instalado (`python --version`)
 - [ ] pendrive em NTFS ou ext4
-- [ ] projeto copiado ou clonado para o pendrive
+- [ ] projeto copiado, clonado ou extraído do ZIP para o pendrive
 - [ ] `npm install` executado
 - [ ] `.venv` criado e `pip install -r requirements-dev.txt` executado
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.1` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.2` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
+
+### Sequência completa no Windows (do zero ao `npm run dev`)
+
+Supondo o projeto extraído em `E:\JARVIS` e as ferramentas já instaladas:
+
+```bat
+cd /d E:\JARVIS
+npm install
+py -m venv .venv
+.venv\Scripts\pip install -r requirements-dev.txt
+copy .env.example .env
+notepad .env
+npm run checar
+npm run dev
+```
+
+Linha por linha:
+
+| Comando | O que faz |
+|---|---|
+| `cd /d E:\JARVIS` | entra na pasta do projeto, trocando também de unidade |
+| `npm install` | instala as bibliotecas da interface (≈ 139 MB) |
+| `py -m venv .venv` | cria o ambiente Python isolado dentro do pendrive |
+| `.venv\Scripts\pip install -r requirements-dev.txt` | instala FastAPI, Pydantic, pytest e o resto |
+| `copy .env.example .env` | cria o arquivo de configuração |
+| `notepad .env` | abre para você colar a chave em `JARVIS_AI_API_KEY=` |
+| `npm run checar` | confere tudo e diz o que falta |
+| `npm run dev` | sobe a API (:8000) e a interface (:5173) |
+
+Depois, no navegador: <http://localhost:5173>.
