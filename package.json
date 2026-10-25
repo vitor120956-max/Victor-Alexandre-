@@ -13,7 +13,8 @@
     "test": "npm run test:web && npm run test:api",
     "test:web": "vitest run",
     "test:api": "node scripts/python.mjs -m pytest",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "checar": "node scripts/checar-pendrive.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.2.8",

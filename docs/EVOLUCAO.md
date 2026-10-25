@@ -94,7 +94,7 @@ A camada nunca cria branch e nunca commita. A árvore fica modificada de propós
 
 Isso precisa estar escrito sem enfeite:
 
-1. **A suíte pega regressão, não má intenção.** Um patch pode passar em 1.809 testes e ainda abrir uma porta, vazar um arquivo ou apagar um backup. As guardas G1–G10 e o `risco` cobrem os padrões que conhecemos; o que não está no padrão passa.
+1. **A suíte pega regressão, não má intenção.** Um patch pode passar em 1.815 testes e ainda abrir uma porta, vazar um arquivo ou apagar um backup. As guardas G1–G10 e o `risco` cobrem os padrões que conhecemos; o que não está no padrão passa.
 2. **O ensaio executa código novo.** Um `conftest.py` malicioso roda com o usuário da API antes de qualquer aprovação. Ensaiar já é executar.
 3. **"Passou nos testes" ≠ "é boa mudança".** Verde prova que nada quebrado quebrou. Não prova que a mudança é correta, necessária ou segura.
 4. **O backup está no mesmo disco.** Reverter protege contra erro de patch, não contra `rm -rf`, disco cheio ou criptografia por ransomware.

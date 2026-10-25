@@ -166,7 +166,7 @@ Regras que valem mesmo sem runtime: término pode começar antes da preparação
 ## Verificação
 
 ```bash
-npm test                                   # 41 testes web + 1.809 de API
+npm test                                   # 41 testes web + 1.815 de API
 .venv/bin/python -m pytest server/tests/test_agency.py -q
 curl -s http://localhost:8000/api/health   # 0.36.0, 209 skills
 ```
