@@ -312,6 +312,80 @@ export async function listarSkillsLocais(): Promise<AgenteReceitas> {
   return resposta.result;
 }
 
+export interface AgenteApelido {
+  pedido: string;
+  chave: string;
+  skill_id: string;
+  origem: string;
+  criado_em: string;
+}
+
+export interface AgenteFalha {
+  id: string;
+  pedido: string;
+  chave: string;
+  motivo: string;
+  tentativas: number;
+  criado_em: string;
+  visto_em: string;
+}
+
+export interface AgenteHistorico {
+  quando: string;
+  pedido: string;
+  acao: string;
+  skill: string | null;
+  confianca: number;
+  resumo: string;
+}
+
+export interface AgentePainel {
+  locais: Array<{ id: string; nome: string; descricao: string; receita: string; campo: string; criado_em: string }>;
+  receitas: Array<{ id: string; nome: string; descricao: string; exemplo: string; campo: string }>;
+  apelidos: AgenteApelido[];
+  fila: AgenteFalha[];
+  historico: AgenteHistorico[];
+  respostas: Array<{ pedido: string; criado_em: string; fontes: PesquisaFonte[] }>;
+}
+
+export async function painelAgente(): Promise<AgentePainel> {
+  const resposta = await apiFetch<{ ok: boolean; result: AgentePainel }>('/api/agente/painel');
+  return resposta.result;
+}
+
+export async function ensinarAgente(pedido: string, alvo: string): Promise<AgenteApelido> {
+  const resposta = await apiFetch<{ ok: boolean; result: AgenteApelido; error?: { message?: string } }>(
+    '/api/agente/ensinar',
+    { method: 'POST', body: JSON.stringify({ pedido, alvo }) },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'Não consegui ensinar essa correlação.', 200, 'AGENTE_ERROR');
+  return resposta.result;
+}
+
+export async function esquecerAgente(pedido: string): Promise<number> {
+  const resposta = await apiFetch<{ ok: boolean; result: { removidos: number } }>(
+    `/api/agente/apelidos?pedido=${encodeURIComponent(pedido)}`,
+    { method: 'DELETE' },
+  );
+  return resposta.result.removidos;
+}
+
+export async function pesquisarAgente(pedido: string, autorizacao: string): Promise<AgenteResultado> {
+  const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado }>(
+    '/api/agente/pesquisar',
+    { method: 'POST', body: JSON.stringify({ pedido, autorizacao }) },
+  );
+  return resposta.result;
+}
+
+export async function removerSkillLocal(skillId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/agente/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' });
+}
+
+export async function removerFalhaAgente(falhaId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/agente/fila/${encodeURIComponent(falhaId)}`, { method: 'DELETE' });
+}
+
 export async function requestAIChat(input: {
   message: string;
   history: Array<{ role: 'user' | 'jarvis'; content: string }>;

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   Blocks,
+  Bot,
   Brain,
   Briefcase,
   CheckSquare2,
@@ -75,6 +76,7 @@ const navigation = [
   { to: '/escritorio', label: 'Escritório', icon: Cloud },
   { to: '/estacao', label: 'Estação', icon: Cpu },
   { to: '/skills', label: 'Skills', icon: Blocks },
+  { to: '/agente', label: 'Agente', icon: Bot },
 ];
 
 export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {

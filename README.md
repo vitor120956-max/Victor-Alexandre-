@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.39.0.**
+**Versão atual: 0.40.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -24,11 +24,12 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 | `abrir GitHub` · `quero q vc abra uma tela do youtube` | entende o pedido coloquial e abre a aba no navegador |
 | `pesquisar e responder X` | busca, lê as páginas e responde citando as fontes |
 | `contar as palavras de: …` · `minhas skills locais` | agente local: cria a skill de receita, executa e lista o que já criou |
+| `não é essa, é a skill X` · `procure na web sobre isso` | ensina a correlação ou guarda a resposta buscada |
 | `abrir estúdio` · `abrir lean` · `abrir agentes` | painéis de análise |
 
 **O que precisa de chave:** qualquer pergunta aberta — “quem foi Machado de Assis”, “explique a diferença entre X e Y”. Sem chave, o JARVIS responde que a IA externa não foi configurada e lembra que os comandos locais continuam valendo.
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 209, preenche os campos a partir da própria frase e executa. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 209, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Pesquisa com fonte:** `pesquisar e responder quem foi Machado de Assis` busca no DuckDuckGo, lê as primeiras páginas e manda o texto ao modelo como material citável. Precisa de três coisas: rede ligada na subida (`JARVIS_HOST_REDE=1`), o token de `storage/host-token.txt` (envie `token SEU_TOKEN` uma vez na conversa — fica só na memória da aba) e um provedor de IA configurado. Sem provedor ele não falha: devolve as fontes e o trecho lido, sem resumo. Detalhes em [`docs/PESQUISA.md`](docs/PESQUISA.md).
 

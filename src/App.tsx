@@ -34,6 +34,7 @@ import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
 import { EstacaoPage } from './pages/EstacaoPage';
 import { SkillsPage } from './pages/SkillsPage';
+import { AgentePage } from './pages/AgentePage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="escritorio" element={<EscritorioPage />} />
         <Route path="estacao" element={<EstacaoPage />} />
         <Route path="skills" element={<SkillsPage />} />
+        <Route path="agente" element={<AgentePage />} />
         <Route path="configuracoes" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

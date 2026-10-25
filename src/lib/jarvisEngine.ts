@@ -25,6 +25,9 @@ export type Intent =
   | { type: 'pesquisa:responder'; pergunta: string }
   | { type: 'agente:skills' }
   | { type: 'agente:executar'; pedido: string }
+  | { type: 'agente:corrigir'; alvo: string }
+  | { type: 'agente:pesquisar' }
+  | { type: 'agente:esquecer'; pedido: string }
   | { type: 'host:token'; token: string }
   | { type: 'web:open'; destination: string; url: string }
   | { type: 'automation:summary' }
@@ -176,6 +179,17 @@ export function parseCommand(rawInput: string): Intent {
   const agenteExplicito = input.match(/^(?:skill|agente|modo local)\s*[:,]?\s*(.+)$/i);
   if (agenteExplicito?.[1].trim()) {
     return { type: 'agente:executar', pedido: agenteExplicito[1].trim() };
+  }
+  const correcao = input.match(/^(?:n[aã]o [ée] (?:essa|esse|isso)[,\s]*)?(?:corrigir|corrija|use a skill|usar a skill|é a skill|e a skill|deveria ser(?: a skill)?)\s*[:,]?\s*(.+)$/i);
+  if (correcao?.[1].trim()) {
+    return { type: 'agente:corrigir', alvo: correcao[1].trim() };
+  }
+  if (/^(?:n[aã]o sabe[?,]?\s*)?(?:procure|procura|pesquise|pesquisa|busque|busca)\s+(?:na web\s+)?(?:sobre\s+)?(?:isso|isto)(?:\s+na web)?$/.test(text)) {
+    return { type: 'agente:pesquisar' };
+  }
+  const esquecer = input.match(/^(?:esque[cç]a|esquecer|apague o apelido de)\s+(.+)$/i);
+  if (esquecer?.[1].trim()) {
+    return { type: 'agente:esquecer', pedido: esquecer[1].trim() };
   }
 
   if (/que horas|horas agora|^hora\??$/.test(text)) return { type: 'time' };
@@ -416,6 +430,7 @@ export const helpText = [
   '• Enxuto — “revisar mudança: <diff>”, “auditar código app”, “dívida de atalhos em app” ou “abrir lean”. Análise estática, sem executar nada.',
   '• Agentes — “abrir agentes” ou “governo de agentes”. Revisa equipe, quadro, orçamento, parada de trabalho e permissões declaradas, sem executar agentes.',
   '• Estúdio — “abrir estúdio”, “design system” ou “revisar contraste”. Confere contrato de design, contraste WCAG, crítica em cinco dimensões e clichês no HTML, sem compilar nem publicar.',
+  '• Correção — “não é essa, é a skill legal.article” ensina a correlação; “procure na web sobre isso” busca e guarda a resposta; “esqueça <pedido>” apaga as duas.',
   '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

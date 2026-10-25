@@ -1,4 +1,4 @@
-"""Testes do agente local (0.39.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.40.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -613,3 +613,270 @@ def test_readme_aponta_para_a_doc_do_agente():
     texto = (raiz / "README.md").read_text(encoding="utf-8")
     assert "docs/AGENTE-LOCAL.md" in texto
     assert "Agente local, sem modelo" in texto
+
+
+# ------------------------------------------------- memória do agente (0.40.0)
+
+from server.agente_local import (  # noqa: E402
+    apelido_de,
+    ensinar,
+    ensinar_por_nome,
+    esquecer,
+    guardar_resposta,
+    listar_fila,
+    listar_historico,
+    painel,
+    parametros_explicitos,
+    registrar_falha,
+    registrar_execucao,
+    remover_falha,
+    remover_local,
+    resposta_guardada,
+)
+
+
+def test_ensinar_guarda_apelido_e_executa_depois(tmp_path):
+    async def run():
+        reg = registro(SKILL_ARQUIVO, raiz=tmp_path)
+        ensinar("meu relatorio do mes", "files.read", tmp_path)
+        assert apelido_de("meu relatorio do mes", tmp_path)["skill_id"] == "files.read"
+        resultado = await atender("meu relatorio do mes com path=documentos/relatorio.pdf", registry=reg, raiz=tmp_path, consultar_web=False)
+        assert resultado["via"] == "apelido"
+        assert resultado["acao"] == "executado"
+        assert reg.execucoes[-1][0] == "files.read"
+    asyncio.run(run())
+
+
+def test_apelido_com_pedido_sem_parametro_pede_o_campo(tmp_path):
+    async def run():
+        reg = registro(SKILL_ARQUIVO, raiz=tmp_path)
+        ensinar("abre meu arquivo", "files.read", tmp_path)
+        resultado = await atender("abre meu arquivo", registry=reg, raiz=tmp_path, consultar_web=False)
+        assert resultado["acao"] == "faltando"
+        assert "Você me ensinou" in resultado["resposta"]
+    asyncio.run(run())
+
+
+def test_esquecer_remove_apelido_e_resposta(tmp_path):
+    ensinar("pedido qualquer", "files.read", tmp_path)
+    guardar_resposta("pedido qualquer", "texto", [], tmp_path)
+    assert esquecer("pedido qualquer", tmp_path) == 2
+    assert apelido_de("pedido qualquer", tmp_path) is None
+    assert resposta_guardada("pedido qualquer", tmp_path) is None
+
+
+def test_fila_guarda_o_que_nao_foi_resolvido(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        await atender("como fazer pão caseiro", registry=reg, raiz=tmp_path, consultar_web=False)
+        fila = listar_fila(tmp_path)
+        assert len(fila) == 1
+        assert fila[0]["pedido"] == "como fazer pão caseiro"
+        assert fila[0]["tentativas"] == 1
+    asyncio.run(run())
+
+
+def test_fila_conta_tentativas_sem_duplicar(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        await atender("como fazer pão caseiro", registry=reg, raiz=tmp_path, consultar_web=False)
+        await atender("como fazer pão caseiro", registry=reg, raiz=tmp_path, consultar_web=False)
+        fila = listar_fila(tmp_path)
+        assert len(fila) == 1
+        assert fila[0]["tentativas"] == 2
+    asyncio.run(run())
+
+
+def test_remover_falha(tmp_path):
+    registro_falha = registrar_falha("pedido perdido", "motivo", tmp_path)
+    assert remover_falha(registro_falha["id"], tmp_path) is True
+    assert remover_falha(registro_falha["id"], tmp_path) is False
+    assert listar_fila(tmp_path) == []
+
+
+def test_resposta_guardada_volta_sem_pesquisar(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        guardar_resposta("quem inventou o pão", "Foi um padeiro.\n\n(fonte: https://exemplo.com)", [{"titulo": "Pão", "url": "https://exemplo.com", "lida": True}], tmp_path)
+        resultado = await atender("quem inventou o pão", registry=reg, raiz=tmp_path, consultar_web=False)
+        assert resultado["acao"] == "guardado"
+        assert "padeiro" in resultado["resposta"]
+        assert resultado["fontes"][0]["url"] == "https://exemplo.com"
+        assert "esqueça" in resultado["resposta"]
+    asyncio.run(run())
+
+
+def test_forcar_web_guarda_a_resposta(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        resultado = await atender(
+            "como fazer pão",
+            registry=reg,
+            raiz=tmp_path,
+            autorizacao="t",
+            buscar=busca_falsa,
+            ler=leitura_falsa,
+            forcar_web=True,
+        )
+        assert resultado["acao"] == "web"
+        assert resposta_guardada("como fazer pão", tmp_path) is not None
+        assert "sove por dez minutos" in resultado["resposta"]
+    asyncio.run(run())
+
+
+def test_historico_registra_o_que_foi_feito(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        await atender("analisar texto: a vida é bela", registry=reg, raiz=tmp_path, consultar_web=False)
+        historico = listar_historico(tmp_path)
+        assert historico[0]["acao"] == "executado"
+        assert historico[0]["skill"] == "text.analyze"
+        assert "a vida é bela" in historico[0]["pedido"]
+    asyncio.run(run())
+
+
+def test_historico_nao_cresce_sem_limite(tmp_path):
+    for indice in range(5):
+        registrar_execucao(f"pedido {indice}", acao="executado", skill="x.y", confianca=1.0, resposta="ok", raiz=tmp_path)
+    assert len(listar_historico(tmp_path, limite=3)) == 3
+
+
+def test_painel_junta_tudo(tmp_path):
+    criar_skill(_RECEITAS_POR_ID["somar"], tmp_path)
+    registrar_falha("pedido perdido", "motivo", tmp_path)
+    dados = painel(tmp_path)
+    assert len(dados["locais"]) == 1
+    assert len(dados["receitas"]) == len(RECEITAS)
+    assert len(dados["fila"]) == 1
+    assert dados["apelidos"] == []
+    assert dados["historico"] == []
+
+
+def test_remover_local(tmp_path):
+    skill, _ = criar_skill(_RECEITAS_POR_ID["somar"], tmp_path)
+    assert remover_local(skill.id, tmp_path) is True
+    assert remover_local(skill.id, tmp_path) is False
+    assert carregar_locais(tmp_path) == []
+
+
+def test_parametros_explicitos_converte_pelo_tipo():
+    schema = {
+        "properties": {
+            "texto": {"type": "string"},
+            "quantidade": {"type": "integer"},
+            "taxa": {"type": "number"},
+            "ativo": {"type": "boolean"},
+        }
+    }
+    valores = parametros_explicitos("texto=olá mundo, quantidade=12, taxa=3,5, ativo=sim", schema)
+    assert valores == {"texto": "olá mundo", "quantidade": 12, "taxa": 3.5, "ativo": True}
+
+
+def test_parametros_explicitos_ignora_campo_desconhecido():
+    assert parametros_explicitos("inventado=1", {"properties": {"texto": {"type": "string"}}}) == {}
+
+
+def test_campo_explicito_cobre_skill_sem_texto(tmp_path):
+    async def run():
+        reg = registro(SKILL_ARQUIVO, raiz=tmp_path)
+        resultado = await atender("ler arquivo path=documentos/relatorio.pdf", registry=reg, raiz=tmp_path, consultar_web=False)
+        assert resultado["acao"] == "executado"
+        assert resultado["parametros"] == {"path": "documentos/relatorio.pdf"}
+    asyncio.run(run())
+
+
+def test_ensinar_por_nome_aceita_id_e_nome(tmp_path):
+    reg = registro(SKILL_TEXTO, raiz=tmp_path)
+    ensinar_por_nome("resume isso", "text.analyze", tmp_path, reg)
+    assert apelido_de("resume isso", tmp_path)["skill_id"] == "text.analyze"
+    ensinar_por_nome("resume aquilo", "Analisar texto", tmp_path, reg)
+    assert apelido_de("resume aquilo", tmp_path)["skill_id"] == "text.analyze"
+
+
+def test_ensinar_por_nome_recusa_ambiguo(tmp_path):
+    reg = registro(SKILL_TEXTO, SKILL_ARQUIVO, raiz=tmp_path)
+    with pytest.raises(AgenteError):
+        ensinar_por_nome("qualquer coisa", "zzz", tmp_path, reg)
+
+
+def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
+    for nome in ("apelidos.json", "fila.json", "respostas.json", "historico.json"):
+        arquivo = tmp_path / "agente-local" / nome
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.write_text("não é json", encoding="utf-8")
+    assert listar_fila(tmp_path) == []
+    assert listar_historico(tmp_path) == []
+    assert apelido_de("qualquer", tmp_path) is None
+    assert resposta_guardada("qualquer", tmp_path) is None
+
+
+# ------------------------------------- cobertura: as 209 skills, uma por uma
+
+def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
+    if spec.get("enum"):
+        return spec["enum"][0]
+    tipo = spec.get("type")
+    chave = nome.lower()
+    if tipo == "integer":
+        return int(spec.get("minimum") if spec.get("minimum") is not None else 1)
+    if tipo == "number":
+        return float(spec.get("minimum") if spec.get("minimum") is not None else 1)
+    if tipo == "boolean":
+        return True
+    if tipo == "array":
+        return ["exemplo"]
+    if "email" in chave:
+        return "ana@exemplo.com"
+    if "url" in chave or "link" in chave:
+        return "https://exemplo.com/pagina"
+    if "data" in chave or "date" in chave:
+        return "2026-01-31"
+    if "path" in chave or "arquivo" in chave or "caminho" in chave:
+        return "documentos/relatorio.pdf"
+    if "sha" in chave or "{64}" in str(spec.get("pattern") or ""):
+        return "a" * 64
+    minimo = int(spec.get("minLength") or 1)
+    maximo = int(spec.get("maxLength") or 400)
+    alvo = max(3, min(minimo, maximo))
+    base = "exemplo de texto"
+    texto = base
+    while len(texto) < alvo:
+        texto += " " + base
+    texto = texto[:alvo]
+    # espaço no fim é removido pela validação, então completa com uma letra
+    return texto[:-1] + "x" if texto.endswith(" ") else texto
+
+
+def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    propriedades = schema.get("properties") or {}
+    return {
+        campo: _valor_de_exemplo(campo, propriedades.get(campo) or {})
+        for campo in schema.get("required") or []
+    }
+
+
+def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
+    """A promessa de cobertura: qualquer uma das 209 skills tem como ser rodada.
+
+    Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
+    mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
+    executar nada.
+    """
+    from server.skill_registry import build_registry
+
+    reg = build_registry(tmp_path)
+    problemas: list[tuple[str, str]] = []
+    for skill in reg.list():
+        schema = skill["inputSchema"] or {}
+        valores = _valores_para_schema(schema)
+        consulta = "skill " + skill["id"] + " " + ", ".join(f"{campo}={valor}" for campo, valor in valores.items())
+        lidos = parametros_explicitos(consulta, schema)
+        faltando = [campo for campo in schema.get("required") or [] if campo not in lidos]
+        if faltando:
+            problemas.append((skill["id"], "não leu: " + ", ".join(faltando)))
+            continue
+        try:
+            reg.get(skill["id"]).input_model.model_validate(lidos)
+        except Exception as exc:  # schema recusou o exemplo
+            problemas.append((skill["id"], str(exc).splitlines()[0][:120]))
+    assert problemas == [], problemas[:10]

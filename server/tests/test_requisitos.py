@@ -1,4 +1,4 @@
-"""Testes das listas de dependências (0.39.0).
+"""Testes das listas de dependências (0.40.0).
 
 O PyYAML não publica wheel para Python 3.15 no Windows (conferido no PyPI:
 6.0 a 6.0.3, nenhuma `cp315`), e ele entra pela porta do `uvicorn[standard]`.

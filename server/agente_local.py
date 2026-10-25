@@ -417,6 +417,54 @@ def extrair_parametros(consulta: str, schema: dict[str, Any]) -> tuple[dict[str,
     return valores, faltando
 
 
+# "campo=valor" separado por vírgula ou ponto e vírgula. A vírgula só separa
+# quando o que vem depois é outro campo — assim "taxa=3,5" continua um número.
+_RE_PAR = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", re.DOTALL)
+_RE_SEPARADOR = re.compile(r"[,;]\s*(?=[A-Za-z_][A-Za-z0-9_]*\s*=)")
+
+
+def _converter_explicito(bruto: str, spec: dict[str, Any]) -> Any:
+    texto = bruto.strip().strip('"').strip("'")
+    if texto.startswith(("{", "[")):
+        try:
+            return json.loads(texto)
+        except ValueError:
+            pass
+    tipo = spec.get("type")
+    if tipo == "integer":
+        try:
+            return int(float(texto.replace(",", ".")))
+        except ValueError:
+            return texto
+    if tipo == "number":
+        try:
+            return float(texto.replace(",", "."))
+        except ValueError:
+            return texto
+    if tipo == "boolean":
+        return normalizar(texto) in {"sim", "true", "1", "verdadeiro", "ativo", "ligado"}
+    return texto
+
+
+def parametros_explicitos(consulta: str, schema: dict[str, Any]) -> dict[str, Any]:
+    """Lê `campo=valor` do pedido. É a rede de segurança: cobre qualquer skill.
+
+    Com isso o usuário sempre consegue preencher o que o agente não adivinhou,
+    sem formulário e sem IA — inclusive campo de tipo composto, escrito em JSON.
+    """
+    propriedades = schema.get("properties") or {}
+    valores: dict[str, Any] = {}
+    for parte in _RE_SEPARADOR.split(consulta or ""):
+        achado = _RE_PAR.search(parte.strip())
+        if not achado:
+            continue
+        chave, bruto = achado.group(1), achado.group(2).strip()
+        if chave not in propriedades:
+            continue
+        valores[chave] = _converter_explicito(bruto, propriedades[chave] or {})
+    return valores
+
+
 def _titulo_do_campo(nome: str, schema: dict[str, Any]) -> str:
     spec = (schema.get("properties") or {}).get(nome) or {}
     return str(spec.get("title") or nome)
@@ -804,6 +852,15 @@ def criar_skill(receita: Receita, raiz: Path) -> tuple[SkillLocal, bool]:
     return skill, True
 
 
+def remover_local(skill_id: str, raiz: Path) -> bool:
+    locais = carregar_locais(raiz)
+    restantes = [local for local in locais if local.id != skill_id]
+    if len(restantes) == len(locais):
+        return False
+    salvar_locais(raiz, restantes)
+    return True
+
+
 def entrada_de_local(local: SkillLocal) -> Entrada:
     receita = _RECEITAS_POR_ID.get(local.receita)
     fortes = set(palavras(local.nome)) | set(palavras(local.id.replace(".", " ").replace("-", " ")))
@@ -972,6 +1029,207 @@ async def procurar_na_web(
     }
 
 
+
+# ------------------------------------------------ memória do agente (arquivos)
+
+ARQUIVO_APELIDOS = Path("agente-local") / "apelidos.json"
+ARQUIVO_FILA = Path("agente-local") / "fila.json"
+ARQUIVO_RESPOSTAS = Path("agente-local") / "respostas.json"
+ARQUIVO_HISTORICO = Path("agente-local") / "historico.json"
+LIMITE_HISTORICO = 200
+LIMITE_FILA = 200
+
+
+def _ler_lista(arquivo: Path) -> list[dict[str, Any]]:
+    try:
+        bruto = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    itens = bruto.get("itens") if isinstance(bruto, dict) else bruto
+    return [item for item in itens or [] if isinstance(item, dict)]
+
+
+def _gravar_lista(arquivo: Path, itens: list[dict[str, Any]]) -> None:
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(json.dumps({"itens": itens}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def chave_do_pedido(pedido: str) -> str:
+    """Forma comparável do pedido: sem acento, sem pontuação, espaço único."""
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", normalizar(pedido))).strip()
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# --- apelidos: "quando eu pedir assim, use esta skill" -----------------------
+
+def ensinar(pedido: str, skill_id: str, raiz: Path, origem: str = "correcao") -> dict[str, Any]:
+    """Guarda a correlação pedido → skill. Ensina de novo substitui a antiga."""
+    chave = chave_do_pedido(pedido)
+    if not chave or not skill_id:
+        raise AgenteError("Para ensinar, mande o pedido e a skill.")
+    arquivo = Path(raiz) / ARQUIVO_APELIDOS
+    itens = [item for item in _ler_lista(arquivo) if chave_do_pedido(str(item.get("pedido", ""))) != chave]
+    registro = {"pedido": pedido.strip(), "chave": chave, "skill_id": skill_id, "origem": origem, "criado_em": _agora()}
+    itens.append(registro)
+    _gravar_lista(arquivo, itens[-LIMITE_HISTORICO:])
+    return registro
+
+
+def apelido_de(pedido: str, raiz: Path) -> dict[str, Any] | None:
+    """Procura o apelido exato; se não houver, o mais longo que abre o pedido.
+
+    Isso permite ensinar "meu relatorio do mes" e depois pedir
+    "meu relatorio do mes com path=documentos/x.pdf".
+    """
+    chave = chave_do_pedido(pedido)
+    if not chave:
+        return None
+    itens = _ler_lista(Path(raiz) / ARQUIVO_APELIDOS)
+    for item in itens:
+        if item.get("chave") == chave:
+            return item
+    candidatos = [
+        item
+        for item in itens
+        if item.get("chave") and chave.startswith(str(item["chave"]) + " ")
+    ]
+    if not candidatos:
+        return None
+    return max(candidatos, key=lambda item: len(str(item["chave"])))
+
+
+def listar_apelidos(raiz: Path) -> list[dict[str, Any]]:
+    return _ler_lista(Path(raiz) / ARQUIVO_APELIDOS)
+
+
+def esquecer(pedido: str, raiz: Path) -> int:
+    """Remove o apelido e a resposta guardada daquele pedido. Devolve quantos."""
+    chave = chave_do_pedido(pedido)
+    removidos = 0
+    for arquivo, campo in ((ARQUIVO_APELIDOS, "chave"), (ARQUIVO_RESPOSTAS, "chave")):
+        caminho = Path(raiz) / arquivo
+        itens = _ler_lista(caminho)
+        restantes = [item for item in itens if item.get(campo) != chave]
+        removidos += len(itens) - len(restantes)
+        if len(restantes) != len(itens):
+            _gravar_lista(caminho, restantes)
+    return removidos
+
+
+# --- respostas guardadas da web ---------------------------------------------
+
+def guardar_resposta(pedido: str, texto: str, fontes: list[dict[str, Any]], raiz: Path) -> dict[str, Any]:
+    chave = chave_do_pedido(pedido)
+    arquivo = Path(raiz) / ARQUIVO_RESPOSTAS
+    itens = [item for item in _ler_lista(arquivo) if item.get("chave") != chave]
+    registro = {"pedido": pedido.strip(), "chave": chave, "texto": texto, "fontes": fontes, "criado_em": _agora()}
+    itens.append(registro)
+    _gravar_lista(arquivo, itens[-LIMITE_HISTORICO:])
+    return registro
+
+
+def resposta_guardada(pedido: str, raiz: Path) -> dict[str, Any] | None:
+    chave = chave_do_pedido(pedido)
+    if not chave:
+        return None
+    for item in _ler_lista(Path(raiz) / ARQUIVO_RESPOSTAS):
+        if item.get("chave") == chave:
+            return item
+    return None
+
+
+# --- fila do que ele não soube fazer ----------------------------------------
+
+def registrar_falha(pedido: str, motivo: str, raiz: Path) -> dict[str, Any]:
+    """Todo pedido sem solução fica aqui, com data — nada some."""
+    chave = chave_do_pedido(pedido)
+    arquivo = Path(raiz) / ARQUIVO_FILA
+    itens = _ler_lista(arquivo)
+    for item in itens:
+        if item.get("chave") == chave:
+            item["tentativas"] = int(item.get("tentativas", 1)) + 1
+            item["motivo"] = motivo
+            item["visto_em"] = _agora()
+            _gravar_lista(arquivo, itens[-LIMITE_FILA:])
+            return item
+    registro = {
+        "id": f"falha-{len(itens) + 1:04d}",
+        "pedido": pedido.strip(),
+        "chave": chave,
+        "motivo": motivo,
+        "tentativas": 1,
+        "criado_em": _agora(),
+        "visto_em": _agora(),
+    }
+    itens.append(registro)
+    _gravar_lista(arquivo, itens[-LIMITE_FILA:])
+    return registro
+
+
+def listar_fila(raiz: Path) -> list[dict[str, Any]]:
+    itens = _ler_lista(Path(raiz) / ARQUIVO_FILA)
+    return sorted(itens, key=lambda item: str(item.get("visto_em", "")), reverse=True)
+
+
+def remover_falha(falha_id: str, raiz: Path) -> bool:
+    arquivo = Path(raiz) / ARQUIVO_FILA
+    itens = _ler_lista(arquivo)
+    restantes = [item for item in itens if item.get("id") != falha_id]
+    if len(restantes) == len(itens):
+        return False
+    _gravar_lista(arquivo, restantes)
+    return True
+
+
+# --- histórico do que ele fez ------------------------------------------------
+
+def registrar_execucao(
+    pedido: str,
+    *,
+    acao: str,
+    skill: str | None,
+    confianca: float,
+    resposta: str,
+    raiz: Path,
+) -> dict[str, Any]:
+    arquivo = Path(raiz) / ARQUIVO_HISTORICO
+    itens = _ler_lista(arquivo)
+    registro = {
+        "quando": _agora(),
+        "pedido": pedido.strip()[:200],
+        "acao": acao,
+        "skill": skill,
+        "confianca": confianca,
+        "resumo": (resposta or "")[:240],
+    }
+    itens.append(registro)
+    _gravar_lista(arquivo, itens[-LIMITE_HISTORICO:])
+    return registro
+
+
+def listar_historico(raiz: Path, limite: int = 50) -> list[dict[str, Any]]:
+    itens = _ler_lista(Path(raiz) / ARQUIVO_HISTORICO)
+    return list(reversed(itens))[:limite]
+
+
+def painel(raiz: Path) -> dict[str, Any]:
+    """Tudo que a página do agente mostra, numa chamada só."""
+    return {
+        "locais": [local.publica() for local in carregar_locais(raiz)],
+        "receitas": [receita.publica() for receita in RECEITAS],
+        "apelidos": list(reversed(listar_apelidos(raiz))),
+        "fila": listar_fila(raiz),
+        "historico": listar_historico(raiz),
+        "respostas": [
+            {"pedido": item.get("pedido"), "criado_em": item.get("criado_em"), "fontes": item.get("fontes", [])}
+            for item in reversed(_ler_lista(Path(raiz) / ARQUIVO_RESPOSTAS))
+        ],
+    }
+
+
 # ----------------------------------------------------------- orquestração
 
 def _resultado_base(pedido: str) -> dict[str, Any]:
@@ -979,6 +1237,7 @@ def _resultado_base(pedido: str) -> dict[str, Any]:
         "ok": True,
         "pedido": pedido,
         "acao": "nada",
+        "via": "nada",
         "skill": None,
         "confianca": 0.0,
         "parametros": {},
@@ -1001,11 +1260,12 @@ async def _executar_skill(
     *,
     registry: Any,
 ) -> dict[str, Any]:
+    explicitos = parametros_explicitos(consulta, entrada.schema)
     if entrada.receita:
         receita = _RECEITAS_POR_ID.get(entrada.receita)
         if receita is None:
             return {"parametros": {}, "faltando": [], "resposta": None, "erro": "receita desconhecida"}
-        texto = texto_livre(consulta)
+        texto = str(explicitos.get(receita.campo) or texto_livre(consulta))
         if receita.tipo == "numeros" and not _numeros(texto):
             texto = ""
         if not texto:
@@ -1013,6 +1273,8 @@ async def _executar_skill(
         resultado = executar_receita(receita, texto)
         return {"parametros": {receita.campo: texto}, "faltando": [], "resposta": str(resultado.get("resultado") or "")}
     parametros, faltando = extrair_parametros(consulta, entrada.schema)
+    parametros.update(explicitos)
+    faltando = [campo for campo in (entrada.schema.get("required") or []) if campo not in parametros]
     if faltando:
         return {"parametros": parametros, "faltando": faltando, "resposta": None}
     try:
@@ -1027,7 +1289,7 @@ def _pedido_do_campo(campo: str, entrada: Entrada, exemplo: str) -> str:
     return f"Falta o campo “{titulo}”. Exemplo: {exemplo}"
 
 
-async def atender(
+async def _resolver(
     pedido: str,
     *,
     registry: Any,
@@ -1038,13 +1300,51 @@ async def atender(
     buscar: Callable[..., dict[str, Any]] | None = None,
     ler: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Resolve o pedido sem IA: skill → receita → web → explicação honesta."""
+    """Resolve o pedido sem IA: apelido → guardada → skill → receita → web."""
     termo = (pedido or "").strip()
     if len(termo) < 3:
         raise AgenteError("Escreva o pedido com pelo menos 3 caracteres.")
 
     base = _resultado_base(termo)
     locais = carregar_locais(raiz)
+
+    # 0a. Resposta que já foi buscada na web e guardada numa correção.
+    guardada = resposta_guardada(termo, raiz)
+    if guardada is not None:
+        base["acao"] = "guardado"
+        base["via"] = "guardado"
+        base["resposta"] = (
+            f"{guardada.get('texto', '')}\n\n"
+            f"(resposta guardada em {str(guardada.get('criado_em', ''))[:10]} — diga “esqueça {termo}” para buscar de novo)"
+        )
+        base["fontes"] = [fonte for fonte in guardada.get("fontes") or [] if isinstance(fonte, dict)]
+        return base
+
+    # 0b. Apelido ensinado: "quando eu pedir assim, use esta skill".
+    ensinado = apelido_de(termo, raiz)
+    if ensinado is not None:
+        alvo = str(ensinado.get("skill_id") or "")
+        disponiveis = indexar(registry.list()) + [entrada_de_local(local) for local in locais]
+        escolhida = next((item for item in disponiveis if item.skill_id == alvo), None)
+        if escolhida is not None:
+            tentativa = await _executar_skill(escolhida, termo, registry=registry)
+            base["skill"] = escolhida.resumo()
+            base["parametros"] = tentativa.get("parametros", {})
+            base["via"] = "apelido"
+            base["confianca"] = 1.0
+            if tentativa.get("resposta"):
+                base["acao"] = "executado"
+                base["resposta"] = str(tentativa["resposta"])
+                return base
+            if tentativa.get("faltando"):
+                base["acao"] = "faltando"
+                base["faltando"] = tentativa["faltando"]
+                base["resposta"] = "Você me ensinou a usar “{}”, mas {}.".format(
+                    escolhida.nome,
+                    " e ".join(_pedido_do_campo(campo, escolhida, "veja o formulário da skill") for campo in tentativa["faltando"]),
+                )
+                return base
+
     receita = achar_receita(termo) if criar else None
 
     # 0. Receita que já virou skill local: executa direto, sem passar pelo
@@ -1079,6 +1379,7 @@ async def atender(
         base["skill"] = principal["entrada"].resumo()
         if tentativa.get("resposta"):
             base["acao"] = "executado"
+            base["via"] = "skill"
             prefixo = f"Usei a skill local “{principal['entrada'].nome}” ({principal['entrada'].skill_id}).\n\n" if principal["entrada"].local else ""
             base["resposta"] = prefixo + tentativa["resposta"]
             return base
@@ -1134,6 +1435,7 @@ async def atender(
             return base
         resultado = executar_receita(receita, entrada_texto)
         base["acao"] = "criado"
+        base["via"] = "receita"
         base["parametros"] = {receita.campo: entrada_texto}
         base["confianca"] = 1.0
         base["resposta"] = f"{'Criei' if criada else 'Usei'} a skill local “{skill.nome}” ({skill.id}).\n\n{resultado.get('resultado', '')}"
@@ -1143,6 +1445,7 @@ async def atender(
     if consultar_web:
         busca_web = await procurar_na_web(termo, autorizacao=autorizacao, buscar=buscar, ler=ler)
         base["acao"] = busca_web["acao"]
+        base["via"] = "web" if busca_web["acao"] == "web" else "nada"
         base["resposta"] = busca_web["resposta"]
         base["fontes"] = busca_web["fontes"]
         base["avisos"].extend(busca_web["avisos"])
@@ -1158,3 +1461,99 @@ async def atender(
         "Diga “ajuda” para ver os comandos que funcionam sem modelo."
     )
     return base
+
+
+async def pesquisar_e_guardar(
+    pedido: str,
+    *,
+    raiz: Path,
+    autorizacao: str,
+    buscar: Callable[..., dict[str, Any]] | None = None,
+    ler: Callable[..., dict[str, Any]] | None = None,
+    limite: int = 6,
+) -> dict[str, Any]:
+    """Busca na web sem modelo e guarda a resposta para o mesmo pedido."""
+    resultado = await procurar_na_web(pedido, autorizacao=autorizacao, buscar=buscar, ler=ler, limite=limite)
+    if resultado["acao"] == "web":
+        guardar_resposta(pedido, resultado["resposta"], resultado["fontes"], raiz)
+    return resultado
+
+
+async def atender(
+    pedido: str,
+    *,
+    registry: Any,
+    raiz: Path,
+    autorizacao: str = "",
+    criar: bool = True,
+    consultar_web: bool = True,
+    buscar: Callable[..., dict[str, Any]] | None = None,
+    ler: Callable[..., dict[str, Any]] | None = None,
+    forcar_web: bool = False,
+) -> dict[str, Any]:
+    """Resolve o pedido sem IA e **registra** o que fez.
+
+    A resolução fica em `_resolver`; aqui ficam as três coisas que o usuário
+    não pode perder de vista: nada some (fila), tudo fica no histórico e a
+    correção pela web vale para as próximas vezes.
+    """
+    termo = (pedido or "").strip()
+    if len(termo) < 3:
+        raise AgenteError("Escreva o pedido com pelo menos 3 caracteres.")
+
+    if forcar_web:
+        base = _resultado_base(termo)
+        base["via"] = "web"
+        resultado = await pesquisar_e_guardar(termo, raiz=raiz, autorizacao=autorizacao, buscar=buscar, ler=ler)
+        base["acao"] = resultado["acao"]
+        base["resposta"] = resultado["resposta"]
+        base["fontes"] = resultado["fontes"]
+        base["avisos"] = list(resultado["avisos"])
+        if resultado["acao"] == "web":
+            registrar_execucao(termo, acao="web", skill=None, confianca=0.0, resposta=resultado["resposta"], raiz=raiz)
+        else:
+            registrar_falha(termo, resultado["resposta"][:200], raiz)
+        return base
+
+    resultado = await _resolver(
+        termo,
+        registry=registry,
+        raiz=raiz,
+        autorizacao=autorizacao,
+        criar=criar,
+        consultar_web=consultar_web,
+        buscar=buscar,
+        ler=ler,
+    )
+    if resultado["acao"] in {"nada", "sugerir"}:
+        registrar_falha(termo, (resultado.get("resposta") or "")[:200], raiz)
+    else:
+        registrar_execucao(
+            termo,
+            acao=resultado["acao"],
+            skill=(resultado.get("skill") or {}).get("id"),
+            confianca=float(resultado.get("confianca") or 0.0),
+            resposta=resultado.get("resposta") or "",
+            raiz=raiz,
+        )
+    return resultado
+
+
+def ensinar_por_nome(pedido: str, alvo: str, raiz: Path, registry: Any, origem: str = "correcao") -> dict[str, Any]:
+    """Aceita id, nome exato ou pedaço do nome e grava o apelido."""
+    alvo = (alvo or "").strip()
+    if not alvo:
+        raise AgenteError("Diga qual skill deve responder por esse pedido.")
+    disponiveis = indexar(registry.list()) + [entrada_de_local(local) for local in carregar_locais(raiz)]
+    por_id = next((item for item in disponiveis if item.skill_id.lower() == alvo.lower()), None)
+    if por_id is None:
+        alvo_normal = normalizar(alvo)
+        por_nome = next((item for item in disponiveis if normalizar(item.nome) == alvo_normal), None)
+        if por_nome is None:
+            candidatos = [item for item in disponiveis if alvo_normal in normalizar(item.nome) or alvo_normal in item.skill_id.lower()]
+            if len(candidatos) != 1:
+                nomes = ", ".join(item.skill_id for item in candidatos[:5]) or "nenhuma"
+                raise AgenteError(f"Não achei uma skill única com “{alvo}”. Candidatas: {nomes}.")
+            por_nome = candidatos[0]
+        por_id = por_nome
+    return ensinar(pedido, por_id.skill_id, raiz, origem)

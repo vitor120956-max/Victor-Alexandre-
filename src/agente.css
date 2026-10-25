@@ -1,0 +1,240 @@
+.agente-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.agente-page .girando {
+  animation: agente-girar 1s linear infinite;
+}
+
+@keyframes agente-girar {
+  to { transform: rotate(360deg); }
+}
+
+.agente-erro {
+  padding: 14px 18px;
+  border-left: 3px solid var(--danger, #c2410c);
+  color: var(--text-soft, #b3b3b3);
+  font-size: 13px;
+}
+
+.agente-secao {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agente-titulo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.agente-titulo h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.agente-titulo p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-soft, #9a9a9a);
+  max-width: 70ch;
+}
+
+.agente-contagem {
+  margin-left: auto;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #2a2a2a);
+  color: var(--text-soft, #b3b3b3);
+}
+
+.agente-vazio {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-soft, #8a8a8a);
+}
+
+.agente-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agente-lista > li {
+  border: 1px solid var(--line, #262626);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.agente-item-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agente-item-topo strong {
+  font-size: 13.5px;
+}
+
+.agente-item-topo code,
+.agente-historico code {
+  font-family: var(--mono, monospace);
+  font-size: 11.5px;
+  color: var(--accent, #d5ff5f);
+}
+
+.agente-motivo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft, #9a9a9a);
+  overflow-wrap: anywhere;
+}
+
+.agente-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agente-acoes input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #2a2a2a);
+  background: var(--surface, #121212);
+  color: inherit;
+  font-size: 12.5px;
+}
+
+.agente-acoes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #2a2a2a);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agente-acoes button:hover {
+  border-color: var(--accent, #d5ff5f);
+  color: var(--accent, #d5ff5f);
+}
+
+.agente-acoes .agente-remover {
+  padding: 7px;
+  color: var(--text-soft, #9a9a9a);
+}
+
+.agente-tentativas {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-soft, #8a8a8a);
+  margin-left: auto;
+}
+
+.agente-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 18px;
+}
+
+.agente-historico {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.agente-historico li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line, #1f1f1f);
+  flex-wrap: wrap;
+}
+
+.agente-historico li:last-child {
+  border-bottom: none;
+}
+
+.agente-historico strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.agente-etiqueta {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #2a2a2a);
+  color: var(--text-soft, #b3b3b3);
+  white-space: nowrap;
+}
+
+.agente-etiqueta.acao-executado { border-color: #4d7c0f; color: #a3e635; }
+.agente-etiqueta.acao-criado { border-color: #0e7490; color: #67e8f9; }
+.agente-etiqueta.acao-guardado { border-color: #7c3aed; color: #c4b5fd; }
+.agente-etiqueta.acao-web { border-color: #0369a1; color: #7dd3fc; }
+.agente-etiqueta.acao-faltando,
+.agente-etiqueta.acao-sugerir { border-color: #b45309; color: #fcd34d; }
+.agente-etiqueta.acao-nada { border-color: #b91c1c; color: #fca5a5; }
+
+.agente-receitas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.agente-receitas article {
+  border: 1px solid var(--line, #262626);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agente-receitas strong {
+  font-size: 13px;
+}
+
+.agente-receitas p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft, #9a9a9a);
+}
+
+.agente-receitas code {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--accent, #d5ff5f);
+  overflow-wrap: anywhere;
+}

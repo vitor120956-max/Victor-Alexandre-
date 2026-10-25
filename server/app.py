@@ -18,7 +18,18 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .agente_local import RECEITAS, AgenteError, atender as agente_atender, carregar_locais
+from .agente_local import (
+    RECEITAS,
+    AgenteError,
+    atender as agente_atender,
+    carregar_locais,
+    ensinar_por_nome,
+    esquecer,
+    painel as agente_painel,
+    pesquisar_e_guardar,
+    remover_falha,
+    remover_local,
+)
 from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
@@ -48,6 +59,20 @@ class AgenteRequest(BaseModel):
     autorizacao: str = Field(default="")
     criar: bool = True
     consultar_web: bool = Field(default=True, alias="consultarWeb")
+
+
+class EnsinarRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    pedido: str = Field(min_length=3, max_length=400)
+    alvo: str = Field(min_length=2, max_length=120)
+
+
+class PesquisarRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    pedido: str = Field(min_length=3, max_length=400)
+    autorizacao: str = Field(default="")
 
 
 class ExecuteRequest(BaseModel):
@@ -175,7 +200,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.39.0",
+        version="0.40.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -210,7 +235,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.39.0",
+            "version": "0.40.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
@@ -423,6 +448,44 @@ def create_app(
                 content={"ok": False, "error": {"code": "AGENTE_RECUSADO", "message": str(exc)}},
             )
         return {"ok": True, "result": resultado}
+
+    @application.get("/api/agente/painel")
+    def agente_painel_rota() -> dict[str, Any]:
+        return {"ok": True, "result": agente_painel(pasta_agente)}
+
+    @application.post("/api/agente/ensinar")
+    def agente_ensinar(payload: EnsinarRequest) -> dict[str, Any]:
+        try:
+            registro = ensinar_por_nome(payload.pedido, payload.alvo, pasta_agente, skill_registry)
+        except AgenteError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "AGENTE_RECUSADO", "message": str(exc)}},
+            )
+        return {"ok": True, "result": registro}
+
+    @application.delete("/api/agente/apelidos")
+    def agente_esquecer(pedido: str = Query(min_length=3, max_length=400)) -> dict[str, Any]:
+        return {"ok": True, "result": {"removidos": esquecer(pedido, pasta_agente)}}
+
+    @application.post("/api/agente/pesquisar")
+    async def agente_pesquisar(payload: PesquisarRequest) -> dict[str, Any]:
+        resultado = await pesquisar_e_guardar(payload.pedido, raiz=pasta_agente, autorizacao=payload.autorizacao)
+        return {"ok": True, "result": resultado}
+
+    @application.delete("/api/agente/fila/{falha_id}")
+    def agente_remover_falha(falha_id: str) -> dict[str, Any]:
+        return {"ok": True, "result": {"removida": remover_falha(falha_id, pasta_agente)}}
+
+    @application.delete("/api/agente/skills/{skill_id}")
+    def agente_remover_skill(skill_id: str) -> dict[str, Any]:
+        removida = remover_local(skill_id, pasta_agente)
+        if not removida:
+            return JSONResponse(
+                status_code=404,
+                content={"ok": False, "error": {"code": "AGENTE_SEM_SKILL", "message": "Skill local não encontrada."}},
+            )
+        return {"ok": True, "result": {"removida": True, "id": skill_id}}
 
     @application.get("/api/agente/skills")
     def agente_skills() -> dict[str, Any]:

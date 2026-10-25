@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarSkillsLocais, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
 import type { AgenteResultado, AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
@@ -75,6 +75,7 @@ interface AppContextValue {
   deleteTask: (id: string) => void;
   addNote: (content: string, tag?: string) => void;
   deleteNote: (id: string) => void;
+  hostToken: string;
   sendMessage: (text: string) => void;
   clearMessages: () => void;
   updatePreferences: (patch: Partial<Preferences>) => void;
@@ -126,6 +127,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [processing, setProcessing] = useState<'ai' | 'python' | null>(null);
   // Token de host fica só na memória desta aba: não é persistido e não entra no backup.
   const [hostToken, setHostToken] = useState('');
+  // Último pedido que o agente não resolveu: é ele que a correção ensina.
+  const ultimoFalho = useRef('');
   const completionRef = useRef('');
 
   const dismissToast = useCallback((id: string) => {
@@ -436,8 +439,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         void requestAgenteLocal(text, hostToken)
           .then((resultado) => {
             setProcessing(null);
+            if (resultado.acao === 'nada' || resultado.acao === 'sugerir') {
+              ultimoFalho.current = text;
+            }
             if (resultado.resposta.trim()) {
-              appendJarvisMessage(montarRespostaAgente(resultado), 'python');
+              const dica = resultado.acao === 'nada' || resultado.acao === 'sugerir'
+                ? '\n\nSe eu errei, diga “não é essa, é a skill <id>” para eu aprender, ou “procure na web sobre isso”.'
+                : '';
+              appendJarvisMessage(montarRespostaAgente(resultado) + dica, 'python');
             } else {
               appendJarvisMessage('Não achei skill, receita nem web para este pedido. Diga “ajuda” para ver os comandos que funcionam sem modelo.');
             }
@@ -742,6 +751,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .finally(() => setProcessing(null));
         return;
       }
+      case 'agente:corrigir': {
+        const pedidoFalho = ultimoFalho.current;
+        if (!pedidoFalho) {
+          reply = 'Ainda não tenho um pedido para corrigir. Faça o pedido primeiro; depois diga “não é essa, é a skill …”.';
+          break;
+        }
+        if (!backendOnline) {
+          reply = 'A API Python está offline, então não consigo guardar a correlação agora.';
+          break;
+        }
+        setProcessing('python');
+        void ensinarAgente(pedidoFalho, intent.alvo)
+          .then((registro) => {
+            ultimoFalho.current = '';
+            appendJarvisMessage(`Aprendi: quando você pedir “${registro.pedido}”, uso ${registro.skill_id}.`, 'python');
+          })
+          .catch((error: unknown) => {
+            appendJarvisMessage(`Não consegui ensinar: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
+      case 'agente:pesquisar': {
+        const pedidoFalho = ultimoFalho.current;
+        if (!pedidoFalho) {
+          reply = 'Não tenho um pedido pendente. Diga o que devo procurar, por exemplo “procure na web: quem inventou o pão” — ou use “pesquisar e responder …”.';
+          break;
+        }
+        if (!hostToken) {
+          reply = 'Para buscar na web eu preciso do token de host: copie de storage/host-token.txt e envie “token SEU_TOKEN”.';
+          break;
+        }
+        setProcessing('python');
+        void pesquisarAgente(pedidoFalho, hostToken)
+          .then((resultado) => {
+            if (resultado.acao === 'web') {
+              ultimoFalho.current = '';
+              appendJarvisMessage(`${resultado.resposta}\n\nGuardei esta resposta: o mesmo pedido passa a responder da memória.`, 'python');
+            } else {
+              appendJarvisMessage(resultado.resposta || 'A busca não trouxe nada.', 'python');
+            }
+          })
+          .catch((error: unknown) => {
+            appendJarvisMessage(`A busca falhou: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
+      case 'agente:esquecer': {
+        if (!backendOnline) {
+          reply = 'A API Python está offline, então não consigo esquecer nada agora.';
+          break;
+        }
+        setProcessing('python');
+        void esquecerAgente(intent.pedido)
+          .then((removidos) => {
+            appendJarvisMessage(
+              removidos
+                ? `Esqueci ${removidos} registro(s) de “${intent.pedido}”.`
+                : `Não tinha nada guardado para “${intent.pedido}”.`,
+              'python',
+            );
+          })
+          .catch((error: unknown) => {
+            appendJarvisMessage(`Não consegui esquecer: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
       case 'web:search': {
         const url = `https://www.google.com/search?q=${encodeURIComponent(intent.query)}`;
         const opened = window.open(url, '_blank');
@@ -942,6 +1020,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     deleteTask,
     addNote,
     deleteNote,
+    hostToken,
     sendMessage,
     clearMessages,
     updatePreferences,

@@ -193,3 +193,33 @@ describe('agente local — comandos', () => {
     expect(helpText).toMatch(/receitas prontas/);
   });
 });
+
+describe('agente local — correção', () => {
+  it('reconhece a correção pelo nome da skill', () => {
+    expect(parseCommand('não é essa, é a skill legal.article')).toMatchObject({ type: 'agente:corrigir', alvo: 'legal.article' });
+    expect(parseCommand('corrigir: text.analyze')).toMatchObject({ type: 'agente:corrigir', alvo: 'text.analyze' });
+    expect(parseCommand('use a skill Analisar texto')).toMatchObject({ type: 'agente:corrigir', alvo: 'Analisar texto' });
+  });
+
+  it('reconhece o pedido de buscar na web o que falhou', () => {
+    expect(parseCommand('procure na web sobre isso').type).toBe('agente:pesquisar');
+    expect(parseCommand('pesquise isso na web').type).toBe('agente:pesquisar');
+    expect(parseCommand('não sabe? pesquisa isso').type).toBe('agente:pesquisar');
+  });
+
+  it('reconhece o esquecimento', () => {
+    expect(parseCommand('esqueça como fazer pão')).toMatchObject({ type: 'agente:esquecer', pedido: 'como fazer pão' });
+    expect(parseCommand('esquecer meu relatorio do mes').type).toBe('agente:esquecer');
+  });
+
+  it('não confunde pesquisa normal com correção', () => {
+    expect(parseCommand('pesquisar por automação pessoal').type).toBe('web:search');
+    expect(parseCommand('pesquisar e responder quem foi Machado de Assis').type).toBe('pesquisa:responder');
+  });
+
+  it('o help ensina a corrigir', () => {
+    expect(helpText).toMatch(/Correção/);
+    expect(helpText).toMatch(/procure na web sobre isso/);
+    expect(helpText).toMatch(/esqueça/);
+  });
+});
