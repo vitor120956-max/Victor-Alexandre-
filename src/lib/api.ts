@@ -270,6 +270,48 @@ export async function requestPesquisa(pergunta: string, autorizacao: string): Pr
   return apiFetch('/api/pesquisa/responder', { method: 'POST', body: JSON.stringify({ pergunta, autorizacao }) });
 }
 
+export interface AgenteSkill {
+  id: string;
+  nome: string;
+  categoria: string;
+  descricao: string;
+  local?: boolean;
+}
+
+export interface AgenteResultado {
+  ok: boolean;
+  pedido: string;
+  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada';
+  skill: AgenteSkill | null;
+  confianca: number;
+  parametros: Record<string, unknown>;
+  faltando: string[];
+  resposta: string;
+  alternativas: Array<{ id: string; nome: string; confianca: number }>;
+  fontes: PesquisaFonte[];
+  avisos: string[];
+  limites: string[];
+}
+
+export interface AgenteReceitas {
+  locais: Array<{ id: string; nome: string; descricao: string; receita: string; campo: string; criado_em: string }>;
+  receitas: Array<{ id: string; nome: string; descricao: string; exemplo: string; campo: string }>;
+}
+
+export async function requestAgenteLocal(pedido: string, autorizacao: string): Promise<AgenteResultado> {
+  const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado; error?: { message?: string } }>(
+    '/api/agente/executar',
+    { method: 'POST', body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true }) },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'O agente local recusou o pedido.', 200, 'AGENTE_ERROR');
+  return resposta.result;
+}
+
+export async function listarSkillsLocais(): Promise<AgenteReceitas> {
+  const resposta = await apiFetch<{ ok: boolean; result: AgenteReceitas }>('/api/agente/skills');
+  return resposta.result;
+}
+
 export async function requestAIChat(input: {
   message: string;
   history: Array<{ role: 'user' | 'jarvis'; content: string }>;

@@ -18,6 +18,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from .agente_local import RECEITAS, AgenteError, atender as agente_atender, carregar_locais
 from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
@@ -38,6 +39,15 @@ class PesquisaRequest(BaseModel):
     autorizacao: str = Field(default="")
     limite: int = Field(default=6, ge=1, le=10)
     paginas: int = Field(default=2, ge=0, le=3)
+
+
+class AgenteRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    pedido: str = Field(min_length=3, max_length=2_000)
+    autorizacao: str = Field(default="")
+    criar: bool = True
+    consultar_web: bool = Field(default=True, alias="consultarWeb")
 
 
 class ExecuteRequest(BaseModel):
@@ -140,6 +150,7 @@ def create_app(
     ai_provider: AIProvider | None = None,
     registry: SkillRegistry | None = None,
     estacao: EstacaoRuntime | None = None,
+    agente_root: Path | None = None,
 ) -> FastAPI:
     load_dotenv(PROJECT_ROOT / ".env")
     provider = ai_provider or OpenAICompatibleProvider()
@@ -147,6 +158,7 @@ def create_app(
     files_root = Path(files_root_value).expanduser() if files_root_value else PROJECT_ROOT / "storage" / "user-files"
     skill_registry = registry or build_registry(files_root, ai_provider=provider)
     estacao_runtime = estacao or EstacaoRuntime(root=skill_registry.files_root)
+    pasta_agente = Path(agente_root) if agente_root else PROJECT_ROOT / "storage"
     # A camada de host exige prova de acesso: o token aparece aqui, no terminal de
     # quem subiu a API, e nunca numa resposta HTTP.
     if os.getenv("JARVIS_HOST_TOKEN_SILENCIOSO", "0") != "1":
@@ -163,7 +175,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.38.0",
+        version="0.39.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -198,7 +210,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.38.0",
+            "version": "0.39.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
@@ -391,6 +403,37 @@ def create_app(
                 content={"ok": False, "error": {"code": "PESQUISA_RECUSADA", "message": str(exc)}},
             )
         return {"ok": True, "result": resultado}
+
+    # ------------------------------------------------------------ agente local
+
+    @application.post("/api/agente/executar")
+    async def agente_executar(payload: AgenteRequest) -> dict[str, Any]:
+        try:
+            resultado = await agente_atender(
+                payload.pedido,
+                registry=skill_registry,
+                raiz=pasta_agente,
+                autorizacao=payload.autorizacao,
+                criar=payload.criar,
+                consultar_web=payload.consultar_web,
+            )
+        except AgenteError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "AGENTE_RECUSADO", "message": str(exc)}},
+            )
+        return {"ok": True, "result": resultado}
+
+    @application.get("/api/agente/skills")
+    def agente_skills() -> dict[str, Any]:
+        locais = [local.publica() for local in carregar_locais(pasta_agente)]
+        return {
+            "ok": True,
+            "result": {
+                "locais": locais,
+                "receitas": [receita.publica() for receita in RECEITAS],
+            },
+        }
 
     # ------------------------------------------------------------ estação real
 

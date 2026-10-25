@@ -23,6 +23,8 @@ export type Intent =
   | { type: 'focus:status' }
   | { type: 'web:search'; query: string }
   | { type: 'pesquisa:responder'; pergunta: string }
+  | { type: 'agente:skills' }
+  | { type: 'agente:executar'; pedido: string }
   | { type: 'host:token'; token: string }
   | { type: 'web:open'; destination: string; url: string }
   | { type: 'automation:summary' }
@@ -167,6 +169,13 @@ export function parseCommand(rawInput: string): Intent {
   }
   if (/^(?:ativar|desativar|ligar|desligar)(?: a| o)? (?:voz|resposta por voz)$/.test(text)) {
     return { type: 'voice:toggle' };
+  }
+  if (/^(?:minhas |listar |liste |ver |quais )?skills (?:locais|criadas)$/.test(text)) {
+    return { type: 'agente:skills' };
+  }
+  const agenteExplicito = input.match(/^(?:skill|agente|modo local)\s*[:,]?\s*(.+)$/i);
+  if (agenteExplicito?.[1].trim()) {
+    return { type: 'agente:executar', pedido: agenteExplicito[1].trim() };
   }
 
   if (/que horas|horas agora|^hora\??$/.test(text)) return { type: 'time' };
@@ -407,5 +416,6 @@ export const helpText = [
   '• Enxuto — “revisar mudança: <diff>”, “auditar código app”, “dívida de atalhos em app” ou “abrir lean”. Análise estática, sem executar nada.',
   '• Agentes — “abrir agentes” ou “governo de agentes”. Revisa equipe, quadro, orçamento, parada de trabalho e permissões declaradas, sem executar agentes.',
   '• Estúdio — “abrir estúdio”, “design system” ou “revisar contraste”. Confere contrato de design, contraste WCAG, crítica em cinco dimensões e clichês no HTML, sem compilar nem publicar.',
+  '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

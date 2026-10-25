@@ -1,4 +1,4 @@
-"""Testes de `server/pesquisa.py` (0.38.0) — busca, leitura e resposta com fonte.
+"""Testes de `server/pesquisa.py` (0.39.0) — busca, leitura e resposta com fonte.
 
 A rede não é usada aqui: `buscar` e `ler` são injetados, e o provedor é um
 dublê. Isso permite cobrir o fluxo inteiro sem depender do DuckDuckGo.

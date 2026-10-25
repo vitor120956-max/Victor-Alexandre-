@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, requestAIChat, requestPesquisa } from '../lib/api';
-import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
+import { executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarSkillsLocais, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import type { AgenteResultado, AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
 import {
@@ -95,6 +95,12 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 const initialAIStatus: AIStatus = { configured: false, provider: 'Não configurado', model: null, external: true };
+
+function montarRespostaAgente(resultado: AgenteResultado): string {
+  const partes = [resultado.resposta.trim()];
+  if (resultado.avisos.length) partes.push(resultado.avisos.join(' '));
+  return partes.filter(Boolean).join('\n\n');
+}
 
 const actionLabels: Record<AutomationAction, string> = {
   summary: 'Resumo do dia',
@@ -385,6 +391,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     desktopNotification('JARVIS · Automação', `${automation.name} foi executada.`);
   }, [automations, buildSummary, desktopNotification, exportBackup, logActivity, pushToast, setAutomations, setMessages, setTasks, startFocus]);
 
+  const responderComIA = useCallback((texto: string) => {
+    setProcessing('ai');
+    const history = messages.slice(-12).map((message) => ({ role: message.role, content: message.content }));
+    const context = preferences.shareContextWithAI ? {
+      tasks: tasks.slice(0, 20).map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, completed: task.completed })),
+      notes: notes.slice(0, 20).map((note) => ({ content: note.content, tag: note.tag })),
+    } : undefined;
+    void requestAIChat({ message: texto, history, context })
+      .then((response) => appendJarvisMessage(response.content, 'ai'))
+      .catch((error: unknown) => appendJarvisMessage(`Não consegui concluir pela IA externa: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nOs comandos locais continuam disponíveis; diga “ajuda” para ver exemplos.`))
+      .finally(() => setProcessing(null));
+  }, [appendJarvisMessage, messages, notes, preferences.shareContextWithAI, tasks]);
+
   const sendMessage = useCallback((rawText: string) => {
     const text = rawText.trim();
     if (!text) return;
@@ -409,16 +428,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (intent.type === 'unknown') {
       if (backendOnline && aiStatus.configured && preferences.aiEnabled) {
-        setProcessing('ai');
-        const history = messages.slice(-12).map((message) => ({ role: message.role, content: message.content }));
-        const context = preferences.shareContextWithAI ? {
-          tasks: tasks.slice(0, 20).map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, completed: task.completed })),
-          notes: notes.slice(0, 20).map((note) => ({ content: note.content, tag: note.tag })),
-        } : undefined;
-        void requestAIChat({ message: text, history, context })
-          .then((response) => appendJarvisMessage(response.content, 'ai'))
-          .catch((error: unknown) => appendJarvisMessage(`Não consegui concluir pela IA externa: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nOs comandos locais continuam disponíveis; diga “ajuda” para ver exemplos.`))
-          .finally(() => setProcessing(null));
+        responderComIA(text);
+      } else if (backendOnline) {
+        // Sem IA configurada quem responde é o agente local: ele procura a
+        // skill, preenche os campos, cria skill de receita ou busca na web.
+        setProcessing('python');
+        void requestAgenteLocal(text, hostToken)
+          .then((resultado) => {
+            setProcessing(null);
+            if (resultado.resposta.trim()) {
+              appendJarvisMessage(montarRespostaAgente(resultado), 'python');
+            } else {
+              appendJarvisMessage('Não achei skill, receita nem web para este pedido. Diga “ajuda” para ver os comandos que funcionam sem modelo.');
+            }
+          })
+          .catch((error: unknown) => {
+            setProcessing(null);
+            appendJarvisMessage(`O agente local não conseguiu responder: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nDiga “ajuda” para ver os comandos que funcionam sem modelo.`);
+          });
       } else {
         const reason = !backendOnline
           ? 'A API Python está offline e nenhum provedor externo foi chamado.'
@@ -676,6 +703,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .finally(() => setProcessing(null));
         return;
       }
+      case 'agente:skills': {
+        if (!backendOnline) {
+          reply = 'A API Python está offline, então não consigo listar as skills locais.';
+          break;
+        }
+        setProcessing('python');
+        void listarSkillsLocais()
+          .then((dados) => {
+            if (!dados.locais.length) {
+              const exemplos = dados.receitas.slice(0, 6).map((receita) => `“${receita.exemplo}”`).join(', ');
+              appendJarvisMessage(
+                `Ainda não criei nenhuma skill local. Consigo montar ${dados.receitas.length} receitas prontas. Experimente: ${exemplos}.`,
+                'python',
+              );
+              return;
+            }
+            const linhas = dados.locais.map((skill) => `- ${skill.nome} (${skill.id}) — ${skill.descricao}`).join('\n');
+            appendJarvisMessage(`Skills locais já criadas:\n${linhas}`, 'python');
+          })
+          .catch((error: unknown) => {
+            appendJarvisMessage(`Não consegui listar as skills locais: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
+      case 'agente:executar': {
+        if (!backendOnline) {
+          reply = 'A API Python está offline, então o agente local não pode procurar nas skills.';
+          break;
+        }
+        setProcessing('python');
+        void requestAgenteLocal(intent.pedido, hostToken)
+          .then((resultado) => appendJarvisMessage(montarRespostaAgente(resultado), 'python'))
+          .catch((error: unknown) => {
+            appendJarvisMessage(`O agente local não conseguiu responder: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
       case 'web:search': {
         const url = `https://www.google.com/search?q=${encodeURIComponent(intent.query)}`;
         const opened = window.open(url, '_blank');
@@ -722,7 +788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     appendJarvisMessage(reply);
-  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
+  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     if (patch.notifications && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {

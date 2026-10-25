@@ -167,3 +167,29 @@ describe('helpText — pesquisa com fonte', () => {
     expect(helpText).toMatch(/sem resumo/i);
   });
 });
+
+describe('agente local — comandos', () => {
+  it('lista as skills locais', () => {
+    expect(parseCommand('minhas skills locais').type).toBe('agente:skills');
+    expect(parseCommand('skills locais').type).toBe('agente:skills');
+    expect(parseCommand('ver skills criadas').type).toBe('agente:skills');
+  });
+
+  it('aceita o pedido explícito com o prefixo skill', () => {
+    expect(parseCommand('skill somar 10 20 30')).toMatchObject({ type: 'agente:executar', pedido: 'somar 10 20 30' });
+    expect(parseCommand('modo local contar as palavras de: um dois')).toMatchObject({
+      type: 'agente:executar',
+      pedido: 'contar as palavras de: um dois',
+    });
+  });
+
+  it('não transforma pergunta comum em pedido de skill', () => {
+    expect(parseCommand('quem foi Machado de Assis').type).toBe('unknown');
+  });
+
+  it('o help descreve o agente local sem prometer IA', () => {
+    expect(helpText).toMatch(/Agente local/);
+    expect(helpText).toMatch(/sem modelo nenhum/);
+    expect(helpText).toMatch(/receitas prontas/);
+  });
+});

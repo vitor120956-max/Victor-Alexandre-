@@ -1,0 +1,1160 @@
+"""Agente local: acha a skill certa e executa sem provedor de IA.
+
+O caminho é sempre o mesmo, e nenhum passo chama modelo:
+
+1. **procura** o pedido nas 209 skills do registro, por palavra (nome, categoria,
+   descrição, campos do formulário);
+2. achando, **preenche os parâmetros** a partir da própria frase — número,
+   endereço, caminho, enum, texto colado — e **executa**;
+3. não achando, tenta uma das **receitas** prontas (contar palavras, somar,
+   converter unidades…), **cria a skill local** e executa na mesma hora;
+4. não achando nem receita, **procura na web** com a skill `sistema.rede` e
+   devolve as fontes e o trecho lido, sem resumo.
+
+O que este módulo **não** faz: escrever código Python novo. Skill criada aqui é
+uma receita declarativa de um catálogo fechado, executada por funções puras —
+sem `eval`, sem `exec`, sem `subprocess`. Se o pedido não couber nas receitas, o
+agente diz isso e devolve o que encontrou na web, em vez de fingir que criou.
+"""
+from __future__ import annotations
+
+import json
+import re
+import unicodedata
+from collections import Counter
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterable, Literal
+
+from .pesquisa import responder as pesquisa_responder
+from .sistema import SistemaError
+
+# Faixas de confiança da busca lexical. Abaixo do piso, o agente não executa
+# nada: prefere dizer que não sabe a rodar a skill errada.
+LIMIAR_EXECUTAR = 0.50
+LIMIAR_SUGERIR = 0.25
+LIMITE_CANDIDATOS = 5
+LIMITE_RESPOSTA = 4_000
+LIMITE_TRECHO_WEB = 1_200
+ARQUIVO_LOCAIS = Path("agente-local") / "skills.json"
+
+
+class AgenteError(ValueError):
+    """Pedido que o agente local não consegue nem começar a tratar."""
+
+
+# --------------------------------------------------------------- normalização
+
+_PARADAS = {
+    "a", "o", "e", "de", "do", "da", "dos", "das", "um", "uma", "uns", "umas",
+    "para", "com", "em", "no", "na", "nos", "nas", "que", "se", "por", "como",
+    "mais", "menos", "seu", "sua", "seus", "suas", "ao", "aos", "as", "os",
+    "voce", "vc", "eu", "me", "minha", "meu", "isso", "este", "esta", "esse",
+    "essa", "tem", "ter", "foi", "ser", "sao", "ja", "nao", "sim", "muito",
+    "pode", "quero", "queria", "gostaria", "favor", "por", "entao", "aqui",
+}
+
+
+def normalizar(texto: str) -> str:
+    """Minúsculas, sem acento e com espaço simples — a forma de comparar."""
+    decomposto = unicodedata.normalize("NFKD", texto or "")
+    sem_acento = "".join(caractere for caractere in decomposto if not unicodedata.combining(caractere))
+    return re.sub(r"\s+", " ", sem_acento.lower()).strip()
+
+
+def palavras(texto: str) -> list[str]:
+    """Palavras úteis (3+ letras, fora as palavras vazias), sem repetição."""
+    vistas: list[str] = []
+    for palavra in re.findall(r"[a-z0-9]+", normalizar(texto)):
+        if len(palavra) >= 3 and palavra not in _PARADAS and palavra not in vistas:
+            vistas.append(palavra)
+    return vistas
+
+
+# Sinônimos que aproximam a fala do usuário do vocabulário das skills. Só entram
+# na busca; nunca mudam o que a skill recebe.
+_SINONIMOS: dict[str, tuple[str, ...]] = {
+    "planilha": ("xlsx", "excel", "tabela"),
+    "site": ("web", "http", "url"),
+    "link": ("url", "web"),
+    "pasta": ("diretorio", "arquivos"),
+    "conta": ("somar", "calculadora", "calculo"),
+    "soma": ("somar", "calculadora"),
+    "senha": ("segredo", "credencial"),
+    "emprego": ("carreira", "vaga"),
+    "curriculo": ("carreira",),
+    "desenho": ("diagrama", "figura"),
+    "fluxo": ("diagrama", "processo"),
+    "resumo": ("resumir", "resumo"),
+    "traduzir": ("traduzir", "texto"),
+    "revisar": ("revisao", "revisar"),
+    "seguranca": ("risco", "confianca"),
+}
+
+
+def _termos_de_busca(consulta: str) -> list[str]:
+    termos = palavras(consulta)
+    extras: list[str] = []
+    for termo in termos:
+        for sinonimo in _SINONIMOS.get(termo, ()):
+            if sinonimo not in termos and sinonimo not in extras:
+                extras.append(sinonimo)
+    return termos + extras
+
+
+# --------------------------------------------------------------------- índice
+
+@dataclass(frozen=True)
+class Entrada:
+    """Uma skill pronta para ser comparada com o pedido."""
+
+    skill_id: str
+    nome: str
+    categoria: str
+    descricao: str
+    schema: dict[str, Any]
+    fortes: frozenset[str]
+    fracos: frozenset[str]
+    receita: str | None = None
+    local: bool = False
+
+    def resumo(self) -> dict[str, Any]:
+        return {
+            "id": self.skill_id,
+            "nome": self.nome,
+            "categoria": self.categoria,
+            "descricao": self.descricao,
+            "local": self.local,
+        }
+
+
+def _campos_do_schema(schema: dict[str, Any]) -> set[str]:
+    """Palavras que o formulário da skill usa: nomes, títulos e opções."""
+    campos: set[str] = set()
+    for nome, spec in (schema.get("properties") or {}).items():
+        campos.update(palavras(nome.replace("_", " ")))
+        if isinstance(spec, dict):
+            campos.update(palavras(str(spec.get("title") or "")))
+            campos.update(palavras(str(spec.get("description") or "")))
+            for opcao in spec.get("enum") or []:
+                campos.update(palavras(str(opcao).replace("-", " ").replace("_", " ")))
+            for rotulo in spec.get("enumLabels") or []:
+                campos.update(palavras(str(rotulo)))
+    return campos
+
+
+def entrada_de_skill(skill: dict[str, Any]) -> Entrada:
+    schema = skill.get("inputSchema") or {}
+    fortes = set(palavras(str(skill.get("id") or "").replace(".", " ")))
+    fortes.update(palavras(str(skill.get("name") or "")))
+    fortes.update(palavras(str(skill.get("category") or "")))
+    fracos = set(palavras(str(skill.get("description") or "")))
+    fracos |= _campos_do_schema(schema)
+    return Entrada(
+        skill_id=str(skill.get("id") or ""),
+        nome=str(skill.get("name") or ""),
+        categoria=str(skill.get("category") or ""),
+        descricao=str(skill.get("description") or ""),
+        schema=schema,
+        fortes=frozenset(fortes),
+        fracos=frozenset(fracos),
+    )
+
+
+def indexar(skills: Iterable[dict[str, Any]]) -> list[Entrada]:
+    return [entrada_de_skill(skill) for skill in skills if skill.get("id")]
+
+
+def _eh_verbo(palavra: str) -> bool:
+    return len(palavra) >= 4 and palavra.endswith(("ar", "er", "ir"))
+
+
+def _casa(termo: str, vocabulario: frozenset[str]) -> bool:
+    """Casa palavra igual, plural e conjugação — nada além disso.
+
+    "palavra" casa com "palavras" (uma letra a mais), "analise" casa com
+    "analisar" (mesma raiz, uma é verbo), mas "caseiro" **não** casa com
+    "caseiras" e "assis" não casa com "assistido".
+    """
+    if termo in vocabulario:
+        return True
+    if len(termo) < 4:
+        return False
+    for item in vocabulario:
+        if len(item) < 4:
+            continue
+        if item.startswith(termo) and len(item) - len(termo) <= 1:
+            return True
+        if termo.startswith(item) and len(termo) - len(item) <= 1:
+            return True
+        if len(termo) >= 5 and len(item) >= 5 and _eh_verbo(item) != _eh_verbo(termo):
+            corte = min(6, len(termo), len(item))
+            if item[:corte] == termo[:corte]:
+                return True
+    return False
+
+
+def pontuar(consulta: str, entrada: Entrada) -> tuple[float, list[str], int]:
+    """Nota de 0 a 1, as palavras que a justificaram e quantas são fortes.
+
+    Termo forte é o que aparece no id, no nome ou na categoria da skill; termo
+    fraco só na descrição ou no formulário. A contagem de fortes é o que separa
+    "essa skill é sobre isso" de "essa skill menciona a palavra em algum lugar".
+    """
+    termos = _termos_de_busca(consulta)
+    if not termos:
+        return 0.0, [], 0
+    # O denominador conta só as palavras que o usuário escreveu: sinônimo que a
+    # gente acrescenta pode ajudar, nunca penalizar.
+    base = max(1, len(palavras(consulta)))
+    peso = 0.0
+    achados: list[str] = []
+    fortes = 0
+    for termo in termos:
+        if _casa(termo, entrada.fortes):
+            peso += 3.0
+            achados.append(termo)
+            fortes += 1
+        elif _casa(termo, entrada.fracos):
+            peso += 1.0
+            achados.append(termo)
+    nota = peso / (3.0 * base)
+    nome = normalizar(entrada.nome)
+    if nome and nome in normalizar(consulta):
+        nota = min(1.0, nota + 0.25)
+    return round(min(1.0, nota), 3), achados, fortes
+
+
+def pesquisar(consulta: str, entradas: Iterable[Entrada], limite: int = LIMITE_CANDIDATOS) -> list[dict[str, Any]]:
+    """Ranking de skills para o pedido, da mais parecida para a menos."""
+    if not (consulta or "").strip():
+        return []
+    ranking: list[dict[str, Any]] = []
+    for entrada in entradas:
+        nota, achados, fortes = pontuar(consulta, entrada)
+        if nota <= 0:
+            continue
+        ranking.append({"entrada": entrada, "score": nota, "termos": achados, "fortes": fortes})
+    ranking.sort(key=lambda item: (-item["score"], item["entrada"].skill_id))
+    return ranking[:limite]
+
+
+# ------------------------------------------------------- extração de parâmetros
+
+_CAMPOS_TEXTO = {
+    "text", "texto", "content", "conteudo", "diff", "transcript", "transcricao",
+    "notes", "notas", "code", "codigo", "body", "corpo", "mensagem", "message",
+    "material", "prompt", "descricao", "resumo", "transcription", "entrada",
+}
+_CAMPOS_URL = {"url", "link", "href", "endereco", "address", "site"}
+_CAMPOS_CAMINHO = {"path", "caminho", "arquivo", "file", "filename", "pasta", "dir", "diretorio", "caminhoarquivo"}
+_CAMPOS_ID = {"planId", "planid", "id", "chamada", "chamadaid", "artifactid", "runid"}
+
+_RE_URL = re.compile(r"https?://[^\s<>\"']+")
+_RE_CAMINHO = re.compile(
+    r"(?:[A-Za-z]:\\[^\s\"']+|(?:[\w.\-]+/)+[\w.\-]+\.[A-Za-z0-9]{1,6}|[\w.\-]+\.(?:pdf|docx?|xlsx?|pptx?|txt|md|csv|json|png|jpe?g|svg|py|ts|tsx|js|zip|exe))",
+    re.IGNORECASE,
+)
+_RE_ARTIGO = re.compile(r"artigo\s+([0-9][0-9.\-]*[a-zA-Z]?)", re.IGNORECASE)
+_RE_MINUTOS = re.compile(r"(\d+)\s*(?:min|minuto)", re.IGNORECASE)
+_RE_NUMEROS = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+
+def _numeros(texto: str) -> list[float]:
+    valores: list[float] = []
+    for bruto in _RE_NUMEROS.findall(texto or ""):
+        try:
+            valores.append(float(bruto.replace(".", "").replace(",", ".")) if bruto.count(",") else float(bruto))
+        except ValueError:
+            continue
+    return valores
+
+
+def texto_livre(consulta: str) -> str:
+    """Tira o comando e devolve só o conteúdo que o usuário colou."""
+    texto = (consulta or "").strip().strip('"').strip("'")
+    texto = re.sub(r"^(?:ei|oi|ola)[,\s]+", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"^(?:jarvis[,\s]+)+", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"^(?:por favor[,\s]+|pode[,\s]+|poderia[,\s]+|quero que (?:voce|vc|tu)[,\s]+)", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(
+        r"^(?:usar?|use|rode|rodar|executar?|aplique|aplicar)\s+(?:a\s+)?(?:skill|ferramenta)\s+[\w.\-]+[,\s]*(?:com|para|em)?[:\s]*",
+        "",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    texto = re.sub(
+        r"^(?:analisar|analise|analisa|contar|conte|calcular|calcule|transformar|transforme|processar|processe|resumir|resuma|traduzir|traduza)\s+(?:o\s+|a\s+|os\s+|as\s+)?",
+        "",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    texto = re.sub(r"^(?:o\s+)?(?:texto|conteudo)\s*[:\-]\s*", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"^(?:de|do|da|que diz|seguinte)\s*[:\-]\s*", "", texto, flags=re.IGNORECASE)
+    # "contar as palavras de: <conteúdo>" — o que vale é o que vem depois dos
+    # dois-pontos, desde que não seja um endereço (http://).
+    corte = texto.find(":")
+    if 0 <= corte <= 60 and not texto[corte:].startswith("://"):
+        texto = texto[corte + 1:].strip()
+    texto = re.sub(r"[,\s]+por favor\.?$", "", texto, flags=re.IGNORECASE)
+    return texto.strip(" \"'")
+
+
+def _lista_do_pedido(consulta: str) -> str | None:
+    """Pega os itens depois de "entre" — ou depois dos dois-pontos."""
+    texto = (consulta or "").strip()
+    achado = re.search(r"\bentre\s+(.+)$", texto, flags=re.IGNORECASE)
+    if achado:
+        return achado.group(1).strip() or None
+    corte = texto.find(":")
+    if 0 <= corte <= 60:
+        return texto[corte + 1:].strip() or None
+    return None
+
+
+def _booleano(consulta: str) -> bool | None:
+    normalizado = normalizar(consulta)
+    if re.search(r"\b(sim|verdadeiro|ativa|ative|ligado|ligar)\b", normalizado):
+        return True
+    if re.search(r"\b(nao|falso|desativa|desative|desligado)\b", normalizado):
+        return False
+    return None
+
+
+def _escolher_enum(consulta: str, opcoes: list[Any], rotulos: list[Any] | None = None) -> str | None:
+    normalizado = f" {normalizar(consulta)} "
+    for opcao in opcoes:
+        alvo = normalizar(str(opcao).replace("-", " ").replace("_", " "))
+        if f" {alvo} " in normalizado or f" {alvo}s " in normalizado:
+            return str(opcao)
+    for indice, rotulo in enumerate(rotulos or []):
+        alvo = normalizar(str(rotulo))
+        if alvo and f" {alvo} " in normalizado:
+            return str(opcoes[indice]) if indice < len(opcoes) else None
+    return None
+
+
+def _valor_do_campo(
+    nome: str,
+    spec: dict[str, Any],
+    consulta: str,
+    *,
+    unico_texto: bool,
+) -> Any | None:
+    tipo = spec.get("type")
+    opcoes = spec.get("enum")
+    if opcoes:
+        return _escolher_enum(consulta, list(opcoes), list(spec.get("enumLabels") or []))
+
+    if tipo == "boolean":
+        return _booleano(consulta)
+
+    chave = nome.replace("_", "").lower()
+
+    if tipo in ("integer", "number"):
+        if "minuto" in chave:
+            achado = _RE_MINUTOS.search(consulta)
+            return int(achado.group(1)) if achado else None
+        valores = _numeros(consulta)
+        if not valores:
+            return None
+        minimo, maximo = spec.get("minimum"), spec.get("maximum")
+        for valor in valores:
+            numero = int(valor) if tipo == "integer" and float(valor).is_integer() else valor
+            if minimo is not None and numero < minimo:
+                continue
+            if maximo is not None and numero > maximo:
+                continue
+            return numero
+        return None
+
+    if tipo == "array":
+        itens = [item.strip() for item in re.split(r"[,;]| e ", consulta) if item.strip()]
+        return itens or None
+
+    if tipo != "string":
+        return None
+
+    if chave in {c.lower() for c in _CAMPOS_URL}:
+        achado = _RE_URL.search(consulta)
+        return achado.group(0).rstrip(".,)") if achado else None
+    if chave in {c.lower() for c in _CAMPOS_CAMINHO}:
+        achado = _RE_CAMINHO.search(consulta)
+        return achado.group(0) if achado else None
+    if chave in {c.lower() for c in _CAMPOS_ID}:
+        achado = re.search(r"\b([a-z]{2,}[_-][a-z0-9_-]{3,})\b", normalizar(consulta))
+        return achado.group(1) if achado else None
+    if "artigo" in chave or chave.startswith("article"):
+        achado = _RE_ARTIGO.search(consulta)
+        return achado.group(1) if achado else None
+    if chave in {"entries", "participantes", "itens", "nomes", "lista"}:
+        return _lista_do_pedido(consulta)
+
+    tem_padrao = "default" in spec
+    if unico_texto or chave in _CAMPOS_TEXTO or (spec.get("format") == "textarea" and not tem_padrao):
+        texto = texto_livre(consulta)
+        return texto or None
+
+    # Campo de texto comum: só aceita o que veio entre aspas, para não repetir a
+    # frase inteira em vários campos.
+    achado = re.search(r"[\"“']([^\"”']{2,})[\"”']", consulta)
+    return achado.group(1).strip() if achado else None
+
+
+def extrair_parametros(consulta: str, schema: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    propriedades = schema.get("properties") or {}
+    textos = [nome for nome, spec in propriedades.items() if isinstance(spec, dict) and spec.get("type") == "string" and not spec.get("enum")]
+    unico_texto = len(textos) == 1
+    valores: dict[str, Any] = {}
+    for nome, spec in propriedades.items():
+        if not isinstance(spec, dict):
+            continue
+        valor = _valor_do_campo(nome, spec, consulta, unico_texto=unico_texto)
+        if valor is not None:
+            valores[nome] = valor
+    obrigatorios = [campo for campo in (schema.get("required") or []) if campo in propriedades]
+    faltando = [campo for campo in obrigatorios if campo not in valores]
+    return valores, faltando
+
+
+def _titulo_do_campo(nome: str, schema: dict[str, Any]) -> str:
+    spec = (schema.get("properties") or {}).get(nome) or {}
+    return str(spec.get("title") or nome)
+
+
+# ------------------------------------------------------------------- receitas
+
+TipoReceita = Literal["texto", "numeros"]
+
+
+@dataclass(frozen=True)
+class Receita:
+    """Uma operação pronta que pode virar skill local, sem escrever código."""
+
+    id: str
+    nome: str
+    descricao: str
+    fortes: tuple[str, ...]
+    campo: str
+    exemplo: str
+    tipo: TipoReceita = "texto"
+    minimo: int = 2
+
+    def publica(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "exemplo": self.exemplo,
+            "campo": self.campo,
+        }
+
+
+RECEITAS: tuple[Receita, ...] = (
+    Receita("contar-palavras", "Contar palavras", "Conta as palavras de um texto colado.", ("contar", "conte", "palavras", "palavra", "quantas"), "texto", "contar as palavras de: <texto>"),
+    Receita("contar-caracteres", "Contar caracteres", "Conta letras, com e sem espaço, e o tamanho do texto.", ("caracteres", "caractere", "letras", "letra", "contar"), "texto", "contar os caracteres de: <texto>", minimo=1),
+    Receita("contar-linhas", "Contar linhas", "Conta quantas linhas têm conteúdo num bloco de texto.", ("linhas", "linha", "contar"), "texto", "contar as linhas de: <texto>"),
+    Receita("extrair-links", "Extrair links", "Lista os endereços http que aparecem no texto.", ("links", "link", "urls", "extrair", "enderecos"), "texto", "extrair os links de: <texto>"),
+    Receita("extrair-emails", "Extrair e-mails", "Lista os e-mails que aparecem no texto.", ("emails", "email", "extrair", "contatos"), "texto", "extrair os emails de: <texto>"),
+    Receita("extrair-numeros", "Extrair números", "Lista os números encontrados no texto.", ("numeros", "numero", "extrair", "valores"), "texto", "extrair os números de: <texto>"),
+    Receita("somar", "Somar números", "Soma todos os números que aparecem no pedido.", ("somar", "soma", "somatorio", "total"), "numeros", "somar 12 30 8", tipo="numeros", minimo=1),
+    Receita("media", "Calcular média", "Calcula a média dos números informados.", ("media", "medias", "calcular"), "numeros", "média de 10 20 30", tipo="numeros", minimo=1),
+    Receita("maior-menor", "Maior e menor", "Diz o maior e o menor número da lista.", ("maior", "menor", "maximo", "minimo"), "numeros", "maior e menor de 4 9 2", tipo="numeros", minimo=2),
+    Receita("porcentagem", "Calcular porcentagem", "Calcula quanto é uma porcentagem de um valor.", ("porcentagem", "porcento", "%"), "texto", "quanto é 20% de 350", minimo=1),
+    Receita("ordenar", "Ordenar lista", "Coloca os itens em ordem alfabética.", ("ordenar", "ordene", "ordem", "alfabetica", "classificar"), "texto", "ordenar: Ana, Bruno, Carla", minimo=1),
+    Receita("unicos", "Remover repetidos", "Remove itens repetidos mantendo a ordem.", ("unicos", "unicas", "repetidos", "duplicados", "remover"), "texto", "remover repetidos de: Ana, Ana, Bruno"),
+    Receita("frequencia", "Contar repetições", "Mostra quantas vezes cada item aparece.", ("frequencia", "repetem", "repetido", "repeticoes", "repeticao", "vezes", "contar"), "texto", "contar repetições em: Ana, Bruno, Ana"),
+    Receita("maiusculas", "Deixar em maiúsculas", "Converte o texto para maiúsculas.", ("maiusculas", "maiusculo", "gritar", "caixa-alta"), "texto", "deixar em maiúsculas: <texto>", minimo=1),
+    Receita("minusculas", "Deixar em minúsculas", "Converte o texto para minúsculas.", ("minusculas", "minusculo", "caixa-baixa"), "texto", "deixar em minúsculas: <texto>", minimo=1),
+    Receita("slug", "Criar slug", "Transforma o texto em endereço amigável, com hífens.", ("slug", "amigavel", "endereco"), "texto", "criar slug de: <texto>", minimo=1),
+    Receita("inverter", "Inverter texto", "Escreve o texto de trás para frente.", ("inverter", "invertida", "tras", "reverter"), "texto", "inverter o texto: <texto>", minimo=1),
+    Receita("converter-unidades", "Converter unidades", "Converte km/milhas, kg/libras, litros/galões, °C/°F, metros/pés.", ("converter", "conversao", "unidades", "km", "milhas", "kg", "libras", "celsius", "fahrenheit", "litros", "galoes"), "texto", "converter 10 km em milhas"),
+    Receita("diferenca-datas", "Diferença entre datas", "Conta os dias entre duas datas.", ("dias", "datas", "entre", "diferenca", "idade"), "texto", "quantos dias entre 01/01/2026 e 25/10/2026"),
+    Receita("hash-sha256", "Hash SHA-256", "Calcula o SHA-256 de um texto.", ("hash", "sha256", "resumo", "criptografico"), "texto", "hash sha256 de: <texto>", minimo=1),
+)
+
+_RECEITAS_POR_ID = {receita.id: receita for receita in RECEITAS}
+
+
+# Formas que não aparecem como palavra (o "%" some na tokenização) mas são
+# inequívocas: antes de contar gatilhos, olha estes padrões.
+_PADROES_DIRETOS: tuple[tuple[str, str], ...] = (
+    (r"\d+(?:[.,]\d+)?\s*%\s*(?:de|do|da)\s*\d", "porcentagem"),
+    (r"\b\d+\s*(?:km|milhas?|kg|libras?|litros?|galoes?|celsius|fahrenheit)\b.*\b(?:em|para|pra)\b", "converter-unidades"),
+)
+
+
+def achar_receita(pedido: str) -> Receita | None:
+    """Escolhe a receita cujas palavras de gatilho mais aparecem no pedido."""
+    for padrao, receita_id in _PADROES_DIRETOS:
+        if re.search(padrao, pedido or "", flags=re.IGNORECASE):
+            return _RECEITAS_POR_ID[receita_id]
+    termos = set(palavras(pedido))
+    melhor: tuple[int, Receita] | None = None
+    for receita in RECEITAS:
+        acertos = sum(1 for gatilho in receita.fortes if normalizar(gatilho) in termos)
+        if acertos < max(1, receita.minimo):
+            continue
+        # Receita que precisa de duas palavras perde para a que acerta mais.
+        if melhor is None or acertos > melhor[0]:
+            melhor = (acertos, receita)
+    return melhor[1] if melhor else None
+
+
+def _itens(texto: str) -> list[str]:
+    itens: list[str] = []
+    for linha in texto.splitlines():
+        for parte in re.split(r"[,;]", linha):
+            limpo = parte.strip().strip('"').strip("'")
+            if limpo:
+                itens.append(limpo)
+    return itens
+
+
+def _formatar_numero(valor: float) -> str:
+    if float(valor).is_integer():
+        return str(int(valor))
+    return f"{valor:.4f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def _contar_palavras(texto: str) -> dict[str, Any]:
+    achados = re.findall(r"[^\W\d_]+(?:['’-][^\W\d_]+)*|\d+(?:[.,]\d+)?", texto, re.UNICODE)
+    return {"resultado": f"{len(achados)} palavras.", "palavras": len(achados)}
+
+
+def _contar_caracteres(texto: str) -> dict[str, Any]:
+    sem_espaco = len(re.sub(r"\s", "", texto))
+    return {"resultado": f"{len(texto)} caracteres no total, {sem_espaco} sem contar espaços.", "caracteres": len(texto), "semEspacos": sem_espaco}
+
+
+def _contar_linhas(texto: str) -> dict[str, Any]:
+    linhas = [linha for linha in texto.splitlines() if linha.strip()]
+    return {"resultado": f"{len(linhas)} linhas com conteúdo.", "linhas": len(linhas)}
+
+
+def _extrair_links(texto: str) -> dict[str, Any]:
+    links = sorted(set(_RE_URL.findall(texto)))
+    if not links:
+        return {"resultado": "Nenhum link encontrado no texto.", "links": []}
+    return {"resultado": "Links encontrados:\n" + "\n".join(f"- {link}" for link in links), "links": links}
+
+
+def _extrair_emails(texto: str) -> dict[str, Any]:
+    emails = sorted(set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", texto)))
+    if not emails:
+        return {"resultado": "Nenhum e-mail encontrado no texto.", "emails": []}
+    return {"resultado": "E-mails encontrados:\n" + "\n".join(f"- {email}" for email in emails), "emails": emails}
+
+
+def _extrair_numeros(texto: str) -> dict[str, Any]:
+    valores = _numeros(texto)
+    if not valores:
+        return {"resultado": "Nenhum número encontrado no texto.", "numeros": []}
+    return {"resultado": "Números: " + ", ".join(_formatar_numero(valor) for valor in valores), "numeros": valores}
+
+
+def _somar(texto: str) -> dict[str, Any]:
+    valores = _numeros(texto)
+    if not valores:
+        return {"resultado": "Não achei número nenhum para somar.", "numeros": [], "total": 0}
+    total = sum(valores)
+    return {"resultado": f"{' + '.join(_formatar_numero(v) for v in valores)} = {_formatar_numero(total)}", "numeros": valores, "total": total}
+
+
+def _media(texto: str) -> dict[str, Any]:
+    valores = _numeros(texto)
+    if not valores:
+        return {"resultado": "Não achei número nenhum para calcular a média.", "numeros": []}
+    media = sum(valores) / len(valores)
+    return {"resultado": f"Média de {len(valores)} números = {_formatar_numero(media)}", "media": media, "numeros": valores}
+
+
+def _maior_menor(texto: str) -> dict[str, Any]:
+    valores = _numeros(texto)
+    if not valores:
+        return {"resultado": "Não achei número nenhum na lista.", "numeros": []}
+    return {
+        "resultado": f"Maior: {_formatar_numero(max(valores))} · menor: {_formatar_numero(min(valores))}",
+        "maior": max(valores),
+        "menor": min(valores),
+    }
+
+
+def _porcentagem(texto: str) -> dict[str, Any]:
+    achado = re.search(r"(\d+(?:[.,]\d+)?)\s*%\s*(?:de|do|da)\s*(\d+(?:[.,]\d+)?)", texto)
+    if not achado:
+        return {"resultado": "Diga assim: quanto é 20% de 350."}
+    parte = float(achado.group(1).replace(",", "."))
+    total = float(achado.group(2).replace(",", "."))
+    return {"resultado": f"{_formatar_numero(parte)}% de {_formatar_numero(total)} = {_formatar_numero(parte * total / 100)}", "valor": parte * total / 100}
+
+
+def _ordenar(texto: str) -> dict[str, Any]:
+    itens = sorted(_itens(texto), key=str.casefold)
+    return {"resultado": "\n".join(itens), "itens": itens}
+
+
+def _unicos(texto: str) -> dict[str, Any]:
+    vistos: list[str] = []
+    removidos = 0
+    for item in _itens(texto):
+        if item.casefold() in {visto.casefold() for visto in vistos}:
+            removidos += 1
+            continue
+        vistos.append(item)
+    marca = f"{removidos} repetido removido" if removidos == 1 else f"{removidos} repetidos removidos"
+    return {"resultado": f"{len(vistos)} itens, {marca}:\n" + "\n".join(vistos), "itens": vistos, "removidos": removidos}
+
+
+def _frequencia(texto: str) -> dict[str, Any]:
+    contagem = Counter(item.casefold() for item in _itens(texto))
+    if not contagem:
+        return {"resultado": "Nenhum item para contar."}
+    linhas = [f"- {item}: {quantas}×" for item, quantas in contagem.most_common(10)]
+    return {"resultado": "Repetições:\n" + "\n".join(linhas), "contagem": dict(contagem)}
+
+
+def _maiusculas(texto: str) -> dict[str, Any]:
+    return {"resultado": texto.upper()}
+
+
+def _minusculas(texto: str) -> dict[str, Any]:
+    return {"resultado": texto.lower()}
+
+
+def _slug(texto: str) -> dict[str, Any]:
+    base = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    return {"resultado": slug, "slug": slug}
+
+
+def _inverter(texto: str) -> dict[str, Any]:
+    return {"resultado": texto[::-1]}
+
+
+_UNIDADES: dict[str, tuple[str, float]] = {
+    "km": ("comprimento", 1000.0), "quilometro": ("comprimento", 1000.0), "quilometros": ("comprimento", 1000.0),
+    "m": ("comprimento", 1.0), "metro": ("comprimento", 1.0), "metros": ("comprimento", 1.0),
+    "cm": ("comprimento", 0.01), "centimetro": ("comprimento", 0.01), "centimetros": ("comprimento", 0.01),
+    "milha": ("comprimento", 1609.344), "milhas": ("comprimento", 1609.344),
+    "pe": ("comprimento", 0.3048), "pes": ("comprimento", 0.3048),
+    "polegada": ("comprimento", 0.0254), "polegadas": ("comprimento", 0.0254),
+    "kg": ("massa", 1.0), "quilo": ("massa", 1.0), "quilos": ("massa", 1.0), "quilograma": ("massa", 1.0), "quilogramas": ("massa", 1.0),
+    "g": ("massa", 0.001), "grama": ("massa", 0.001), "gramas": ("massa", 0.001),
+    "libra": ("massa", 0.45359237), "libras": ("massa", 0.45359237),
+    "l": ("volume", 1.0), "litro": ("volume", 1.0), "litros": ("volume", 1.0),
+    "ml": ("volume", 0.001), "mililitro": ("volume", 0.001), "mililitros": ("volume", 0.001),
+    "galao": ("volume", 3.785411784), "galoes": ("volume", 3.785411784),
+}
+
+
+def _converter_unidades(texto: str) -> dict[str, Any]:
+    achado = re.search(r"(-?\d+(?:[.,]\d+)?)\s*([a-zA-Zçãéê]+)\s*(?:em|para|pra)\s*([a-zA-Zçãéê]+)", texto)
+    if not achado:
+        return {"resultado": "Diga assim: converter 10 km em milhas."}
+    valor = float(achado.group(1).replace(",", "."))
+    origem = normalizar(achado.group(2))
+    destino = normalizar(achado.group(3))
+
+    if origem in {"c", "celsius", "graus"} and destino in {"f", "fahrenheit"}:
+        return {"resultado": f"{_formatar_numero(valor)} °C = {_formatar_numero(valor * 9 / 5 + 32)} °F", "valor": valor * 9 / 5 + 32}
+    if origem in {"f", "fahrenheit"} and destino in {"c", "celsius", "graus"}:
+        return {"resultado": f"{_formatar_numero(valor)} °F = {_formatar_numero((valor - 32) * 5 / 9)} °C", "valor": (valor - 32) * 5 / 9}
+
+    if origem not in _UNIDADES or destino not in _UNIDADES:
+        return {"resultado": "Não conheço essa unidade. Tento km, m, cm, milhas, pés, polegadas, kg, g, libras, litros, ml, galões, °C e °F."}
+    grandeza_origem, fator_origem = _UNIDADES[origem]
+    grandeza_destino, fator_destino = _UNIDADES[destino]
+    if grandeza_origem != grandeza_destino:
+        return {"resultado": "Essas duas unidades medem coisas diferentes; não dá para converter."}
+    convertido = valor * fator_origem / fator_destino
+    return {"resultado": f"{_formatar_numero(valor)} {origem} = {_formatar_numero(convertido)} {destino}", "valor": convertido}
+
+
+def _diferenca_datas(texto: str) -> dict[str, Any]:
+    padroes = [r"(\d{1,2})/(\d{1,2})/(\d{4})", r"(\d{4})-(\d{2})-(\d{2})"]
+    datas: list[date] = []
+    for padrao in padroes:
+        for achado in re.finditer(padrao, texto):
+            grupos = achado.groups()
+            try:
+                if len(grupos[0]) == 4:
+                    datas.append(date(int(grupos[0]), int(grupos[1]), int(grupos[2])))
+                else:
+                    datas.append(date(int(grupos[2]), int(grupos[1]), int(grupos[0])))
+            except ValueError:
+                continue
+    if len(datas) < 2:
+        return {"resultado": "Preciso de duas datas, por exemplo: quantos dias entre 01/01/2026 e 25/10/2026."}
+    dias = abs((datas[1] - datas[0]).days)
+    return {"resultado": f"{dias} dias entre {datas[0].strftime('%d/%m/%Y')} e {datas[1].strftime('%d/%m/%Y')}.", "dias": dias}
+
+
+def _hash_sha256(texto: str) -> dict[str, Any]:
+    import hashlib
+
+    resumo = hashlib.sha256(texto.encode("utf-8")).hexdigest()
+    return {"resultado": resumo, "sha256": resumo}
+
+
+_OPERACOES: dict[str, Callable[[str], dict[str, Any]]] = {
+    "contar-palavras": _contar_palavras,
+    "contar-caracteres": _contar_caracteres,
+    "contar-linhas": _contar_linhas,
+    "extrair-links": _extrair_links,
+    "extrair-emails": _extrair_emails,
+    "extrair-numeros": _extrair_numeros,
+    "somar": _somar,
+    "media": _media,
+    "maior-menor": _maior_menor,
+    "porcentagem": _porcentagem,
+    "ordenar": _ordenar,
+    "unicos": _unicos,
+    "frequencia": _frequencia,
+    "maiusculas": _maiusculas,
+    "minusculas": _minusculas,
+    "slug": _slug,
+    "inverter": _inverter,
+    "converter-unidades": _converter_unidades,
+    "diferenca-datas": _diferenca_datas,
+    "hash-sha256": _hash_sha256,
+}
+
+
+def executar_receita(receita: Receita, entrada: str) -> dict[str, Any]:
+    operacao = _OPERACOES.get(receita.id)
+    if operacao is None:
+        raise AgenteError(f"A receita {receita.id} não tem operação registrada.")
+    resultado = operacao(entrada)
+    resultado.setdefault("resultado", "")
+    return resultado
+
+
+# ------------------------------------------------------------- skills locais
+
+@dataclass(frozen=True)
+class SkillLocal:
+    """Skill criada pelo agente: uma receita do catálogo, com nome e exemplo."""
+
+    id: str
+    nome: str
+    descricao: str
+    receita: str
+    campo: str
+    criado_em: str
+
+    def publica(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _pasta_locais(raiz: Path) -> Path:
+    return Path(raiz) / ARQUIVO_LOCAIS
+
+
+def carregar_locais(raiz: Path) -> list[SkillLocal]:
+    arquivo = _pasta_locais(raiz)
+    if not arquivo.exists():
+        return []
+    try:
+        bruto = json.loads(arquivo.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    itens = bruto.get("skills") if isinstance(bruto, dict) else bruto
+    locais: list[SkillLocal] = []
+    for item in itens or []:
+        if not isinstance(item, dict) or not item.get("id") or not item.get("receita"):
+            continue
+        if item["receita"] not in _RECEITAS_POR_ID:
+            continue
+        locais.append(
+            SkillLocal(
+                id=str(item["id"]),
+                nome=str(item.get("nome") or item["receita"]),
+                descricao=str(item.get("descricao") or ""),
+                receita=str(item["receita"]),
+                campo=str(item.get("campo") or "texto"),
+                criado_em=str(item.get("criado_em") or ""),
+            )
+        )
+    return locais
+
+
+def salvar_locais(raiz: Path, locais: list[SkillLocal]) -> None:
+    arquivo = _pasta_locais(raiz)
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    conteudo = {"skills": [asdict(local) for local in locais]}
+    arquivo.write_text(json.dumps(conteudo, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def criar_skill(receita: Receita, raiz: Path) -> tuple[SkillLocal, bool]:
+    """Cria (ou reaproveita) a skill local que executa esta receita."""
+    locais = carregar_locais(raiz)
+    for local in locais:
+        if local.receita == receita.id:
+            return local, False
+    skill = SkillLocal(
+        id=f"local.{receita.id}",
+        nome=receita.nome,
+        descricao=receita.descricao,
+        receita=receita.id,
+        campo=receita.campo,
+        criado_em=datetime.now(timezone.utc).isoformat(),
+    )
+    salvar_locais(raiz, [*locais, skill])
+    return skill, True
+
+
+def entrada_de_local(local: SkillLocal) -> Entrada:
+    receita = _RECEITAS_POR_ID.get(local.receita)
+    fortes = set(palavras(local.nome)) | set(palavras(local.id.replace(".", " ").replace("-", " ")))
+    fracos = set(palavras(local.descricao)) | (set(palavras(receita.exemplo)) if receita else set())
+    return Entrada(
+        skill_id=local.id,
+        nome=local.nome,
+        categoria="Skill local",
+        descricao=local.descricao,
+        schema={"properties": {local.campo: {"type": "string", "title": local.campo}}, "required": [local.campo]},
+        fortes=frozenset(fortes),
+        fracos=frozenset(fracos),
+        receita=local.receita,
+        local=True,
+    )
+
+
+# --------------------------------------------------------------- formatação
+
+def _tabela(itens: list[Any], limite: int = 12) -> str:
+    linhas: list[str] = []
+    for item in itens[:limite]:
+        if isinstance(item, dict):
+            partes = [f"{chave}: {valor}" for chave, valor in list(item.items())[:4] if not isinstance(valor, (dict, list))]
+            linhas.append("- " + " · ".join(partes))
+        else:
+            linhas.append(f"- {item}")
+    if len(itens) > limite:
+        linhas.append(f"- … e mais {len(itens) - limite}")
+    return "\n".join(linhas)
+
+
+# Rótulos em português para as chaves que mais aparecem nos resultados. Chave
+# fora da lista aparece como veio; nada é omitido.
+_ROTULOS = {
+    "words": "palavras",
+    "characters": "caracteres",
+    "charactersWithoutSpaces": "caracteres sem espaço",
+    "sentences": "frases",
+    "estimatedReadingMinutes": "minutos de leitura",
+    "count": "total",
+    "files": "arquivos",
+    "root": "raiz",
+    "limit": "limite",
+    "path": "caminho",
+    "status": "estado",
+    "version": "versão",
+    "article": "artigo",
+    "articleNumber": "número do artigo",
+    "documentTitle": "documento",
+    "documentShortTitle": "documento",
+    "text": "texto",
+    "source": "fonte",
+    "total": "total",
+    "dryRun": "simulação",
+}
+
+_TEXTO_LONGO = ("text", "texto", "conteudo", "content", "resposta", "answer", "resultado", "mensagem", "message")
+
+
+def _rotulo(chave: str) -> str:
+    return _ROTULOS.get(chave, chave)
+
+
+def _valor_legivel(valor: Any) -> str:
+    if isinstance(valor, bool):
+        return "sim" if valor else "não"
+    if isinstance(valor, float):
+        return _formatar_numero(valor)
+    return str(valor)
+
+
+def formatar_resultado(resultado: Any) -> str:
+    """Transforma o retorno de uma skill em texto legível no chat."""
+    if not isinstance(resultado, dict):
+        return str(resultado)[:LIMITE_RESPOSTA]
+
+    partes: list[str] = []
+    usados: set[str] = set()
+
+    resumo = resultado.get("summary")
+    if isinstance(resumo, str) and resumo.strip():
+        partes.append(resumo.strip())
+        usados.add("summary")
+
+    corpo = ""
+    for chave in _TEXTO_LONGO:
+        valor = resultado.get(chave)
+        if isinstance(valor, str) and len(valor.strip()) >= 40:
+            corpo = valor.strip()
+            usados.add(chave)
+            break
+    if corpo:
+        partes.append(corpo)
+
+    for chave in ("rows", "items", "resultados", "lista", "registros", "files", "topTerms"):
+        itens = resultado.get(chave)
+        if isinstance(itens, list) and itens:
+            partes.append(_tabela(itens))
+            usados.add(chave)
+            break
+
+    escalares: list[str] = []
+    for chave, valor in resultado.items():
+        if chave in usados or not isinstance(valor, (str, int, float, bool)):
+            continue
+        if isinstance(valor, str) and len(valor) > 160:
+            continue
+        escalares.append(f"{_rotulo(chave)}: {_valor_legivel(valor)}")
+    if escalares:
+        partes.append("\n".join(f"- {linha}" for linha in escalares[:10]))
+
+    if not partes:
+        partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
+    texto = "\n\n".join(partes)
+    return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+# ------------------------------------------------------------------- web
+
+async def procurar_na_web(
+    pergunta: str,
+    *,
+    autorizacao: str,
+    buscar: Callable[..., dict[str, Any]] | None = None,
+    ler: Callable[..., dict[str, Any]] | None = None,
+    limite: int = 6,
+    paginas: int = 1,
+) -> dict[str, Any]:
+    """Busca e lê sem modelo: devolve fontes e trecho, nunca um resumo inventado."""
+    try:
+        resultado = await pesquisa_responder(
+            pergunta,
+            autorizacao=autorizacao,
+            provedor=None,
+            buscar=buscar,
+            ler=ler,
+            limite=limite,
+            paginas=paginas,
+        )
+    except SistemaError as exc:
+        return {
+            "acao": "nada",
+            "resposta": f"Não achei skill nem receita para isso, e a busca na web falhou: {exc}",
+            "fontes": [],
+            "avisos": [str(exc)],
+        }
+
+    fontes = resultado.get("fontes") or []
+    trecho = (resultado.get("trecho") or "").strip()
+    linhas = ["Não tenho skill nem receita para isso. Procurei na web e isto é o que existe:"]
+    for indice, fonte in enumerate(fontes, start=1):
+        marca = " (lida)" if fonte.get("lida") else ""
+        linhas.append(f"{indice}. {fonte.get('titulo') or 'sem título'} — {fonte.get('url')}{marca}")
+    if trecho:
+        linhas.append("")
+        linhas.append(f"Trecho de {fontes[0]['url'] if fontes else 'uma das páginas'}:")
+        linhas.append(trecho[:LIMITE_TRECHO_WEB])
+    if not fontes:
+        linhas.append("A busca não devolveu nenhum link.")
+    return {
+        "acao": "web",
+        "resposta": "\n".join(linhas),
+        "fontes": fontes,
+        "avisos": list(resultado.get("avisos") or []),
+    }
+
+
+# ----------------------------------------------------------- orquestração
+
+def _resultado_base(pedido: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "pedido": pedido,
+        "acao": "nada",
+        "skill": None,
+        "confianca": 0.0,
+        "parametros": {},
+        "faltando": [],
+        "resposta": "",
+        "alternativas": [],
+        "fontes": [],
+        "avisos": [],
+        "limites": [
+            "A busca nas skills é por palavra, não por significado: sinônimo fora da lista não encontra.",
+            "Skill criada aqui vem de um catálogo fechado de receitas; o agente não escreve código novo.",
+            "Nenhum passo chama provedor de IA — com a rede desligada, só a etapa da web deixa de funcionar.",
+        ],
+    }
+
+
+async def _executar_skill(
+    entrada: Entrada,
+    consulta: str,
+    *,
+    registry: Any,
+) -> dict[str, Any]:
+    if entrada.receita:
+        receita = _RECEITAS_POR_ID.get(entrada.receita)
+        if receita is None:
+            return {"parametros": {}, "faltando": [], "resposta": None, "erro": "receita desconhecida"}
+        texto = texto_livre(consulta)
+        if receita.tipo == "numeros" and not _numeros(texto):
+            texto = ""
+        if not texto:
+            return {"parametros": {}, "faltando": [receita.campo], "resposta": None}
+        resultado = executar_receita(receita, texto)
+        return {"parametros": {receita.campo: texto}, "faltando": [], "resposta": str(resultado.get("resultado") or "")}
+    parametros, faltando = extrair_parametros(consulta, entrada.schema)
+    if faltando:
+        return {"parametros": parametros, "faltando": faltando, "resposta": None}
+    try:
+        resultado = await registry.execute(entrada.skill_id, parametros, False)
+    except Exception as exc:  # a skill pode recusar parâmetro; o chat não pode cair
+        return {"parametros": parametros, "faltando": [], "resposta": None, "erro": str(exc)}
+    return {"parametros": parametros, "faltando": [], "resposta": formatar_resultado(resultado)}
+
+
+def _pedido_do_campo(campo: str, entrada: Entrada, exemplo: str) -> str:
+    titulo = _titulo_do_campo(campo, entrada.schema)
+    return f"Falta o campo “{titulo}”. Exemplo: {exemplo}"
+
+
+async def atender(
+    pedido: str,
+    *,
+    registry: Any,
+    raiz: Path,
+    autorizacao: str = "",
+    criar: bool = True,
+    consultar_web: bool = True,
+    buscar: Callable[..., dict[str, Any]] | None = None,
+    ler: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Resolve o pedido sem IA: skill → receita → web → explicação honesta."""
+    termo = (pedido or "").strip()
+    if len(termo) < 3:
+        raise AgenteError("Escreva o pedido com pelo menos 3 caracteres.")
+
+    base = _resultado_base(termo)
+    locais = carregar_locais(raiz)
+    receita = achar_receita(termo) if criar else None
+
+    # 0. Receita que já virou skill local: executa direto, sem passar pelo
+    #    ranking — o gatilho da receita é sinal forte e determinístico.
+    if receita is not None:
+        existente = next((local for local in locais if local.receita == receita.id), None)
+        if existente is not None:
+            tentativa = await _executar_skill(entrada_de_local(existente), termo, registry=registry)
+            if tentativa.get("resposta"):
+                base["acao"] = "executado"
+                base["confianca"] = 1.0
+                base["skill"] = {"id": existente.id, "nome": existente.nome, "categoria": "Skill local", "descricao": existente.descricao, "local": True}
+                base["parametros"] = tentativa["parametros"]
+                base["resposta"] = f"Usei a skill local “{existente.nome}” ({existente.id}).\n\n{tentativa['resposta']}"
+                return base
+
+    entradas = indexar(registry.list()) + [entrada_de_local(local) for local in locais]
+    ranking = pesquisar(termo, entradas, LIMITE_CANDIDATOS)
+
+    if ranking:
+        base["alternativas"] = [
+            {"id": item["entrada"].skill_id, "nome": item["entrada"].nome, "confianca": item["score"]}
+            for item in ranking[1:4]
+        ]
+
+    # 1. Skill existente com confiança alta e ao menos um termo forte: executa.
+    if ranking and ranking[0]["score"] >= LIMIAR_EXECUTAR and ranking[0]["fortes"] > 0:
+        principal = ranking[0]
+        base["confianca"] = principal["score"]
+        tentativa = await _executar_skill(principal["entrada"], termo, registry=registry)
+        base["parametros"] = tentativa["parametros"]
+        base["skill"] = principal["entrada"].resumo()
+        if tentativa.get("resposta"):
+            base["acao"] = "executado"
+            prefixo = f"Usei a skill local “{principal['entrada'].nome}” ({principal['entrada'].skill_id}).\n\n" if principal["entrada"].local else ""
+            base["resposta"] = prefixo + tentativa["resposta"]
+            return base
+        if tentativa.get("faltando"):
+            base["acao"] = "faltando"
+            base["faltando"] = tentativa["faltando"]
+            base["resposta"] = "Encontrei a skill “{}”, mas {}.".format(
+                principal["entrada"].nome,
+                " e ".join(_pedido_do_campo(campo, principal["entrada"], "veja o formulário da skill") for campo in tentativa["faltando"]),
+            )
+            return base
+        base["avisos"].append(f"A skill {principal['entrada'].skill_id} recusou o pedido: {tentativa.get('erro') or 'sem detalhe'}")
+
+    # 2. Confiança média: não executa nada. Pede o campo que falta quando a
+    #    skill é a única parecida; caso contrário, mostra as mais próximas.
+    if ranking and ranking[0]["score"] >= LIMIAR_SUGERIR and ranking[0]["fortes"] > 0:
+        principal = ranking[0]
+        base["confianca"] = principal["score"]
+        _, faltando = extrair_parametros(termo, principal["entrada"].schema)
+        segundo = ranking[1]["score"] if len(ranking) > 1 else 0.0
+        if faltando and principal["score"] - segundo >= 0.15:
+            base["acao"] = "faltando"
+            base["skill"] = principal["entrada"].resumo()
+            base["faltando"] = faltando
+            base["resposta"] = "Encontrei a skill “{}”, mas {}.".format(
+                principal["entrada"].nome,
+                " e ".join(_pedido_do_campo(campo, principal["entrada"], "veja o formulário da skill") for campo in faltando),
+            )
+            return base
+        base["acao"] = "sugerir"
+        base["skill"] = None
+        nomes = "\n".join(f"- {item['entrada'].nome} ({item['entrada'].skill_id})" for item in ranking[:3])
+        base["resposta"] = (
+            "Não tenho certeza de qual skill resolve isso. As mais próximas são:\n"
+            f"{nomes}\n\nDiga o nome ou o id da skill, ou reformule o pedido."
+        )
+        return base
+
+    # 3. Nenhuma skill: cria a skill local a partir de uma receita e executa.
+    if receita is not None:
+        skill, criada = criar_skill(receita, raiz)
+        entrada_texto = texto_livre(termo)
+        if receita.tipo == "numeros" and not _numeros(entrada_texto):
+            entrada_texto = ""
+        base["skill"] = {"id": skill.id, "nome": skill.nome, "categoria": "Skill local", "descricao": skill.descricao, "local": True}
+        if not entrada_texto:
+            base["acao"] = "faltando"
+            base["faltando"] = [receita.campo]
+            base["resposta"] = (
+                f"{'Criei' if criada else 'Já existe'} a skill local “{skill.nome}” ({skill.id}).\n"
+                f"Para rodar, mande: {receita.exemplo}"
+            )
+            return base
+        resultado = executar_receita(receita, entrada_texto)
+        base["acao"] = "criado"
+        base["parametros"] = {receita.campo: entrada_texto}
+        base["confianca"] = 1.0
+        base["resposta"] = f"{'Criei' if criada else 'Usei'} a skill local “{skill.nome}” ({skill.id}).\n\n{resultado.get('resultado', '')}"
+        return base
+
+    # 4. Web, sem modelo: fontes e trecho.
+    if consultar_web:
+        busca_web = await procurar_na_web(termo, autorizacao=autorizacao, buscar=buscar, ler=ler)
+        base["acao"] = busca_web["acao"]
+        base["resposta"] = busca_web["resposta"]
+        base["fontes"] = busca_web["fontes"]
+        base["avisos"].extend(busca_web["avisos"])
+        if busca_web["acao"] == "web":
+            base["avisos"].append(
+                "Não criei skill para isso: escrever código novo exigiria um modelo. "
+                "Se quiser, peça uma das receitas prontas ou copie os passos da página."
+            )
+        return base
+
+    base["resposta"] = (
+        "Não achei skill, receita nem web para este pedido. "
+        "Diga “ajuda” para ver os comandos que funcionam sem modelo."
+    )
+    return base

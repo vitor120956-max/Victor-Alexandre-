@@ -79,7 +79,7 @@ async def responder(
     pergunta: str,
     *,
     autorizacao: str,
-    provedor: AIProvider,
+    provedor: AIProvider | None = None,
     buscar: Buscar | None = None,
     ler: Ler | None = None,
     limite: int = 6,
@@ -116,7 +116,7 @@ async def responder(
 
     resposta: str | None = None
     modo = "sem-ia"
-    if provedor.configured:
+    if provedor is not None and provedor.configured:
         try:
             resposta = await provedor.generate(
                 AIRequest(message=termo, material=material, max_tokens=900)
