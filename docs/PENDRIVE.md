@@ -406,7 +406,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.36.5 D:\JARVIS
+jarvis-nucleo-pessoal@0.37.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -528,7 +528,50 @@ Nesse caso as dependências precisam estar instaladas no Python do sistema: `pip
 
 ---
 
-## 5. Configurar a chave de IA
+## 5. Modo sem Node: rodar sem `npm install`
+
+Todo o resto do guia assume `npm install`. **Não é obrigatório.** A interface compilada está versionada na pasta `web-dist/` (19 arquivos, **1,6 MB**), e a API Python a serve na mesma porta. É o caminho para pendrive lento, máquina sem Node ou `npm install` que não termina.
+
+```bat
+cd /d D:\JARVIS
+py -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python iniciar.py
+```
+
+Depois abra **http://127.0.0.1:8000** — sem Vite, sem porta 5173, sem `node_modules`.
+
+| Modo | Precisa de Node? | Precisa de `npm install`? | Tamanho no pendrive | Porta |
+|---|---|---|---|---|
+| `npm run dev` (desenvolvimento) | sim | sim (139 MB) | ~300 MB | 5173 + 8000 |
+| `py iniciar.py` (sem Node) | **não** | **não** | ~140 MB (só `.venv`) | **8000** |
+
+O `iniciar.py` aceita `--porta 8080` e `--host 0.0.0.0` (para acessar de outro aparelho na rede local). Ele também troca sozinho para o Python do `.venv` quando existir.
+
+Como conferir que a interface está sendo servida:
+
+```bat
+curl http://127.0.0.1:8000/api/health
+```
+
+A resposta inclui `"interface": "web-dist"` (ou `"dist"`, quando você rodou `npm run build`). Se aparecer `"ausente"`, a pasta não veio na cópia.
+
+Para atualizar a interface embutida depois de mexer no React:
+
+```bat
+npm run build:embutido
+```
+
+### Limites do modo sem Node
+
+- **Não recarrega ao editar.** Mudou código React? Precisa de `npm run build:embutido` — que exige Node.
+- **Sem testes web.** `npx vitest` continua exigindo `npm install`.
+- **Mesmas 209 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
+
+---
+
+
+## 6. Configurar a chave de IA
 
 ```bash
 cp .env.example .env
@@ -553,7 +596,7 @@ O `.env` está no `.gitignore`: não entra no Git e não deve ser compartilhado 
 
 ---
 
-## 6. Subir e conferir
+## 7. Subir e conferir
 
 ```bash
 npm run dev
@@ -565,13 +608,13 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.5"` e `"skills": 209`.
+Esperado: `"version": "0.37.0"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
 ---
 
-## 7. Onde cada coisa é gravada
+## 8. Onde cada coisa é gravada
 
 Tudo abaixo fica **dentro da pasta do projeto**, ou seja, no pendrive:
 
@@ -589,7 +632,7 @@ O que **não** fica no pendrive: arquivos baixados clicando no navegador (vão p
 
 ---
 
-## 8. A skill que traz os arquivos da pasta Downloads
+## 9. A skill que traz os arquivos da pasta Downloads
 
 A skill **`files.import`** (“Importar do computador”) copia arquivos da pasta de downloads da máquina para a área isolada do JARVIS, que no seu caso é o pendrive.
 
@@ -641,18 +684,18 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 
 ---
 
-## 9. Limites que precisam ficar ditos
+## 10. Limites que precisam ficar ditos
 
 1. **Não é um sistema operacional.** O pendrive carrega o programa, não a máquina.
 2. **`.venv` e `node_modules` são por máquina.** Trocar a letra do drive (`E:` → `F:`) ou de computador quebra o `.venv`; recrie.
-3. **Pendrive USB 2.0 é lento.** Rodar os 1.815 testes de API a partir dele demora bem mais que no disco interno.
+3. **Pendrive USB 2.0 é lento.** Rodar os 1.830 testes de API a partir dele demora bem mais que no disco interno.
 4. **exFAT não guarda permissão.** Instalar AppImage pela camada de sistema vai falhar no `chmod +x`.
 5. **A camada de auto-alteração precisa de `.git`.** Sem ele, `evoluir.promover` recusa.
 6. **O pendrive pode ser perdido.** O `.env` viaja junto; se a chave estiver nele, troque a chave se o pendrive sumir.
 
 ---
 
-## 10. Problemas comuns
+## 11. Problemas comuns
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
@@ -672,7 +715,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 
 ---
 
-## 11. Checklist
+## 12. Checklist
 
 - [ ] Node 22+ instalado (`node --version`)
 - [ ] Python 3.11+ instalado (`python --version`)
@@ -683,7 +726,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.5` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.37.0` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

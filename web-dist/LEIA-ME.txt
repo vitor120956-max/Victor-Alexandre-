@@ -1,0 +1,8 @@
+Interface compilada, versionada de propósito.
+
+Motivo: a API Python serve esta pasta quando `dist/` não existe, então dá
+para usar o JARVIS sem Node e sem `npm install` — o caso de quem roda de
+um pendrive lento.
+
+Para regerar: npm run build:embutido
+Não edite estes arquivos à mão: eles vêm do `npm run build`.

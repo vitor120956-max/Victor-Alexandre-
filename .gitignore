@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# `web-dist/` NÃO é ignorado: é a interface compilada que permite rodar sem Node.
+# Regenerada por `npm run build:embutido`.
 .vite/
 .venv/
 __pycache__/

@@ -45,7 +45,7 @@ def test_script_existe_e_e_executavel_pelo_node():
 def test_mede_os_itens_que_importam():
     _codigo, dados = rodar()
     ids = {item["id"] for item in dados["itens"]}
-    for esperado in {"node", "python", "deps-python", "deps-node", "env", "chave", "storage", "espaco", "fs", "git", "portas"}:
+    for esperado in {"node", "python", "deps-python", "deps-node", "interface", "env", "chave", "storage", "espaco", "fs", "git", "portas"}:
         assert esperado in ids
 
 

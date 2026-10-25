@@ -170,8 +170,17 @@ let pythonEscolhido = null;
 // --------------------------------------------------------------------------
 {
   const vite = join(RAIZ, 'node_modules', 'vite');
+  const embutida = existsSync(join(RAIZ, 'web-dist', 'index.html'));
   if (existsSync(vite)) {
     registrar('deps-node', 'Bibliotecas do Node', 'ok', 'node_modules presente (vite instalado)');
+  } else if (embutida) {
+    registrar(
+      'deps-node',
+      'Bibliotecas do Node',
+      'aviso',
+      'node_modules ausente — a interface embutida em web-dist/ cobre o uso normal',
+      'Para desenvolver a interface: npm install. Para só usar: py iniciar.py (não precisa de Node).',
+    );
   } else {
     registrar('deps-node', 'Bibliotecas do Node', 'falha', 'node_modules ausente ou incompleto', 'Rode: npm install');
   }
@@ -326,6 +335,27 @@ const WINDOWS_FS = new Map([
     }
   } catch (erro) {
     registrar('espaco', 'Espaço livre', 'aviso', `não consegui medir (${erro.code || erro.message})`);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 6b. Interface compilada (o que permite rodar sem Node)
+// --------------------------------------------------------------------------
+{
+  const local = join(RAIZ, 'dist', 'index.html');
+  const embutida = join(RAIZ, 'web-dist', 'index.html');
+  if (existsSync(local)) {
+    registrar('interface', 'Interface compilada', 'ok', 'dist/ presente (build local)');
+  } else if (existsSync(embutida)) {
+    registrar('interface', 'Interface compilada', 'ok', 'web-dist/ presente — dá para rodar sem Node: py iniciar.py');
+  } else {
+    registrar(
+      'interface',
+      'Interface compilada',
+      'falha',
+      'nenhuma interface em dist/ ou web-dist/',
+      'Rode: npm run build:embutido (exige Node).',
+    );
   }
 }
 

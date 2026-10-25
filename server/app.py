@@ -111,6 +111,20 @@ class RateLimiter:
         return True
 
 
+def pasta_da_interface(base: Path | None = None) -> Path | None:
+    """Onde está a interface já compilada: `dist` (build local) ou `web-dist` (embutida no Git).
+
+    O `web-dist` existe para quem não quer (ou não consegue) rodar `npm install`:
+    a API serve a mesma interface sem Node instalado.
+    """
+    raiz = base or PROJECT_ROOT
+    for nome in ("dist", "web-dist"):
+        candidata = raiz / nome
+        if (candidata / "index.html").is_file():
+            return candidata
+    return None
+
+
 def create_app(
     *,
     ai_provider: AIProvider | None = None,
@@ -139,11 +153,12 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.36.5",
+        version="0.37.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
     application.state.rate_limiter = RateLimiter()
+    interface = pasta_da_interface()
 
     @application.middleware("http")
     async def protect_api(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -173,9 +188,10 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.36.5",
+            "version": "0.37.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
+            "interface": interface.name if interface else "ausente",
         }
 
     @application.get("/api/skills")
@@ -435,22 +451,27 @@ def create_app(
     def estacao_recuperar() -> dict[str, Any]:
         return {"ok": True, "result": estacao_runtime.recuperar()}
 
-    dist = PROJECT_ROOT / "dist"
-
     @application.get("/{full_path:path}", include_in_schema=False)
     def serve_frontend(full_path: str):  # type: ignore[no-untyped-def]
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Rota de API não encontrada.")
-        if not dist.exists():
-            return {"service": "JARVIS API", "status": "online", "docs": "/docs"}
-        candidate = (dist / full_path).resolve()
+        if interface is None:
+            return {
+                "service": "JARVIS API",
+                "status": "online",
+                "docs": "/docs",
+                "interface": "ausente",
+                "como_ligar": "Rode `npm run build` (grava em dist/) ou use a interface embutida em web-dist/.",
+            }
+        raiz = interface.resolve()
+        candidate = (raiz / full_path).resolve()
         try:
-            candidate.relative_to(dist.resolve())
+            candidate.relative_to(raiz)
         except ValueError as exc:
             raise HTTPException(status_code=403, detail="Caminho inválido.") from exc
         if full_path and candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(dist / "index.html")
+        return FileResponse(raiz / "index.html")
 
     return application
 

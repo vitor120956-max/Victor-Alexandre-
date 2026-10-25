@@ -1,15 +1,17 @@
 {
   "name": "jarvis-nucleo-pessoal",
   "private": true,
-  "version": "0.36.5",
+  "version": "0.37.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names API,WEB --prefix-colors yellow,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite --host 0.0.0.0",
     "dev:api": "node scripts/python.mjs -m uvicorn server.app:app --reload --host 0.0.0.0 --port 8000",
     "build": "tsc -b && vite build",
+    "build:embutido": "npm run build && node scripts/embutir-interface.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "start": "node scripts/python.mjs -m uvicorn server.app:app --host 0.0.0.0 --port 8000",
+    "start:embutido": "node scripts/python.mjs -m uvicorn server.app:create_app --factory --host 127.0.0.1 --port 8000",
     "test": "npm run test:web && npm run test:api",
     "test:web": "vitest run",
     "test:api": "node scripts/python.mjs -m pytest",
