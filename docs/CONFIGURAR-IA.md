@@ -14,6 +14,20 @@ Não use uma chave de administrador e não compartilhe a credencial no chat.
 
 ## 2. Crie o arquivo de ambiente no servidor
 
+O caminho mais seguro é o script do projeto: ele pergunta os campos, pede a chave **sem ecoar** (nada de chave no histórico do terminal) e grava o `.env` com a quebra de linha do Windows.
+
+```bash
+.venv/bin/python configurar-chave.py
+```
+
+```bat
+.venv\Scripts\python configurar-chave.py
+```
+
+`--ver` mostra a configuração atual com a chave mascarada; `--limpar` apaga só a chave, mantendo o resto do arquivo.
+
+Na mão:
+
 ```bash
 cp .env.example .env
 ```
@@ -30,6 +44,8 @@ JARVIS_AI_API_KEY=valor-da-chave
 Não inclua `/chat/completions` na base: o backend acrescenta esse caminho. O `.env` já está no `.gitignore`.
 
 ## 3. Reinicie e verifique
+
+O `.env` só é lido na inicialização: pare o processo e suba de novo.
 
 ```bash
 npm run dev

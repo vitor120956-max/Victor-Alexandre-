@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.37.1.**
+**Versão atual: 0.37.2.**
 
 ## Executar em desenvolvimento
 
@@ -29,6 +29,8 @@ Antes de subir, `npm run checar` mede a máquina e a pasta: versão de Node e Py
 **Editáveis no Bloco de Notas antigo.** `requirements.txt`, `requirements-dev.txt`, `requirements-rapido.txt` e `.env.example` são gravados com quebra de linha **CRLF** (o `.gitattributes` impede o git de converter): o Notepad do Windows 10 anterior ao build 17763 mostra arquivo LF como uma linha única e, se salvar nesse estado, amassa o arquivo.
 
 O navegador usa somente URLs relativas `/api`; não é necessário chamar `localhost` a partir do código da interface.
+
+A chave de IA entra por `py configurar-chave.py`: o script pede a chave sem ecoar, não deixa rastro no histórico e grava o `.env` com quebra de linha do Windows. `--ver` mostra o que está gravado (mascarado) e `--limpar` apaga só a chave.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
