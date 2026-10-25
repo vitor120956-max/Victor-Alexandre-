@@ -193,7 +193,7 @@ revisar artefato de design
 Pela API:
 
 ```bash
-curl -s http://localhost:8000/api/health   # 0.33.0, 199 skills
+curl -s http://localhost:8000/api/health   # 0.34.0, 207 skills
 
 curl -s http://localhost:8000/api/skills/studio.contrast/execute \
   -H 'content-type: application/json' \

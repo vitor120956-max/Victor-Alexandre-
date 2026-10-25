@@ -590,8 +590,8 @@ def test_registry_registers_seven_read_only_career_skills() -> None:
 
 def test_health_reports_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.33.0"
-    assert health["skills"] == 199
+    assert health["version"] == "0.34.0"
+    assert health["skills"] == 207
 
 
 def test_api_runs_every_career_skill(client: TestClient) -> None:

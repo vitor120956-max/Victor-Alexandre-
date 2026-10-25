@@ -28,7 +28,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.33.0"
+VERSAO = "0.34.0"
 
 PROJETO = Path(__file__).resolve().parents[1]
 STORAGE = PROJETO / "storage"

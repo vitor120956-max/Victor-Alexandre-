@@ -129,6 +129,17 @@ from .continuidade import (
     portao as portao_continuidade,
     retomada as retomada_continuidade,
 )
+from .distilar import (
+    DistilarError,
+    catalogo as distilar_catalogo,
+    correcao as correcao_distilar,
+    dimensoes as dimensoes_distilar,
+    esboco as esboco_distilar,
+    hospedeiros as hospedeiros_distilar,
+    lastro as lastro_distilar,
+    perfil as perfil_distilar,
+    qualidade as qualidade_distilar,
+)
 from .elevacao import (
     ElevacaoError,
     elevar as elevar_root,
@@ -1178,6 +1189,56 @@ class SistemaDesinstalarInput(BaseModel):
     pacote: str = Field(default="", max_length=200, title="Alvo da remoção", json_schema_extra={"description": "`dpkg:nome`, `rpm:nome`, `pip:nome`, `npm:nome` ou `msi:{GUID}`."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class DistilarPerfilInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    corpus: str = Field(min_length=10, max_length=900_000, title="Material", json_schema_extra={"format": "textarea", "description": "Mensagens, documentos ou notas. Use `>>> arquivo` para separar fontes e `Autor: texto` para marcar falas."})
+    familia: Literal["colleague", "relationship", "celebrity", "owner"] = Field(default="colleague", title="Família")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarDimensoesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    familia: Literal["", "colleague", "relationship", "celebrity", "owner"] = Field(default="", title="Família", json_schema_extra={"description": "Vazio lista as quatro famílias."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarEsbocoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nome: str = Field(min_length=1, max_length=120, title="Nome do perfil")
+    familia: Literal["colleague", "relationship", "celebrity", "owner"] = Field(default="colleague", title="Família")
+    corpus: str = Field(default="", max_length=900_000, title="Material", json_schema_extra={"format": "textarea", "description": "Opcional: com material, o esqueleto marca cada seção como coberta, parcial ou sem evidência."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarQualidadeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    perfil_texto: str = Field(min_length=20, max_length=900_000, title="Texto do perfil", json_schema_extra={"format": "textarea"})
+    referencia: Literal["budget-friendly", "budget-unfriendly"] = Field(default="budget-friendly", title="Referência", json_schema_extra={"description": "`budget-unfriendly` é a régua estrita do projeto original."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarLastroInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    perfil_texto: str = Field(min_length=20, max_length=900_000, title="Texto do perfil", json_schema_extra={"format": "textarea"})
+    corpus: str = Field(min_length=10, max_length=900_000, title="Material de origem", json_schema_extra={"format": "textarea"})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarCorrecaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    correcao: str = Field(min_length=10, max_length=4_000, title="O que está errado", json_schema_extra={"format": "textarea", "description": "Ex.: `ele não decidiria isso, ele pede opinião antes`."})
+    secao: str = Field(default="", max_length=60, title="Seção afetada", json_schema_extra={"description": "Dimensão, `retrato`, `limites_honestos` ou `fontes`."})
+    evidencia: str = Field(default="", max_length=4_000, title="Evidência nova", json_schema_extra={"format": "textarea", "description": "Linha do material que sustenta a correção."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class DistilarHospedeirosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    host: Literal["", "claude-code", "openclaw", "hermes", "codex", "deepseek-harness", "pi", "grok-build", "opencode"] = Field(default="", title="Hospedeiro", json_schema_extra={"description": "Vazio lista os oito."})
+    raiz: str = Field(default="", max_length=500, title="Raiz do usuário", json_schema_extra={"description": "Vazio usa ~. Aceita caminho absoluto do sistema."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
 class SistemaPrivilegioInput(BaseModel):
@@ -3248,6 +3309,60 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def distilar_perfil_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarPerfilInput)
+        try:
+            return perfil_distilar(corpus=data.corpus, familia=data.familia, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_dimensoes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarDimensoesInput)
+        try:
+            return dimensoes_distilar(familia=data.familia, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_esboco_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarEsbocoInput)
+        try:
+            return esboco_distilar(nome=data.nome, familia=data.familia, corpus=data.corpus, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_qualidade_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarQualidadeInput)
+        try:
+            return qualidade_distilar(perfil_texto=data.perfil_texto, referencia=data.referencia, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_lastro_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarLastroInput)
+        try:
+            return lastro_distilar(perfil_texto=data.perfil_texto, corpus=data.corpus, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_correcao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarCorrecaoInput)
+        try:
+            return correcao_distilar(
+                correcao=data.correcao, secao=data.secao, evidencia=data.evidencia, modo=data.modo
+            )
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_hospedeiros_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarHospedeirosInput)
+        try:
+            return hospedeiros_distilar(host=data.host, raiz=data.raiz, modo=data.modo)
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def distilar_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return distilar_catalogo()
+
     def sistema_privilegio_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SistemaPrivilegioInput)
         try:
@@ -3768,6 +3883,14 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.desinstalar", "Plano de desinstalação", "Monta o comando de remoção por gerenciador (`dpkg:`, `rpm:`, `pip:`, `npm:`, `msi:{GUID}`) ou por um `.msi` da quarentena, com risco declarado e token de uso único.", "Sistema", SistemaDesinstalarInput, sistema_desinstalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.executar", "Execução do plano", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("distilar.perfil", "Perfil a partir do material", "Mede o corpus por dimensão da família escolhida, extrai citações candidatas com fonte e linha, e diz o que está coberto, parcial ou sem evidência.", "Pessoa", DistilarPerfilInput, distilar_perfil_handler, timeout_seconds=60),
+        SkillDefinition("distilar.dimensoes", "Dimensões do perfil", "Publica as quatro famílias (colega, relação, figura pública e dono do agente) com as dimensões que cada perfil precisa cobrir e os sinais lexicais usados na busca.", "Pessoa", DistilarDimensoesInput, distilar_dimensoes_handler, timeout_seconds=10),
+        SkillDefinition("distilar.esboco", "Esqueleto do perfil", "Monta o SKILL.md e o manifest.json propostos, com slug portátil, front matter e uma seção por dimensão marcada como coberta, parcial ou sem evidência. Não escreve persona nem grava arquivo.", "Pessoa", DistilarEsbocoInput, distilar_esboco_handler, timeout_seconds=60),
+        SkillDefinition("distilar.qualidade", "Gate de qualidade", "Aplica as treze checagens do projeto original à referência padrão ou estrita: modelos mentais, limites, DNA de expressão, fronteiras honestas, tensão interna, lastro, hierarquia de fonte, cadeia de revisão e segurança de direito.", "Pessoa", DistilarQualidadeInput, distilar_qualidade_handler, timeout_seconds=60),
+        SkillDefinition("distilar.lastro", "Lastro do perfil", "Compara cada afirmação do perfil com as linhas do material, marca o que tem e o que não tem apoio, e recusa citação acima de 240 caracteres ou fora do corpus.", "Pessoa", DistilarLastroInput, distilar_lastro_handler, timeout_seconds=90),
+        SkillDefinition("distilar.correcao", "Correção do perfil", "Classifica a correção em fato, voz, julgamento ou limite, diz o que ela muda na seção e recusa correção sem evidência nova.", "Pessoa", DistilarCorrecaoInput, distilar_correcao_handler, timeout_seconds=20),
+        SkillDefinition("distilar.hospedeiros", "Hospedeiros compatíveis", "Mostra o caminho nativo de skill de oito agentes (Claude Code, OpenClaw, Hermes, Codex, DeepSeek Harness, Pi, Grok Build e OpenCode) e o comando de invocação de cada um.", "Pessoa", DistilarHospedeirosInput, distilar_hospedeiros_handler, timeout_seconds=15),
+        SkillDefinition("distilar.regras", "Catálogo do perfil", "Publica as famílias, dimensões, checagens, hospedeiros, limites e o que a camada recusa fazer.", "Pessoa", EmptyInput, distilar_regras_handler, timeout_seconds=5),
         SkillDefinition("sistema.privilegio", "Privilégio da API", "Mostra com que usuário a API roda, se o sudo existe e se dispensa senha, a trava de elevação, os serviços autorizados e a linha de sudoers que restringe root à tabela fechada.", "Sistema", SistemaPrivilegioInput, sistema_privilegio_handler, timeout_seconds=30),
         SkillDefinition("sistema.elevar", "Plano de root", "Monta o argv exato de uma ação da tabela fechada — instalar/remover .deb ou .rpm da quarentena, reiniciar/parar serviço autorizado — com SHA-256 e token de uso único. Não executa nada.", "Sistema", SistemaElevarInput, sistema_elevar_handler, timeout_seconds=30),
         SkillDefinition("sistema.elevar_executar", "Executar como root", "Executa o plano confirmado com `sudo -n`, sem shell e sem texto livre, revalidando alvo, SHA-256 e argv. Exige JARVIS_HOST_ROOT=1, token de host e confirmação de uso único.", "Sistema", SistemaElevarExecutarInput, sistema_elevar_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=700),

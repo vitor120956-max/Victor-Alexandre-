@@ -1,0 +1,26 @@
+/* --- camada de perfil de pessoa ------------------------------------------ */
+.distilar-page .diagram-form input,
+.distilar-page .diagram-form select {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+
+.distilar-page .diagram-tabs button small {
+  white-space: nowrap;
+}
+
+.distilar-corpus {
+  font-family: var(--mono);
+  font-size: 7px;
+  line-height: 1.7;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.distilar-page .diagram-intro a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

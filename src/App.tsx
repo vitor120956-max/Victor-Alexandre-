@@ -28,6 +28,7 @@ import { PortabilidadePage } from './pages/PortabilidadePage';
 import { ContinuidadePage } from './pages/ContinuidadePage';
 import { SistemaPage } from './pages/SistemaPage';
 import { EvolucaoPage } from './pages/EvolucaoPage';
+import { DistilarPage } from './pages/DistilarPage';
 import { CareerPage } from './pages/CareerPage';
 import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="continuidade" element={<ContinuidadePage />} />
         <Route path="sistema" element={<SistemaPage />} />
         <Route path="evolucao" element={<EvolucaoPage />} />
+        <Route path="pessoa" element={<DistilarPage />} />
         <Route path="carreira" element={<CareerPage />} />
         <Route path="navegador" element={<NavegadorPage />} />
         <Route path="escritorio" element={<EscritorioPage />} />
