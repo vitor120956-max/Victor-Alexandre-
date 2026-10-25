@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.37.0.**
+**Versão atual: 0.37.1.**
 
 ## Executar em desenvolvimento
 
@@ -23,6 +23,8 @@ Antes de subir, `npm run checar` mede a máquina e a pasta: versão de Node e Py
 - API Python em `0.0.0.0:8000`.
 
 **Modo sem Node.** A interface compilada também é versionada em `web-dist/` (1,6 MB, 19 arquivos). Com ela, `py iniciar.py` sobe API e tela juntas em <http://127.0.0.1:8000> **sem `npm install`** — útil em pendrive lento ou máquina sem Node. `npm run build:embutido` regenera a pasta a partir do React.
+
+**Sem compilador no Windows.** O `requirements.txt` pede `uvicorn` **sem** o extra `[standard]`: o extra arrasta o `PyYAML`, que não publica wheel para Python 3.15 no Windows e faz o `pip` parar em *"Microsoft Visual C++ 14.0 or greater is required"*, abortando a instalação inteira. O servidor não usa YAML nem WebSocket. Quem quiser os aceleradores opcionais (`httptools`, `websockets`, `watchfiles`) instala `requirements-rapido.txt`, que é o mesmo conjunto sem o `PyYAML`.
 
 O navegador usa somente URLs relativas `/api`; não é necessário chamar `localhost` a partir do código da interface.
 

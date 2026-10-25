@@ -1,5 +1,9 @@
 fastapi>=0.115,<1.0
-uvicorn[standard]>=0.34,<1.0
+# Sem `[standard]` de propósito: o extra `standard` arrasta o PyYAML, que não tem
+# wheel para Python 3.15 no Windows e exige Visual C++ Build Tools para compilar.
+# O servidor não usa YAML nem WebSocket, então o uvicorn puro (h11) atende.
+# Para os aceleradores opcionais sem o PyYAML: requirements-rapido.txt
+uvicorn>=0.34,<1.0
 httpx>=0.28,<1.0
 pydantic>=2.10,<3.0
 python-dotenv>=1.0,<2.0

@@ -38,9 +38,18 @@ def principal() -> int:
     try:
         import uvicorn  # noqa: PLC0415
     except ImportError:
+        pip = r".venv\Scripts\pip" if os.name == "nt" else ".venv/bin/pip"
         print("Faltam as bibliotecas Python. Rode:", file=sys.stderr)
         print("  py -m venv .venv", file=sys.stderr)
-        print(r"  .venv\Scripts\pip install -r requirements.txt" if os.name == "nt" else "  .venv/bin/pip install -r requirements.txt", file=sys.stderr)
+        print(f"  {pip} install -r requirements.txt", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Se o pip parou com 'Microsoft Visual C++ 14.0 or greater is required':", file=sys.stderr)
+        print("  quase sempre é o PyYAML, que entra pelo uvicorn[standard] e não tem", file=sys.stderr)
+        print("  wheel para Python 3.15 no Windows. O requirements.txt deste projeto", file=sys.stderr)
+        print("  não pede [standard]; se o seu pede, troque a linha do uvicorn por", file=sys.stderr)
+        print("  uvicorn>=0.34,<1.0 . Alternativa manual, sem compilar nada:", file=sys.stderr)
+        print(f"  {pip} install fastapi uvicorn httpx pydantic python-dotenv", file=sys.stderr)
+        print(f"  {pip} install python-docx openpyxl python-pptx pypdf reportlab python-multipart", file=sys.stderr)
         return 1
 
     try:

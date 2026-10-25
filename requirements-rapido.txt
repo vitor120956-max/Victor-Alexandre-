@@ -1,0 +1,20 @@
+# Aceleradores opcionais do uvicorn — SEM o PyYAML.
+#
+# O extra `uvicorn[standard]` inclui `pyyaml>=5.1`, e o PyYAML não publica wheel
+# para Python 3.15 no Windows (conferido no PyPI: 6.0 a 6.0.3, nenhuma `cp315`).
+# Sem wheel, o pip tenta compilar e pede "Microsoft Visual C++ 14.0 or greater".
+#
+# Estes três têm wheel pronta e não pedem compilador:
+#   httptools    — parser HTTP em C (mais rápido)
+#   websockets   — só importa se você usar WebSocket (o JARVIS não usa hoje)
+#   watchfiles   — recarga instantânea do `--reload` (sem ela, o uvicorn usa StatReload)
+#
+# Uso:
+#   .venv\Scripts\pip install -r requirements-rapido.txt
+#
+# Se algum falhar, ignore: `requirements.txt` sozinho já faz o JARVIS funcionar.
+
+-r requirements.txt
+httptools>=0.8,<1.0
+websockets>=13,<18
+watchfiles>=0.20,<2.0

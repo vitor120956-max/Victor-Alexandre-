@@ -437,7 +437,7 @@ def test_esquecer_recusa_entrada_ambigua() -> None:
 
 def test_catalogo_publica_vias_pesos_e_limites() -> None:
     catalogo = memoria_catalogo()
-    assert catalogo["versao"] == "0.37.0"
+    assert catalogo["versao"] == "0.37.1"
     assert [item["via"] for item in catalogo["vias"]] == list(VIAS)
     assert catalogo["roteamento"]["limiar"] == LIMIAR_ROTA
     assert catalogo["recall"]["bm25"]["k1"] == 1.2

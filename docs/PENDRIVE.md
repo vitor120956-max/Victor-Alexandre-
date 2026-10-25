@@ -253,7 +253,39 @@ O `pip` só instala sem compilador se existir **wheel pronta** para a versão do
 | `websockets` 17.3 | sim |
 | `reportlab` 4.5.1 | sim (wheel `py3-none-any`, Python puro) |
 
-Ou seja: `pip install -r requirements-dev.txt` não precisa de Visual Studio Build Tools. Se algum dia precisar, o erro aparece como `error: Microsoft Visual C++ 14.0 or greater is required` — nesse caso use uma versão anterior do Python (3.13) em vez de instalar o compilador.
+Ou seja: `pip install -r requirements-dev.txt` não precisa de Visual Studio Build Tools.
+
+Uma exceção ficou de fora dessa tabela de propósito: o **`PyYAML`**. Ele não publica wheel `cp315` para Windows em nenhuma versão recente (conferido em 25/10/2026: 6.0, 6.0.1, 6.0.2, 6.0.2rc1, 6.0.3, 6.0b1 — nenhuma). E ele não é usado pelo JARVIS: entrava só pelo extra `uvicorn[standard]`, que também traz `httptools`, `websockets`, `watchfiles` e `uvloop`. Desde a **0.37.1** o `requirements.txt` pede `uvicorn>=0.34,<1.0` **sem** o extra, então nada compila.
+
+### Quando o `pip install` para em `Microsoft Visual C++ 14.0 or greater is required`
+
+Sintoma no `cmd`, quase sempre no fim de uma instalação que parecia ir bem:
+
+```text
+Building wheel for pyyaml ... error
+  error: Microsoft Visual C++ 14.0 or greater is required.
+error: failed-wheel-build-for-install
+```
+
+O que aconteceu: essa dependência não tem wheel pronta para a sua versão do Python, o `pip` baixou o código-fonte e tentou compilar. Sem o compilador da Microsoft, o build falha — e **o `pip` aborta a instalação inteira**, deixando o `.venv` vazio. Não é o seu Windows quebrado, e não é preciso instalar o Visual Studio.
+
+Três saídas, da mais simples para a mais completa:
+
+| Situação | O que fazer |
+|---|---|
+| Você baixou o projeto antes da 0.37.1 | Abra `requirements.txt` no Bloco de Notas e troque a linha `uvicorn[standard]>=0.34,<1.0` por `uvicorn>=0.34,<1.0`. Salve e rode o `pip install` de novo. |
+| Quer só colocar o JARVIS no ar agora | `.venv\Scripts\pip install fastapi uvicorn httpx pydantic python-dotenv` — em seguida `.venv\Scripts\pip install python-docx openpyxl python-pptx pypdf reportlab python-multipart` |
+| Quer os aceleradores opcionais (parser HTTP em C, `--reload` instantâneo) | `.venv\Scripts\pip install -r requirements-rapido.txt` — é o `requirements.txt` mais `httptools`, `websockets` e `watchfiles`, e nenhum dos três pede compilador |
+
+Se você realmente precisar do `uvicorn` completo, o comando avulso é `.venv\Scripts\pip install "uvicorn[standard]"` — mas saiba que hoje ele vai tentar compilar o `PyYAML` e falhar em Python 3.15 no Windows. O JARVIS não usa YAML nem WebSocket, então o `uvicorn` sem o extra atende tudo.
+
+Como saber que deu certo, sem adivinhar:
+
+```bat
+.venv\Scripts\pip list
+```
+
+A lista precisa ter `fastapi`, `uvicorn`, `pydantic`, `python-docx`, `openpyxl`, `python-pptx`, `pypdf`, `reportlab` e `python-multipart`. Se faltar algum, o `pip install -r requirements.txt` parou no meio por causa de outra dependência — leia a última linha em vermelho, ela nomeia o pacote.
 
 ### Comandos que **não** funcionam no `cmd` do Windows
 
@@ -367,6 +399,8 @@ O `cd /d` é obrigatório quando o cmd está em outra unidade (`C:`) e o projeto
 
 Se `py` não existir, use `python`. Se o venv já existir e estiver quebrado, apague a pasta `.venv` e repita.
 
+Se você só quer a API e a interface embutida (sem rodar testes), `requirements.txt` basta e é mais rápido: `.venv\Scripts\pip install -r requirements.txt`. Quer os aceleradores opcionais do uvicorn? `requirements-rapido.txt`. Nenhum dos dois compila nada — detalhes em [§1](#quando-o-pip-install-para-em-microsoft-visual-c-140-or-greater-is-required).
+
 ### `npm error ENOENT … C:\Users\SEU_USUARIO\package.json`
 
 Esse erro não é problema do projeto: é **o comando rodando na pasta errada**. Cada janela do cmd nasce em `C:\Users\SEU_USUARIO`, e o npm procura `package.json` sempre na pasta atual.
@@ -406,7 +440,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.37.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.37.1 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -546,9 +580,9 @@ Validado numa cópia limpa (sem `node_modules`, sem `dist`, sem `.git`): `/api/h
 | Modo | Precisa de Node? | Precisa de `npm install`? | Arquivos a gravar | Tamanho no pendrive | Porta |
 |---|---|---|---|---|---|
 | `npm run dev` (desenvolvimento) | sim | sim | **9.198** | 18 MB + 139 MB = **157 MB** | 5173 + 8000 |
-| `py iniciar.py` (sem Node) | **não** | **não** | **~1.300** | 18 MB + 124 MB = **142 MB** | **8000** |
+| `py iniciar.py` (sem Node) | **não** | **não** | **~4.400** | 18 MB + 103 MB = **121 MB** | **8000** |
 
-Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` = **124 MB** e **36 pacotes**. O `npm install` grava **9.198 arquivos**; o `pip` grava cerca de **1.300** — quase sete vezes menos arquivos pequenos, que é o que dói num pendrive USB 2.0.
+Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` (0.37.1, sem o extra `standard`) = **103 MB**, **31 pacotes** e **4.410 arquivos** — era 124 MB e 36 pacotes antes de tirar o `PyYAML`. O `npm install` grava **9.198 arquivos**; o `pip` grava pouco mais de **4.400**, cerca de metade, e nenhum deles é arquivo pequeno de dependência JavaScript, que é o que dói num pendrive USB 2.0.
 
 O `iniciar.py` aceita `--porta 8080` e `--host 0.0.0.0` (para acessar de outro aparelho na rede local). Ele também troca sozinho para o Python do `.venv` quando existir.
 
@@ -612,7 +646,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.37.0"` e `"skills": 209`.
+Esperado: `"version": "0.37.1"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -712,6 +746,8 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 | `npm error ENOENT … C:\Users\pc\package.json` | comando rodou fora da pasta do projeto | `cd /d D:\JARVIS` antes de qualquer `npm` |
 | `npm ls` mostra `UNMET DEPENDENCY` | instalação interrompida | rodar `npm install` de novo (é idempotente) |
 | `.venv` quebrou depois de trocar de porta USB | caminho absoluto mudou | apagar `.venv` e recriar na máquina |
+| `Building wheel for pyyaml ... error` / `Microsoft Visual C++ 14.0 or greater is required` | `PyYAML` não tem wheel para Python 3.15 no Windows; vinha pelo `uvicorn[standard]` | usar o `requirements.txt` da 0.37.1 (sem `[standard]`) e rodar o `pip install` de novo — o `pip` aborta **tudo** quando um pacote falha, então até aqui nada foi instalado (§1) |
+| `Faltam as bibliotecas Python` mas o `.venv` existe | o `pip install` parou no meio; o `.venv` está vazio | subir `pip list` e conferir; quase sempre é o caso da linha acima |
 | `Token de host inválido` | token de outro projeto/cópia | ler `storage/host-token.txt` desta cópia |
 | `A origem não existe` | caminho errado | informar o caminho completo da pasta Downloads |
 | `formato fora da lista permitida` | extensão não suportada | salvar como PDF ou converter para um dos nove formatos |
@@ -730,7 +766,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.37.0` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.37.1` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

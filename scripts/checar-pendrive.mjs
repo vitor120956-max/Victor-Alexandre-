@@ -150,7 +150,7 @@ let pythonEscolhido = null;
       const saida = rodar(pythonEscolhido.binario, [
         ...pythonEscolhido.argumentos,
         '-c',
-        'import fastapi, pydantic, httpx, dotenv; print(fastapi.__version__, pydantic.VERSION)',
+        'import fastapi, uvicorn, pydantic, httpx, dotenv; print(fastapi.__version__, pydantic.VERSION)',
       ]);
       registrar('deps-python', 'Bibliotecas Python', 'ok', `fastapi ${saida.split(' ')[0]} · pydantic ${saida.split(' ')[1]}`);
     } catch {
@@ -158,8 +158,8 @@ let pythonEscolhido = null;
         'deps-python',
         'Bibliotecas Python',
         'falha',
-        'fastapi/pydantic/httpx/python-dotenv não importam',
-        'Rode: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt',
+        'fastapi/uvicorn/pydantic/httpx/python-dotenv não importam',
+        'Rode: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt — se o pip parou em “Microsoft Visual C++ 14.0 or greater”, veja §1 de docs/PENDRIVE.md',
       );
     }
   }
