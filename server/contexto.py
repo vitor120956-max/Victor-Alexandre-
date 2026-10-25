@@ -17,7 +17,7 @@ from typing import Any
 
 from .review import common, finalize, finding, verdict as veredito_padrao
 
-VERSAO = "0.32.0"
+VERSAO = "0.33.0"
 
 MAX_TEXTO = 200_000
 MAX_MENSAGENS = 400

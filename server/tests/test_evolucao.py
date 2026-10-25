@@ -1,4 +1,4 @@
-"""Testes da camada de evolução (0.32.0): mapa, diff, risco, guardas, ensaio e promoção.
+"""Testes da camada de evolução (0.33.0): mapa, diff, risco, guardas, ensaio e promoção.
 
 O ensaio roda pytest de verdade dentro da cópia, então os testes que o exercitam
 usam um alvo pequeno (`server/tests/test_revisao.py` quando existe, ou um arquivo
@@ -679,8 +679,8 @@ def client():
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.32.0"
-    assert dados["skills"] == 196
+    assert dados["version"] == "0.33.0"
+    assert dados["skills"] == 199
 
 
 def test_api_lista_as_oito_skills_de_evolucao(client):
@@ -697,7 +697,7 @@ def test_api_mapa_exige_token(client):
 def test_api_regras_responde(client):
     corpo = client.post("/api/skills/evoluir.regras/execute", json={"parameters": {}}).json()
     assert corpo["ok"] is True
-    assert corpo["result"]["versao"] == "0.32.0"
+    assert corpo["result"]["versao"] == "0.33.0"
 
 
 def test_api_ensaiar_exige_confirmacao(client):
@@ -718,3 +718,56 @@ def test_api_promover_exige_confirmacao(client):
 
 def test_api_skill_inexistente(client):
     assert client.post("/api/skills/evoluir.nada/execute", json={"parameters": {}}).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Elevação de privilégio (0.33.0)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "linha",
+    [
+        'subprocess.run(["sudo", "apt-get", "install", "-y", "rich"], shell=False)',
+        "os.system('sudo rm -rf /var/lib/foo')",
+        'subprocess.run(["pkexec", "sh", "-c", "id"])',
+        'subprocess.run(["doas", "sh"])',
+        "subprocess.run(['su', '-', 'root'])",
+    ],
+)
+def test_risco_detecta_elevacao(linha, token):
+    dados = E.risco(diff=_diff_adicionando(linha), autorizacao=token)
+    assert dados["metrics"]["perigos"] >= 1
+    assert dados["metrics"]["nivel"] == "alto"
+    assert dados["counts"]["must"] >= 1
+
+
+def test_risco_elevacao_soma_alem_do_peso_normal(token):
+    """Um único `sudo` já basta para passar de baixo para alto."""
+    dados = E.risco(diff=_diff_adicionando('subprocess.run(["sudo", "id"])'), autorizacao=token)
+    assert dados["metrics"]["pontuacao"] >= 60
+    assert any("elevação" in item["title"].lower() for item in dados["findings"])
+
+
+def test_guardas_violam_allowlist_com_sudo(token):
+    dados = E.guardas(diff=_diff_adicionando('subprocess.run(["sudo", "id"])'), autorizacao=token)
+    assert dados["metrics"]["violadas"] >= 1
+    regra = [linha for linha in dados["rows"] if linha["codigo"] == "G2"][0]
+    assert regra["estado"] == "viola"
+
+
+def test_guardas_violam_allowlist_com_pkexec(token):
+    dados = E.guardas(diff=_diff_adicionando('subprocess.run(["pkexec", "id"])'), autorizacao=token)
+    assert dados["metrics"]["violadas"] >= 1
+
+
+def test_risco_nao_marca_palavra_solta(token):
+    """`sudoers` numa frase não é uma chamada de elevação."""
+    dados = E.risco(diff=_diff_adicionando("# ver /etc/sudoers.d/jarvis-elevacao"), autorizacao=token)
+    assert dados["metrics"]["perigos"] == 0
+
+
+def test_catalogo_publica_os_padroes_de_elevacao(token):
+    dados = E.catalogo()
+    titulos = " ".join(item["titulo"] for item in dados["perigos_monitorados"]).lower()
+    assert "elevação" in titulos

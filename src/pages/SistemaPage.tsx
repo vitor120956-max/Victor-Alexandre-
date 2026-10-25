@@ -10,6 +10,7 @@ import {
   Gauge,
   Globe,
   HardDrive,
+  KeyRound,
   LoaderCircle,
   Package,
   PackageMinus,
@@ -26,7 +27,7 @@ import '../revisao.css';
 import '../continuidade.css';
 import '../sistema.css';
 
-type SistemaTab = 'ambiente' | 'disco' | 'pastas' | 'drivers' | 'bluetooth' | 'rede' | 'baixar' | 'assinatura' | 'instalar' | 'desinstalar' | 'executar' | 'regras';
+type SistemaTab = 'ambiente' | 'disco' | 'pastas' | 'drivers' | 'bluetooth' | 'rede' | 'baixar' | 'assinatura' | 'instalar' | 'desinstalar' | 'executar' | 'privilegio' | 'elevar' | 'elevar_executar' | 'regras';
 type Row = Record<string, unknown>;
 
 const tabs: Array<{ id: SistemaTab; label: string; hint: string; icon: typeof Cpu }> = [
@@ -41,6 +42,9 @@ const tabs: Array<{ id: SistemaTab; label: string; hint: string; icon: typeof Cp
   { id: 'instalar', label: 'Instalar', hint: 'Plano e risco', icon: Package },
   { id: 'desinstalar', label: 'Desinstalar', hint: 'Remoção simétrica', icon: PackageMinus },
   { id: 'executar', label: 'Executar', hint: 'O efeito real', icon: Play },
+  { id: 'privilegio', label: 'Privilégio', hint: 'Root ou usuário', icon: KeyRound },
+  { id: 'elevar', label: 'Elevar', hint: 'Plano como root', icon: ShieldAlert },
+  { id: 'elevar_executar', label: 'Root', hint: 'Executar o plano', icon: Play },
   { id: 'regras', label: 'Regras', hint: 'Guardas e limites', icon: ShieldAlert },
 ];
 
@@ -77,6 +81,8 @@ export function SistemaPage() {
   const [pacote, setPacote] = useState('');
   const [silencioso, setSilencioso] = useState(true);
   const [confirmacao, setConfirmacao] = useState('');
+  const [acaoRoot, setAcaoRoot] = useState('instalar_deb');
+  const [alvoRoot, setAlvoRoot] = useState('');
   const [confirmado, setConfirmado] = useState(false);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState('');
@@ -93,6 +99,9 @@ export function SistemaPage() {
 
   const parametros = (): Record<string, unknown> => {
     const base = { autorizacao: token, modo: nivel };
+    if (tab === 'privilegio') return { autorizacao: token, modo: nivel };
+    if (tab === 'elevar') return { ...base, acao: acaoRoot, alvo: alvoRoot };
+    if (tab === 'elevar_executar') return { ...base, confirmacao };
     if (tab === 'regras') return {};
     if (tab === 'ambiente') return { autorizacao: token, modo: nivel, detalhe: 'full' };
     if (tab === 'disco') return { ...base, caminhos, minimo: Number(minimo) || 0 };
@@ -107,7 +116,7 @@ export function SistemaPage() {
     return { ...base, confirmacao };
   };
 
-  const opcoes = () => (tab === 'baixar' || tab === 'executar' ? { confirmed: confirmado } : tab === 'instalar' ? { dryRun: true } : undefined);
+  const opcoes = () => (tab === 'baixar' || tab === 'executar' || tab === 'elevar_executar' ? { confirmed: confirmado } : tab === 'instalar' ? { dryRun: true } : undefined);
 
   const executar = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -352,10 +361,39 @@ export function SistemaPage() {
               </label>
             )}
 
-            {(tab === 'baixar' || tab === 'executar') && (
+            {tab === 'elevar' && (
+              <>
+                <label className="field">
+                  <span>Ação — tabela fechada, sem comando livre</span>
+                  <select value={acaoRoot} onChange={(event) => setAcaoRoot(event.target.value)}>
+                    <option value="instalar_deb">instalar_deb — dpkg -i</option>
+                    <option value="remover_deb">remover_deb — dpkg -r</option>
+                    <option value="instalar_rpm">instalar_rpm — rpm -Uvh</option>
+                    <option value="remover_rpm">remover_rpm — rpm -e</option>
+                    <option value="reiniciar_servico">reiniciar_servico — systemctl restart</option>
+                    <option value="parar_servico">parar_servico — systemctl stop</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Alvo — arquivo da quarentena, nome do pacote ou unidade</span>
+                  <input value={alvoRoot} onChange={(event) => setAlvoRoot(event.target.value)} placeholder="storage/host-downloads/…-app.deb" spellCheck={false} />
+                  <small className="selecao-contador">Serviço só entra se estiver em <code>JARVIS_HOST_SERVICOS</code>.</small>
+                </label>
+              </>
+            )}
+
+            {tab === 'elevar_executar' && (
+              <label className="field">
+                <span>Confirmação — o token de 8 caracteres devolvido pelo plano</span>
+                <input value={confirmacao} onChange={(event) => setConfirmacao(event.target.value)} placeholder="a1b2c3d4" spellCheck={false} />
+                <small className="selecao-contador">Exige <code>JARVIS_HOST_ROOT=1</code>. Vale 10 minutos e serve uma vez.</small>
+              </label>
+            )}
+
+            {(tab === 'baixar' || tab === 'executar' || tab === 'elevar_executar') && (
               <label className="continuidade-check is-warning">
                 <input type="checkbox" checked={confirmado} onChange={(event) => setConfirmado(event.target.checked)} />
-                <span>Confirmo que esta operação {tab === 'baixar' ? 'grava um arquivo no disco' : 'executa um instalador de terceiro'}</span>
+                <span>Confirmo que esta operação {tab === 'baixar' ? 'grava um arquivo no disco' : tab === 'elevar_executar' ? 'executa o comando como root' : 'executa um instalador de terceiro'}</span>
               </label>
             )}
 
@@ -375,7 +413,9 @@ export function SistemaPage() {
 
             <p className="sistema-aviso">
               <ShieldAlert size={14} />
-              Os dados são da máquina que executa a API. Num contêiner, é o contêiner — não o seu PC.
+              {(tab === 'elevar' || tab === 'elevar_executar')
+                ? 'Root não pede confirmação ao sistema: um alvo errado é dano imediato. Quem autoriza de verdade é o /etc/sudoers.'
+                : 'Os dados são da máquina que executa a API. Num contêiner, é o contêiner — não o seu PC.'}
             </p>
           </form>
         </section>
@@ -406,6 +446,17 @@ export function SistemaPage() {
               {tab === 'instalar' && <Tabela titulo="Plano" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'desinstalar' && <Tabela titulo="Plano de remoção" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'executar' && <Tabela titulo="Execução" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+              {tab === 'privilegio' && <Tabela titulo="Processo e travas" colunas={[{ titulo: 'Chave', chave: 'chave' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+              {tab === 'elevar' && <Tabela titulo="Plano de root" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+              {tab === 'elevar_executar' && <Tabela titulo="Execução como root" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+
+              {(tab === 'privilegio' || tab === 'elevar') && asList(resultado.sudoers).length > 0 && (
+                <div className="sistema-hash">
+                  <span>SUDOERS</span>
+                  <code>{asList(resultado.sudoers).join('\n')}</code>
+                  <button type="button" onClick={() => copiar(asList(resultado.sudoers).join('\n'), 'sudoers copiado')}>Copiar</button>
+                </div>
+              )}
 
               {txt(download.sha256) && (
                 <div className="sistema-hash">
@@ -563,6 +614,9 @@ const tbMetrics = (tab: SistemaTab): Array<{ label: string; chave: string }> => 
   if (tab === 'desinstalar') return [{ label: 'PASSOS', chave: 'passos' }];
   if (tab === 'instalar') return [{ label: 'PASSOS', chave: 'passos' }];
   if (tab === 'executar') return [{ label: 'CÓDIGO', chave: 'codigo' }];
+  if (tab === 'privilegio') return [{ label: 'UID', chave: 'uid' }, { label: 'ROOT', chave: 'root' }, { label: 'SUDO SEM SENHA', chave: 'semSenha' }, { label: 'AÇÕES', chave: 'acoes' }];
+  if (tab === 'elevar') return [{ label: 'RISCO', chave: 'risco' }, { label: 'SUDO SEM SENHA', chave: 'sudoSemSenha' }, { label: 'AÇÃO', chave: 'acao' }];
+  if (tab === 'elevar_executar') return [{ label: 'CÓDIGO', chave: 'codigo' }, { label: 'SEGUNDOS', chave: 'duracao' }, { label: 'AÇÃO', chave: 'acao' }];
   return [];
 };
 

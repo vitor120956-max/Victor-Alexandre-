@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.32.0.**
+**Versão atual: 0.33.0.**
 
 ## Executar em desenvolvimento
 
@@ -297,6 +297,22 @@ O aviso que a interface repete: os dados são da máquina que executa a API. Num
 
 Consulte [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
+## Root, sem virar root
+
+A 0.33.0 entrega a elevação controlada: `server/elevacao.py`. A API continua rodando com o seu usuário; quem ganha root é o comando de uma **tabela fechada de seis ações**, por um instante, com token de uso único e linha de auditoria. Nada de processo root e nada de comando livre.
+
+| Skill | Efeito | Travas |
+|---|---|---|
+| `sistema.privilegio` | leitura | token de host |
+| `sistema.elevar` | leitura — monta o argv e o SHA-256 | token de host |
+| `sistema.elevar_executar` | **root** | token + `JARVIS_HOST_ROOT=1` + `confirmed` + token de 8 hex |
+
+A tabela é `dpkg -i`, `dpkg -r`, `rpm -Uvh`, `rpm -e`, `systemctl restart` e `systemctl stop`. As quatro primeiras só aceitam arquivo da quarentena ou nome de pacote validado por regex; as duas de serviço só aceitam unidade declarada em `JARVIS_HOST_SERVICOS`. O argv sai com `sudo -n`, `--` antes do alvo e `shell=False`.
+
+Quem autoriza root de verdade é o `/etc/sudoers`: sem uma linha `NOPASSWD` restrita aos três binários, a chamada falha e nada acontece. E o limite precisa ficar dito — `NOPASSWD` em `dpkg` equivale a root, porque um pacote instala o que quiser. O ganho não é impedir processo comprometido de virar root; é impedir bug acidental e texto livre de virar root, além de deixar um registro por execução.
+
+Consulte [`docs/ROOT.md`](docs/ROOT.md).
+
 ## Evolução do próprio código
 
 A 0.32.0 abre o único caminho pelo qual o JARVIS pode mudar o próprio código — e o desenha para que a prova venha antes da escrita. `server/evolucao.py` expõe oito skills: `evoluir.mapa` inventaria arquivos, linhas, módulos e quem está sem teste; `evoluir.proposta` prova hunk por hunk se o diff aplica no arquivo como ele está; `evoluir.risco` pontua de 0 a 100 por treze padrões de perigo — shell, `eval`/`exec`, TLS desligado, segredo embutido, chave privada — mais peso por arquivo central; `evoluir.guardas` confere as dez leis do projeto; `evoluir.ensaiar` aplica o patch numa **cópia isolada** em `storage/evolucao/ensaios/<id>/` e roda o pytest de verdade; `evoluir.promover` só escreve depois de ensaio aprovado, hash idêntico ao ensaiado, `git status` limpo naquele arquivo e backup em `storage/evolucao/backups/<id>/`; `evoluir.reverter` devolve os arquivos do backup; `evoluir.regras` publica o contrato.
@@ -424,7 +440,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **196 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **199 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -559,7 +575,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 196 skills
+├── skill_registry.py        # allowlist, Pydantic e 199 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

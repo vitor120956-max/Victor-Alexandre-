@@ -37,7 +37,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.32.0"
+VERSAO = "0.33.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage" / "evolucao"
@@ -109,6 +109,11 @@ MARCAS_DE_GUARDA = {
     "JARVIS_HOST_INSTALAR": "trava de instalação",
 }
 
+# Elevação de privilégio: o achado que a camada não podia deixar passar.
+# Casa `sudo comando`, `sudo -n comando` e `"sudo"` dentro de uma lista de argv.
+PADRAO_SUDO = r"[\"']sudo[\"']|(?<![\w-])sudo\s+(?:-{1,2}[\w-]+\s+)*[\w/.\-]"
+PADRAO_ELEVACAO = r"[\"'](?:pkexec|doas|runas|su)[\"']|\bpkexec\b|\bdoas\s+|\brunas\s+/|\bsu\s+-\s+"
+
 # Padrões que um patch **acrescenta** e que mudam o perfil de risco.
 PERIGOS: tuple[tuple[str, str, str, str], ...] = (
     (r"\beval\s*\(", "must", "Código avaliado em tempo de execução", "`eval` executa texto como código."),
@@ -124,7 +129,28 @@ PERIGOS: tuple[tuple[str, str, str, str], ...] = (
     (r"(?i)(api[_-]?key|secret|password|senha|token)\s*=\s*[\"'][A-Za-z0-9_\-]{16,}[\"']", "must", "Segredo embutido no código", "Chave no fonte vaza no histórico do Git."),
     (r"AKIA[0-9A-Z]{16}", "must", "Chave da AWS embutida", "Credencial de nuvem no código."),
     (r"-----BEGIN [A-Z ]*PRIVATE KEY-----", "must", "Chave privada no patch", "Chave privada nunca entra no repositório."),
+    (
+        PADRAO_SUDO,
+        "must",
+        "Elevação de privilégio com sudo",
+        "`sudo` troca o usuário do processo por root e escapa de todas as travas da camada.",
+    ),
+    (
+        PADRAO_ELEVACAO,
+        "must",
+        "Elevação de privilégio por outro caminho",
+        "`pkexec`, `doas`, `runas` e `su -` existem para virar root; num patch, isso é sempre decisão humana.",
+    ),
+    (
+        r"chmod\s+(?:[ugoa]*\+s|0?[4-7][0-7]{3})\b",
+        "should",
+        "Bit setuid ou setgid",
+        "Binário com bit setuid roda como o dono, não como quem chamou.",
+    ),
 )
+
+# Padrões que, sozinhos, já pedem revisão humana: somam além do peso normal.
+PADROES_CRITICOS = (PADRAO_SUDO, PADRAO_ELEVACAO)
 
 # Arquivos cujo toque eleva o risco por concentrarem as travas do projeto.
 ARQUIVOS_CENTRAIS = {
@@ -775,6 +801,8 @@ def _pontuar(arquivos: list[ArquivoDiff], perigos: list[dict[str, Any]], guardas
     pontos = 0
     for achado in perigos:
         pontos += 30 if achado["grupo"] == "must" else 12
+        if achado.get("padrao") in PADROES_CRITICOS:
+            pontos += 20
     for _ in guardas:
         pontos += 25
     for item in arquivos:
@@ -902,7 +930,7 @@ def risco(*, diff: str, modo: str = "full", autorizacao: str = "") -> dict[str, 
 
 REGRAS_GUARDA: tuple[tuple[str, str, str], ...] = (
     ("G1", "Toda skill de leitura continua devolvendo `executed: false`", "review.py e as camadas novas"),
-    ("G2", "Nenhum comando novo fora da allowlist fechada", "sistema.py"),
+    ("G2", "Nenhum comando novo fora da allowlist fechada, e nenhum binário de elevação", "sistema.py, elevacao.py"),
     ("G3", "`shell=False` preservado em toda chamada de processo", "sistema.py, evolucao.py"),
     ("G4", "Token de host continua exigido antes de qualquer leitura do host", "sistema.py, evolucao.py"),
     ("G5", "Nenhuma dependência nova sem entrada em requirements", "requirements.txt"),
@@ -938,10 +966,18 @@ def guardas(*, diff: str, modo: str = "full", autorizacao: str = "") -> dict[str
         aprovar("G1", REGRAS_GUARDA[0][1])
 
     # G2 — allowlist
-    suspeitos = [(c, l) for c, l in adicionadas if re.search(r"GERENCIADORES|DESINSTALADORES|_comando_do_plano", l)]
-    novos_binarios = [(c, l) for c, l in adicionadas if re.search(r"\[\s*\"(sh|bash|cmd|powershell|curl|wget)\"", l)]
+    suspeitos = [
+        (c, l)
+        for c, l in adicionadas
+        if re.search(r"GERENCIADORES|DESINSTALADORES|ACOES\b|_comando_do_plano", l)
+    ]
+    novos_binarios = [
+        (c, l)
+        for c, l in adicionadas
+        if re.search(r"\[\s*\"(sh|bash|cmd|powershell|curl|wget|sudo|doas|pkexec|runas)\"", l)
+    ]
     if novos_binarios:
-        violar("G2", REGRAS_GUARDA[1][1], novos_binarios[0][0], f"Binário novo na allowlist: `{novos_binarios[0][1].strip()[:80]}`.", "Binário de shell não entra na allowlist.", "A API vira executor genérico.")
+        violar("G2", REGRAS_GUARDA[1][1], novos_binarios[0][0], f"Binário novo na allowlist: `{novos_binarios[0][1].strip()[:80]}`.", "Binário de shell ou de elevação não entra na allowlist sem decisão explícita.", "A API vira executor genérico — ou executor como root.")
     elif suspeitos:
         resultados.append({"codigo": "G2", "regra": REGRAS_GUARDA[1][1], "estado": "revisar", "local": suspeitos[0][0], "detalhe": "O patch mexe na allowlist de instaladores."})
         findings.append(finding("should", "guarda", "Allowlist alterada", suspeitos[0][0], "O patch toca a tabela de comandos permitidos.", "Alterar allowlist muda o que a camada aceita executar.", "Explique no corpo da proposta qual entrada mudou e por quê.", "A lista cresce sem revisão."))

@@ -129,6 +129,12 @@ from .continuidade import (
     portao as portao_continuidade,
     retomada as retomada_continuidade,
 )
+from .elevacao import (
+    ElevacaoError,
+    elevar as elevar_root,
+    elevar_executar as elevar_executar_root,
+    privilegio as privilegio_root,
+)
 from .evolucao import (
     EvolucaoError,
     catalogo as evolucao_catalogo,
@@ -1170,6 +1176,34 @@ class SistemaDesinstalarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arquivo: str = Field(default="", max_length=1_000, title="MSI da quarentena", json_schema_extra={"description": "Um `.msi`/`.msix` já baixado; `msiexec /x` usa o próprio arquivo."})
     pacote: str = Field(default="", max_length=200, title="Alvo da remoção", json_schema_extra={"description": "`dpkg:nome`, `rpm:nome`, `pip:nome`, `npm:nome` ou `msi:{GUID}`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaPrivilegioInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaElevarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acao: Literal[
+        "instalar_deb",
+        "remover_deb",
+        "instalar_rpm",
+        "remover_rpm",
+        "reiniciar_servico",
+        "parar_servico",
+    ] = Field(title="Ação como root", json_schema_extra={"description": "Tabela fechada: pacote .deb/.rpm da quarentena ou serviço declarado em JARVIS_HOST_SERVICOS."})
+    alvo: str = Field(default="", max_length=1_000, title="Alvo", json_schema_extra={"description": "Arquivo da quarentena, nome do pacote ou nome da unidade."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaElevarExecutarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmacao: str = Field(min_length=4, max_length=64, title="Confirmação de uso único", json_schema_extra={"description": "Token devolvido por `sistema.elevar`; vale 10 minutos e serve uma vez."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
@@ -3214,6 +3248,29 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def sistema_privilegio_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaPrivilegioInput)
+        try:
+            return privilegio_root(modo=data.modo, autorizacao=data.autorizacao)
+        except ElevacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_elevar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaElevarInput)
+        try:
+            return elevar_root(acao=data.acao, alvo=data.alvo, modo=data.modo, autorizacao=data.autorizacao)
+        except ElevacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_elevar_executar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaElevarExecutarInput)
+        try:
+            return elevar_executar_root(
+                confirmacao=data.confirmacao, modo=data.modo, autorizacao=data.autorizacao
+            )
+        except ElevacaoError as exc:
+            raise SkillError(str(exc)) from exc
+
     def sistema_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return sistema_catalogo()
 
@@ -3711,6 +3768,9 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.desinstalar", "Plano de desinstalação", "Monta o comando de remoção por gerenciador (`dpkg:`, `rpm:`, `pip:`, `npm:`, `msi:{GUID}`) ou por um `.msi` da quarentena, com risco declarado e token de uso único.", "Sistema", SistemaDesinstalarInput, sistema_desinstalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.executar", "Execução do plano", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("sistema.privilegio", "Privilégio da API", "Mostra com que usuário a API roda, se o sudo existe e se dispensa senha, a trava de elevação, os serviços autorizados e a linha de sudoers que restringe root à tabela fechada.", "Sistema", SistemaPrivilegioInput, sistema_privilegio_handler, timeout_seconds=30),
+        SkillDefinition("sistema.elevar", "Plano de root", "Monta o argv exato de uma ação da tabela fechada — instalar/remover .deb ou .rpm da quarentena, reiniciar/parar serviço autorizado — com SHA-256 e token de uso único. Não executa nada.", "Sistema", SistemaElevarInput, sistema_elevar_handler, timeout_seconds=30),
+        SkillDefinition("sistema.elevar_executar", "Executar como root", "Executa o plano confirmado com `sudo -n`, sem shell e sem texto livre, revalidando alvo, SHA-256 e argv. Exige JARVIS_HOST_ROOT=1, token de host e confirmação de uso único.", "Sistema", SistemaElevarExecutarInput, sistema_elevar_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=700),
         SkillDefinition("sistema.regras", "Catálogo do host", "Publica as três travas, a allowlist de instaladores, os limites de leitura e download, e a lista do que a camada recusa fazer.", "Sistema", EmptyInput, sistema_regras_handler, timeout_seconds=5),
         SkillDefinition("portabilidade.auditar", "Auditar bundle de skills", "Lê o `SKILL.md` de cada pasta e confere nome, slug, descrição, script citado no corpo, `allowed-tools`, licença, tamanho e arquivo solto — antes de qualquer conversão.", "Portabilidade", PortabilidadeAuditarInput, portabilidade_auditar_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.converter", "Converter para ferramenta", "Monta o plano arquivo a arquivo para os treze alvos — pasta, espelho, regra ou convenção — dizendo o que é copiado, reescrito, embutido, gerado e descartado.", "Portabilidade", PortabilidadeConverterInput, portabilidade_converter_handler, timeout_seconds=20),

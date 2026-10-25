@@ -132,13 +132,14 @@ def create_app(
                 "JARVIS modo host: token em storage/host-token.txt -> "
                 f"{_token_host[:4]}…{_token_host[-4:]} "
                 f"(rede={'ligada' if os.getenv('JARVIS_HOST_REDE') == '1' else 'desligada'}, "
-                f"instalar={'ligado' if os.getenv('JARVIS_HOST_INSTALAR') == '1' else 'desligado'})"
+                f"instalar={'ligado' if os.getenv('JARVIS_HOST_INSTALAR') == '1' else 'desligado'}, "
+                f"root={'ligado' if os.getenv('JARVIS_HOST_ROOT') == '1' else 'desligado'})"
             )
 
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.32.0",
+        version="0.33.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -172,7 +173,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.32.0",
+            "version": "0.33.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
         }
