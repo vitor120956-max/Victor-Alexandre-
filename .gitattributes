@@ -1,0 +1,10 @@
+# O Bloco de Notas do Windows 10 anterior ao build 17763 (o 1607 é 14393)
+# mostra arquivo com quebra de linha Unix (LF) como UMA linha só. Se o usuário
+# abrir e salvar, o arquivo vira um amassado e o pip não consegue ler.
+# Por isso estes arquivos são gravados com CRLF e o git não deve normalizar.
+
+.env.example        -text
+requirements.txt    -text
+requirements-dev.txt -text
+requirements-rapido.txt -text
+*.bat               -text

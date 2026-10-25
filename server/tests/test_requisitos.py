@@ -85,3 +85,39 @@ def test_codigo_do_servidor_nao_importa_yaml_nem_websockets():
         texto = arquivo.read_text(encoding="utf-8", errors="replace")
         assert "import yaml" not in texto, f"{arquivo.name} importa yaml sem declarar dependência"
         assert "import websockets" not in texto, f"{arquivo.name} importa websockets sem declarar dependência"
+
+
+# ---------------------------------------------------------------------------
+# Quebra de linha: o Bloco de Notas do Windows 10 antigo (1607 = build 14393)
+# não entende LF e mostra o arquivo inteiro como uma única linha. Se o usuário
+# salvar nesse estado, ele grava tudo amassado e o pip não consegue ler.
+# Estes quatro arquivos são os que ele abre no editor, então ficam em CRLF.
+# ---------------------------------------------------------------------------
+
+ARQUIVOS_DO_EDITOR = [
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements-rapido.txt",
+    ".env.example",
+]
+
+
+@pytest.mark.parametrize("nome", ARQUIVOS_DO_EDITOR)
+def test_arquivo_do_notepad_usa_crlf(nome):
+    bruto = (RAIZ / nome).read_bytes()
+    assert b"\r\n" in bruto, f"{nome} sem CRLF: no Bloco de Notas antigo aparece tudo numa linha"
+    assert b"\n" not in bruto.replace(b"\r\n", b""), f"{nome} tem LF solto misturado com CRLF"
+
+
+@pytest.mark.parametrize("nome", ARQUIVOS_DO_EDITOR)
+def test_gitattributes_preserva_o_crlf(nome):
+    atributos = (RAIZ / ".gitattributes").read_text(encoding="utf-8")
+    linhas = [linha.split("#", 1)[0].split() for linha in atributos.splitlines()]
+    declarados = {partes[0]: partes[1:] for partes in linhas if len(partes) >= 2}
+    assert nome in declarados, f".gitattributes precisa declarar {nome} como -text"
+    assert "-text" in declarados[nome], f"{nome} precisa de -text para o git não normalizar para LF"
+
+
+def test_env_example_tem_a_chave_para_preencher():
+    texto = (RAIZ / ".env.example").read_text(encoding="utf-8")
+    assert "JARVIS_AI_API_KEY=" in texto

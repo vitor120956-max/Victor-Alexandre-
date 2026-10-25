@@ -273,9 +273,17 @@ Três saídas, da mais simples para a mais completa:
 
 | Situação | O que fazer |
 |---|---|
-| Você baixou o projeto antes da 0.37.1 | Abra `requirements.txt` no Bloco de Notas e troque a linha `uvicorn[standard]>=0.34,<1.0` por `uvicorn>=0.34,<1.0`. Salve e rode o `pip install` de novo. |
-| Quer só colocar o JARVIS no ar agora | `.venv\Scripts\pip install fastapi uvicorn httpx pydantic python-dotenv` — em seguida `.venv\Scripts\pip install python-docx openpyxl python-pptx pypdf reportlab python-multipart` |
+| Quer só colocar o JARVIS no ar agora | Um comando, sem editar arquivo nenhum: `.venv\Scripts\pip install fastapi uvicorn httpx pydantic python-dotenv python-docx openpyxl python-pptx pypdf reportlab python-multipart` |
+| Você baixou o projeto antes da 0.37.1 e quer o `requirements.txt` certo | Cole no `cmd`, dentro de `D:\JARVIS`, o conserto automático abaixo — ele reescreve a linha sem você abrir editor |
 | Quer os aceleradores opcionais (parser HTTP em C, `--reload` instantâneo) | `.venv\Scripts\pip install -r requirements-rapido.txt` — é o `requirements.txt` mais `httptools`, `websockets` e `watchfiles`, e nenhum dos três pede compilador |
+
+O conserto automático do `requirements.txt` de uma cópia antiga (2 segundos, não abre editor):
+
+```bat
+py -c "import pathlib;p=pathlib.Path('requirements.txt');t=p.read_text(encoding='utf-8');t=t.replace('uvicorn[standard]','uvicorn');p.write_text(t,encoding='utf-8',newline='\r\n');print(t)"
+```
+
+Ele troca o texto, **regrava com quebra de linha do Windows** e imprime o resultado. Se aparecer `uvicorn>=0.34,<1.0` no meio da lista, funcionou.
 
 Se você realmente precisar do `uvicorn` completo, o comando avulso é `.venv\Scripts\pip install "uvicorn[standard]"` — mas saiba que hoje ele vai tentar compilar o `PyYAML` e falhar em Python 3.15 no Windows. O JARVIS não usa YAML nem WebSocket, então o `uvicorn` sem o extra atende tudo.
 
@@ -286,6 +294,29 @@ Como saber que deu certo, sem adivinhar:
 ```
 
 A lista precisa ter `fastapi`, `uvicorn`, `pydantic`, `python-docx`, `openpyxl`, `python-pptx`, `pypdf`, `reportlab` e `python-multipart`. Se faltar algum, o `pip install -r requirements.txt` parou no meio por causa de outra dependência — leia a última linha em vermelho, ela nomeia o pacote.
+
+### O Bloco de Notas antigo mostra o arquivo numa linha só
+
+Se você abrir `requirements.txt` ou `.env.example` no **Bloco de Notas** de um Windows 10 antigo (1607 = build 14393, 1709, 1803) e vir tudo grudado numa linha única, como `fastapi>=0.115,<1.0uvicorn[standard]>=0.34,...`, não é o arquivo que está corrompido: **é o Bloco de Notas** que não entende a quebra de linha do Unix (LF). Só a partir do build **17763 (1809)** ele passou a entender.
+
+O perigo é apertar Ctrl+S nesse estado: ele grava tudo amassado numa linha só, e aí o `pip` não consegue mais ler. **Feche o Bloco de Notas sem salvar** (ou clique em não salvar quando ele perguntar).
+
+Desde a **0.37.1** os quatro arquivos que você edita no Windows são gravados em **CRLF**, a quebra de linha do Windows, e o `.gitattributes` impede o git de converter de volta:
+
+| Arquivo | Quebra de linha |
+|---|---|
+| `requirements.txt` | CRLF |
+| `requirements-dev.txt` | CRLF |
+| `requirements-rapido.txt` | CRLF |
+| `.env.example` | CRLF |
+
+Se o seu `requirements.txt` ainda mostra uma linha só no Bloco de Notas, a cópia é anterior — use o conserto automático da seção anterior, ou simplesmente instale a lista de pacotes na mão e siga em frente. Para conferir a quebra de linha pelo próprio `cmd`, sem abrir editor:
+
+```bat
+py -c "print(open('requirements.txt','rb').read().count(b'\r\n'))"
+```
+
+Se o número for igual à quantidade de linhas do arquivo (15 no `requirements.txt`), está em CRLF.
 
 ### Comandos que **não** funcionam no `cmd` do Windows
 

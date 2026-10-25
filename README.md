@@ -26,6 +26,8 @@ Antes de subir, `npm run checar` mede a máquina e a pasta: versão de Node e Py
 
 **Sem compilador no Windows.** O `requirements.txt` pede `uvicorn` **sem** o extra `[standard]`: o extra arrasta o `PyYAML`, que não publica wheel para Python 3.15 no Windows e faz o `pip` parar em *"Microsoft Visual C++ 14.0 or greater is required"*, abortando a instalação inteira. O servidor não usa YAML nem WebSocket. Quem quiser os aceleradores opcionais (`httptools`, `websockets`, `watchfiles`) instala `requirements-rapido.txt`, que é o mesmo conjunto sem o `PyYAML`.
 
+**Editáveis no Bloco de Notas antigo.** `requirements.txt`, `requirements-dev.txt`, `requirements-rapido.txt` e `.env.example` são gravados com quebra de linha **CRLF** (o `.gitattributes` impede o git de converter): o Notepad do Windows 10 anterior ao build 17763 mostra arquivo LF como uma linha única e, se salvar nesse estado, amassa o arquivo.
+
 O navegador usa somente URLs relativas `/api`; não é necessário chamar `localhost` a partir do código da interface.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
