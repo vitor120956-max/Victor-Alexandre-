@@ -182,6 +182,13 @@ def principal(argv: list[str] | None = None) -> int:
         help="Grava a chave direto. Prefira deixar em branco: o padrão é digitar sem eco, sem deixar rastro no histórico.",
     )
     parser.add_argument(
+        "--local",
+        nargs="?",
+        const="http://127.0.0.1:8080/v1",
+        metavar="URL",
+        help="Aponta para um servidor de IA rodando na sua maquina (llama.cpp, KoboldCpp, LM Studio, Ollama no Linux). Sem URL usa %(const)s. Grava a chave de mentira 'local', que esses servidores ignoram.",
+    )
+    parser.add_argument(
         "--testar",
         action="store_true",
         help="Depois de gravar (ou com o que já está no .env), faz uma chamada real e diz se a chave, a base e o modelo funcionam.",
@@ -215,6 +222,14 @@ def principal(argv: list[str] | None = None) -> int:
             ler_valor(texto, CHAVE) or "",
         )
         return 0 if prova else 1
+
+    if args.local:
+        # Servidor local nao usa chave; o JARVIS exige um valor nao vazio para
+        # considerar a IA configurada, entao gravamos um marcador.
+        args.provedor = args.provedor or "Local (sem internet)"
+        args.base = args.base or args.local
+        if not args.chave:
+            args.chave = "local"
 
     print("Configurar a IA externa do JARVIS")
     print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")

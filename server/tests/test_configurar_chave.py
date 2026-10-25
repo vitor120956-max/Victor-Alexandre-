@@ -1,4 +1,4 @@
-"""Testes do `configurar-chave.py` (0.37.3).
+"""Testes do `configurar-chave.py` (0.37.4).
 
 O script existe porque o Bloco de Notas do Windows 10 antigo (1607) não lê
 quebra de linha Unix e amassa o `.env`. Ele grava em CRLF, preserva as outras
@@ -259,3 +259,31 @@ def test_doc_do_pendrive_aponta_para_os_provedores():
     texto = (RAIZ / "docs" / "PENDRIVE.md").read_text(encoding="utf-8")
     assert "console.groq.com/keys" in texto
     assert "CONFIGURAR-IA.md" in texto
+
+
+def test_local_grava_chave_marcadora_e_base_padrao(script, tmp_path):
+    assert script.principal(["--local", "--modelo", "qwen2.5-1.5b-instruct-q4_k_m.gguf"]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_BASE_URL=http://127.0.0.1:8080/v1\r\n" in bruto
+    assert b"JARVIS_AI_API_KEY=local\r\n" in bruto
+    assert b"qwen2.5-1.5b-instruct-q4_k_m.gguf" in bruto
+
+
+def test_local_aceita_outra_porta(script, tmp_path):
+    script.principal(["--local", "http://127.0.0.1:5001/v1", "--modelo", "m.gguf"])
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_BASE_URL=http://127.0.0.1:5001/v1\r\n" in bruto
+
+
+def test_local_nao_sobrescreve_chave_informada(script, tmp_path):
+    script.principal(["--local", "--modelo", "m.gguf", "--chave", "sk-de-verdade-1234567"])
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_API_KEY=sk-de-verdade-1234567\r\n" in bruto
+
+
+def test_doc_explica_ia_local_e_a_limitacao_do_windows_1607():
+    texto = (RAIZ / "docs" / "CONFIGURAR-IA.md").read_text(encoding="utf-8")
+    assert "--local" in texto
+    assert "22H2" in texto
+    assert "llama.cpp" in texto
+    assert "não é obrigado" in texto.lower() or "não é obrigado" in texto

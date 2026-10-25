@@ -2,7 +2,7 @@
 
 A camada generativa é opcional. As skills locais e Python não dependem dela.
 
-## 0. Onde conseguir uma chave sem pagar
+## 0. De onde vem a IA: chave grátis ou modelo local
 
 **Não existe chave grátis da OpenAI.** A OpenAI não tem mais camada gratuita de API desde 2024. Todo site que oferece "chave OpenAI grátis" está revendendo chave vazada ou compartilhada: ela para de funcionar em horas e todo mundo que a usa lê o que você escreve. Não use.
 
@@ -83,6 +83,65 @@ Ele faz uma chamada real de 8 tokens e responde em português:
 | `Falhou na conexão` | internet, proxy ou firewall bloqueando |
 
 O teste não imprime a chave. Você pode rodá-lo quantas vezes quiser.
+
+### Modelo local: sem chave, sem limite e sem internet
+
+**Você não é obrigado a ter chave.** A camada de IA é opcional: sem chave nenhuma, as **209 skills** locais, a legislação, os documentos, a memória e as tarefas continuam funcionando. O que fica de fora é só o chat aberto (`IA EXTERNA`) e o `distilar.persona`.
+
+Se você quer o chat também, sem chave e sem limite de requisições, dá para rodar o modelo **na sua máquina**. O custo não é dinheiro, é RAM e paciência: a resposta sai bem mais devagar que num provedor de nuvem.
+
+**O Ollama — o caminho mais fácil — não roda no seu Windows.** A documentação dele pede **Windows 10 22H2 (build 19045) ou mais novo**; o seu é o build **14393 (1607)**, de 2016. Não é limitação do JARVIS, é do instalador.
+
+| Programa | Como vem | Roda no Windows 1607? | Endereço padrão |
+|---|---|---|---|
+| **llama.cpp** (`llama-server.exe`) | zip, sem instalador | provavelmente sim (binário `x64` genérico, sem AVX2) | `http://127.0.0.1:8080/v1` |
+| **KoboldCpp** | um `.exe` só | provavelmente sim | `http://127.0.0.1:5001/v1` |
+| LM Studio | instalador grande | incerto, costuma pedir Windows mais novo | `http://127.0.0.1:1234/v1` |
+| Ollama | instalador | **não** | `http://127.0.0.1:11434/v1` |
+
+"Provavelmente" é o máximo que se pode dizer sem testar na sua máquina. **Meça antes de baixar 2 GB.**
+
+### Meça a máquina primeiro
+
+```bat
+powershell -c "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB; (Get-CimInstance Win32_Processor).Name; (Get-CimInstance Win32_Processor).NumberOfCores"
+```
+
+```bat
+wmic logicaldisk get caption,freespace
+```
+
+A primeira linha é a RAM em GB, a segunda o processador, a terceira quantos núcleos. A quarta mostra o espaço livre de cada disco, em bytes (`10737418240` = 10 GB).
+
+| RAM | Modelo que cabe (quantizado em 4 bits) | Como fica |
+|---|---|---|
+| 4 GB | 1–2 bilhões de parâmetros (~1 GB de arquivo) | responde, mas devagar e simples |
+| 8 GB | 3–4 bilhões | usável para conversa curta |
+| 16 GB | 7–8 bilhões | confortável |
+| 32 GB | 13–14 bilhões | bom |
+
+Regra de bolso: o arquivo do modelo ocupa mais ou menos **0,7 GB por bilhão de parâmetros** em 4 bits, e o programa precisa de mais ~1 GB para trabalhar.
+
+### Apontar o JARVIS para o servidor local
+
+Suba o `llama-server` (ou o KoboldCpp) e, noutra janela:
+
+```bat
+cd /d D:\JARVIS
+.venv\Scripts\python configurar-chave.py --local
+```
+
+Ele já preenche a base com `http://127.0.0.1:8080/v1` e grava a chave `local`; só pergunta o nome do modelo. Se o seu servidor estiver noutra porta, informe:
+
+```bat
+.venv\Scripts\python configurar-chave.py --local http://127.0.0.1:5001/v1 --modelo nome-do-modelo
+```
+
+> **Por que uma "chave" se não existe chave?** O JARVIS só considera a IA configurada quando os quatro campos têm valor. Servidores locais ignoram o cabeçalho `Authorization`, então o valor `local` é só um marcador. Sem ele, o painel fica em NÃO CONFIGURADA mesmo com o servidor no ar.
+
+Confira com `--testar`, como nos provedores de nuvem: ele faz uma chamada de verdade e responde `FUNCIONOU` ou o motivo.
+
+Nesse modo, **nada sai da sua máquina**: nem a pergunta, nem as conversas, nem o contexto. É o único caminho em que o "local-first" do projeto vale também para o chat.
 
 ## 1. Escolha um provedor compatível
 
