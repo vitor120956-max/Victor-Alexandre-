@@ -255,7 +255,7 @@ O `pip` só instala sem compilador se existir **wheel pronta** para a versão do
 
 Ou seja: `pip install -r requirements-dev.txt` não precisa de Visual Studio Build Tools.
 
-Uma exceção ficou de fora dessa tabela de propósito: o **`PyYAML`**. Ele não publica wheel `cp315` para Windows em nenhuma versão recente (conferido em 25/10/2026: 6.0, 6.0.1, 6.0.2, 6.0.2rc1, 6.0.3, 6.0b1 — nenhuma). E ele não é usado pelo JARVIS: entrava só pelo extra `uvicorn[standard]`, que também traz `httptools`, `websockets`, `watchfiles` e `uvloop`. Desde a **0.37.1** o `requirements.txt` pede `uvicorn>=0.34,<1.0` **sem** o extra, então nada compila.
+Um pacote ficou de fora dessa tabela de propósito: o **`PyYAML`**. Ele não publica wheel `cp315` para Windows em nenhuma versão recente (conferido em 25/10/2026: 6.0, 6.0.1, 6.0.2, 6.0.2rc1, 6.0.3, 6.0b1 — nenhuma). E ele não é usado pelo JARVIS: entrava só pelo extra `uvicorn[standard]`, que também traz `httptools`, `websockets`, `watchfiles` e `uvloop`. Desde a **0.37.1** o `requirements.txt` pede `uvicorn>=0.34,<1.0` **sem** o extra, então nada compila.
 
 ### Quando o `pip install` para em `Microsoft Visual C++ 14.0 or greater is required`
 
