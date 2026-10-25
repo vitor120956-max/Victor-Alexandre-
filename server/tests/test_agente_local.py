@@ -14,7 +14,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.agente_local import (
-    LIMIAR_EXECUTAR,
     RECEITAS,
     AgenteError,
     achar_receita,
