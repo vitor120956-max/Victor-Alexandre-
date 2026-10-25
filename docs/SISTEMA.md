@@ -206,7 +206,7 @@ Cada execução — instalar ou remover — vira uma linha em `storage/host-audi
 - **Ler conteúdo de arquivo.** A enumeração é metadado.
 - **Parear Bluetooth.** Lista e diagnostica, não conecta.
 - **Confiar sem verificar.** A assinatura é validada quando a plataforma permite e declarada como não verificável quando não permite.
-- **Elevar privilégio.** Instalador que pede administrador falha.
+- **Elevar privilégio por conta própria.** Instalador que pede administrador falha nesta camada. A elevação existe em camada separada — `sistema.elevar` e `sistema.elevar_executar` (0.33.0), com token próprio, tabela fechada de seis ações e auditoria —; esta camada não a chama por dentro nem a esconde. Detalhes em [`ROOT.md`](ROOT.md).
 - **Apagar, mover ou renomear.** O desinstalador chama o gerenciador de pacotes; nenhum arquivo do usuário é removido por esta camada.
 - **Alcançar rede privada.** Bloqueado por política, inclusive via DNS.
 

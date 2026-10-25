@@ -44,7 +44,7 @@ from urllib.request import Request, urlopen
 
 from .review import common, finalize, finding
 
-VERSAO = "0.35.0"
+VERSAO = "0.35.1"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -2172,7 +2172,8 @@ def instalar(
             "Não existe shell livre: só a lista fechada de instaladores com argumentos fixos.",
             "Assinatura é verificada pelo que a plataforma oferece; pacote por gerenciador não tem arquivo local para conferir.",
             "O token vale 10 minutos, serve uma vez e só para este alvo.",
-            "Elevação de privilégio não é feita: se o instalador pedir administrador, a execução falha.",
+            "Esta skill não eleva privilégio: roda com o usuário da API, e instalador que pede administrador falha aqui.",
+            "Para .deb e .rpm a elevação é outra camada: sistema.elevar e sistema.elevar_executar (0.33.0), com token próprio, tabela fechada de seis ações e auditoria em storage/host-audit.jsonl.",
         ],
     )
     resultado["confirmacao"] = token
@@ -2332,7 +2333,7 @@ def desinstalar(
             "Só remove o que um gerenciador conhece: programa instalado por copiar pasta não aparece aqui.",
             "AppImage não tem desinstalador: apagar o arquivo seria remoção de arquivo, e esta camada não apaga.",
             "Executar depende de JARVIS_HOST_INSTALAR=1 e do token devolvido pelo plano.",
-            "Elevação de privilégio não é feita.",
+            "Esta skill não eleva privilégio: remoção que pede administrador falha aqui; .deb e .rpm se removem por sistema.elevar (remover_deb/remover_rpm, 0.33.0).",
         ],
     )
     resultado["confirmacao"] = token
@@ -2417,7 +2418,7 @@ def executar(
                     registro["rotulo"],
                     f"Código de saída {codigo}: {(erro or saida)[-300:] or 'sem mensagem'}.",
                     "A operação não foi concluída ou parou no meio.",
-                    "Confira se a execução precisa de elevação e rode de novo como administrador.",
+                    "Se o erro for de permissão, esta camada não eleva: para .deb e .rpm, monte o plano em sistema.elevar (0.33.0).",
                     "Você acredita que o sistema mudou e ele não mudou.",
                 )
             )
@@ -2528,7 +2529,7 @@ def catalogo() -> dict[str, Any]:
             "Não pareia, conecta ou desconecta dispositivo Bluetooth.",
             "Não confia na assinatura sem verificar: valida Authenticode, rpm -K, dpkg-sig ou gpg quando a plataforma permite, e declara quando não permite.",
             "Não consulta serviço externo de reputação de arquivo.",
-            "Não eleva privilégio.",
+            "Não eleva privilégio nesta camada: a elevação é skill separada (sistema.elevar e sistema.elevar_executar), com token próprio, tabela fechada de seis ações e auditoria em storage/host-audit.jsonl.",
             "Não apaga, move ou renomeia arquivo do usuário.",
             "Não alcança endereço privado, laço local ou link-local pela rede.",
         ],

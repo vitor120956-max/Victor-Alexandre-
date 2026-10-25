@@ -904,6 +904,12 @@ def test_catalogo_declara_o_que_nao_faz():
     assert "shell livre" in texto and "reputação" in texto and "bluetooth" in texto
 
 
+def test_catalogo_aponta_a_elevacao_em_vez_de_negala():
+    texto = " ".join(S.catalogo()["nao_faz"]).lower()
+    assert "não eleva privilégio nesta camada" in texto
+    assert "sistema.elevar" in texto and "host-audit.jsonl" in texto
+
+
 def test_catalogo_publica_as_cinco_fontes_de_verificacao():
     dados = S.catalogo()["verificacao_de_assinatura"]
     assert set(dados) == {"windows", "linux_rpm", "linux_deb", "destacada", "hash", "revalidacao"}
@@ -1103,6 +1109,13 @@ def test_instalar_sem_arquivo_local_nao_tem_hash(token):
     assert linha["valor"] == "(sem arquivo local)"
 
 
+def test_plano_de_instalacao_aponta_a_skill_de_elevacao(token):
+    dados = S.instalar(pacote="pip:rich", autorizacao=token)
+    texto = " ".join(dados["limitations"]).lower()
+    assert "sistema.elevar" in texto
+    assert "elevação de privilégio não é feita" not in texto
+
+
 def test_instalar_exigindo_assinatura_bloqueia_quando_nao_verificavel(estado, token):
     alvo = _arquivo(estado)
     dados = S.instalar(arquivo=str(alvo), exigir_assinatura=True, autorizacao=token)
@@ -1183,6 +1196,13 @@ def test_desinstalar_arquivo_nao_msi(estado, token):
         S.desinstalar(arquivo=str(alvo), autorizacao=token)
 
 
+def test_plano_de_desinstalacao_aponta_a_skill_de_elevacao(token):
+    dados = S.desinstalar(pacote="dpkg:curl", autorizacao=token)
+    texto = " ".join(dados["limitations"]).lower()
+    assert "sistema.elevar" in texto and "remover_deb" in texto
+    assert "elevação de privilégio não é feita" not in texto
+
+
 def test_desinstalar_nao_executa(estado, token):
     dados = S.desinstalar(arquivo=str(_arquivo(estado)), autorizacao=token)
     assert dados["executed"] is False and dados["readOnly"] is True
@@ -1215,6 +1235,14 @@ def test_executar_audita_desinstalacao(monkeypatch, instalacao_ligada, token, es
     S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
     linha = json.loads((estado / "host-audit.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1])
     assert linha["acao"] == "desinstalar"
+
+
+def test_executar_com_erro_de_permissao_aponta_a_elevacao(monkeypatch, instalacao_ligada, token):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (1, "", "permission denied"))
+    plano = S.desinstalar(pacote="dpkg:curl", autorizacao=token)
+    dados = S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+    texto = " ".join(item["fix"] for item in dados["findings"]).lower()
+    assert "sistema.elevar" in texto
 
 
 # ---------------------------------------------------------------------------
@@ -1303,7 +1331,7 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.35.0"
+    assert dados["version"] == "0.35.1"
     assert dados["skills"] == 208
 
 
@@ -1322,7 +1350,7 @@ def test_api_sistema_disco_exige_token(client):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.35.0"
+    assert resposta["result"]["versao"] == "0.35.1"
 
 
 def test_api_baixar_exige_confirmacao(client):
