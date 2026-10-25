@@ -541,10 +541,14 @@ py -m venv .venv
 
 Depois abra **http://127.0.0.1:8000** — sem Vite, sem porta 5173, sem `node_modules`.
 
-| Modo | Precisa de Node? | Precisa de `npm install`? | Tamanho no pendrive | Porta |
-|---|---|---|---|---|
-| `npm run dev` (desenvolvimento) | sim | sim (139 MB) | ~300 MB | 5173 + 8000 |
-| `py iniciar.py` (sem Node) | **não** | **não** | ~140 MB (só `.venv`) | **8000** |
+Validado numa cópia limpa (sem `node_modules`, sem `dist`, sem `.git`): `/api/health` respondeu `"interface": "web-dist"` e a raiz entregou o HTML da interface.
+
+| Modo | Precisa de Node? | Precisa de `npm install`? | Arquivos a gravar | Tamanho no pendrive | Porta |
+|---|---|---|---|---|---|
+| `npm run dev` (desenvolvimento) | sim | sim | **9.198** | 18 MB + 139 MB = **157 MB** | 5173 + 8000 |
+| `py iniciar.py` (sem Node) | **não** | **não** | **~1.300** | 18 MB + 124 MB = **142 MB** | **8000** |
+
+Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` = **124 MB** e **36 pacotes**. O `npm install` grava **9.198 arquivos**; o `pip` grava cerca de **1.300** — quase sete vezes menos arquivos pequenos, que é o que dói num pendrive USB 2.0.
 
 O `iniciar.py` aceita `--porta 8080` e `--host 0.0.0.0` (para acessar de outro aparelho na rede local). Ele também troca sozinho para o Python do `.venv` quando existir.
 
