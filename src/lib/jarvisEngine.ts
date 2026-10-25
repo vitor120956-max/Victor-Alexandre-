@@ -141,9 +141,16 @@ function cleanTaskTitle(value: string): string {
  * Tira a cortesia do pedido para reconhecer "quero que você abra o YouTube"
  * com a mesma regra que reconhece "abrir YouTube".
  */
+const SAUDACAO = /^(?:ei|oi|ola|jarvis|chat|assistente|por favor|pf|pfv)[\s,:!.-]+/i;
+
 export function normalizarPedidoDeAbertura(text: string): string {
-  let saida = text
-    .replace(/^(?:ei|oi|ola|jarvis|por favor|pf|pfv)[,\s]+/g, '')
+  let saida = text.trim();
+  // Tira as palavras de chamada em qualquer combinação: "chat", "chat:",
+  // "jarvis chat", "oi jarvis". Antes só saía a primeira.
+  while (SAUDACAO.test(saida)) {
+    saida = saida.replace(SAUDACAO, '');
+  }
+  saida = saida
     .replace(/^(?:eu\s+)?(?:quero|queria|gostaria)(?:\s+(?:que|q)\s+(?:voce|vc|tu))?\s+/, '')
     .replace(/^(?:voce\s+)?(?:pode|poderia|consegue|consegues|da\s+pra|da\s+para)\s+/, '')
     .replace(/^(?:me\s+)/, '');

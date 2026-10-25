@@ -1,6 +1,7 @@
 # Agente local — usar as skills sem modelo
 
-A partir da 0.40.0 o chat tenta resolver o pedido **sem chamar provedor de IA**.
+Desde a 0.39.0 o chat tenta resolver o pedido **sem chamar provedor de IA**; a
+correção por apelido, a memória de respostas e o painel chegaram na 0.40.0.
 Quando nenhuma skill ou receita serve, ele procura na web, lê a página e devolve
 o que achou — também sem modelo.
 

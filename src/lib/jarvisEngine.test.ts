@@ -223,3 +223,20 @@ describe('agente local — correção', () => {
     expect(helpText).toMatch(/esqueça/);
   });
 });
+
+describe('abertura com palavra de chamada na frente', () => {
+  it('aceita "chat" antes do pedido', () => {
+    expect(parseCommand('chat abra o youtube no meu pc')).toMatchObject({ type: 'web:open', destination: 'YouTube' });
+    expect(parseCommand('chat: abre o gmail')).toMatchObject({ type: 'web:open', destination: 'Gmail' });
+    expect(parseCommand('jarvis chat abra o github')).toMatchObject({ type: 'web:open', destination: 'GitHub' });
+  });
+
+  it('continua aceitando o pedido sem palavra de chamada', () => {
+    expect(parseCommand('abra o youtube')).toMatchObject({ type: 'web:open', destination: 'YouTube' });
+    expect(parseCommand('quero q vc abra uma tela do youtube no meu pc')).toMatchObject({ type: 'web:open', destination: 'YouTube' });
+  });
+
+  it('não transforma site desconhecido em abertura', () => {
+    expect(parseCommand('chat abra um site de receitas')).not.toMatchObject({ type: 'web:open' });
+  });
+});

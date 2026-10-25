@@ -4,7 +4,8 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
 import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
-import type { AgenteResultado, AIStatus, PythonSkill, SkillExecution } from '../lib/api';
+import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
+import { montarRespostaAgente } from '../lib/agenteResposta';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
 import {
@@ -96,12 +97,6 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 const initialAIStatus: AIStatus = { configured: false, provider: 'Não configurado', model: null, external: true };
-
-function montarRespostaAgente(resultado: AgenteResultado): string {
-  const partes = [resultado.resposta.trim()];
-  if (resultado.avisos.length) partes.push(resultado.avisos.join(' '));
-  return partes.filter(Boolean).join('\n\n');
-}
 
 const actionLabels: Record<AutomationAction, string> = {
   summary: 'Resumo do dia',
