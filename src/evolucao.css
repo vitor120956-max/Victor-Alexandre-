@@ -1,0 +1,54 @@
+/* --- camada de evolução -------------------------------------------------- */
+.evolucao-page .diagram-form input,
+.evolucao-page .diagram-form select {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+
+.evolucao-page .diagram-tabs button small {
+  white-space: nowrap;
+}
+
+.evolucao-diff {
+  font-family: var(--mono);
+  font-size: 7px;
+  line-height: 1.7;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.evolucao-alerta {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--warn, #d9a441);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warn, #d9a441) 8%, transparent);
+}
+
+.evolucao-alerta svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn, #d9a441);
+}
+
+.evolucao-alerta strong {
+  display: block;
+  font-size: 7.4px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.evolucao-alerta span {
+  font-size: 7.4px;
+  line-height: 1.6;
+  opacity: 0.82;
+}
+
+.evolucao-alerta code {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}

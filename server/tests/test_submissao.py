@@ -721,7 +721,7 @@ def test_registro_tem_as_sete_skills_de_submissao(tmp_path) -> None:
     submissao = [item for item in itens if item["id"].startswith("submissao.")]
     assert len(submissao) == 7
     assert {item["category"] for item in submissao} == {"Submissão"}
-    assert len(itens) == 188
+    assert len(itens) == 196
     assert all(item["sideEffects"] is False for item in submissao)
 
 

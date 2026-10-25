@@ -129,6 +129,17 @@ from .continuidade import (
     portao as portao_continuidade,
     retomada as retomada_continuidade,
 )
+from .evolucao import (
+    EvolucaoError,
+    catalogo as evolucao_catalogo,
+    ensaiar as ensaiar_evolucao,
+    guardas as guardas_evolucao,
+    mapa as mapa_evolucao,
+    promover as promover_evolucao,
+    proposta as proposta_evolucao,
+    reverter as reverter_evolucao,
+    risco as risco_evolucao,
+)
 from .sistema import (
     SistemaError,
     ambiente as ambiente_sistema,
@@ -1025,6 +1036,57 @@ class ContinuidadeMedicoInput(BaseModel):
     planos: str = Field(min_length=10, max_length=1_800_000, title="Diretório de planos", json_schema_extra={"format": "textarea", "description": "Bundle `>>> <plano>/<arquivo>` com task_plan.md, progress.md, findings.md, ledger e atestação."})
     ativo: str = Field(default="", max_length=120, title="Plano ativo", json_schema_extra={"description": "Nome declarado como ativo; quando não resolve, nenhum outro plano é substituído."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class EvolucaoMapaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    area: Literal["tudo", "server", "testes", "web", "docs"] = Field(default="tudo", title="Área")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoPropostaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(min_length=10, max_length=900_000, title="Diff unificado", json_schema_extra={"format": "textarea", "description": "Saída de `git diff` ou `diff -u`. Cada hunk é testado contra o arquivo atual."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoRiscoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(min_length=10, max_length=900_000, title="Diff unificado", json_schema_extra={"format": "textarea"})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoGuardasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(min_length=10, max_length=900_000, title="Diff unificado", json_schema_extra={"format": "textarea"})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoEnsaiarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    diff: str = Field(min_length=10, max_length=900_000, title="Diff unificado", json_schema_extra={"format": "textarea"})
+    testes: str = Field(default="", max_length=300, title="Alvo dos testes", json_schema_extra={"description": "Caminho ou `-k`; vazio roda `server/tests` inteiro."})
+    timeout: int = Field(default=600, ge=30, le=1_800, title="Timeout (s)")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoPromoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmacao: str = Field(min_length=4, max_length=64, title="Confirmação do ensaio", json_schema_extra={"description": "Token de 8 caracteres devolvido por `evoluir.ensaiar` quando a suíte passa."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class EvolucaoReverterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ensaio: str = Field(min_length=4, max_length=32, title="Ensaio promovido", json_schema_extra={"description": "Identificador devolvido por `evoluir.promover`."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
 class SistemaAmbienteInput(BaseModel):
@@ -2985,6 +3047,64 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def continuidade_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return continuidade_catalogo()
 
+    def evolucao_mapa_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoMapaInput)
+        try:
+            return mapa_evolucao(area=data.area, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_proposta_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoPropostaInput)
+        try:
+            return proposta_evolucao(diff=data.diff, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_risco_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoRiscoInput)
+        try:
+            return risco_evolucao(diff=data.diff, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_guardas_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoGuardasInput)
+        try:
+            return guardas_evolucao(diff=data.diff, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_ensaiar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoEnsaiarInput)
+        try:
+            return ensaiar_evolucao(
+                diff=data.diff,
+                testes=data.testes,
+                timeout=data.timeout,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_promover_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoPromoverInput)
+        try:
+            return promover_evolucao(confirmacao=data.confirmacao, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_reverter_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EvolucaoReverterInput)
+        try:
+            return reverter_evolucao(ensaio=data.ensaio, modo=data.modo, autorizacao=data.autorizacao)
+        except EvolucaoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def evolucao_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return evolucao_catalogo()
+
     def sistema_ambiente_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SistemaAmbienteInput)
         try:
@@ -3572,6 +3692,14 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("continuidade.livro", "Livro de execução", "Valida o `ledger-<agente>.jsonl`: JSON por linha, seis eventos, tick inteiro e crescente, resumo de até 200 caracteres sem quebra, agente sanitizado, lacuna e ordem.", "Continuidade", ContinuidadeLivroInput, continuidade_livro_handler, timeout_seconds=15),
         SkillDefinition("continuidade.medico", "Médico do diretório", "Diagnostica o conjunto de planos: arquivo obrigatório faltando, plano sem livro ou atestação, título duplicado, plano ativo inexistente e ambiguidade quando dois planos têm fase aberta.", "Continuidade", ContinuidadeMedicoInput, continuidade_medico_handler, timeout_seconds=20),
         SkillDefinition("continuidade.regras", "Catálogo de continuidade", "Publica os arquivos do plano, os dois formatos de status, os seis eventos, os cinco guardas do portão, o orçamento da injeção, as doze regras e os limites.", "Continuidade", EmptyInput, continuidade_regras_handler, timeout_seconds=5),
+        SkillDefinition("evoluir.mapa", "Mapa do código", "Inventaria módulos, testes, páginas e docs com linhas, tamanho e superfície pública, apontando módulo gigante e módulo sem teste de mesmo nome.", "Evolução", EvolucaoMapaInput, evolucao_mapa_handler, timeout_seconds=30),
+        SkillDefinition("evoluir.proposta", "Proposta de mudança", "Lê um diff unificado e prova hunk por hunk se ele aplica no arquivo atual, recusando caminho proibido, extensão não permitida e patch que esvazia arquivo.", "Evolução", EvolucaoPropostaInput, evolucao_proposta_handler, timeout_seconds=30),
+        SkillDefinition("evoluir.risco", "Risco da mudança", "Pontua o patch de 0 a 100: padrões de perigo nas linhas adicionadas (`eval`, `shell=True`, segredo embutido), guardas removidas e arquivos centrais tocados.", "Evolução", EvolucaoRiscoInput, evolucao_risco_handler, timeout_seconds=30),
+        SkillDefinition("evoluir.guardas", "Guardas do projeto", "Confere as dez leis do projeto contra o patch — `executed: false`, allowlist, `shell=False`, token de host, dependências, contagem de skills, credencial, tamanho da suíte, declaração de efeito e rede com trava.", "Evolução", EvolucaoGuardasInput, evolucao_guardas_handler, timeout_seconds=30),
+        SkillDefinition("evoluir.ensaiar", "Ensaio em cópia", "Copia o projeto para `storage/evolucao/ensaios/<id>`, aplica o patch na cópia e roda a suíte real: verde libera o token de promoção, vermelho bloqueia. O código vivo não é tocado.", "Evolução", EvolucaoEnsaiarInput, evolucao_ensaiar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition("evoluir.promover", "Promoção", "Aplica no código vivo o patch de um ensaio aprovado, exigindo hash idêntico ao ensaiado, arquivo sem alteração não commitada e backup antes da escrita. Não cria branch nem commita.", "Evolução", EvolucaoPromoverInput, evolucao_promover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=120),
+        SkillDefinition("evoluir.reverter", "Reversão", "Restaura os arquivos a partir do backup de uma promoção e avisa que o processo precisa reiniciar para voltar ao código anterior.", "Evolução", EvolucaoReverterInput, evolucao_reverter_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=120),
+        SkillDefinition("evoluir.regras", "Catálogo de evolução", "Publica o fluxo de sete passos, as seis travas, as dez guardas, os padrões de perigo monitorados e o que a camada recusa fazer.", "Evolução", EmptyInput, evolucao_regras_handler, timeout_seconds=5),
         SkillDefinition("sistema.ambiente", "Ambiente do host", "Descreve a máquina que executa a API: sistema, arquitetura, núcleos, memória, tempo ligado, detecção de contêiner e o estado das três travas (token de host, rede e instalação).", "Sistema", SistemaAmbienteInput, sistema_ambiente_handler, timeout_seconds=20),
         SkillDefinition("sistema.disco", "Espaço em disco", "Mede total, usado e livre por unidade montada, ignorando pseudo-filesystems e bind mounts repetidos, e alerta em 15% e 5% livres.", "Sistema", SistemaDiscoInput, sistema_disco_handler, timeout_seconds=20),
         SkillDefinition("sistema.pastas", "Inventário de pastas", "Enumera nomes, tipos, tamanhos e datas até a profundidade pedida, sem ler conteúdo; cofre, chave e token aparecem só pelo nome.", "Sistema", SistemaPastasInput, sistema_pastas_handler, timeout_seconds=30),

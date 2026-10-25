@@ -230,7 +230,7 @@ O comando de voz ou texto `carreira`, `triagem de vaga`, `checar ats`, `auditar 
 
 ```bash
 npm run dev                                   # API em 8000 e Vite em 5173
-curl -s http://localhost:8000/api/health      # 0.31.0, 188 skills
+curl -s http://localhost:8000/api/health      # 0.32.0, 196 skills
 ```
 
 ```bash
