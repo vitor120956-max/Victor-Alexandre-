@@ -6,6 +6,7 @@ A camada lê a máquina de verdade, então cada teste isola o diretório de esta
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -889,9 +890,9 @@ def test_e_rodar_respeita_timeout(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_catalogo_lista_dez_operacoes():
+def test_catalogo_lista_doze_operacoes():
     dados = S.catalogo()
-    assert len(dados["operacoes"]) == 10
+    assert len(dados["operacoes"]) == 12
 
 
 def test_catalogo_lista_cinco_guardas():
@@ -900,7 +901,12 @@ def test_catalogo_lista_cinco_guardas():
 
 def test_catalogo_declara_o_que_nao_faz():
     texto = " ".join(S.catalogo()["nao_faz"]).lower()
-    assert "shell livre" in texto and "assinatura" in texto and "bluetooth" in texto
+    assert "shell livre" in texto and "reputação" in texto and "bluetooth" in texto
+
+
+def test_catalogo_publica_as_cinco_fontes_de_verificacao():
+    dados = S.catalogo()["verificacao_de_assinatura"]
+    assert set(dados) == {"windows", "linux_rpm", "linux_deb", "destacada", "hash", "revalidacao"}
 
 
 def test_catalogo_nao_expoe_token():
@@ -910,6 +916,378 @@ def test_catalogo_nao_expoe_token():
 def test_catalogo_e_somente_leitura():
     dados = S.catalogo()
     assert dados["executed"] is False and dados["readOnly"] is True
+
+
+# ---------------------------------------------------------------------------
+# Assinatura e integridade
+# ---------------------------------------------------------------------------
+
+
+def _arquivo(estado, nome="fone.msi", dados=b"conteudo"):
+    return _baixar_fake(estado, nome=nome, dados=dados)
+
+
+def test_assinatura_calcula_sha256(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.assinatura(arquivo=str(alvo), autorizacao=token)
+    assert dados["metrics"]["sha256"] == hashlib.sha256(b"conteudo").hexdigest()
+    assert dados["metrics"]["bytes"] == 8
+
+
+def test_assinatura_hash_confere(estado, token):
+    alvo = _arquivo(estado)
+    certo = hashlib.sha256(b"conteudo").hexdigest()
+    dados = S.assinatura(arquivo=str(alvo), hash_esperado=certo, autorizacao=token)
+    assert dados["metrics"]["hashConfere"] is True
+    assert dados["counts"]["must"] == 0
+
+
+def test_assinatura_hash_divergente_bloqueia(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.assinatura(arquivo=str(alvo), hash_esperado="0" * 64, autorizacao=token)
+    assert dados["metrics"]["hashConfere"] is False
+    assert dados["counts"]["must"] == 1
+    assert any("hash" in item["title"].lower() for item in dados["findings"])
+
+
+def test_assinatura_hash_aceita_maiuscula(estado, token):
+    alvo = _arquivo(estado)
+    certo = hashlib.sha256(b"conteudo").hexdigest().upper()
+    assert S.assinatura(arquivo=str(alvo), hash_esperado=certo, autorizacao=token)["metrics"]["hashConfere"] is True
+
+
+def test_assinatura_hash_malformado(estado, token):
+    alvo = _arquivo(estado)
+    with pytest.raises(S.SistemaError, match="64"):
+        S.assinatura(arquivo=str(alvo), hash_esperado="abc", autorizacao=token)
+
+
+def test_assinatura_sem_hash_avisa(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.assinatura(arquivo=str(alvo), autorizacao=token)
+    assert dados["metrics"]["hashConfere"] is None
+    assert any("não comparado" in item["title"].lower() for item in dados["findings"])
+
+
+def test_assinatura_fora_da_quarentena(token):
+    with pytest.raises(S.SistemaError, match="quarentena"):
+        S.assinatura(arquivo="/etc/passwd", autorizacao=token)
+
+
+def test_assinatura_exige_token(estado):
+    with pytest.raises(S.SistemaError, match="token"):
+        S.assinatura(arquivo=str(_arquivo(estado)), autorizacao="")
+
+
+def test_assinatura_authenticode_valida(monkeypatch, estado, token):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        S,
+        "_authenticode",
+        lambda _p: {"estado": "válida", "fonte": "Get-AuthenticodeSignature", "detalhe": "Valid: ok", "assinante": "CN=Fabricante"},
+    )
+    dados = S.assinatura(arquivo=str(alvo), autorizacao=token)
+    assert dados["metrics"]["assinatura"] == "válida"
+    assert dados["counts"]["must"] == 0
+
+
+def test_assinatura_authenticode_invalida_bloqueia(monkeypatch, estado, token):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        S,
+        "_authenticode",
+        lambda _p: {"estado": "inválida", "fonte": "Get-AuthenticodeSignature", "detalhe": "HashMismatch", "assinante": ""},
+    )
+    dados = S.assinatura(arquivo=str(alvo), autorizacao=token)
+    assert dados["counts"]["must"] >= 1
+
+
+def test_authenticode_mapeia_status(monkeypatch):
+    monkeypatch.setattr(S, "_rodar_env", lambda *_a, **_k: (0, json.dumps({"Status": "Valid", "Mensagem": "ok"}), ""))
+    assert S._authenticode(Path("/x.msi"))["estado"] == "válida"
+    monkeypatch.setattr(S, "_rodar_env", lambda *_a, **_k: (0, json.dumps({"Status": "HashMismatch"}), ""))
+    assert S._authenticode(Path("/x.msi"))["estado"] == "inválida"
+    monkeypatch.setattr(S, "_rodar_env", lambda *_a, **_k: (0, json.dumps({"Status": "NotSigned"}), ""))
+    assert S._authenticode(Path("/x.msi"))["estado"] == "ausente"
+
+
+def test_authenticode_sem_powershell(monkeypatch):
+    monkeypatch.setattr(S, "_rodar_env", lambda *_a, **_k: (127, "", "comando não encontrado"))
+    assert S._authenticode(Path("/x.msi"))["estado"] == "não verificável"
+
+
+def test_authenticode_passa_caminho_por_ambiente(monkeypatch):
+    visto = {}
+
+    def espiao(comando, extra, timeout=30):
+        visto["comando"] = comando
+        visto["extra"] = extra
+        return 0, json.dumps({"Status": "Valid"}), ""
+
+    monkeypatch.setattr(S, "_rodar_env", espiao)
+    S._authenticode(Path("/tmp/quarentena/driver.msi"))
+    assert visto["extra"]["JARVIS_ALVO"] == "/tmp/quarentena/driver.msi"
+    assert "driver.msi" not in " ".join(visto["comando"])
+
+
+def test_gpg_assinatura_valida(monkeypatch, estado, token):
+    alvo = _arquivo(estado)
+    sig = estado / "host-downloads" / "0000-fone.asc"
+    sig.write_text("assinatura", encoding="utf-8")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, 'Good signature from "Ahmad"', ""))
+    dados = S.assinatura(arquivo=str(alvo), assinatura_arquivo=str(sig), autorizacao=token)
+    assert dados["metrics"]["assinatura"] == "válida"
+    assert dados["metrics"]["fonte"] == "gpg --verify"
+
+
+def test_gpg_assinatura_invalida(monkeypatch, estado, token):
+    alvo = _arquivo(estado)
+    sig = estado / "host-downloads" / "0000-fone.asc"
+    sig.write_text("assinatura", encoding="utf-8")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (1, "", "BAD signature"))
+    dados = S.assinatura(arquivo=str(alvo), assinatura_arquivo=str(sig), autorizacao=token)
+    assert dados["metrics"]["assinatura"] == "inválida"
+    assert dados["counts"]["must"] >= 1
+
+
+def test_gpg_ausente_nao_verifica(monkeypatch):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (127, "", "não encontrado"))
+    assert S._gpg(Path("/x"), Path("/y"))["estado"] == "não verificável"
+
+
+def test_rpm_checksig_ok(monkeypatch):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "digests signatures OK", ""))
+    assert S._rpm_checksig(Path("/x.rpm"))["estado"] == "válida"
+
+
+def test_rpm_checksig_so_digest(monkeypatch):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "digests OK", ""))
+    assert S._rpm_checksig(Path("/x.rpm"))["estado"] == "ausente"
+
+
+def test_rpm_checksig_quebrado(monkeypatch):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (1, "digests NOT OK", ""))
+    assert S._rpm_checksig(Path("/x.rpm"))["estado"] == "inválida"
+
+
+def test_dpkg_sig_sem_ferramenta(monkeypatch):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (127, "", "não encontrado"))
+    assert S._dpkg_sig(Path("/x.deb"))["estado"] == "não verificável"
+
+
+def test_verificacao_escolhe_fonte_por_plataforma(monkeypatch, tmp_path):
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(S, "_authenticode", lambda _p: {"estado": "válida", "fonte": "Authenticode", "detalhe": "", "assinante": ""})
+    assert S._verificar_assinatura(tmp_path / "x.msi")["fonte"] == "Authenticode"
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    assert S._verificar_assinatura(tmp_path / "x.appimage")["estado"] == "não verificável"
+
+
+# ---------------------------------------------------------------------------
+# Instalação com assinatura
+# ---------------------------------------------------------------------------
+
+
+def test_instalar_expoe_sha256_do_arquivo(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.instalar(arquivo=str(alvo), autorizacao=token)
+    linha = next(item for item in dados["rows"] if item["campo"] == "sha256")
+    assert linha["valor"] == hashlib.sha256(b"conteudo").hexdigest()
+
+
+def test_instalar_sem_arquivo_local_nao_tem_hash(token):
+    dados = S.instalar(pacote="pip:rich", autorizacao=token)
+    linha = next(item for item in dados["rows"] if item["campo"] == "sha256")
+    assert linha["valor"] == "(sem arquivo local)"
+
+
+def test_instalar_exigindo_assinatura_bloqueia_quando_nao_verificavel(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.instalar(arquivo=str(alvo), exigir_assinatura=True, autorizacao=token)
+    assert dados["metrics"]["exigirAssinatura"] is True
+    assert dados["counts"]["must"] >= 1
+
+
+def test_instalar_exigindo_assinatura_aprovada(monkeypatch, estado, token):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(
+        S,
+        "_verificar_assinatura",
+        lambda *_a, **_k: {"estado": "válida", "fonte": "Authenticode", "detalhe": "Valid", "assinante": "CN=X"},
+    )
+    dados = S.instalar(arquivo=str(alvo), exigir_assinatura=True, autorizacao=token)
+    assert dados["metrics"]["assinatura"] == "válida"
+    assert dados["counts"]["must"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Desinstalação
+# ---------------------------------------------------------------------------
+
+
+def test_desinstalar_dpkg(token):
+    dados = S.desinstalar(pacote="dpkg:curl", autorizacao=token)
+    assert dados["rows"][2]["valor"] == "dpkg -r curl"
+    assert dados["metrics"]["risco"] == "alto"
+
+
+def test_desinstalar_rpm(token):
+    assert S.desinstalar(pacote="rpm:htop", autorizacao=token)["rows"][2]["valor"] == "rpm -e htop"
+
+
+def test_desinstalar_pip(token):
+    assert S.desinstalar(pacote="pip:rich", autorizacao=token)["rows"][2]["valor"].endswith("-m pip uninstall -y rich")
+
+
+def test_desinstalar_npm(token):
+    assert S.desinstalar(pacote="npm:typescript", autorizacao=token)["rows"][2]["valor"] == "npm uninstall typescript"
+
+
+def test_desinstalar_msi_por_guid(token):
+    guid = "{12345678-1234-1234-1234-123456789012}"
+    assert S.desinstalar(pacote=f"msi:{guid}", autorizacao=token)["rows"][2]["valor"] == f"msiexec /x {guid} /qb /norestart"
+
+
+def test_desinstalar_msi_por_arquivo(estado, token):
+    alvo = _arquivo(estado)
+    dados = S.desinstalar(arquivo=str(alvo), autorizacao=token)
+    assert dados["rows"][2]["valor"].startswith("msiexec /x ")
+    assert dados["rows"][2]["valor"].endswith("/qb /norestart")
+
+
+def test_desinstalar_recusa_metacaractere(token):
+    with pytest.raises(S.SistemaError, match="inválido"):
+        S.desinstalar(pacote="dpkg:curl;rm -rf /", autorizacao=token)
+
+
+def test_desinstalar_recusa_prefixo_desconhecido(token):
+    with pytest.raises(S.SistemaError, match="Prefixo"):
+        S.desinstalar(pacote="snap:curl", autorizacao=token)
+
+
+def test_desinstalar_exige_prefixo_ou_arquivo(token):
+    with pytest.raises(S.SistemaError, match="Informe"):
+        S.desinstalar(autorizacao=token)
+
+
+def test_desinstalar_msi_sem_guid(token):
+    with pytest.raises(S.SistemaError, match="GUID"):
+        S.desinstalar(pacote="msi:1234", autorizacao=token)
+
+
+def test_desinstalar_arquivo_nao_msi(estado, token):
+    alvo = _arquivo(estado, nome="pacote.AppImage")
+    with pytest.raises(S.SistemaError, match="msi"):
+        S.desinstalar(arquivo=str(alvo), autorizacao=token)
+
+
+def test_desinstalar_nao_executa(estado, token):
+    dados = S.desinstalar(arquivo=str(_arquivo(estado)), autorizacao=token)
+    assert dados["executed"] is False and dados["readOnly"] is True
+    assert len(dados["confirmacao"]) == 8
+
+
+def test_desinstalar_avisa_trava(token):
+    dados = S.desinstalar(pacote="pip:rich", autorizacao=token)
+    assert any(item["location"] == S.AMBIENTE_INSTALAR for item in dados["findings"])
+
+
+def test_desinstalar_avisa_residuo(token):
+    dados = S.desinstalar(pacote="dpkg:curl", autorizacao=token)
+    assert any("resíduo" in item["title"].lower() for item in dados["findings"])
+
+
+def test_executar_desinstala(monkeypatch, instalacao_ligada, token, estado):
+    chamadas = []
+    monkeypatch.setattr(S, "_rodar", lambda cmd, timeout=20: chamadas.append(cmd) or (0, "Removing", ""))
+    plano = S.desinstalar(pacote="dpkg:curl", autorizacao=token)
+    dados = S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+    assert dados["executed"] is True
+    assert dados["metrics"]["acao"] == "desinstalar"
+    assert chamadas[0] == ["dpkg", "-r", "curl"]
+
+
+def test_executar_audita_desinstalacao(monkeypatch, instalacao_ligada, token, estado):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    plano = S.desinstalar(pacote="pip:rich", autorizacao=token)
+    S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+    linha = json.loads((estado / "host-audit.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1])
+    assert linha["acao"] == "desinstalar"
+
+
+# ---------------------------------------------------------------------------
+# Revalidação na execução
+# ---------------------------------------------------------------------------
+
+
+def test_executar_recusa_arquivo_alterado(monkeypatch, instalacao_ligada, token, estado):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    plano = S.instalar(arquivo=str(alvo), autorizacao=token)
+    alvo.write_bytes(b"outra coisa")
+    with pytest.raises(S.SistemaError, match="mudou"):
+        S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+
+
+def test_executar_recusa_assinatura_exigida_nao_confirmada(monkeypatch, instalacao_ligada, token, estado):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    plano = S.instalar(arquivo=str(alvo), exigir_assinatura=True, autorizacao=token)
+    with pytest.raises(S.SistemaError, match="Assinatura exigida"):
+        S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+
+
+def test_executar_aceita_assinatura_confirmada(monkeypatch, instalacao_ligada, token, estado):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    monkeypatch.setattr(
+        S,
+        "_verificar_assinatura",
+        lambda *_a, **_k: {"estado": "válida", "fonte": "Authenticator", "detalhe": "", "assinante": "CN=X"},
+    )
+    plano = S.instalar(arquivo=str(alvo), exigir_assinatura=True, autorizacao=token)
+    dados = S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+    assert dados["executed"] is True
+
+
+def test_executar_mostra_sha256(monkeypatch, instalacao_ligada, token, estado):
+    alvo = _arquivo(estado)
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    plano = S.instalar(arquivo=str(alvo), autorizacao=token)
+    dados = S.executar(confirmacao=plano["confirmacao"], autorizacao=token)
+    linha = next(item for item in dados["rows"] if item["campo"] == "sha256")
+    assert linha["valor"] == hashlib.sha256(b"conteudo").hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# API das novas rotas
+# ---------------------------------------------------------------------------
+
+
+def test_api_assinatura_exige_token(client):
+    corpo = client.post("/api/skills/sistema.assinatura/execute", json={"parameters": {"arquivo": "/tmp/x.msi"}}).json()
+    assert corpo["error"]["code"] == "SKILL_ERROR"
+    assert "token" in corpo["error"]["message"]
+
+
+def test_api_desinstalar_responde(client, token):
+    corpo = client.post(
+        "/api/skills/sistema.desinstalar/execute",
+        json={"parameters": {"pacote": "pip:rich", "autorizacao": token}},
+    ).json()
+    assert corpo["ok"] is True
+    assert corpo["result"]["metrics"]["tipo"] == "pip"
+
+
+def test_api_desinstalar_recusa_sem_prefixo(client, token):
+    corpo = client.post(
+        "/api/skills/sistema.desinstalar/execute",
+        json={"parameters": {"pacote": "curl", "autorizacao": token}},
+    ).json()
+    assert corpo["ok"] is False
+    assert "Prefixo" in corpo["error"]["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -925,13 +1303,13 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.30.0"
-    assert dados["skills"] == 186
+    assert dados["version"] == "0.31.0"
+    assert dados["skills"] == 188
 
 
-def test_api_lista_as_dez_skills_de_sistema(client):
+def test_api_lista_as_doze_skills_de_sistema(client):
     ids = [item["id"] for item in client.get("/api/skills").json()["skills"]]
-    assert len([item for item in ids if item.startswith("sistema.")]) == 10
+    assert len([item for item in ids if item.startswith("sistema.")]) == 12
 
 
 def test_api_sistema_disco_exige_token(client):
@@ -944,7 +1322,7 @@ def test_api_sistema_disco_exige_token(client):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.30.0"
+    assert resposta["result"]["versao"] == "0.31.0"
 
 
 def test_api_baixar_exige_confirmacao(client):

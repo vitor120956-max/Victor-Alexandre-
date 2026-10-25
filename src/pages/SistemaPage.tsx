@@ -5,12 +5,14 @@ import {
   CheckCircle2,
   Cpu,
   Download,
+  FileCheck2,
   FolderTree,
   Gauge,
   Globe,
   HardDrive,
   LoaderCircle,
   Package,
+  PackageMinus,
   Play,
   ShieldAlert,
   Terminal,
@@ -24,7 +26,7 @@ import '../revisao.css';
 import '../continuidade.css';
 import '../sistema.css';
 
-type SistemaTab = 'ambiente' | 'disco' | 'pastas' | 'drivers' | 'bluetooth' | 'rede' | 'baixar' | 'instalar' | 'executar' | 'regras';
+type SistemaTab = 'ambiente' | 'disco' | 'pastas' | 'drivers' | 'bluetooth' | 'rede' | 'baixar' | 'assinatura' | 'instalar' | 'desinstalar' | 'executar' | 'regras';
 type Row = Record<string, unknown>;
 
 const tabs: Array<{ id: SistemaTab; label: string; hint: string; icon: typeof Cpu }> = [
@@ -35,7 +37,9 @@ const tabs: Array<{ id: SistemaTab; label: string; hint: string; icon: typeof Cp
   { id: 'bluetooth', label: 'Bluetooth', hint: 'Rádio e pareados', icon: Bluetooth },
   { id: 'rede', label: 'Rede', hint: 'Buscar e ler', icon: Globe },
   { id: 'baixar', label: 'Baixar', hint: 'Quarentena e hash', icon: Download },
+  { id: 'assinatura', label: 'Assinatura', hint: 'Origem e integridade', icon: FileCheck2 },
   { id: 'instalar', label: 'Instalar', hint: 'Plano e risco', icon: Package },
+  { id: 'desinstalar', label: 'Desinstalar', hint: 'Remoção simétrica', icon: PackageMinus },
   { id: 'executar', label: 'Executar', hint: 'O efeito real', icon: Play },
   { id: 'regras', label: 'Regras', hint: 'Guardas e limites', icon: ShieldAlert },
 ];
@@ -64,6 +68,11 @@ export function SistemaPage() {
   const [consulta, setConsulta] = useState('driver bluetooth windows 11');
   const [urlRede, setUrlRede] = useState('');
   const [urlDownload, setUrlDownload] = useState('');
+  const [arquivoAssinatura, setArquivoAssinatura] = useState('');
+  const [hashEsperado, setHashEsperado] = useState('');
+  const [assinaturaDestacada, setAssinaturaDestacada] = useState('');
+  const [exigirAssinatura, setExigirAssinatura] = useState(false);
+  const [pacoteRemover, setPacoteRemover] = useState('');
   const [arquivo, setArquivo] = useState('');
   const [pacote, setPacote] = useState('');
   const [silencioso, setSilencioso] = useState(true);
@@ -92,7 +101,9 @@ export function SistemaPage() {
     if (tab === 'bluetooth') return { ...base, filtro };
     if (tab === 'rede') return { ...base, acao: acaoRede, consulta, url: urlRede, limite: 8 };
     if (tab === 'baixar') return { ...base, url: urlDownload };
-    if (tab === 'instalar') return { ...base, arquivo, pacote, silencioso };
+    if (tab === 'assinatura') return { ...base, arquivo: arquivoAssinatura, hash_esperado: hashEsperado, assinatura_arquivo: assinaturaDestacada };
+    if (tab === 'instalar') return { ...base, arquivo, pacote, silencioso, exigir_assinatura: exigirAssinatura };
+    if (tab === 'desinstalar') return { ...base, arquivo, pacote: pacoteRemover };
     return { ...base, confirmacao };
   };
 
@@ -123,7 +134,7 @@ export function SistemaPage() {
       }
       setExecution(resposta);
       const plano = asObj(resposta.result);
-      if (tab === 'instalar' && txt(plano.confirmacao)) setConfirmacao(txt(plano.confirmacao));
+      if ((tab === 'instalar' || tab === 'desinstalar') && txt(plano.confirmacao)) setConfirmacao(txt(plano.confirmacao));
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Falha ao executar a skill.');
     } finally {
@@ -282,6 +293,23 @@ export function SistemaPage() {
               </label>
             )}
 
+            {tab === 'assinatura' && (
+              <>
+                <label className="field">
+                  <span>Arquivo da quarentena</span>
+                  <input value={arquivoAssinatura} onChange={(event) => setArquivoAssinatura(event.target.value)} placeholder="storage/host-downloads/…-driver.msi" spellCheck={false} />
+                </label>
+                <label className="field">
+                  <span>SHA-256 esperado — o hash publicado pelo projeto</span>
+                  <input value={hashEsperado} onChange={(event) => setHashEsperado(event.target.value)} placeholder="64 caracteres hexadecimais" spellCheck={false} />
+                </label>
+                <label className="field">
+                  <span>Assinatura destacada (opcional) — <code>.sig</code> ou <code>.asc</code> na quarentena</span>
+                  <input value={assinaturaDestacada} onChange={(event) => setAssinaturaDestacada(event.target.value)} placeholder="storage/host-downloads/…-driver.msi.asc" spellCheck={false} />
+                </label>
+              </>
+            )}
+
             {tab === 'instalar' && (
               <>
                 <label className="field">
@@ -295,6 +323,23 @@ export function SistemaPage() {
                 <label className="continuidade-check">
                   <input type="checkbox" checked={silencioso} onChange={(event) => setSilencioso(event.target.checked)} />
                   <span>Instalação silenciosa (<code>/S</code>, <code>/qb</code>) — reduz clique, não reduz risco</span>
+                </label>
+                <label className="continuidade-check is-warning">
+                  <input type="checkbox" checked={exigirAssinatura} onChange={(event) => setExigirAssinatura(event.target.checked)} />
+                  <span>Exigir assinatura válida — o plano bloqueia e a execução recusa quando não confirmar</span>
+                </label>
+              </>
+            )}
+
+            {tab === 'desinstalar' && (
+              <>
+                <label className="field">
+                  <span>Alvo — <code>dpkg:</code>, <code>rpm:</code>, <code>pip:</code>, <code>npm:</code> ou <code>msi:&#123;GUID&#125;</code></span>
+                  <input value={pacoteRemover} onChange={(event) => setPacoteRemover(event.target.value)} placeholder="dpkg:curl" spellCheck={false} />
+                </label>
+                <label className="field">
+                  <span>ou um <code>.msi</code> da quarentena</span>
+                  <input value={arquivo} onChange={(event) => setArquivo(event.target.value)} placeholder="storage/host-downloads/…-driver.msi" spellCheck={false} />
                 </label>
               </>
             )}
@@ -357,7 +402,9 @@ export function SistemaPage() {
               {tab === 'bluetooth' && <Tabela titulo="Dispositivos" colunas={[{ titulo: 'Nome', chave: 'nome' }, { titulo: 'Tipo', chave: 'tipo', tipo: 'pill' }, { titulo: 'MAC', chave: 'mac', tipo: 'code' }, { titulo: 'Estado', chave: 'estado' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'rede' && <Tabela titulo="Resultados" colunas={[{ titulo: '#', chave: 'posicao' }, { titulo: 'Título', chave: 'titulo' }, { titulo: 'URL', chave: 'url', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'baixar' && <Tabela titulo="Arquivo" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+              {tab === 'assinatura' && <Tabela titulo="Verificação" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'instalar' && <Tabela titulo="Plano" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
+              {tab === 'desinstalar' && <Tabela titulo="Plano de remoção" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'executar' && <Tabela titulo="Execução" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
 
               {txt(download.sha256) && (
@@ -512,6 +559,8 @@ const tbMetrics = (tab: SistemaTab): Array<{ label: string; chave: string }> => 
   if (tab === 'bluetooth') return [{ label: 'ADAPTADORES', chave: 'adaptadores' }, { label: 'PAREA DOS', chave: 'emparelhados' }];
   if (tab === 'rede') return [{ label: 'RESULTADOS', chave: 'resultados' }];
   if (tab === 'baixar') return [{ label: 'BYTES', chave: 'bytes' }];
+  if (tab === 'assinatura') return [{ label: 'BYTES', chave: 'bytes' }, { label: 'HASH CONFERE', chave: 'hashConfere' }, { label: 'ASSINATURA', chave: 'assinatura' }];
+  if (tab === 'desinstalar') return [{ label: 'PASSOS', chave: 'passos' }];
   if (tab === 'instalar') return [{ label: 'PASSOS', chave: 'passos' }];
   if (tab === 'executar') return [{ label: 'CÓDIGO', chave: 'codigo' }];
   return [];

@@ -26,7 +26,7 @@ O token é impresso assim, com só oito caracteres visíveis:
 JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, instalar=ligado)
 ```
 
-## As dez skills
+## As doze skills
 
 | Rota | Efeito | O que devolve |
 |---|---|---|
@@ -37,7 +37,9 @@ JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, i
 | `sistema.bluetooth` | leitura | adaptadores e dispositivos pareados |
 | `sistema.rede` | leitura | resultados de busca ou texto de uma página |
 | `sistema.baixar` | **grava** | arquivo em `storage/host-downloads`, bytes e SHA-256 |
-| `sistema.instalar` | leitura | comando exato, risco e token de uso único |
+| `sistema.assinatura` | leitura | SHA-256 comparado e assinatura digital verificada |
+| `sistema.instalar` | leitura | comando exato, risco, SHA-256, assinatura e token de uso único |
+| `sistema.desinstalar` | leitura | comando de remoção, risco e token de uso único |
 | `sistema.executar` | **executa** | código de saída e mensagens do instalador |
 | `sistema.regras` | leitura | guardas, allowlist, limites e recusas |
 
@@ -146,14 +148,66 @@ Quatro condições simultâneas:
 
 O token é consumido na primeira tentativa — inclusive quando falha. O comando executado é **exatamente** o que o plano mostrou, montado a partir de uma lista fechada de binários; nenhum texto do usuário entra numa linha de comando, e `subprocess` roda com `shell=False`.
 
+## 10. Assinatura e integridade
+
+Assinatura válida é a única prova de origem que não depende de confiar no domínio. A camada chama o verificador que a plataforma oferece e **declara quando não consegue verificar** — nunca trata ausência de verificação como aprovação.
+
+| Alvo | Fonte | O que significa o resultado |
+|---|---|---|
+| `.msi`, `.msix`, `.exe` no Windows | `Get-AuthenticodeSignature` | `Valid` → válida; `NotSigned` → ausente; `HashMismatch`/`NotTrusted` → **inválida** |
+| `.rpm` no Linux | `rpm -K` | `digests signatures OK` → válida; só `digests OK` → ausente; `NOT OK` → inválida |
+| `.deb` no Linux | `dpkg-sig --verify` | sem o pacote instalado → **não verificável**, e isso é dito |
+| assinatura destacada `.sig`/`.asc` | `gpg --verify` | `Good signature` → válida com o nome do assinante |
+| qualquer arquivo | SHA-256 em fluxo | comparado com o hash publicado pelo projeto |
+
+O caminho do arquivo **não entra na linha de comando** do PowerShell: ele viaja na variável de ambiente `JARVIS_ALVO`, e o script é fixo no código. É a mesma regra do resto da camada — nenhum texto do usuário em comando.
+
+O SHA-256 é sempre calculado. Com `hash_esperado`, vira comparação: divergência é achado **must**, porque hash errado significa arquivo alterado, download truncado ou hash copiado de outro pacote — e os três terminam igual.
+
+Assinatura válida prova **origem e integridade**, não segurança. Um instalador assinado por fabricante sério ainda pode ser um programa ruim.
+
+## 11. Instalação com exigência de assinatura
+
+O plano de instalação mostra agora SHA-256 e estado da assinatura, e aceita `exigir_assinatura`:
+
+- `exigir_assinatura: false` (padrão) — a assinatura é reportada e o plano só alerta;
+- `exigir_assinatura: true` — se a verificação não confirmar `válida`, o plano ganha achado **must** e o `sistema.executar` **recusa**, mesmo com token válido.
+
+## 12. Desinstalação simétrica
+
+O desinstalador reaproveita o mesmo caminho de execução: ele só **planeja** e devolve token; quem roda é `sistema.executar`.
+
+| Alvo | Comando |
+|---|---|
+| `dpkg:nome` | `dpkg -r nome` |
+| `rpm:nome` | `rpm -e nome` |
+| `pip:nome` | `<python> -m pip uninstall -y nome` |
+| `npm:nome` | `npm uninstall nome` |
+| `msi:{GUID}` | `msiexec /x {GUID} /qb /norestart` |
+| arquivo `.msi` da quarentena | `msiexec /x <arquivo> /qb /norestart` |
+
+Risco **alto** para pacote de sistema: remover um pacote leva dependências junto. Por isso o achado **must** pede que você confira o que depende dele antes de confirmar. E o achado **should** lembra que remoção não apaga resíduo: configuração em `~/.config` e `AppData` continua ocupando espaço.
+
+AppImage não tem desinstalador — apagar o arquivo seria remoção de arquivo, e esta camada não apaga nada.
+
+## 13. Revalidação entre plano e execução
+
+O token não é um cheque em branco. O plano grava o SHA-256 do arquivo, e `sistema.executar` recalcula antes de rodar:
+
+- **arquivo mudou depois do plano** → recusa e pede plano novo (proteção contra troca de binário entre revisão e execução);
+- **`exigir_assinatura` ligado** → revalida a assinatura na hora de executar, não só no plano;
+- **token consumido** → não serve de novo, nem quando a execução falha.
+
+Cada execução — instalar ou remover — vira uma linha em `storage/host-audit.jsonl` com a ação, o alvo, o comando e o código de saída.
+
 ## O que esta camada recusa fazer
 
 - **Shell livre.** Não existe campo de comando. Rodar binário arbitrário transformaria a API num executor genérico.
 - **Ler conteúdo de arquivo.** A enumeração é metadado.
 - **Parear Bluetooth.** Lista e diagnostica, não conecta.
-- **Verificar assinatura digital.** O `IsSigned` do Windows é reportado, não validado.
+- **Confiar sem verificar.** A assinatura é validada quando a plataforma permite e declarada como não verificável quando não permite.
 - **Elevar privilégio.** Instalador que pede administrador falha.
-- **Apagar, mover ou renomear.** Nada do usuário é tocado.
+- **Apagar, mover ou renomear.** O desinstalador chama o gerenciador de pacotes; nenhum arquivo do usuário é removido por esta camada.
 - **Alcançar rede privada.** Bloqueado por política, inclusive via DNS.
 
 ## Limites de volume
@@ -175,4 +229,4 @@ curl -s localhost:8000/api/health
 
 ## Sem upstream
 
-Esta é a primeira camada que não adapta um repositório. O desenho vem do problema — diagnosticar a própria máquina e instalar software com autorização — e das APIs padrão de cada sistema: `shutil.disk_usage`, `/proc`, `/sys`, `Get-PnpDevice` e `Win32_PnPSignedDriver`. Não há arquivo de licença a acrescentar em `docs/licenses/` porque não há obra de terceiro copiada ou adaptada.
+Esta camada não adapta um repositório. O desenho vem do problema — diagnosticar a própria máquina e instalar software com autorização — e das APIs padrão de cada sistema: `shutil.disk_usage`, `/proc`, `/sys`, `Get-PnpDevice` e `Win32_PnPSignedDriver`. Não há arquivo de licença a acrescentar em `docs/licenses/` porque não há obra de terceiro copiada ou adaptada.

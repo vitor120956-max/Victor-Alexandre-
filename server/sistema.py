@@ -44,7 +44,7 @@ from urllib.request import Request, urlopen
 
 from .review import common, finalize, finding
 
-VERSAO = "0.30.0"
+VERSAO = "0.31.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -1619,11 +1619,413 @@ def risco_final(tipo: str) -> str:
     return _risco(tipo)[0]
 
 
+# ---------------------------------------------------------------------------
+# Assinatura e integridade
+# ---------------------------------------------------------------------------
+
+GUID = re.compile(r"^\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?$")
+PACOTE_SISTEMA = re.compile(r"^[a-z0-9][a-z0-9+._-]{0,99}$")
+PACOTE_GERENCIADOR = re.compile(r"^@?[\w][\w./@-]{0,199}$")
+HASH_SHA256 = re.compile(r"^[0-9A-Fa-f]{64}$")
+EXTENSOES_ASSINADAS = {".msi", ".msix", ".exe", ".deb", ".rpm"}
+
+
+def _sha256_arquivo(caminho: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    total = 0
+    with open(caminho, "rb") as handle:
+        while True:
+            bloco = handle.read(1024 * 1024)
+            if not bloco:
+                break
+            total += len(bloco)
+            digest.update(bloco)
+    return digest.hexdigest(), total
+
+
+def _rodar_env(comando: list[str], extra: dict[str, str], timeout: int = 30) -> tuple[int, str, str]:
+    """Executa comando fixo passando dados por ambiente, nunca por interpolação."""
+    ambiente = {**os.environ, **extra}
+    try:
+        concluido = subprocess.run(
+            comando,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            shell=False,
+            check=False,
+            env=ambiente,
+        )
+        return concluido.returncode, concluido.stdout[:MAX_TEXTO], concluido.stderr[:20_000]
+    except FileNotFoundError:
+        return 127, "", f"comando não encontrado: {comando[0]}"
+    except subprocess.TimeoutExpired:
+        return 124, "", f"tempo esgotado em {timeout}s"
+    except OSError as exc:
+        return 126, "", f"falha ao executar: {type(exc).__name__}"
+
+
+def _authenticode(caminho: Path) -> dict[str, Any]:
+    """Consulta a assinatura Authenticode no Windows sem interpolar o caminho."""
+    script = (
+        "$s = Get-AuthenticodeSignature -FilePath $env:JARVIS_ALVO; "
+        "[PSCustomObject]@{"
+        "Status=[string]$s.Status; "
+        "Mensagem=[string]$s.StatusMessage; "
+        "Assinante=if($s.SignerCertificate){[string]$s.SignerCertificate.Subject}else{''}; "
+        "Impressao=if($s.SignerCertificate){[string]$s.SignerCertificate.Thumbprint}else{''}; "
+        "VenceEm=if($s.SignerCertificate){[string]$s.SignerCertificate.NotAfter}else{''}"
+        "} | ConvertTo-Json -Compress"
+    )
+    codigo, saida, erro = _rodar_env(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        {"JARVIS_ALVO": str(caminho)},
+        timeout=30,
+    )
+    if codigo != 0 or not saida.strip():
+        return {
+            "estado": "não verificável",
+            "fonte": "Get-AuthenticodeSignature",
+            "detalhe": (erro.strip() or "PowerShell não respondeu.")[:200],
+            "assinante": "",
+        }
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError:
+        return {
+            "estado": "não verificável",
+            "fonte": "Get-AuthenticodeSignature",
+            "detalhe": "saída do PowerShell não é JSON.",
+            "assinante": "",
+        }
+    if not isinstance(dados, dict):
+        dados = {}
+    status = str(dados.get("Status") or "").strip()
+    mapa = {
+        "Valid": "válida",
+        "NotSigned": "ausente",
+        "HashMismatch": "inválida",
+        "NotTrusted": "inválida",
+        "UnknownError": "não verificável",
+        "NotSupported": "não verificável",
+        "Incompatible": "não verificável",
+    }
+    return {
+        "estado": mapa.get(status, "não verificável"),
+        "fonte": "Get-AuthenticodeSignature",
+        "detalhe": f"{status or 'sem status'}: {str(dados.get('Mensagem') or '').strip()[:160]}",
+        "assinante": str(dados.get("Assinante") or "").strip()[:200],
+        "impressao": str(dados.get("Impressao") or "").strip()[:80],
+        "venceEm": str(dados.get("VenceEm") or "").strip()[:40],
+    }
+
+
+def _gpg(caminho: Path, assinatura: Path) -> dict[str, Any]:
+    codigo, saida, erro = _rodar(
+        ["gpg", "--batch", "--no-tty", "--verify", str(assinatura), str(caminho)], timeout=30
+    )
+    texto = (saida + erro).strip()
+    if codigo == 127:
+        return {"estado": "não verificável", "fonte": "gpg", "detalhe": "gpg não instalado.", "assinante": ""}
+    if codigo == 0:
+        assinante = ""
+        achado = re.search(r'Good signature from "?([^"\n]+)"?', texto)
+        if achado:
+            assinante = achado.group(1).strip()
+        return {
+            "estado": "válida",
+            "fonte": "gpg --verify",
+            "detalhe": "assinatura destacada confere com a chave pública do chaveiro.",
+            "assinante": assinante[:200],
+        }
+    return {
+        "estado": "inválida",
+        "fonte": "gpg --verify",
+        "detalhe": texto[:200] or "gpg recusou a assinatura.",
+        "assinante": "",
+    }
+
+
+def _rpm_checksig(caminho: Path) -> dict[str, Any]:
+    codigo, saida, erro = _rodar(["rpm", "-K", str(caminho)], timeout=30)
+    texto = (saida + erro).strip()
+    if codigo == 127:
+        return {"estado": "não verificável", "fonte": "rpm -K", "detalhe": "rpm não instalado.", "assinante": ""}
+    baixo = texto.lower()
+    if "not ok" in baixo or "bad" in baixo:
+        return {"estado": "inválida", "fonte": "rpm -K", "detalhe": texto[:200], "assinante": ""}
+    if "signatures" in baixo and "ok" in baixo:
+        return {"estado": "válida", "fonte": "rpm -K", "detalhe": texto[:200], "assinante": ""}
+    if "digests" in baixo and "ok" in baixo:
+        return {
+            "estado": "ausente",
+            "fonte": "rpm -K",
+            "detalhe": "só o resumo confere; o pacote não traz assinatura.",
+            "assinante": "",
+        }
+    return {"estado": "não verificável", "fonte": "rpm -K", "detalhe": texto[:200] or "sem saída.", "assinante": ""}
+
+
+def _dpkg_sig(caminho: Path) -> dict[str, Any]:
+    codigo, saida, erro = _rodar(["dpkg-sig", "--verify", str(caminho)], timeout=30)
+    texto = (saida + erro).strip()
+    if codigo == 127:
+        return {
+            "estado": "não verificável",
+            "fonte": "dpkg-sig",
+            "detalhe": "dpkg-sig não instalado: o dpkg não valida assinatura por arquivo.",
+            "assinante": "",
+        }
+    if codigo == 0 and "good" in texto.lower():
+        return {"estado": "válida", "fonte": "dpkg-sig", "detalhe": texto[:200], "assinante": ""}
+    if "unknown" in texto.lower() or "no signature" in texto.lower():
+        return {"estado": "ausente", "fonte": "dpkg-sig", "detalhe": texto[:200], "assinante": ""}
+    return {"estado": "inválida", "fonte": "dpkg-sig", "detalhe": texto[:200] or "falhou.", "assinante": ""}
+
+
+def _verificar_assinatura(caminho: Path, assinatura_arquivo: str = "") -> dict[str, Any]:
+    """Escolhe a fonte de verificação que a plataforma e a extensão permitem."""
+    sistema = platform.system()
+    sufixo = caminho.suffix.lower()
+    if assinatura_arquivo:
+        destacada = _dentro_da_quarentena(assinatura_arquivo)
+        return _gpg(caminho, destacada)
+    if sistema == "Windows" and sufixo in EXTENSOES_ASSINADAS:
+        return _authenticode(caminho)
+    if sistema == "Linux" and sufixo == ".rpm":
+        return _rpm_checksig(caminho)
+    if sistema == "Linux" and sufixo == ".deb":
+        return _dpkg_sig(caminho)
+    return {
+        "estado": "não verificável",
+        "fonte": "nenhuma",
+        "detalhe": f"{sistema or 'plataforma'} com extensão {sufixo or 'sem extensão'} não tem verificador de assinatura nesta camada.",
+        "assinante": "",
+    }
+
+
+def assinatura(
+    *,
+    arquivo: str,
+    hash_esperado: str = "",
+    assinatura_arquivo: str = "",
+    modo: str = "full",
+    autorizacao: str = "",
+) -> dict[str, Any]:
+    """Confere SHA-256 e assinatura digital de um arquivo da quarentena. Não instala."""
+    modo = _modo(modo)
+    _exigir(autorizacao)
+    alvo = _dentro_da_quarentena(arquivo)
+    sha, bytes_arquivo = _sha256_arquivo(alvo)
+    esperado = (hash_esperado or "").strip().lower()
+    if esperado and not HASH_SHA256.match(esperado):
+        raise SistemaError("Hash esperado precisa ter 64 caracteres hexadecimais (SHA-256).")
+    confere = (esperado == sha) if esperado else None
+    verificacao = _verificar_assinatura(alvo, assinatura_arquivo)
+    rows = [
+        {"campo": "arquivo", "valor": str(alvo)},
+        {"campo": "bytes", "valor": str(bytes_arquivo)},
+        {"campo": "sha256", "valor": sha},
+        {"campo": "hash esperado", "valor": esperado or "(não informado)"},
+        {"campo": "hash", "valor": "confere" if confere else ("não confere" if confere is False else "não comparado")},
+        {"campo": "assinatura", "valor": verificacao["estado"]},
+        {"campo": "fonte", "valor": verificacao["fonte"]},
+        {"campo": "detalhe", "valor": verificacao["detalhe"]},
+        {"campo": "assinante", "valor": verificacao.get("assinante") or "(não informado)"},
+    ]
+    findings: list[dict[str, Any]] = []
+    if confere is False:
+        findings.append(
+            finding(
+                "must",
+                "integridade",
+                "Hash não confere",
+                str(alvo),
+                "O SHA-256 medido é diferente do esperado.",
+                "Arquivo alterado, download truncado ou hash copiado de outro pacote: os três produzem o mesmo resultado.",
+                "Baixe de novo na fonte oficial e compare outra vez antes de instalar.",
+                "Você instala um binário diferente do que conferiu.",
+            )
+        )
+    if verificacao["estado"] == "inválida":
+        findings.append(
+            finding(
+                "must",
+                "assinatura",
+                "Assinatura digital inválida",
+                str(alvo),
+                verificacao["detalhe"][:300],
+                "Assinatura quebrada ou de chave não confiável significa conteúdo alterado depois da assinatura.",
+                "Descarte o arquivo e baixe de novo na fonte oficial.",
+                "Você executa código adulterado com aparência de legítimo.",
+            )
+        )
+    elif verificacao["estado"] == "ausente":
+        findings.append(
+            finding(
+                "should",
+                "assinatura",
+                "Arquivo sem assinatura digital",
+                str(alvo),
+                verificacao["detalhe"][:300],
+                "Sem assinatura não há como atribuir o arquivo a um fabricante.",
+                "Compare o SHA-256 com o publicado pelo projeto antes de instalar.",
+                "Você confia só no domínio de onde baixou.",
+            )
+        )
+    elif verificacao["estado"] == "não verificável":
+        findings.append(
+            finding(
+                "nice",
+                "assinatura",
+                "Assinatura não verificável nesta plataforma",
+                verificacao["fonte"],
+                verificacao["detalhe"][:300],
+                "A camada não chama serviço externo nem confia em biblioteca de terceiro para validar assinatura.",
+                "Use o SHA-256 publicado pelo projeto como prova de integridade.",
+                "A ausência de verificação pode ser lida como aprovação, e não é.",
+            )
+        )
+    if confere is None:
+        findings.append(
+            finding(
+                "nice",
+                "integridade",
+                "Hash não comparado",
+                str(alvo),
+                "Nenhum SHA-256 esperado foi informado.",
+                "Sem valor de referência o hash só serve para conferência manual.",
+                "Copie o SHA-256 publicado pelo projeto em `hash_esperado`.",
+                "Você tem o hash e não a prova.",
+            )
+        )
+    findings, counts, verdict, questions = finalize(findings, modo, [
+        "O SHA-256 esperado veio da página oficial do projeto?",
+        "Você aceita instalar mesmo com a assinatura não verificável?",
+    ])
+    return common(
+        analysis="assinatura",
+        mode=modo,
+        title="Assinatura e integridade",
+        summary=[
+            f"SHA-256 `{sha[:32]}…` de **{alvo.name}** ({_gb(bytes_arquivo)}).",
+            f"Assinatura: **{verificacao['estado']}** por {verificacao['fonte']}.",
+            "Confere com o esperado." if confere else ("Não confere com o esperado." if confere is False else "Nenhum hash esperado informado."),
+        ],
+        findings=findings,
+        counts=counts,
+        verdict=verdict,
+        questions=questions,
+        rows=rows,
+        metrics={
+            "bytes": bytes_arquivo,
+            "sha256": sha,
+            "hashConfere": confere,
+            "assinatura": verificacao["estado"],
+            "fonte": verificacao["fonte"],
+        },
+        limitations=[
+            "A verificação usa o que a plataforma oferece: Authenticode no Windows, rpm -K e dpkg-sig no Linux, gpg para assinatura destacada.",
+            "Nenhum serviço externo de reputação é consultado.",
+            "Assinatura válida prova origem e integridade, não que o programa seja seguro ou confiável.",
+            "Sem `dpkg-sig` instalado, pacote .deb fica como não verificável — o dpkg não valida assinatura por arquivo.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Instalação
+# ---------------------------------------------------------------------------
+
+
+def _tipo_instalador(nome: str) -> str:
+    baixo = nome.lower()
+    for sufixo, tipo in TIPOS.items():
+        if baixo.endswith(sufixo):
+            return tipo
+    return ""
+
+
+def _dentro_da_quarentena(caminho: str) -> Path:
+    alvo = Path(caminho).expanduser()
+    try:
+        resolvido = alvo.resolve()
+    except OSError as exc:
+        raise SistemaError("Caminho de arquivo inválido.") from exc
+    try:
+        base = QUARENTENA.resolve()
+    except OSError:
+        base = QUARENTENA
+    if base not in resolvido.parents:
+        raise SistemaError(
+            "Só aceito arquivo que passou pela quarentena de `sistema.baixar` em storage/host-downloads."
+        )
+    if not resolvido.exists():
+        raise SistemaError("O arquivo não existe mais na quarentena.")
+    return resolvido
+
+
+def _comando_do_plano(tipo: str, arquivo: Path, pacote: str, silencioso: bool) -> list[str]:
+    if tipo == "appimage":
+        return []
+    if tipo in {"pip", "npm"}:
+        modelo = GERENCIADORES[tipo]
+        nome = modelo[0].format(python=sys.executable)
+        return [nome, *[parte.format(pacote=pacote) for parte in modelo[1]]]
+    modelo = GERENCIADORES[tipo]
+    nome = modelo[0].format(arquivo=str(arquivo))
+    partes = [parte.format(arquivo=str(arquivo)) for parte in modelo[1]]
+    if silencioso and tipo == "exe":
+        partes = ["/S"]
+    return [nome, *partes]
+
+
+def _risco(tipo: str) -> tuple[str, str]:
+    if tipo in {"msi", "deb", "rpm"}:
+        return "médio", "O pacote roda com privilégio do instalador do sistema e pode pedir elevação."
+    if tipo == "exe":
+        return "alto", "Executável sem formato pactuado: o que ele faz depende inteiramente do fabricante."
+    if tipo == "appimage":
+        return "baixo", "O plano só marca o arquivo como executável; nada é executado."
+    return "médio", "O gerenciador de pacotes baixa dependências da internet."
+
+
+def _plano(*, arquivo: str, pacote: str, silencioso: bool) -> tuple[str, str, Path, list[str], str, str]:
+    nome_pacote = (pacote or "").strip()
+    if nome_pacote and re.search(r"[;&|`$><\s]", nome_pacote):
+        raise SistemaError("Nome de pacote inválido: sem espaço, ponto e vírgula ou metacaractere.")
+    if nome_pacote:
+        tipo = "pip"
+        if nome_pacote.startswith("npm:"):
+            nome_pacote, tipo = nome_pacote[4:], "npm"
+        elif nome_pacote.startswith("pip:"):
+            nome_pacote = nome_pacote[4:]
+        if not PACOTE_GERENCIADOR.match(nome_pacote):
+            raise SistemaError("Nome de pacote inválido para o gerenciador.")
+        alvo = Path(nome_pacote)
+        comando = _comando_do_plano(tipo, alvo, nome_pacote, silencioso)
+        return f"pacote {tipo}: {nome_pacote}", tipo, alvo, comando, risco_final(tipo), str(alvo)
+    if not arquivo.strip():
+        raise SistemaError("Informe `arquivo` (da quarentena) ou `pacote` (pip:/npm:).")
+    alvo = _dentro_da_quarentena(arquivo)
+    tipo = _tipo_instalador(alvo.name)
+    if not tipo:
+        suportados = ", ".join(sorted(TIPOS))
+        raise SistemaError(f"Extensão não suportada para instalação. Use {suportados}.")
+    comando = _comando_do_plano(tipo, alvo, "", silencioso)
+    return alvo.name, tipo, alvo, comando, risco_final(tipo), str(alvo)
+
+
+def risco_final(tipo: str) -> str:
+    return _risco(tipo)[0]
+
+
 def instalar(
     *,
     arquivo: str = "",
     pacote: str = "",
     silencioso: bool = True,
+    exigir_assinatura: bool = False,
     modo: str = "full",
     autorizacao: str = "",
 ) -> dict[str, Any]:
@@ -1632,20 +2034,31 @@ def instalar(
     _exigir(autorizacao)
     rotulo, tipo, alvo, comando, risco, _chave = _plano(arquivo=arquivo, pacote=pacote, silencioso=silencioso)
     motivo = _risco(tipo)[1]
+    sha = ""
+    verificacao: dict[str, Any] = {"estado": "não aplicável", "fonte": "—", "detalhe": "plano por gerenciador de pacotes", "assinante": ""}
+    if tipo not in {"pip", "npm"} and alvo.exists():
+        sha, _bytes = _sha256_arquivo(alvo)
+        if tipo != "appimage":
+            verificacao = _verificar_assinatura(alvo)
     token = secrets.token_hex(4)
     expira = time.time() + CONFIRMACAO_TTL
     _CONFIRMACAO[token] = {
-        "arquivo": str(alvo),
+        "acao": "instalar",
+        "arquivo": str(alvo) if tipo not in {"pip", "npm"} else "",
         "tipo": tipo,
         "comando": comando,
         "expira": expira,
         "rotulo": rotulo,
+        "sha256": sha,
+        "exigir_assinatura": bool(exigir_assinatura),
     }
     rows = [
         {"campo": "alvo", "valor": rotulo},
         {"campo": "tipo", "valor": tipo},
         {"campo": "comando", "valor": " ".join(comando) if comando else "(somente chmod +x)"},
         {"campo": "risco", "valor": risco},
+        {"campo": "sha256", "valor": sha or "(sem arquivo local)"},
+        {"campo": "assinatura", "valor": verificacao["estado"]},
         {"campo": "confirmação", "valor": token},
         {"campo": "válida até", "valor": datetime.fromtimestamp(expira, tz=timezone.utc).strftime("%H:%M:%S UTC")},
     ]
@@ -1658,9 +2071,48 @@ def instalar(
                 "Executável de terceiro com risco alto",
                 str(alvo),
                 "O plano executaria um .exe baixado da internet.",
-                "Não existe verificação de assinatura nesta camada: o arquivo roda como veio.",
-                "Confira o SHA-256 no site oficial e prefira .msi assinado pelo fabricante.",
+                "Executável sem formato pactuado pode fazer qualquer coisa com o seu usuário.",
+                "Peça `exigir_assinatura` e confira o SHA-256 no site oficial; prefira .msi assinado pelo fabricante.",
                 "Você instala software não verificado com um clique.",
+            )
+        )
+    if exigir_assinatura and verificacao["estado"] != "válida":
+        findings.append(
+            finding(
+                "must",
+                "assinatura",
+                "Assinatura exigida não foi confirmada",
+                str(alvo),
+                f"Estado da verificação: {verificacao['estado']} ({verificacao['fonte']}).",
+                "O plano pediu assinatura verificada e a verificação não confirmou: a execução vai recusar.",
+                "Baixe o pacote assinado pelo fabricante ou desligue `exigir_assinatura` com consciência do risco.",
+                "O token existe mas não vai executar nada.",
+            )
+        )
+    elif verificacao["estado"] == "inválida":
+        findings.append(
+            finding(
+                "must",
+                "assinatura",
+                "Assinatura inválida no arquivo do plano",
+                str(alvo),
+                verificacao["detalhe"][:300],
+                "Arquivo com assinatura quebrada foi alterado depois de assinado.",
+                "Descarte o arquivo e baixe de novo na fonte oficial.",
+                "Você executa código adulterado.",
+            )
+        )
+    elif verificacao["estado"] == "ausente":
+        findings.append(
+            finding(
+                "should",
+                "assinatura",
+                "Arquivo sem assinatura",
+                str(alvo),
+                verificacao["detalhe"][:300],
+                "Sem assinatura o arquivo não tem fabricante verificável.",
+                "Compare o SHA-256 exibido acima com o publicado pelo projeto.",
+                "Você confia apenas no domínio de origem.",
             )
         )
     if comando and comando[0] not in {"msiexec", "dpkg", "rpm", "npm", sys.executable}:
@@ -1700,7 +2152,175 @@ def instalar(
         summary=[
             f"Plano para **{rotulo}** ({tipo}), risco **{risco}**.",
             motivo,
+            f"Assinatura: **{verificacao['estado']}**." if tipo not in {"pip", "npm"} else "Pacote vem do gerenciador, sem arquivo local para verificar.",
             "Nada foi executado: este passo só desenha o comando.",
+        ],
+        findings=findings,
+        counts=counts,
+        verdict=verdict,
+        questions=questions,
+        rows=rows,
+        metrics={
+            "tipo": tipo,
+            "risco": risco,
+            "passos": len(comando),
+            "executado": False,
+            "assinatura": verificacao["estado"],
+            "exigirAssinatura": bool(exigir_assinatura),
+        },
+        limitations=[
+            "Não existe shell livre: só a lista fechada de instaladores com argumentos fixos.",
+            "Assinatura é verificada pelo que a plataforma oferece; pacote por gerenciador não tem arquivo local para conferir.",
+            "O token vale 10 minutos, serve uma vez e só para este alvo.",
+            "Elevação de privilégio não é feita: se o instalador pedir administrador, a execução falha.",
+        ],
+    )
+    resultado["confirmacao"] = token
+    return resultado
+
+
+# ---------------------------------------------------------------------------
+# Desinstalação
+# ---------------------------------------------------------------------------
+
+DESINSTALADORES = {
+    "pip": ("{python}", ("-m", "pip", "uninstall", "-y", "{pacote}")),
+    "npm": ("npm", ("uninstall", "{pacote}")),
+    "deb": ("dpkg", ("-r", "{pacote}")),
+    "rpm": ("rpm", ("-e", "{pacote}")),
+    "msi": ("msiexec", ("/x", "{pacote}", "/qb", "/norestart")),
+    "exe": ("msiexec", ("/x", "{pacote}", "/qb", "/norestart")),
+}
+
+PREFIXOS_REMOCAO = ("pip:", "npm:", "dpkg:", "rpm:", "msi:")
+
+
+def _plano_remocao(*, arquivo: str, pacote: str) -> tuple[str, str, Path | None, list[str], str, str]:
+    nome = (pacote or "").strip()
+    if not nome and not arquivo.strip():
+        raise SistemaError(
+            "Informe `arquivo` (um .msi da quarentena) ou `pacote` com prefixo: pip:, npm:, dpkg:, rpm: ou msi:."
+        )
+    if nome:
+        prefixo, _, resto = nome.partition(":")
+        tipo = prefixo.strip().lower()
+        resto = resto.strip()
+        if tipo not in {"pip", "npm", "dpkg", "rpm", "msi"}:
+            raise SistemaError(f"Prefixo inválido. Use {', '.join(PREFIXOS_REMOCAO)}")
+        if not resto:
+            raise SistemaError("O prefixo precisa do nome depois dos dois-pontos.")
+        if tipo == "msi" or tipo == "exe":
+            if not GUID.match(resto):
+                raise SistemaError("Desinstalar por MSI exige o ProductCode no formato GUID entre chaves.")
+            alvo = Path("")
+            comando = _comando_remocao("msi", None, resto)
+            return f"MSI {resto}", "msi", None, comando, "alto", resto
+        if tipo in {"dpkg", "rpm"}:
+            if not PACOTE_SISTEMA.match(resto):
+                raise SistemaError("Nome de pacote do sistema inválido: minúsculas, dígitos, ponto, hífen e sublinhado.")
+            comando = _comando_remocao("deb" if tipo == "dpkg" else "rpm", None, resto)
+            return f"pacote {tipo}: {resto}", "deb" if tipo == "dpkg" else "rpm", None, comando, "alto", resto
+        if not PACOTE_GERENCIADOR.match(resto):
+            raise SistemaError("Nome de pacote do gerenciador inválido.")
+        comando = _comando_remocao(tipo, None, resto)
+        return f"pacote {tipo}: {resto}", tipo, None, comando, "médio", resto
+    alvo = _dentro_da_quarentena(arquivo)
+    if alvo.suffix.lower() not in {".msi", ".msix"}:
+        raise SistemaError(
+            "Desinstalação por arquivo só aceita .msi/.msix da quarentena. Para os demais, use o prefixo do gerenciador."
+        )
+    comando = _comando_remocao("msi", alvo, "")
+    return alvo.name, "msi", alvo, comando, "alto", str(alvo)
+
+
+def _comando_remocao(tipo: str, arquivo: Path | None, pacote: str) -> list[str]:
+    modelo = DESINSTALADORES[tipo]
+    nome = modelo[0].format(python=sys.executable)
+    valor = str(arquivo) if arquivo is not None else pacote
+    return [nome, *[parte.format(pacote=valor) for parte in modelo[1]]]
+
+
+def desinstalar(
+    *,
+    arquivo: str = "",
+    pacote: str = "",
+    modo: str = "full",
+    autorizacao: str = "",
+) -> dict[str, Any]:
+    """Monta o plano de remoção e devolve o token. Executar é sempre `sistema.executar`."""
+    modo = _modo(modo)
+    _exigir(autorizacao)
+    rotulo, tipo, alvo, comando, risco, _chave = _plano_remocao(arquivo=arquivo, pacote=pacote)
+    token = secrets.token_hex(4)
+    expira = time.time() + CONFIRMACAO_TTL
+    _CONFIRMACAO[token] = {
+        "acao": "desinstalar",
+        "arquivo": str(alvo) if alvo is not None else "",
+        "tipo": tipo,
+        "comando": comando,
+        "expira": expira,
+        "rotulo": rotulo,
+        "sha256": "",
+        "exigir_assinatura": False,
+    }
+    rows = [
+        {"campo": "alvo", "valor": rotulo},
+        {"campo": "tipo", "valor": tipo},
+        {"campo": "comando", "valor": " ".join(comando)},
+        {"campo": "risco", "valor": risco},
+        {"campo": "confirmação", "valor": token},
+        {"campo": "válida até", "valor": datetime.fromtimestamp(expira, tz=timezone.utc).strftime("%H:%M:%S UTC")},
+    ]
+    findings: list[dict[str, Any]] = []
+    if risco == "alto":
+        findings.append(
+            finding(
+                "must",
+                "risco",
+                "Remoção de pacote do sistema não tem desfazer",
+                rotulo,
+                "O plano removeria um pacote com o gerenciador do sistema operacional.",
+                "Remover um pacote do sistema pode levar dependências junto e deixar o ambiente sem o programa que dependia dele.",
+                "Confira com `dpkg -s`/`rpm -q` o que depende do pacote antes de confirmar.",
+                "Você desinstala algo que outro programa usava.",
+            )
+        )
+    findings.append(
+        finding(
+            "should",
+            "alcance",
+            "Desinstalar não apaga resíduo",
+            rotulo,
+            "O gerenciador remove o pacote; configuração e dados do usuário permanecem.",
+            "Restos em ~/.config, AppData e cache continuam ocupando espaço depois da remoção.",
+            "Apague a pasta de configuração manualmente se quiser remoção completa.",
+            "Você conclui que o programa saiu e ele deixou arquivos.",
+        )
+    )
+    if not capacidades()["instalar"]:
+        findings.append(
+            finding(
+                "should",
+                "guarda",
+                "Execução bloqueada até você ligar a trava",
+                AMBIENTE_INSTALAR,
+                "O plano sai, mas `sistema.executar` recusa enquanto a variável não estiver em 1.",
+                "A mesma trava protege instalar e desinstalar: as duas mudam o sistema.",
+                f"Suba a API com {AMBIENTE_INSTALAR}=1 quando for remover de verdade.",
+                "O plano vira rascunho sem efeito.",
+            )
+        )
+    findings, counts, verdict, questions = finalize(findings, modo, [
+        "Algum outro programa depende deste pacote?",
+        "Você quer manter a configuração e os dados do programa?",
+    ])
+    resultado = common(
+        analysis="desinstalar",
+        mode=modo,
+        title="Plano de desinstalação",
+        summary=[
+            f"Plano para remover **{rotulo}** ({tipo}), risco **{risco}**.",
+            "Nada foi removido: este passo só desenha o comando.",
         ],
         findings=findings,
         counts=counts,
@@ -1709,10 +2329,10 @@ def instalar(
         rows=rows,
         metrics={"tipo": tipo, "risco": risco, "passos": len(comando), "executado": False},
         limitations=[
-            "Não existe shell livre: só a lista fechada de instaladores com argumentos fixos.",
-            "Nenhuma assinatura digital é verificada por esta camada.",
-            "O token vale 10 minutos, serve uma vez e só para este arquivo.",
-            "Elevação de privilégio não é feita: se o instalador pedir administrador, a execução falha.",
+            "Só remove o que um gerenciador conhece: programa instalado por copiar pasta não aparece aqui.",
+            "AppImage não tem desinstalador: apagar o arquivo seria remoção de arquivo, e esta camada não apaga.",
+            "Executar depende de JARVIS_HOST_INSTALAR=1 e do token devolvido pelo plano.",
+            "Elevação de privilégio não é feita.",
         ],
     )
     resultado["confirmacao"] = token
@@ -1730,20 +2350,40 @@ def executar(
     _exigir_instalar(autorizacao)
     token = (confirmacao or "").strip()
     if not token or token not in _CONFIRMACAO:
-        raise SistemaError("Confirmação ausente ou desconhecida. Gere o plano em `sistema.instalar` de novo.")
+        raise SistemaError(
+            "Confirmação ausente ou desconhecida. Gere o plano em `sistema.instalar` ou `sistema.desinstalar` de novo."
+        )
     registro = _CONFIRMACAO.pop(token)
     if registro["expira"] < time.time():
         raise SistemaError("Confirmação expirada. Gere o plano de novo.")
-    alvo = Path(registro["arquivo"])
-    if registro["tipo"] in {"msi", "deb", "rpm", "exe"} and not _dentro_da_quarentena(str(alvo)):
-        raise SistemaError("O arquivo saiu da quarentena. Gere o plano de novo.")
+    acao = registro.get("acao", "instalar")
+    alvo = Path(registro["arquivo"]) if registro["arquivo"] else None
+    if alvo is not None and registro["tipo"] in {"msi", "deb", "rpm", "exe"}:
+        if not _dentro_da_quarentena(str(alvo)):
+            raise SistemaError("O arquivo saiu da quarentena. Gere o plano de novo.")
     rows: list[dict[str, Any]] = [
+        {"campo": "ação", "valor": acao},
         {"campo": "alvo", "valor": registro["rotulo"]},
         {"campo": "tipo", "valor": registro["tipo"]},
         {"campo": "comando", "valor": " ".join(registro["comando"]) or "(chmod +x)"},
     ]
     findings: list[dict[str, Any]] = []
-    if registro["tipo"] == "appimage":
+    # O arquivo não pode ter mudado entre o plano e a execução.
+    if alvo is not None and registro.get("sha256"):
+        sha_atual, _bytes = _sha256_arquivo(alvo)
+        if sha_atual != registro["sha256"]:
+            raise SistemaError("O arquivo mudou depois do plano. Gere o plano de novo para ver o comando atualizado.")
+        rows.append({"campo": "sha256", "valor": sha_atual})
+    if registro.get("exigir_assinatura") and alvo is not None:
+        verificacao = _verificar_assinatura(alvo)
+        rows.append({"campo": "assinatura", "valor": verificacao["estado"]})
+        if verificacao["estado"] != "válida":
+            raise SistemaError(
+                f"Assinatura exigida não confirmada ({verificacao['estado']}). Nada foi executado."
+            )
+    if registro["tipo"] == "appimage" and acao == "instalar":
+        if alvo is None:
+            raise SistemaError("Plano sem arquivo para marcar como executável.")
         try:
             os.chmod(alvo, 0o755)
         except OSError as exc:
@@ -1754,7 +2394,7 @@ def executar(
             raise SistemaError("O plano não produziu comando executável.")
         codigo, saida, erro = _rodar(registro["comando"], timeout=300)
         resultado_exec = {
-            "acao": "executar",
+            "acao": acao,
             "comando": " ".join(registro["comando"]),
             "codigo": codigo,
             "saida": saida[-4_000:],
@@ -1762,7 +2402,7 @@ def executar(
         }
         _auditar(
             {
-                "acao": "instalar",
+                "acao": acao,
                 "alvo": registro["rotulo"],
                 "comando": " ".join(registro["comando"]),
                 "codigo": codigo,
@@ -1773,12 +2413,12 @@ def executar(
                 finding(
                     "must",
                     "execucao",
-                    "Instalador terminou com erro",
+                    "Comando terminou com erro",
                     registro["rotulo"],
                     f"Código de saída {codigo}: {(erro or saida)[-300:] or 'sem mensagem'}.",
-                    "O pacote não foi instalado ou parou no meio.",
+                    "A operação não foi concluída ou parou no meio.",
                     "Confira se a execução precisa de elevação e rode de novo como administrador.",
-                    "Você acredita que instalou e o programa não existe.",
+                    "Você acredita que o sistema mudou e ele não mudou.",
                 )
             )
         elif saida:
@@ -1786,25 +2426,26 @@ def executar(
                 finding(
                     "nice",
                     "execucao",
-                    "Instalador terminou sem erro",
+                    "Comando terminou sem erro",
                     registro["rotulo"],
                     f"Código 0. Saída: {saida[-200:] or 'vazia'}.",
-                    "Código zero não garante que o programa ficou no PATH nem que abriu.",
-                    "Confirme abrindo o programa pelo menu do sistema.",
-                    "Você procura um atalho que não foi criado.",
+                    "Código zero não garante que o programa ficou no PATH nem que saiu por completo.",
+                    "Confirme abrindo (ou não encontrando) o programa no menu do sistema.",
+                    "Você procura um atalho que não foi criado ou que sobrou.",
                 )
             )
         rows.append({"campo": "execução", "valor": f"código {codigo}"})
     findings, counts, verdict, questions = finalize(findings, modo, [
-        "O programa abriu depois da instalação?",
-        "Você quer desinstalar se o resultado não servir?",
+        "O resultado no sistema é o que você esperava?",
+        "Você quer desfazer esta operação?",
     ])
     resultado = common(
         analysis="executar",
         mode=modo,
-        title="Execução do instalador",
+        title="Execução do plano",
         summary=[
-            f"Executado **{registro['rotulo']}** ({registro['tipo']}) com código **{resultado_exec.get('codigo')}**.",
+            f"{'Desinstalado' if acao == 'desinstalar' else 'Executado'} **{registro['rotulo']}** "
+            f"({registro['tipo']}) com código **{resultado_exec.get('codigo')}**.",
             "O token foi consumido e não serve de novo.",
         ],
         findings=findings,
@@ -1812,10 +2453,10 @@ def executar(
         verdict=verdict,
         questions=questions,
         rows=rows,
-        metrics={"tipo": registro["tipo"], "codigo": resultado_exec.get("codigo"), "executado": True},
+        metrics={"tipo": registro["tipo"], "codigo": resultado_exec.get("codigo"), "executado": True, "acao": acao},
         limitations=[
             "A execução herdou o usuário e os privilégios do processo da API.",
-            "Nenhuma assinatura digital foi verificada.",
+            "Assinatura só é reverificada quando o plano pediu `exigir_assinatura`.",
             "O comando executado é o que o plano mostrou: nada foi acrescentado depois.",
         ],
     )
@@ -1849,7 +2490,9 @@ def catalogo() -> dict[str, Any]:
             {"id": "bluetooth", "entrada": "filtro", "saida": "adaptadores e dispositivos pareados"},
             {"id": "rede", "entrada": "buscar | olhar", "saida": "resultados de busca ou texto da página"},
             {"id": "baixar", "entrada": "url", "saida": "arquivo em quarentena, bytes e sha256"},
-            {"id": "instalar", "entrada": "arquivo ou pacote", "saida": "comando exato, risco e token de uso único"},
+            {"id": "assinatura", "entrada": "arquivo e hash esperado", "saida": "sha256 comparado e assinatura digital"},
+            {"id": "instalar", "entrada": "arquivo ou pacote", "saida": "comando exato, risco, assinatura e token de uso único"},
+            {"id": "desinstalar", "entrada": "arquivo .msi ou prefixo dpkg:/rpm:/pip:/npm:/msi:", "saida": "comando de remoção, risco e token"},
             {"id": "executar", "entrada": "confirmacao", "saida": "código de saída e mensagens do instalador"},
             {"id": "regras", "entrada": "—", "saida": "guardas, allowlist, limites e recusas"},
         ],
@@ -1871,11 +2514,20 @@ def catalogo() -> dict[str, Any]:
             "timeoutRede": TIMEOUT_REDE,
         },
         "instaladores": sorted(TIPOS) + ["pip", "npm", "appimage"],
+        "verificacao_de_assinatura": {
+            "windows": "Get-AuthenticodeSignature por $env:JARVIS_ALVO, sem interpolar caminho",
+            "linux_rpm": "rpm -K",
+            "linux_deb": "dpkg-sig --verify; sem ele, não verificável",
+            "destacada": "gpg --verify <assinatura> <arquivo>",
+            "hash": "SHA-256 calculado em fluxo e comparado com o esperado",
+            "revalidacao": "executar recalcula o SHA-256 do plano e recusa se o arquivo mudou",
+        },
         "nao_faz": [
             "Não abre shell livre nem aceita comando digitado.",
             "Não lê conteúdo de arquivo: a enumeração devolve só metadado.",
             "Não pareia, conecta ou desconecta dispositivo Bluetooth.",
-            "Não verifica assinatura digital de instalador.",
+            "Não confia na assinatura sem verificar: valida Authenticode, rpm -K, dpkg-sig ou gpg quando a plataforma permite, e declara quando não permite.",
+            "Não consulta serviço externo de reputação de arquivo.",
             "Não eleva privilégio.",
             "Não apaga, move ou renomeia arquivo do usuário.",
             "Não alcança endereço privado, laço local ou link-local pela rede.",

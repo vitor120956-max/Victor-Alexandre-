@@ -170,7 +170,7 @@ def test_inventario_recusa_arquivo_sem_caminho_ou_conteudo():
 
 def test_catalogo_publica_treze_alvos_e_dez_regras():
     dados = catalogo()
-    assert dados["versao"] == "0.30.0"
+    assert dados["versao"] == "0.31.0"
     assert len(dados["alvos"]) == len(ALVOS) == 13
     assert len(dados["regras"]) == 10
     assert dados["limites"]["slug"] == 64
@@ -581,14 +581,14 @@ def test_registro_publica_sete_skills_de_portabilidade(tmp_path):
 
 def test_registro_total_de_skills_e_169(tmp_path):
     registry = build_registry(tmp_path / "files")
-    assert len(registry.list()) == 186
+    assert len(registry.list()) == 188
 
 
 def test_api_executa_auditoria_e_catalogo(client):
     cliente = client
     resposta = cliente.post("/api/skills/portabilidade.regras/execute", json={"parameters": {}})
     assert resposta.status_code == 200
-    assert resposta.json()["result"]["versao"] == "0.30.0"
+    assert resposta.json()["result"]["versao"] == "0.31.0"
 
     resposta = cliente.post(
         "/api/skills/portabilidade.auditar/execute",

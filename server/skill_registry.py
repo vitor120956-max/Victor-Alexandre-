@@ -132,7 +132,9 @@ from .continuidade import (
 from .sistema import (
     SistemaError,
     ambiente as ambiente_sistema,
+    assinatura as assinatura_sistema,
     baixar as baixar_sistema,
+    desinstalar as desinstalar_sistema,
     bluetooth as bluetooth_sistema,
     catalogo as sistema_catalogo,
     disco as disco_sistema,
@@ -1083,11 +1085,29 @@ class SistemaBaixarInput(BaseModel):
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
+class SistemaAssinaturaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(min_length=1, max_length=1_000, title="Arquivo da quarentena", json_schema_extra={"description": "Caminho em `storage/host-downloads`, produzido por `sistema.baixar`."})
+    hash_esperado: str = Field(default="", max_length=64, title="SHA-256 esperado", json_schema_extra={"description": "Valor publicado pelo projeto; vazio calcula e não compara."})
+    assinatura_arquivo: str = Field(default="", max_length=1_000, title="Assinatura destacada", json_schema_extra={"description": "Arquivo `.sig`/`.asc` na quarentena para verificar com gpg."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
 class SistemaInstalarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arquivo: str = Field(default="", max_length=1_000, title="Arquivo da quarentena", json_schema_extra={"description": "Caminho em `storage/host-downloads`, produzido por `sistema.baixar`."})
     pacote: str = Field(default="", max_length=200, title="Pacote", json_schema_extra={"description": "`pip:<nome>` ou `npm:<nome>` para gerenciador de pacotes."})
     silencioso: bool = Field(default=True, title="Instalação silenciosa")
+    exigir_assinatura: bool = Field(default=False, title="Exigir assinatura válida", json_schema_extra={"description": "Verdadeiro faz o plano bloquear e a execução recusar quando a assinatura não for confirmada."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaDesinstalarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(default="", max_length=1_000, title="MSI da quarentena", json_schema_extra={"description": "Um `.msi`/`.msix` já baixado; `msiexec /x` usa o próprio arquivo."})
+    pacote: str = Field(default="", max_length=200, title="Alvo da remoção", json_schema_extra={"description": "`dpkg:nome`, `rpm:nome`, `pip:nome`, `npm:nome` ou `msi:{GUID}`."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
@@ -3028,6 +3048,19 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def sistema_assinatura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaAssinaturaInput)
+        try:
+            return assinatura_sistema(
+                arquivo=data.arquivo,
+                hash_esperado=data.hash_esperado,
+                assinatura_arquivo=data.assinatura_arquivo,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
     def sistema_instalar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SistemaInstalarInput)
         try:
@@ -3035,6 +3068,19 @@ def build_registry(files_root: Path) -> "SkillRegistry":
                 arquivo=data.arquivo,
                 pacote=data.pacote,
                 silencioso=data.silencioso,
+                exigir_assinatura=data.exigir_assinatura,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_desinstalar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaDesinstalarInput)
+        try:
+            return desinstalar_sistema(
+                arquivo=data.arquivo,
+                pacote=data.pacote,
                 modo=data.modo,
                 autorizacao=data.autorizacao,
             )
@@ -3533,8 +3579,10 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("sistema.bluetooth", "Bluetooth", "Lista adaptadores e dispositivos pareados e diagnostica o caso do fone: sem rádio, adaptador desligado ou nada pareado.", "Sistema", SistemaBluetoothInput, sistema_bluetooth_handler, timeout_seconds=30),
         SkillDefinition("sistema.rede", "Busca e leitura na web", "Busca na web ou lê o texto de uma página, com rede desligada por padrão e bloqueio de endereço privado, laço local e link-local.", "Sistema", SistemaRedeInput, sistema_rede_handler, timeout_seconds=60),
         SkillDefinition("sistema.baixar", "Download para quarentena", "Baixa um arquivo para `storage/host-downloads`, com teto de 256 MB e SHA-256; nada é executado nesta skill.", "Sistema", SistemaBaixarInput, sistema_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("sistema.assinatura", "Assinatura e integridade", "Calcula o SHA-256 em fluxo, compara com o hash publicado e verifica a assinatura digital pelo que a plataforma oferece: Authenticode no Windows, rpm -K, dpkg-sig ou gpg para assinatura destacada — declarando quando não é verificável.", "Sistema", SistemaAssinaturaInput, sistema_assinatura_handler, timeout_seconds=60),
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
-        SkillDefinition("sistema.executar", "Execução do instalador", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("sistema.desinstalar", "Plano de desinstalação", "Monta o comando de remoção por gerenciador (`dpkg:`, `rpm:`, `pip:`, `npm:`, `msi:{GUID}`) ou por um `.msi` da quarentena, com risco declarado e token de uso único.", "Sistema", SistemaDesinstalarInput, sistema_desinstalar_handler, timeout_seconds=30),
+        SkillDefinition("sistema.executar", "Execução do plano", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("sistema.regras", "Catálogo do host", "Publica as três travas, a allowlist de instaladores, os limites de leitura e download, e a lista do que a camada recusa fazer.", "Sistema", EmptyInput, sistema_regras_handler, timeout_seconds=5),
         SkillDefinition("portabilidade.auditar", "Auditar bundle de skills", "Lê o `SKILL.md` de cada pasta e confere nome, slug, descrição, script citado no corpo, `allowed-tools`, licença, tamanho e arquivo solto — antes de qualquer conversão.", "Portabilidade", PortabilidadeAuditarInput, portabilidade_auditar_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.converter", "Converter para ferramenta", "Monta o plano arquivo a arquivo para os treze alvos — pasta, espelho, regra ou convenção — dizendo o que é copiado, reescrito, embutido, gerado e descartado.", "Portabilidade", PortabilidadeConverterInput, portabilidade_converter_handler, timeout_seconds=20),
