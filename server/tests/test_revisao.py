@@ -1,4 +1,4 @@
-"""Testes da camada de revisão de código (0.27.0).
+"""Testes da camada de revisão de código (0.25.0).
 
 A camada é determinística: lê diff e achados em texto, não chama modelo, não
 executa git e não publica comentário. As fixtures são diffs unificados
@@ -712,7 +712,7 @@ def test_registro_tem_as_sete_skills_de_revisao(tmp_path) -> None:
     revisao = [item for item in itens if item["id"].startswith("revisao.")]
     assert len(revisao) == 7
     assert {item["category"] for item in revisao} == {"Revisão"}
-    assert len(itens) == 162
+    assert len(itens) == 169
     assert all(item["sideEffects"] is False for item in revisao)
 
 

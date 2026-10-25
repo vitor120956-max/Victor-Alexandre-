@@ -119,6 +119,16 @@ from .submissao import (
     validar_ficha,
     varrer_risco,
 )
+from .portabilidade import (
+    PortabilidadeError,
+    auditar as auditar_portabilidade,
+    catalogo as portabilidade_catalogo,
+    colisoes as colisoes_portabilidade,
+    converter as converter_portabilidade,
+    deriva as deriva_portabilidade,
+    lote as lote_portabilidade,
+    matriz as matriz_portabilidade,
+)
 from .memoria import (
     MemoriaError,
     consultar_memoria,
@@ -939,6 +949,53 @@ class MemoriaEsquecerInput(BaseModel):
     dataset: str = Field(default="", max_length=120, title="Dataset", json_schema_extra={"description": "Obrigatório no escopo `dataset`."})
     escopo: Literal["item", "dataset", "tudo"] = Field(default="item", title="Escopo")
     somente_memoria: bool = Field(default=False, title="Só a memória", json_schema_extra={"description": "Remove grafo e vetor e mantém o arquivo bruto, como `memory_only` no cognee."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeAuditarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Bundle: `>>> caminho` seguido do conteúdo; ou JSON com `arquivos`; ou `caminho | bytes | sha256 | tipo`."})
+    alvo: Literal["", "claude-code", "codex", "gemini", "openclaw", "hermes", "vibe", "windsurf", "opencode", "antigravity", "cursor", "kilocode", "augment", "aider"] = Field(default="", title="Alvo", json_schema_extra={"description": "Vazio audita para todos; com alvo, aponta os campos que aquele formato descarta."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeConverterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Bundle no mesmo formato da auditoria."})
+    alvo: Literal["claude-code", "codex", "gemini", "openclaw", "hermes", "vibe", "windsurf", "opencode", "antigravity", "cursor", "kilocode", "augment", "aider"] = Field(title="Alvo", json_schema_extra={"description": "Ferramenta cujo formato define os caminhos e o front matter do plano."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeDerivaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Fonte", json_schema_extra={"format": "textarea", "description": "Árvore fonte, com ou sem conteúdo."})
+    espelho: str = Field(min_length=3, max_length=1_800_000, title="Espelho", json_schema_extra={"format": "textarea", "description": "Árvore publicada: `caminho | bytes | sha256 | arquivo|symlink`, uma por linha."})
+    estrito: bool = Field(default=False, title="Estrito", json_schema_extra={"description": "Trata arquivo sem hash nem conteúdo como divergente."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeColisoesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Bundle completo: nomes repetidos, cópias idênticas e slugs que colidem saem daqui."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeLoteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Bundle convertido, com `SKILL.md` por skill."})
+    marketplace: str = Field(default="skills-do-projeto", max_length=64, title="Marketplace", json_schema_extra={"description": "Slug em minúsculas com hífen simples."})
+    versao: str = Field(default="1.0.0", max_length=32, title="Versão", json_schema_extra={"description": "Semver `X.Y.Z` aplicada ao marketplace e a cada plugin."})
+    autor: str = Field(default="", max_length=120, title="Autor", json_schema_extra={"description": "Obrigatório: `author` é uma das oito chaves do `plugin.json`."})
+    repo: str = Field(default="", max_length=200, title="Repositório", json_schema_extra={"description": "URL `https://github.com/dono/repo`; vira `homepage` e `repository`."})
+    licenca: str = Field(default="MIT", max_length=60, title="Licença")
+    dominio: str = Field(default="", max_length=60, title="Domínio", json_schema_extra={"description": "Vazio agrupa pela primeira pasta do caminho; preenchido força um plugin só."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class PortabilidadeMatrizInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivos: str = Field(min_length=3, max_length=1_800_000, title="Arquivos", json_schema_extra={"format": "textarea", "description": "Bundle com `SKILL.md` e as pastas de apoio."})
+    alvos: str = Field(default="", max_length=400, title="Alvos", json_schema_extra={"description": "Ids separados por vírgula; vazio cruza com os treze alvos."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2698,6 +2755,60 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def memoria_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return memoria_catalogo()
 
+    def portabilidade_auditar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeAuditarInput)
+        try:
+            return auditar_portabilidade(arquivos=data.arquivos, alvo=data.alvo, modo=data.modo)
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_converter_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeConverterInput)
+        try:
+            return converter_portabilidade(arquivos=data.arquivos, alvo=data.alvo, modo=data.modo)
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_deriva_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeDerivaInput)
+        try:
+            return deriva_portabilidade(arquivos=data.arquivos, espelho=data.espelho, estrito=data.estrito, modo=data.modo)
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_colisoes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeColisoesInput)
+        try:
+            return colisoes_portabilidade(arquivos=data.arquivos, modo=data.modo)
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_lote_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeLoteInput)
+        try:
+            return lote_portabilidade(
+                arquivos=data.arquivos,
+                marketplace=data.marketplace,
+                versao=data.versao,
+                autor=data.autor,
+                repo=data.repo,
+                licenca=data.licenca,
+                dominio=data.dominio,
+                modo=data.modo,
+            )
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_matriz_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PortabilidadeMatrizInput)
+        try:
+            return matriz_portabilidade(arquivos=data.arquivos, alvos=data.alvos, modo=data.modo)
+        except PortabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def portabilidade_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return portabilidade_catalogo()
+
     def revisao_regras_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, RevisaoRegrasInput)
         try:
@@ -3112,6 +3223,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("estacao.recibos", "Auditar execução e recuperação", "Lê o log de chamadas, acha chamada sem resultado, execução dupla, aprovação reaproveitada e retomada sem conferir o estado — o que um crash deixa para trás.", "Estação", EstacaoRecibosInput, estacao_recibos_handler, timeout_seconds=10),
         SkillDefinition("estacao.agenda", "Planejar agenda", "Valida cron, mede disparos por semana, acha sobreposição, checa presença e orçamento de acordadas e diz o que acontece com a automação perdida.", "Estação", EstacaoAgendaInput, estacao_agenda_handler, timeout_seconds=10),
         SkillDefinition("estacao.limites", "Checar limites e consentimento", "Classifica cada ação pretendida em liberada, confirmar ou bloqueada; recusa evasão de detecção, CAPTCHA e rotação de conta, e aponta a via oficial.", "Estação", EstacaoLimitesInput, estacao_limites_handler, timeout_seconds=10),
+        SkillDefinition("portabilidade.auditar", "Auditar bundle de skills", "Lê o `SKILL.md` de cada pasta e confere nome, slug, descrição, script citado no corpo, `allowed-tools`, licença, tamanho e arquivo solto — antes de qualquer conversão.", "Portabilidade", PortabilidadeAuditarInput, portabilidade_auditar_handler, timeout_seconds=20),
+        SkillDefinition("portabilidade.converter", "Converter para ferramenta", "Monta o plano arquivo a arquivo para os treze alvos — pasta, espelho, regra ou convenção — dizendo o que é copiado, reescrito, embutido, gerado e descartado.", "Portabilidade", PortabilidadeConverterInput, portabilidade_converter_handler, timeout_seconds=20),
+        SkillDefinition("portabilidade.deriva", "Deriva fonte × espelho", "Compara a árvore fonte com a árvore publicada por conteúdo ou hash e classifica cada caminho em igual, alterado, faltando, sobrando ou não comparável, com achado para ponteiro quebrado.", "Portabilidade", PortabilidadeDerivaInput, portabilidade_deriva_handler, timeout_seconds=20),
+        SkillDefinition("portabilidade.colisoes", "Colisões e duplicatas", "Encontra a mesma skill publicada em dois lugares, cópia idêntica com nome diferente e nomes que caem no mesmo slug — a colisão é medida pelo destino, não pelo nome declarado.", "Portabilidade", PortabilidadeColisoesInput, portabilidade_colisoes_handler, timeout_seconds=15),
+        SkillDefinition("portabilidade.lote", "Lote para marketplace", "Agrupa as skills em plugins com `plugin.json` de exatamente oito chaves, semver, caminhos com `./` e limite de tamanho, e publica o `marketplace.json` correspondente.", "Portabilidade", PortabilidadeLoteInput, portabilidade_lote_handler, timeout_seconds=20),
+        SkillDefinition("portabilidade.matriz", "Matriz skill × alvo", "Cruza cada skill com cada ferramenta e diz quantas conversões preservam a estrutura, quantas perdem apoio e em qual alvo o bundle chega inteiro.", "Portabilidade", PortabilidadeMatrizInput, portabilidade_matriz_handler, timeout_seconds=20),
+        SkillDefinition("portabilidade.regras", "Catálogo de portabilidade", "Publica os treze alvos com estilo, base e o que cada um carrega, as dez regras de conversão, os limites e o que a camada não faz.", "Portabilidade", EmptyInput, portabilidade_regras_handler, timeout_seconds=5),
         SkillDefinition("estacao.memoria", "Revisar notas e skills", "Checa as notas do agente (tamanho, segredo, fato sem dia, absoluto) e as skills que ele escreveu (gatilho, passos, verificação, gatilho repetido).", "Estação", EstacaoMemoriaInput, estacao_memoria_handler, timeout_seconds=10),
         SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),

@@ -1,0 +1,84 @@
+ATRIBUIÇÃO — alirezarezvani/claude-skills
+=========================================
+
+Obra original: https://github.com/alirezarezvani/claude-skills
+Titular: Alireza Rezvani e colaboradores
+Licença: MIT
+Texto integral da licença: https://opensource.org/licenses/MIT
+Versão de referência: `main` em 23/10/2026 (28.656 estrelas, 3.980 forks, Python)
+
+O QUE FOI USADO
+---------------
+Apenas o DESENHO descrito publicamente no repositório, reimplementado em Python
+sem copiar nenhum script do upstream e sem adicionar dependência:
+
+- a anatomia de uma skill portátil — pasta com `SKILL.md` (front matter +
+  instruções) e as pastas `scripts/`, `references/` e `assets/` — usada como
+  unidade de leitura do inventário;
+- a matriz de ferramentas atendidas (Claude Code, Codex, Gemini, OpenClaw,
+  Hermes, Mistral Vibe, Windsurf, OpenCode, Antigravity, Cursor, Kilo Code,
+  Augment e Aider) com o formato e o caminho de instalação de cada uma,
+  declarados como dados em `ALVOS`;
+- os três estilos de empacotamento observados nos scripts de conversão e de
+  sincronização: pasta própria, espelho com índice e regra em arquivo único;
+- o padrão de dual publish — `<domínio>/skills/<nome>` e
+  `<domínio>/<nome>/skills/<nome>` mantidos iguais por script — usado como
+  origem da checagem de deriva e de cópia duplicada;
+- o schema do `plugin.json` segundo o validador do upstream
+  (`scripts/check_plugin_json.py`): exatamente oito chaves — name, description,
+  version, author, homepage, repository, license, skills — e caminhos
+  relativos obrigatoriamente prefixados com `./`;
+- a ideia de catálogo de marketplace (`.claude-plugin/marketplace.json`) com
+  `owner`, `metadata.version` e a lista de plugins;
+- as regras de sanidade citadas nos scripts de verificação: slug em minúsculas,
+  nome declarado igual ao nome da pasta, caminho abaixo do limite do sistema de
+  arquivos, `allowed-tools` declarado quando existe script e symlink tratado
+  como ponteiro que quebra no Windows sem `core.symlinks=true`.
+
+O QUE NÃO FOI USADO
+-------------------
+- Nenhum arquivo Python, shell, JSON, SKILL.md, referência, asset, agente,
+  persona, comando ou plugin do upstream foi copiado para este repositório.
+- `convert.sh`, `install.sh`, `sync-*-skills.py`, `check_*.py`,
+  `derive_counters.py`, `smoke_scripts.py` e o pipeline de marketplace não
+  foram reproduzidos nem executados.
+- Nenhuma das 398 skills do catálogo do upstream foi importada, executada ou
+  redistribuída; as sete skills desta camada são implementação própria.
+- Nenhum modelo de linguagem, chamada de rede, `git clone`, download de pacote
+  ou escrita em disco acontece: a camada só lê o inventário colado e devolve o
+  plano.
+- A instalação por `/plugin marketplace add` e a verificação externa do
+  SkillCheck não foram integradas.
+
+AVISO
+-----
+Este projeto é uma reimplementação independente. Não é afiliado ao
+`claude-skills` nem endossado por ele. Os nomes dos projetos são citados apenas
+para atribuição e comparação.
+
+TEXTO DA LICENÇA
+----------------
+MIT License
+
+Copyright (c) Alireza Rezvani e colaboradores
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+O texto integral está em https://opensource.org/licenses/MIT e no arquivo
+LICENSE do repositório de origem.

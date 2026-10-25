@@ -1,4 +1,4 @@
-"""Camada de submissão de artefatos para catálogo de skills (0.27.0).
+"""Camada de submissão de artefatos para catálogo de skills (0.26.0).
 
 Inspirada no pipeline determinístico do `github/awesome-copilot` (MIT): antes de
 qualquer revisão humana, todo envio passa por um portão que confere front
@@ -16,7 +16,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.27.0"
+VERSAO = "0.28.0"
 
 MAX_TEXTO = 1_800_000
 MAX_ARQUIVOS = 300
