@@ -1,3 +1,95 @@
+ATRIBUIÇÃO — OthmanAdi/planning-with-files
+===========================================
+
+Obra original: https://github.com/OthmanAdi/planning-with-files
+Titular: Ahmad Adi
+Licença: MIT
+Texto integral da licença: https://opensource.org/licenses/MIT
+Referência da 0.6.0: commit `de837a95cc845b6341a6cbfd902a89a8190c568e` (metadata de skill 3.25.0)
+Referência da 0.29.0: `master` em 24/10/2026 (27.629 estrelas, 2.297 forks, Python)
+
+O QUE FOI USADO NA 0.6.0
+------------------------
+Apenas o DESENHO do padrão, reimplementado em Python com escrita confinada em
+`storage/user-files/planning/<plan-id>/`:
+
+- os três arquivos do plano — `task_plan.md`, `findings.md` e `progress.md` —
+  como unidade de trabalho com identificador explícito;
+- as seções do `task_plan.md` (`Goal`, `Next Step`, `Current Phase`, `Phases`,
+  `Key Questions`, `Decisions Made`, `Errors Encountered`, `Notes`);
+- as fases numeradas com status `pending`, `in_progress` e `complete`, e o
+  critério verificável por fase;
+- o gate determinístico que confere fase e critério sem executar o Markdown;
+- a regra de nunca escolher plano automaticamente pelo mais recente sem
+  seleção explícita do usuário.
+
+O QUE FOI USADO NA 0.29.0
+-------------------------
+O desenho do lado que ficou de fora, reimplementado como leitura determinística
+em `server/continuidade.py`, sem escrever nada:
+
+- a dupla aceitação de status — `**Status:** <valor>` e `[<valor>]` — e a regra
+  de contagem que usa o maior valor por campo entre os dois formatos
+  (`check-complete.sh`);
+- a exigência de exatamente uma marca de status por fase na validação de
+  formato;
+- a tabela de decisão do portão de conclusão (`--gate`): opt-in por `.mode`
+  contendo `gate`, existência de fase em `in_progress`, `stop_hook_active`,
+  teto `PWF_GATE_CAP` (padrão 20) e avanço do livro desde o último bloqueio;
+- a lição de que `complete < total` sozinho não bloqueia — só a fase ativa
+  bloqueia — e que a estagnação libera a parada;
+- o formato do livro append-only (`ledger-append.sh`): `tick`, `ts`, `agent`,
+  `phase`, `event`, `summary`, `files`; os seis eventos `progress`,
+  `phase_complete`, `error`, `gate_block`, `attest` e `note`; resumo de até 200
+  caracteres sem quebra de linha; agente sanitizado para `[A-Za-z0-9_-]` e
+  vazio caindo para `main`; `tick` como `1 + maior tick` entre todos os livros;
+- o resumo de forma fixa do livro (`ledger-summary.sh`) usado como bloco
+  injetado quando existe, com `entries`, `phases`, `in_progress` e o último
+  evento por agente;
+- o bloco de injeção por turno (`inject-plan.py`): visão por seções
+  prioritárias, queda para as primeiras linhas do arquivo, orçamento de 65.536
+  bytes para o plano e 32.768 para o progresso, cauda de 20 linhas do
+  `progress.md` na ausência de livro, corte declarado e normalização do relógio
+  (`T12:34:56Z` → `T00:00:00Z`) para o prefixo ficar estável em cache;
+- a atestação do hash do plano (arquivo de 128 bytes) usada como impressão
+  digital, não como assinatura;
+- o diagnóstico de diretório (`plan-doctor.sh`): arquivo obrigatório faltando,
+  formato de fase inválido, livro e atestação ausentes;
+- a regra de que seletor explícito de plano é vínculo, não dica — quando um
+  `PLAN_ID` declarado não resolve, nenhum outro plano é substituído —, e a
+  marca de ambiguidade quando há mais de um plano com fase aberta;
+- a reconstrução de estado depois de limpar a sessão (`session-catchup.py`) na
+  parte que não depende de transcrição: cruzamento dos três arquivos e as cinco
+  perguntas de reboot do template.
+
+O QUE NÃO FOI USADO
+-------------------
+- Nenhum script shell, PowerShell, hook, template, SKILL.md, exemplo ou
+  referência do upstream foi copiado para este repositório.
+- `inject-plan.py`, `session-catchup.py`, `check-complete.sh`, `gate-stop.sh`,
+  `plan-doctor.sh`, `phase-status.sh`, `attest-plan.sh`, `resolve-plan-dir.sh`,
+  `set-active-plan.sh`, `skill-hook.sh` e os instaladores não são executados nem
+  redistribuídos.
+- Nenhum hook de ciclo de vida (SessionStart, UserPromptSubmit, PreToolUse,
+  PreCompact, Stop) é instalado; nenhuma sessão de agente é bloqueada ou
+  continuada por este projeto.
+- Nenhum arquivo de transcrição, histórico de sessão do host ou armazenamento
+  do agente é lido: a camada só lê o que é colado na chamada.
+- O resolvedor de diretório por `PLAN_ID`, `.planning/.active_plan` e mtime não
+  foi portado — a camada recebe o diretório como bundle e aponta a ambiguidade.
+- Nenhum modelo de linguagem é chamado para resumir, injetar ou retomar.
+- A gravação em disco da 0.6.0 (`create_plan`, `update_plan`) é adaptação
+  própria, confinada a `storage/user-files/planning/`, e não usa o código do
+  upstream.
+
+AVISO
+-----
+Este projeto é uma reimplementação independente. Não é afiliado ao
+`planning-with-files` nem endossado por ele. Os nomes dos projetos são citados
+apenas para atribuição e comparação.
+
+TEXTO DA LICENÇA
+----------------
 MIT License
 
 Copyright (c) 2026 Ahmad Adi
@@ -19,3 +111,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+O texto integral está em https://opensource.org/licenses/MIT e no arquivo
+LICENSE do repositório de origem.

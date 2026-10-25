@@ -1,0 +1,116 @@
+/* --- continuidade de plano ---------------------------------------------- */
+.continuidade-page .diagram-form textarea,
+.continuidade-page .diagram-form input,
+.continuidade-page .diagram-form select {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+.continuidade-page .continuidade-arquivo {
+  min-height: 180px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.continuidade-page .selecao-contador {
+  align-self: flex-end;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .04em;
+}
+.continuidade-page .diagram-table td { vertical-align: top; }
+.continuidade-page .diagram-table code { overflow-wrap: anywhere; }
+.continuidade-page .diagram-table td:first-child code { word-break: break-all; }
+
+.continuidade-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-2);
+  font-size: 7.8px;
+  line-height: 1.5;
+}
+.continuidade-check input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+.continuidade-check code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.2px;
+}
+
+.continuidade-decisao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 7.8px;
+  line-height: 1.55;
+}
+.continuidade-decisao code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.4px;
+  font-weight: 600;
+}
+
+.continuidade-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+.continuidade-bloco h4 {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 6.8px;
+  letter-spacing: .08em;
+}
+.continuidade-bloco h4 code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7px;
+}
+.continuidade-bloco pre {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 6.9px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.continuidade-bloco small {
+  color: var(--muted-2);
+  font-size: 6.6px;
+  letter-spacing: .03em;
+}
+
+.continuidade-origem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 7.6px;
+  line-height: 1.55;
+}
+.continuidade-origem code {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 7.2px;
+}
+
+@media (max-width: 640px) {
+  .continuidade-page .continuidade-arquivo { min-height: 140px; }
+  .continuidade-bloco pre { max-height: 190px; }
+}

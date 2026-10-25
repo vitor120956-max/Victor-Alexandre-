@@ -25,6 +25,7 @@ import { RevisaoPage } from './pages/RevisaoPage';
 import { SubmissaoPage } from './pages/SubmissaoPage';
 import { MemoriaPage } from './pages/MemoriaPage';
 import { PortabilidadePage } from './pages/PortabilidadePage';
+import { ContinuidadePage } from './pages/ContinuidadePage';
 import { CareerPage } from './pages/CareerPage';
 import { NavegadorPage } from './pages/NavegadorPage';
 import { EscritorioPage } from './pages/EscritorioPage';
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="submissao" element={<SubmissaoPage />} />
         <Route path="memoria-ia" element={<MemoriaPage />} />
         <Route path="portabilidade" element={<PortabilidadePage />} />
+        <Route path="continuidade" element={<ContinuidadePage />} />
         <Route path="carreira" element={<CareerPage />} />
         <Route path="navegador" element={<NavegadorPage />} />
         <Route path="escritorio" element={<EscritorioPage />} />

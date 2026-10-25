@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.28.0.**
+**Versão atual: 0.29.0.**
 
 ## Executar em desenvolvimento
 
@@ -273,6 +273,16 @@ O bundle é o texto que você cola: nada é copiado, escrito ou instalado, nenhu
 
 Consulte [`docs/PORTABILIDADE.md`](docs/PORTABILIDADE.md) e a atribuição MIT em [`docs/licenses/alirezarezvani-claude-skills.txt`](docs/licenses/alirezarezvani-claude-skills.txt).
 
+## Continuidade de plano
+
+A página **Continuidade** (`/continuidade`) retoma o [`OthmanAdi/planning-with-files`](https://github.com/OthmanAdi/planning-with-files) — **MIT**, 27 mil estrelas — que já era a base da 0.6.0. Agora o eixo é o outro lado do padrão: o plano precisa continuar valendo quando a sessão é limpa, quando o contexto é compactado e quando o agente insiste em parar no meio.
+
+`server/continuidade.py` lê o `### Phase` do `task_plan.md` nos **dois formatos de status** (`**Status:**` e `[status]`) e conta por formato como o portão conta; aplica os **cinco guardas** do bloqueio de parada — opt-in `gate`, fase em andamento, parada não forçada, teto de bloqueios e avanço do livro — devolvendo `block` ou `allow` com o motivo; cruza plano, progresso e achados para apontar **divergência de status entre as duas fontes** e responder as cinco perguntas de reboot; monta o **bloco reinjetado por turno** com as seções prioritárias, orçamento de 65.536 bytes, corte em linha inteira e hora zerada para o prefixo ficar estável; valida o **livro append-only** em JSONL com seis eventos, tick crescente, resumo de 200 caracteres e lacuna; e diagnostica o **diretório de planos** com arquivo faltando, plano sem livro ou atestação, título duplicado e ambiguidade de plano ativo.
+
+O plano é o texto que você cola: nada é escrito, nenhum hook é instalado, nenhum agente é bloqueado e nenhum modelo é chamado.
+
+Consulte [`docs/CONTINUIDADE.md`](docs/CONTINUIDADE.md) e a atribuição MIT em [`docs/licenses/othmanadi-planning-with-files.txt`](docs/licenses/othmanadi-planning-with-files.txt).
+
 ## Ativar a IA externa
 
 A integração usa o formato **OpenAI Chat Completions**, aceito por diferentes provedores. Copie o exemplo e preencha os valores no servidor:
@@ -390,7 +400,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **169 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **176 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -447,7 +457,7 @@ npm run build     # TypeScript + bundle de produção
 npm audit         # dependências JavaScript
 ```
 
-Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, as dez checagens de higiene, o front matter por tipo de artefato, o cabeçalho `>>> caminho` do bundle, as nove regras de risco, o parser SPDX com `AND`/`OR`/`WITH`, a âncora e a caixa do link, o portão de três decisões e o catálogo da submissão, as 29 regras de roteamento de via com negação e limiar, os sete tipos de entidade, o grafo com ciclo e componente, a pontuação de lição da sessão, o recall com BM25 e decaimento, o raio de alcance do esquecimento e o catálogo da memória, o inventário por `>>> caminho`, a auditoria de front matter e slug, o plano de conversão para os treze alvos, a deriva entre fonte e espelho, a colisão pelo destino, o `plugin.json` de oito chaves e a matriz skill × alvo. O estado desta versão tem **41 testes web e 1.322 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
+Os testes cobrem o parser em português, calculadora, catálogo da API, execução real das skills, corpus jurídico, documentos, upload/download, produtividade, normalização numérica, grafos de dependências, matriz de testes, revisão estática sem exposição de segredos, STRIDE, Web Vitals, ADR, gate de release, recuperação persistente, isolamento de planos, hash otimista, evidências e gate determinístico, parsers ELF/PE/Mach-O/ZIP/ASAR/WASM com artefatos sintéticos, entropia, strings, análise JavaScript, bloqueio de symlink na árvore, confirmação de upload reverso, `path traversal`, escada com evidência por degrau, proteção removida e risco novo em diffs, marcadores `shortcut:` sem gatilho, auditoria com limite de arquivos e bloqueio de symlink, raiz humana e ciclos de reporte, quadro com dono/evidência/bloqueios, orçamento com hard stop e projeção, impressão digital e supressão do watchdog, mandato não ampliável, linha de base e exceções de permissões, contrato de design com 56 slots e temas, manifesto inseguro, prosa rasa, contraste AA/AAA, cinco dimensões com evidência e inflação, 26 regras anti-clichê no HTML, determinismo do sorteio de direções, ficha por seção, prova sem fonte, orçamento de título, deck de copy, 29 regras lexicais com isenções e modo app, 25 tells em três ondas, pesos e tetos do júri, notas e tetos da triagem de carreira, confiança da evidência, legitimidade do anúncio, lints e placar ATS, auditoria de bullets, gate da carta, plano de entrevista, leitura de funil, parser de snapshot com nove achados, resolução de alvo ambíguo, roteiro de três rodadas, quinze padrões de checagem, recibos de fechamento, limites de navegação, montagem de comando `gws`, planejamento de receitas, leitura de páginas, lotes, escopos e triagem de erro, plano de tarefa durável, matriz de permissões, recuperação de execução, agenda de automações, classificação de efeito, memória e skills do agente, execução real com gate de permissão, fila de aprovação, recibos duráveis, recuperação de chamada interrompida e automação de cron, e provedor de IA com respostas simuladas, catálogo dos 45 tipos editoriais, seleção por padrão semântico, contraste com proposta de ajuste, os 12 anti-padrões, as 6 regras de conector, os três parsers de importação, a escada de degradação, o recibo de fidelidade, o contrato de entrega, elegibilidade pelos dois caminhos, validação de entrada com linha pronta, agrupamento por configuração, README derivado com âncoras e escape, proteções e movimentos do ticker, as dez checagens de higiene, o front matter por tipo de artefato, o cabeçalho `>>> caminho` do bundle, as nove regras de risco, o parser SPDX com `AND`/`OR`/`WITH`, a âncora e a caixa do link, o portão de três decisões e o catálogo da submissão, as 29 regras de roteamento de via com negação e limiar, os sete tipos de entidade, o grafo com ciclo e componente, a pontuação de lição da sessão, o recall com BM25 e decaimento, o raio de alcance do esquecimento e o catálogo da memória, o inventário por `>>> caminho`, a auditoria de front matter e slug, o plano de conversão para os treze alvos, a deriva entre fonte e espelho, a colisão pelo destino, o `plugin.json` de oito chaves e a matriz skill × alvo, os dois formatos de status de fase, os cinco guardas do portão, a divergência entre plano e progresso, o bloco injetado com orçamento e o livro append-only em JSONL. O estado desta versão tem **41 testes web e 1.396 testes de API**. Nenhum teste exige uma chave real nem faz cobrança em provedores.
 
 ## Produção
 
@@ -486,6 +496,7 @@ src/                         # interface React e estado local
 ├── pages/SubmissaoPage.tsx  # ficha, estrutura, risco, licença, links, portão e regras
 ├── pages/MemoriaPage.tsx    # roteamento, entidades, grafo, sessão, recall e esquecimento
 ├── pages/PortabilidadePage.tsx # auditar, converter, deriva, colisão, lote, matriz e regras
+├── pages/ContinuidadePage.tsx # fases, portão, retomada, injeção, livro, médico e regras
 └── lib/skillResults.ts      # resultados Python apresentados no chat
 server/
 ├── app.py                   # rotas, upload/download, rate limit e SPA
@@ -512,6 +523,7 @@ server/
 ├── submissao.py             # front matter, estrutura, risco, SPDX, link e portão
 ├── memoria.py               # roteamento, entidades, grafo, sessão, recall e esquecimento
 ├── portabilidade.py         # alvos, conversão, deriva, colisão, lote, matriz e catálogo
+├── continuidade.py          # fases, portão, retomada, injeção, livro, médico e catálogo
 ├── editorial.py             # 45 tipos, padrões, contraste, conectores e recibo
 ├── career.py                # triagem com evidência, ATS, bullets, carta, entrevista e funil
 ├── navegador.py             # snapshot, alvo, roteiro, checagem, recibos e limites
@@ -521,7 +533,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 169 skills
+├── skill_registry.py        # allowlist, Pydantic e 176 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -540,6 +552,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Revisão de código é heurística; Web Vitals e gates usam valores declarados, sem coleta, teste ou deploy automático.
 - Submissão é lexical: o front matter é lido por um parser de subconjunto, o risco não pega frase reescrita e a licença é conferida por identificador SPDX, não pelo texto do arquivo `LICENSE`. Nada é publicado — o rótulo do GitHub continua com a revisão humana.
 - Memória de agente é lexical: o roteador não entende paráfrase sem palavra-chave, a extração não faz correferência, o recall mede termo em comum e não verdade, e o esquecimento devolve plano em vez de apagar. Nenhum modelo, embedding ou banco de grafo é usado.
+- Continuidade de plano é leitura: a camada sabe se o critério está marcado, não se foi cumprido; a decisão do portão é texto, não bloqueio de sessão; o bloco injetado é corte e contagem, não resumo por modelo; e nenhum hook é instalado.
 - Portabilidade é declarada, não testada: os treze formatos vêm do que cada ferramenta publica, a conversão devolve plano em vez de escrever arquivo, a deriva compara hash ou conteúdo colado e o manifesto não é submetido ao marketplace. Nenhum `convert.sh`, `install.sh` ou skill do catálogo upstream é executado.
 - Planos são limitados a 100 KB por arquivo; o hash bloqueia escritores obsoletos, mas o lock local não é coordenação distribuída entre servidores.
 - Análise reversa é estática e baseada em parsers próprios: não descompila, não executa, não extrai contêineres e não cobre formatos sem parser dedicado. Evidência não substitui laudo pericial ou atestado de malware.

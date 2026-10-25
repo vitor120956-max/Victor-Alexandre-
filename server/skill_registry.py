@@ -119,6 +119,16 @@ from .submissao import (
     validar_ficha,
     varrer_risco,
 )
+from .continuidade import (
+    ContinuidadeError,
+    catalogo as continuidade_catalogo,
+    fases as fases_continuidade,
+    injecao as injecao_continuidade,
+    livro as livro_continuidade,
+    medico as medico_continuidade,
+    portao as portao_continuidade,
+    retomada as retomada_continuidade,
+)
 from .portabilidade import (
     PortabilidadeError,
     auditar as auditar_portabilidade,
@@ -949,6 +959,56 @@ class MemoriaEsquecerInput(BaseModel):
     dataset: str = Field(default="", max_length=120, title="Dataset", json_schema_extra={"description": "Obrigatório no escopo `dataset`."})
     escopo: Literal["item", "dataset", "tudo"] = Field(default="item", title="Escopo")
     somente_memoria: bool = Field(default=False, title="Só a memória", json_schema_extra={"description": "Remove grafo e vetor e mantém o arquivo bruto, como `memory_only` no cognee."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadeFasesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(min_length=20, max_length=1_800_000, title="task_plan.md", json_schema_extra={"format": "textarea", "description": "O plano inteiro, com `### Phase N` e uma marca de status por fase (`**Status:**` ou `[status]`)."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadePortaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(min_length=20, max_length=1_800_000, title="task_plan.md", json_schema_extra={"format": "textarea", "description": "O plano com fases; a decisão depende de existir fase em `in_progress`."})
+    ligado: bool = Field(default=False, title="Modo gate", json_schema_extra={"description": "Verdadeiro quando o plano declarou `.mode` com `gate`. Sem isso o portão é consultivo."})
+    bloqueios: int = Field(default=0, ge=0, le=1_000, title="Bloqueios já dados", json_schema_extra={"description": "Contador de bloqueios anteriores, como o `.stop_blocks` do upstream."})
+    cap: int = Field(default=20, ge=1, le=1_000, title="Teto de bloqueios")
+    ledger: str = Field(default="", max_length=1_800_000, title="Livro", json_schema_extra={"format": "textarea", "description": "Linhas JSONL do livro; a contagem decide se houve avanço desde o último bloqueio."})
+    linhas_anteriores: int = Field(default=0, ge=0, le=1_800_000, title="Linhas no último bloqueio")
+    stop_ativo: bool = Field(default=False, title="Parada forçada", json_schema_extra={"description": "Como `stop_hook_active`: verdadeiro desliga o bloqueio para não gerar recursão."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadeRetomadaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(min_length=20, max_length=1_800_000, title="task_plan.md", json_schema_extra={"format": "textarea", "description": "O plano com `## Goal`, `## Next Step` e as fases."})
+    progresso: str = Field(min_length=10, max_length=1_800_000, title="progress.md", json_schema_extra={"format": "textarea", "description": "O registro cronológico, com `## Session: AAAA-MM-DD` e as fases."})
+    achados: str = Field(default="", max_length=1_800_000, title="findings.md", json_schema_extra={"format": "textarea", "description": "Opcional: requisito, achado e decisão durável."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadeInjecaoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(min_length=20, max_length=1_800_000, title="task_plan.md", json_schema_extra={"format": "textarea", "description": "O plano a reinjetar por turno."})
+    progresso: str = Field(default="", max_length=1_800_000, title="progress.md", json_schema_extra={"format": "textarea", "description": "Opcional sem livro: entram as últimas 20 linhas."})
+    ledger: str = Field(default="", max_length=1_800_000, title="Livro", json_schema_extra={"format": "textarea", "description": "Opcional: com livro, o resumo é de forma fixa em vez da cauda do progresso."})
+    orcamento: int = Field(default=65_536, ge=512, le=1_800_000, title="Orçamento (bytes)", json_schema_extra={"description": "Teto da visão do plano; o corte é declarado no parecer."})
+    linhas: int = Field(default=120, ge=5, le=2_000, title="Linhas do cabeçalho", json_schema_extra={"description": "Usado só quando o plano não tem as seções prioritárias."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadeLivroInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ledger: str = Field(min_length=2, max_length=1_800_000, title="Livro JSONL", json_schema_extra={"format": "textarea", "description": "Uma entrada por linha: `tick`, `ts`, `agent`, `phase`, `event`, `summary`, `files`."})
+    agente: str = Field(default="", max_length=64, title="Agente", json_schema_extra={"description": "Vazio lê todos; preenchido filtra e valida o nome."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class ContinuidadeMedicoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    planos: str = Field(min_length=10, max_length=1_800_000, title="Diretório de planos", json_schema_extra={"format": "textarea", "description": "Bundle `>>> <plano>/<arquivo>` com task_plan.md, progress.md, findings.md, ledger e atestação."})
+    ativo: str = Field(default="", max_length=120, title="Plano ativo", json_schema_extra={"description": "Nome declarado como ativo; quando não resolve, nenhum outro plano é substituído."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
@@ -2755,6 +2815,69 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def memoria_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return memoria_catalogo()
 
+    def continuidade_fases_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadeFasesInput)
+        try:
+            return fases_continuidade(plano=data.plano, modo=data.modo)
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_portao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadePortaoInput)
+        try:
+            return portao_continuidade(
+                plano=data.plano,
+                ligado=data.ligado,
+                bloqueios=data.bloqueios,
+                cap=data.cap,
+                ledger=data.ledger,
+                linhas_anteriores=data.linhas_anteriores,
+                stop_ativo=data.stop_ativo,
+                modo=data.modo,
+            )
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_retomada_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadeRetomadaInput)
+        try:
+            return retomada_continuidade(
+                plano=data.plano, progresso=data.progresso, achados=data.achados, modo=data.modo
+            )
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_injecao_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadeInjecaoInput)
+        try:
+            return injecao_continuidade(
+                plano=data.plano,
+                progresso=data.progresso,
+                ledger=data.ledger,
+                orcamento=data.orcamento,
+                linhas=data.linhas,
+                modo=data.modo,
+            )
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_livro_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadeLivroInput)
+        try:
+            return livro_continuidade(ledger=data.ledger, agente=data.agente, modo=data.modo)
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_medico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ContinuidadeMedicoInput)
+        try:
+            return medico_continuidade(planos=data.planos, ativo=data.ativo, modo=data.modo)
+        except ContinuidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def continuidade_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return continuidade_catalogo()
+
     def portabilidade_auditar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, PortabilidadeAuditarInput)
         try:
@@ -3223,6 +3346,13 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("estacao.recibos", "Auditar execução e recuperação", "Lê o log de chamadas, acha chamada sem resultado, execução dupla, aprovação reaproveitada e retomada sem conferir o estado — o que um crash deixa para trás.", "Estação", EstacaoRecibosInput, estacao_recibos_handler, timeout_seconds=10),
         SkillDefinition("estacao.agenda", "Planejar agenda", "Valida cron, mede disparos por semana, acha sobreposição, checa presença e orçamento de acordadas e diz o que acontece com a automação perdida.", "Estação", EstacaoAgendaInput, estacao_agenda_handler, timeout_seconds=10),
         SkillDefinition("estacao.limites", "Checar limites e consentimento", "Classifica cada ação pretendida em liberada, confirmar ou bloqueada; recusa evasão de detecção, CAPTCHA e rotação de conta, e aponta a via oficial.", "Estação", EstacaoLimitesInput, estacao_limites_handler, timeout_seconds=10),
+        SkillDefinition("continuidade.fases", "Fases do plano", "Lê `### Phase` nos dois formatos de status, conta por formato como o portão conta, e aponta fase sem status, status duplicado, critério aberto em fase concluída e ordem quebrada.", "Continuidade", ContinuidadeFasesInput, continuidade_fases_handler, timeout_seconds=15),
+        SkillDefinition("continuidade.portao", "Portão de conclusão", "Aplica os cinco guardas do bloqueio de parada — opt-in `gate`, fase em andamento, parada não forçada, teto de bloqueios e avanço do livro — e devolve `block` ou `allow` com o guarda que decidiu.", "Continuidade", ContinuidadePortaoInput, continuidade_portao_handler, timeout_seconds=15),
+        SkillDefinition("continuidade.retomada", "Retomada após /clear", "Cruza plano, progresso e achados, aponta divergência de status entre as duas fontes, registra sem data e fase sem registro, e responde as cinco perguntas de reboot.", "Continuidade", ContinuidadeRetomadaInput, continuidade_retomada_handler, timeout_seconds=20),
+        SkillDefinition("continuidade.injecao", "Injeção por turno", "Monta o bloco reinjetado com as seções prioritárias e a fase ativa, corta no orçamento em linha inteira, normaliza o relógio para o prefixo ficar estável e devolve o hash do plano.", "Continuidade", ContinuidadeInjecaoInput, continuidade_injecao_handler, timeout_seconds=20),
+        SkillDefinition("continuidade.livro", "Livro de execução", "Valida o `ledger-<agente>.jsonl`: JSON por linha, seis eventos, tick inteiro e crescente, resumo de até 200 caracteres sem quebra, agente sanitizado, lacuna e ordem.", "Continuidade", ContinuidadeLivroInput, continuidade_livro_handler, timeout_seconds=15),
+        SkillDefinition("continuidade.medico", "Médico do diretório", "Diagnostica o conjunto de planos: arquivo obrigatório faltando, plano sem livro ou atestação, título duplicado, plano ativo inexistente e ambiguidade quando dois planos têm fase aberta.", "Continuidade", ContinuidadeMedicoInput, continuidade_medico_handler, timeout_seconds=20),
+        SkillDefinition("continuidade.regras", "Catálogo de continuidade", "Publica os arquivos do plano, os dois formatos de status, os seis eventos, os cinco guardas do portão, o orçamento da injeção, as doze regras e os limites.", "Continuidade", EmptyInput, continuidade_regras_handler, timeout_seconds=5),
         SkillDefinition("portabilidade.auditar", "Auditar bundle de skills", "Lê o `SKILL.md` de cada pasta e confere nome, slug, descrição, script citado no corpo, `allowed-tools`, licença, tamanho e arquivo solto — antes de qualquer conversão.", "Portabilidade", PortabilidadeAuditarInput, portabilidade_auditar_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.converter", "Converter para ferramenta", "Monta o plano arquivo a arquivo para os treze alvos — pasta, espelho, regra ou convenção — dizendo o que é copiado, reescrito, embutido, gerado e descartado.", "Portabilidade", PortabilidadeConverterInput, portabilidade_converter_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.deriva", "Deriva fonte × espelho", "Compara a árvore fonte com a árvore publicada por conteúdo ou hash e classifica cada caminho em igual, alterado, faltando, sobrando ou não comparável, com achado para ponteiro quebrado.", "Portabilidade", PortabilidadeDerivaInput, portabilidade_deriva_handler, timeout_seconds=20),
