@@ -363,7 +363,7 @@ export const helpText = [
   '• Memória — “anotar minha ideia sobre o JARVIS” ou “mostrar notas”.',
   '• Foco — “iniciar foco de 25 minutos”, “pausar foco” ou “retomar foco”.',
   '• Cálculos — “calcular (1250 * 0,18) + 40”.',
-  '• Web — “pesquisar por automação pessoal” ou “abrir GitHub”.',
+  '• Web — “pesquisar por automação pessoal” abre a busca no Google numa aba nova; o JARVIS não lê os resultados. Para pesquisa lida de verdade, use a skill “Busca e leitura na web” em Skills, com a rede ligada.',
   '• Python — “analisar texto JARVIS organiza minha rotina” ou “python status”.',
   '• Legislação — “artigo 49 do CDC” ou “pesquisar na legislação sobre proteção de dados”.',
   '• Documentos — “listar documentos” ou “ler PDF documentos/relatorio.pdf”. Criação exige confirmação na página Documentos.',
