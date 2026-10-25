@@ -75,6 +75,74 @@ No Windows, ao instalar o Python, marque **“Add python.exe to PATH”**. Sem i
 
 **Se o comando responder “não é reconhecido” ou “command not found”:** o programa não está instalado ou não está no PATH. Instale pelo link acima e **feche e abra o terminal de novo** — o PATH só é relido em processo novo.
 
+### Instalar Node, Python e Git pelo próprio cmd (winget)
+
+O Windows 10 (1809+) e o Windows 11 já trazem o **winget**. Ele instala pelo terminal, sem baixar instalador à mão. Abra o **Prompt de Comando** e comece conferindo se ele existe:
+
+```bat
+winget --version
+```
+
+Se responder “não é reconhecido”, atualize o **App Installer** pela Microsoft Store — é ele que fornece o `winget`.
+
+Com o winget disponível, os três comandos são:
+
+```bat
+winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-package-agreements --accept-source-agreements
+winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
+winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
+```
+
+| Comando | O que instala | Observação |
+|---|---|---|
+| `OpenJS.NodeJS.LTS` | Node.js LTS + npm | a linha LTS é a 22 ou mais nova; confira depois |
+| `Python.Python.3.12` | Python 3.12 + `py` launcher | serve 3.11+; `Python.Python.3.13` também funciona |
+| `Git.Git` | Git | opcional; só a camada `evoluir.*` precisa |
+
+Se quiser conferir o identificador antes de instalar, ou se o seu estiver diferente:
+
+```bat
+winget search nodejs
+winget search python
+winget show OpenJS.NodeJS.LTS
+```
+
+**Depois de instalar, feche o cmd e abra outro.** O PATH é lido quando o processo nasce: na janela antiga o comando continua “não reconhecido” mesmo com tudo instalado. Confira na janela nova:
+
+```bat
+node --version
+npm --version
+python --version
+py --version
+git --version
+```
+
+Dois tropeços comuns no Windows:
+
+- **`python` abre a Loja.** Isso é o atalho falso da Microsoft Store (alias de execução). Use `py --version` ou desligue o atalho em **Configurações → Aplicativos → Configurações avançadas de aplicativos → Aliases de execução de aplicativo**, desmarcando `python.exe`.
+- **winget sem permissão de administrador.** Ele até instala para o usuário em alguns pacotes, mas o normal é abrir o cmd com **Executar como administrador**. No PowerShell, a mesma sintaxe funciona.
+
+Alternativas ao winget, se ele não existir na sua máquina:
+
+| Gerenciador | Comando | Requisito |
+|---|---|---|
+| Chocolatey | `choco install nodejs-lts python git -y` | instalar o Chocolatey antes, em PowerShell como administrador |
+| Scoop | `scoop install nodejs-lts python git` | `scoop` instalado; não exige administrador |
+| Instalador oficial | <https://nodejs.org> e <https://www.python.org/downloads/> | marcar “Add python.exe to PATH” |
+
+No Linux, o equivalente por distribuição:
+
+```bash
+sudo apt install -y nodejs npm python3 python3-venv git     # Debian/Ubuntu
+sudo dnf install -y nodejs python3 python3-virtualenv git   # Fedora
+```
+
+Depois de qualquer um dos caminhos, o teste é o mesmo comando deste projeto:
+
+```bash
+npm run checar
+```
+
 Referência do ambiente onde este guia foi testado: `node v22.22.3`, `npm 10.9.8`, `Python 3.11.2`, `git 2.39.5`. Os seus números podem ser diferentes; o que importa é estarem acima do mínimo.
 
 ---
@@ -202,7 +270,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.0"` e `"skills": 209`.
+Esperado: `"version": "0.36.1"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -315,5 +383,5 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.0` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.1` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
