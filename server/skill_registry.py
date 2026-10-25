@@ -169,6 +169,7 @@ from .sistema import (
     disco as disco_sistema,
     drivers as drivers_sistema,
     executar as executar_sistema,
+    importar as importar_sistema,
     instalar as instalar_sistema,
     pastas as pastas_sistema,
     rede as rede_sistema,
@@ -389,6 +390,24 @@ class FileWriteInput(BaseModel):
     path: str = Field(title="Arquivo de destino", min_length=1, max_length=160, description="Ex.: notas/ideia.md")
     content: str = Field(title="Conteúdo", max_length=100_000, json_schema_extra={"format": "textarea"})
     overwrite: bool = Field(default=False, title="Permitir sobrescrever")
+
+
+class FileImportInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    origem: str = Field(
+        default="",
+        max_length=1_000,
+        title="Pasta de origem",
+        description="Vazio usa a pasta Downloads do usuário na máquina da API. Aceita caminho absoluto ou com ~.",
+    )
+    destino: str = Field(
+        default="",
+        max_length=160,
+        title="Subpasta na área do JARVIS",
+        description="Ex.: importados. Vazio usa a raiz da área isolada.",
+    )
+    sobrescrever: bool = Field(default=False, title="Permitir sobrescrever")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
 class FileOrganizeInput(BaseModel):
@@ -2178,6 +2197,20 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         path.write_text(data.content, encoding="utf-8")
         return {"dryRun": False, "written": relative, "bytes": encoded_size}
 
+    def import_files(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FileImportInput)
+        try:
+            return importar_sistema(
+                destino_root=files_root,
+                origem=data.origem,
+                destino=data.destino,
+                sobrescrever=data.sobrescrever,
+                autorizacao=data.autorizacao,
+                dry_run=dry_run,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
     def organize_files(data: BaseModel, dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, FileOrganizeInput)
         directory = _safe_path(files_root, data.path, allow_root=True)
@@ -3718,6 +3751,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("files.list", "Listar arquivos", "Lista os documentos da área isolada, sem acessar outras pastas.", "Arquivos", FileListInput, list_files),
         SkillDefinition("files.read", "Ler arquivo", "Lê um documento de texto permitido da área isolada.", "Arquivos", FileReadInput, read_file),
         SkillDefinition("files.write", "Gravar arquivo", "Cria um documento na área isolada, com simulação e confirmação.", "Arquivos", FileWriteInput, write_file, side_effects=True, dry_run_supported=True, requires_confirmation=True),
+        SkillDefinition("files.import", "Importar do computador", "Copia PDFs, Office e textos da pasta de downloads do usuário para a área isolada, com token de host, lista fechada de formatos e teto por arquivo e por lote. Não move, não apaga e não executa nada.", "Arquivos", FileImportInput, import_files, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=120),
         SkillDefinition("system.status", "Status do núcleo Python", "Consulta versão e horário do ambiente sem expor variáveis ou credenciais.", "Sistema", EmptyInput, system_status),
         SkillDefinition("legal.search", "Pesquisar legislação", "Busca temas nos textos de oito normas brasileiras, sem usar IA para criar referências.", "Legislação", LegalSearchInput, legal_search),
         SkillDefinition("legal.article", "Consultar artigo de lei", "Retorna um artigo exato do corpus local, com texto e link da fonte oficial.", "Legislação", LegalArticleInput, legal_article),

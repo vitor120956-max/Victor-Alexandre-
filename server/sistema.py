@@ -44,7 +44,7 @@ from urllib.request import Request, urlopen
 
 from .review import common, finalize, finding
 
-VERSAO = "0.35.1"
+VERSAO = "0.36.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -1530,6 +1530,155 @@ def baixar(
     resultado["readOnly"] = False
     resultado["download"] = baixado
     return resultado
+
+
+# ---------------------------------------------------------------------------
+# Importação da pasta de downloads
+# ---------------------------------------------------------------------------
+
+# Lista fechada: só entra o que a área isolada sabe listar (`files.list`) e ler
+# (`files.read`, `document.read`). Copiar executável para a área não serve para
+# nada e só aumenta a superfície.
+IMPORTAR_EXTENSOES = frozenset({".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".json", ".csv", ".log"})
+MAX_IMPORTAR_ARQUIVOS = 200
+MAX_IMPORTAR_ARQUIVO = 64 * 1024 * 1024
+MAX_IMPORTAR_BYTES = 512 * 1024 * 1024
+
+
+def _destino_importacao(destino_root: Path, destino: str) -> Path:
+    bruto = (destino or "").strip().replace("\\", "/")
+    if bruto.startswith("/") or re.match(r"^[A-Za-z]:", bruto):
+        raise SistemaError("O destino é relativo à área do JARVIS: não use caminho absoluto.")
+    valor = bruto.strip("/")
+    if valor:
+        partes = valor.split("/")
+        if any(parte in {"..", ""} or parte.startswith(".") for parte in partes):
+            raise SistemaError(
+                "Subpasta inválida: use só nomes visíveis, sem `..` e sem ponto inicial."
+            )
+    try:
+        base = Path(destino_root).resolve()
+        alvo = (base / valor).resolve() if valor else base
+    except OSError as exc:
+        raise SistemaError("Não consegui resolver a pasta de destino.") from exc
+    if alvo != base and base not in alvo.parents:
+        raise SistemaError("O destino sai da área isolada do JARVIS.")
+    return alvo
+
+
+def importar(
+    *,
+    destino_root: Path,
+    origem: str = "",
+    destino: str = "",
+    sobrescrever: bool = False,
+    autorizacao: str = "",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Copia arquivos da pasta de downloads para a área isolada. Não move nem apaga."""
+    _exigir(autorizacao)
+    bruto = (origem or "").strip()
+    pasta_bruta = Path(bruto).expanduser() if bruto else Path.home() / "Downloads"
+    if pasta_bruta.is_symlink():
+        raise SistemaError("A origem é um link simbólico; informe a pasta real.")
+    try:
+        pasta = pasta_bruta.resolve()
+    except OSError as exc:
+        raise SistemaError("Caminho de origem inválido.") from exc
+    if not pasta.exists():
+        raise SistemaError(
+            f"A origem não existe: {pasta}. Informe a pasta de downloads no campo origem."
+        )
+    if pasta.is_file():
+        pasta_origem = pasta.parent
+        candidatos = [pasta]
+    elif pasta.is_dir():
+        pasta_origem = pasta
+        try:
+            candidatos = sorted(item for item in pasta.iterdir() if not item.name.startswith("."))
+        except OSError as exc:
+            raise SistemaError("Não consegui listar a pasta de origem.") from exc
+    else:
+        raise SistemaError("A origem precisa ser uma pasta ou um arquivo comum.")
+
+    alvo_dir = _destino_importacao(destino_root, destino)
+    if not dry_run:
+        alvo_dir.mkdir(parents=True, exist_ok=True)
+    base = Path(destino_root).resolve()
+
+    copiados: list[dict[str, Any]] = []
+    ignorados: list[dict[str, Any]] = []
+    total = 0
+    for item in candidatos:
+        nome = item.name
+        if len(copiados) >= MAX_IMPORTAR_ARQUIVOS:
+            ignorados.append({"arquivo": nome, "motivo": f"limite de {MAX_IMPORTAR_ARQUIVOS} arquivos atingido"})
+            break
+        if item.is_symlink() or not item.is_file():
+            ignorados.append({"arquivo": nome, "motivo": "não é arquivo comum (pasta, link ou dispositivo)"})
+            continue
+        if item.suffix.lower() not in IMPORTAR_EXTENSOES:
+            ignorados.append({"arquivo": nome, "motivo": "formato fora da lista permitida"})
+            continue
+        try:
+            tamanho = item.stat().st_size
+        except OSError:
+            ignorados.append({"arquivo": nome, "motivo": "não consegui ler o tamanho"})
+            continue
+        if tamanho > MAX_IMPORTAR_ARQUIVO:
+            ignorados.append(
+                {"arquivo": nome, "motivo": f"acima de {MAX_IMPORTAR_ARQUIVO // (1024 * 1024)} MB por arquivo"}
+            )
+            continue
+        if total + tamanho > MAX_IMPORTAR_BYTES:
+            ignorados.append(
+                {"arquivo": nome, "motivo": f"o lote passaria de {MAX_IMPORTAR_BYTES // (1024 * 1024)} MB"}
+            )
+            break
+        destino_arquivo = alvo_dir / nome
+        if destino_arquivo.is_dir():
+            ignorados.append({"arquivo": nome, "motivo": "existe uma pasta com esse nome no destino"})
+            continue
+        if destino_arquivo.exists() and not sobrescrever:
+            ignorados.append({"arquivo": nome, "motivo": "já existe no destino (marque sobrescrever)"})
+            continue
+        if not dry_run:
+            try:
+                shutil.copy2(item, destino_arquivo)
+            except OSError as exc:
+                ignorados.append({"arquivo": nome, "motivo": f"falha ao copiar: {exc.strerror or exc}"})
+                continue
+        copiados.append(
+            {"arquivo": nome, "bytes": tamanho, "destino": destino_arquivo.relative_to(base).as_posix()}
+        )
+        total += tamanho
+
+    if not dry_run and copiados:
+        _auditar(
+            {
+                "acao": "importar",
+                "alvo": str(pasta_origem),
+                "destino": str(alvo_dir),
+                "arquivos": len(copiados),
+                "bytes": total,
+            }
+        )
+    return {
+        "dryRun": dry_run,
+        "executado": bool(copiados) and not dry_run,
+        "origem": str(pasta_origem),
+        "destino": str(alvo_dir),
+        "copiados": copiados,
+        "ignorados": ignorados,
+        "arquivos": len(copiados),
+        "bytes": total,
+        "limites": {
+            "arquivos": MAX_IMPORTAR_ARQUIVOS,
+            "porArquivo": MAX_IMPORTAR_ARQUIVO,
+            "lote": MAX_IMPORTAR_BYTES,
+            "formatos": sorted(IMPORTAR_EXTENSOES),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------

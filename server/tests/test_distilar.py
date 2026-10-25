@@ -618,5 +618,5 @@ def test_api_persona_sem_chave_recusa(tmp_path):
     assert "JARVIS_AI_API_KEY" in corpo["error"]["message"]
 
 
-def test_api_registro_conta_208(client):
-    assert len(client.get("/api/skills").json()["skills"]) == 208
+def test_api_registro_conta_209(client):
+    assert len(client.get("/api/skills").json()["skills"]) == 209
