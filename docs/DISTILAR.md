@@ -12,7 +12,7 @@ O que **não** foi portado: o gerador de persona. O original escreve o perfil co
 
 Isso não é preciosismo. Um perfil de pessoa é uma afirmação sobre alguém — o que essa pessoa decide, como fala, do que desconfia. Sem lastro, o perfil vira a sua memória projetada em outra pessoa, com a autoridade de um documento.
 
-## As oito skills
+## As nove skills
 
 | Skill | O que faz |
 |---|---|
@@ -24,8 +24,9 @@ Isso não é preciosismo. Um perfil de pessoa é uma afirmação sobre alguém �
 | `distilar.correcao` | Classifica o "ele não faria isso" e diz o que muda, exigindo evidência nova |
 | `distilar.hospedeiros` | Mostra o caminho de skill nativo dos oito agentes compatíveis |
 | `distilar.regras` | Catálogo: famílias, checagens, hospedeiros, limites e recusas |
+| `distilar.persona` | **Gera** o rascunho no provedor externo e o submete a lastro e gate |
 
-Todas são de leitura: nenhuma grava arquivo, instala skill ou chama modelo. `distilar.regras` não pede token; as outras também não — esta camada não toca a máquina. Ela é a única do projeto que analisa texto puro do começo ao fim.
+Oito delas são de leitura: não gravam arquivo, não instalam skill, não chamam modelo. Nenhuma pede token de host — esta camada não toca a máquina. A nona, `distilar.persona`, é a exceção declarada: chama o provedor externo, exporta material e exige confirmação. Nenhuma das nove grava em disco.
 
 ## As quatro famílias
 
@@ -118,6 +119,33 @@ Do `tools/hosts.json` do original:
 | OpenCode | `~/.config/opencode/skills` | nativo, sem comando |
 
 A skill calcula o caminho e **não instala nada**. Grok Bot não importa `SKILL.md` local — o próprio README do original diz isso, e a camada repete.
+
+## Gerar com modelo — `distilar.persona` (0.35.0)
+
+A nona skill é a única que **escreve**, e a única que **tira dado da máquina**. Ela existe porque medir o material e escrever o perfil são trabalhos diferentes: oito skills conferem, uma redige.
+
+| Item | Como funciona |
+|---|---|
+| Provedor | o mesmo `OpenAICompatibleProvider` do `.env` (`JARVIS_AI_API_KEY`, `JARVIS_AI_BASE_URL`, `JARVIS_AI_MODEL`) |
+| Sem chave | **recusa** com a mensagem do `.env`; as outras oito continuam funcionando |
+| Envio | até **24.000 caracteres** de material; acima disso, corta e avisa |
+| Resposta | até **3.000 tokens** e 150 s de espera |
+| Front matter | montado **pelo código**, não pelo modelo: `name: distilly-<slug>` sempre válido |
+| Verificação | o rascunho passa por `distilar.lastro` e por `distilar.qualidade` **antes** de aparecer, e as duas notas vêm no relatório |
+| Disco | nada é gravado: a saída é proposta |
+| Confirmação | obrigatória (`confirmed: true`), porque exporta material e consome tokens |
+
+### O que essa skill muda no projeto
+
+1. **A camada deixa de ser 100% sem modelo.** A frase "nenhuma das oito chama modelo" continua verdadeira para as oito; a nona chama, e o teste fixa isso.
+2. **O texto do modelo não é publicado puro.** Ele volta com os achados do lastro e do gate embutidos. Se o modelo inventar, aparece na lista de "sem lastro".
+3. **O material sai da máquina.** Se o corpus tem conversa de terceiros — família, colega, cliente —, isso é exportação de dado pessoal de outra pessoa, e a decisão é sua. A caixa de confirmação diz exatamente isso.
+4. **Custa dinheiro.** Cada geração paga tokens de entrada (material) e de saída (perfil). O teto de 24 mil caracteres e 3 mil tokens existe para o custo não surpreender.
+5. **`server/ai.py` ganhou dois campos** — `material` (canal de dados, nunca instrução) e `max_tokens` (padrão 800, até 4.096), com tempo limite maior para geração longa. A conversa (`/api/ai/chat`) não mudou.
+
+### O que ela não resolve
+
+Um modelo pode escrever uma frase com citação `(arquivo:linha)` que aponta para uma linha parecida mas não idêntica. O lastro aceita similaridade acima de 0,18 — isso pega invenção grosseira, não paráfrase enganosa. **A revisão humana continua sendo o último passo**, e a skill diz isso no achado `should` que sempre acompanha a resposta.
 
 ## O que ela recusa
 

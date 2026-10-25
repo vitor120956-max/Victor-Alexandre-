@@ -121,7 +121,7 @@ def create_app(
     provider = ai_provider or OpenAICompatibleProvider()
     files_root_value = os.getenv("JARVIS_FILES_ROOT", "").strip()
     files_root = Path(files_root_value).expanduser() if files_root_value else PROJECT_ROOT / "storage" / "user-files"
-    skill_registry = registry or build_registry(files_root)
+    skill_registry = registry or build_registry(files_root, ai_provider=provider)
     estacao_runtime = estacao or EstacaoRuntime(root=skill_registry.files_root)
     # A camada de host exige prova de acesso: o token aparece aqui, no terminal de
     # quem subiu a API, e nunca numa resposta HTTP.
@@ -139,7 +139,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.34.0",
+        version="0.35.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -173,7 +173,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.34.0",
+            "version": "0.35.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
         }

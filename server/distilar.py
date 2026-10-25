@@ -1,4 +1,4 @@
-"""Distilação de pessoa em perfil com lastro (0.34.0).
+"""Distilação de pessoa em perfil com lastro (0.35.0).
 
 Porta a parte determinística de `titanwings/distilly` (MIT): famílias de
 personagem, perfil de pessoa empacotado como skill, gate de qualidade,
@@ -24,7 +24,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.34.0"
+VERSAO = "0.35.0"
 
 PROJETO = Path(__file__).resolve().parents[1]
 MODOS = ("lite", "full", "ultra")
@@ -230,6 +230,14 @@ def _slug(nome: str) -> str:
     base = "".join(letra for letra in base if not unicodedata.combining(letra))
     base = re.sub(r"[^a-zA-Z0-9]+", "-", base).strip("-").lower()
     return base[:MAX_SLUG].strip("-")
+
+
+def slug_seguro(nome: str) -> str:
+    """Slug portátil, recusando nome reservado do sistema operacional."""
+    slug = _slug(nome)
+    if slug in RESERVADOS_WINDOWS:
+        raise DistilarError(f"`{slug}` é nome reservado do Windows e não serve como pasta de skill.")
+    return slug
 
 
 def _normalizar_url(url: str) -> str:

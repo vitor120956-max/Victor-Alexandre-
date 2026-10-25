@@ -13,6 +13,7 @@ import {
   Play,
   Quote,
   ScanSearch,
+  Sparkles,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -26,11 +27,12 @@ import '../sistema.css';
 import '../evolucao.css';
 import '../distilar.css';
 
-type DistilarTab = 'perfil' | 'dimensoes' | 'esboco' | 'qualidade' | 'lastro' | 'correcao' | 'hospedeiros' | 'regras';
+type DistilarTab = 'perfil' | 'persona' | 'dimensoes' | 'esboco' | 'qualidade' | 'lastro' | 'correcao' | 'hospedeiros' | 'regras';
 type Row = Record<string, unknown>;
 
 const tabs: Array<{ id: DistilarTab; label: string; hint: string; icon: typeof Users }> = [
   { id: 'perfil', label: 'Perfil', hint: 'O que o material prova', icon: ScanSearch },
+  { id: 'persona', label: 'Persona (IA)', hint: 'Rascunho do modelo', icon: Sparkles },
   { id: 'dimensoes', label: 'Dimensões', hint: 'O que cada família exige', icon: Layers3 },
   { id: 'esboco', label: 'Esqueleto', hint: 'SKILL.md proposto', icon: FileSignature },
   { id: 'qualidade', label: 'Qualidade', hint: 'As treze checagens', icon: FlaskConical },
@@ -63,6 +65,7 @@ export function DistilarPage() {
   const [evidencia, setEvidencia] = useState('');
   const [host, setHost] = useState('');
   const [raiz, setRaiz] = useState('');
+  const [confirmado, setConfirmado] = useState(false);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState('');
   const [execution, setExecution] = useState<SkillExecution | null>(null);
@@ -80,6 +83,7 @@ export function DistilarPage() {
   const parametros = (): Record<string, unknown> => {
     if (tab === 'regras') return {};
     if (tab === 'perfil') return { corpus, familia, modo: 'full' };
+    if (tab === 'persona') return { corpus, nome: nome || 'Perfil', familia, modo: 'full' };
     if (tab === 'dimensoes') return { familia, modo: 'full' };
     if (tab === 'esboco') return { nome, familia, corpus, modo: 'full' };
     if (tab === 'qualidade') return { perfil_texto: perfilTexto, referencia, modo: 'full' };
@@ -94,11 +98,15 @@ export function DistilarPage() {
       setErro('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi analisado.');
       return;
     }
+    if (tab === 'persona' && !confirmado) {
+      setErro('Marque a confirmação: esta aba envia o material para um provedor externo e consome tokens.');
+      return;
+    }
     setBusy(true);
     setErro('');
     setExecution(null);
     try {
-      const resposta = await executeSkill(`distilar.${tab}`, parametros());
+      const resposta = await executeSkill(`distilar.${tab}`, parametros(), tab === 'persona' ? { confirmed: confirmado } : undefined);
       if (!resposta.ok) {
         setErro(resposta.error?.message ?? 'A skill recusou o pedido.');
         return;
@@ -178,7 +186,7 @@ export function DistilarPage() {
               </label>
             )}
 
-            {tab === 'esboco' && (
+            {(tab === 'esboco' || tab === 'persona') && (
               <label className="field">
                 <span>Nome do perfil</span>
                 <input value={nome} onChange={(event) => setNome(event.target.value)} placeholder="Ana Souza" />
@@ -244,10 +252,17 @@ export function DistilarPage() {
               </div>
             )}
 
+            {tab === 'persona' && (
+              <label className="continuidade-check is-warning">
+                <input type="checkbox" checked={confirmado} onChange={(event) => setConfirmado(event.target.checked)} />
+                <span>Confirmo que o material vai para o provedor externo configurado no <code>.env</code>, que isso consome tokens pagos e que tenho direito de exportar essas conversas</span>
+              </label>
+            )}
+
             <div className="diagram-actions">
               <button type="submit" className="primary" disabled={busy}>
                 {busy ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}
-                {busy ? 'Analisando' : tab === 'regras' ? 'Abrir catálogo' : 'Analisar'}
+                {busy ? 'Analisando' : tab === 'regras' ? 'Abrir catálogo' : tab === 'persona' ? 'Gerar rascunho' : 'Analisar'}
               </button>
               {markdown && (
                 <button type="button" className="ghost" onClick={() => copiar(markdown, 'Parecer copiado')}>
@@ -265,7 +280,9 @@ export function DistilarPage() {
 
             <p className="sistema-aviso">
               <AlertTriangle size={14} />
-              Perfil de pessoa é afirmação sobre alguém. Sem linha de origem, a afirmação é sua — não dela.
+              {tab === 'persona'
+                ? 'O modelo inventa bem. O rascunho já vem com o lastro conferido e as afirmações sem apoio listadas — leia antes de instalar.'
+                : 'Perfil de pessoa é afirmação sobre alguém. Sem linha de origem, a afirmação é sua — não dela.'}
             </p>
           </form>
         </section>
@@ -285,6 +302,7 @@ export function DistilarPage() {
                 </div>
               )}
 
+              {tab === 'persona' && <Tabela titulo="Geração" colunas={[{ titulo: 'Campo', chave: 'campo' }, { titulo: 'Valor', chave: 'valor', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'perfil' && <Tabela titulo="Cobertura por dimensão" colunas={[{ titulo: 'Dimensão', chave: 'dimensao', tipo: 'code' }, { titulo: 'Evidências', chave: 'evidencias' }, { titulo: 'Estado', chave: 'estado', tipo: 'pill' }, { titulo: 'Primeira citação', chave: 'citacao' }, { titulo: 'Fonte', chave: 'fonte', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {tab === 'dimensoes' && <Tabela titulo="Dimensões" colunas={[{ titulo: 'Família', chave: 'familia', tipo: 'code' }, { titulo: 'Dimensão', chave: 'dimensao' }, { titulo: 'Sinais', chave: 'sinais' }, { titulo: 'Raiz', chave: 'raiz', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
               {(tab === 'esboco' || tab === 'lastro') && <Tabela titulo={tab === 'esboco' ? 'Seções propostas' : 'Afirmações conferidas'} colunas={tab === 'esboco' ? [{ titulo: 'Dimensão', chave: 'dimensao', tipo: 'code' }, { titulo: 'Evidências', chave: 'evidencias' }, { titulo: 'Estado', chave: 'estado', tipo: 'pill' }] : [{ titulo: 'Afirmação', chave: 'afirmacao' }, { titulo: 'Lastro', chave: 'lastro', tipo: 'pill' }, { titulo: 'Similaridade', chave: 'similaridade' }, { titulo: 'Fonte', chave: 'fonte', tipo: 'code' }]} linhas={asRows(resultado.rows)} />}
@@ -451,6 +469,7 @@ const valorMetrica = (valor: unknown): React.ReactNode => {
 
 const metricas = (tab: DistilarTab): Array<{ label: string; chave: string }> => {
   if (tab === 'perfil') return [{ label: 'MENSAGENS', chave: 'mensagens' }, { label: 'PALAVRAS', chave: 'palavras' }, { label: 'COBERTAS', chave: 'cobertas' }, { label: 'AUSENTES', chave: 'ausentes' }];
+  if (tab === 'persona') return [{ label: 'ENVIADOS', chave: 'caracteresEnviados' }, { label: 'RECEBIDOS', chave: 'caracteresRecebidos' }, { label: 'SEM LASTRO', chave: 'semLastro' }, { label: 'GATE', chave: 'gateReprovam' }];
   if (tab === 'dimensoes') return [{ label: 'FAMÍLIAS', chave: 'familias' }, { label: 'DIMENSÕES', chave: 'dimensoes' }];
   if (tab === 'esboco') return [{ label: 'DIMENSÕES', chave: 'dimensoes' }, { label: 'FONTES', chave: 'fontes' }, { label: 'EVIDÊNCIAS', chave: 'evidencias' }];
   if (tab === 'qualidade') return [{ label: 'CHECAGENS', chave: 'checagens' }, { label: 'PASSAM', chave: 'passam' }, { label: 'REPROVAM', chave: 'reprovam' }, { label: 'OBRIGATÓRIAS', chave: 'obrigatorias' }];

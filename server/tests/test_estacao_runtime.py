@@ -462,7 +462,7 @@ def test_estado_traz_politica_e_contagem(aberto: EstacaoRuntime) -> None:
     estado = aberto.estado()
     assert estado["contagem"]["ok"] == 1
     assert set(estado["politica"]) == set(PERMISSOES)
-    assert estado["versao"] == "0.34.0"
+    assert estado["versao"] == "0.35.0"
     assert estado["executado"] is True
 
 
@@ -580,4 +580,4 @@ def test_api_recibos_e_chamadas(client: TestClient) -> None:
 
 
 def test_api_health_versao_nova(client: TestClient) -> None:
-    assert client.get("/api/health").json()["version"] == "0.34.0"
+    assert client.get("/api/health").json()["version"] == "0.35.0"

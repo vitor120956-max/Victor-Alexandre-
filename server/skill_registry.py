@@ -129,6 +129,7 @@ from .continuidade import (
     portao as portao_continuidade,
     retomada as retomada_continuidade,
 )
+from .distilar_ia import persona as persona_distilar
 from .distilar import (
     DistilarError,
     catalogo as distilar_catalogo,
@@ -1234,6 +1235,14 @@ class DistilarCorrecaoInput(BaseModel):
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
+class DistilarPersonaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    corpus: str = Field(min_length=200, max_length=900_000, title="Material", json_schema_extra={"format": "textarea", "description": "Vai para o provedor externo. Envie só o que você tem direito de exportar."})
+    nome: str = Field(default="Perfil", max_length=120, title="Nome do perfil")
+    familia: Literal["colleague", "relationship", "celebrity", "owner"] = Field(default="colleague", title="Família")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
 class DistilarHospedeirosInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     host: Literal["", "claude-code", "openclaw", "hermes", "codex", "deepseek-harness", "pi", "grok-build", "opencode"] = Field(default="", title="Hospedeiro", json_schema_extra={"description": "Vazio lista os oito."})
@@ -1988,7 +1997,7 @@ def _safe_path(root: Path, relative: str, *, allow_root: bool = False) -> Path:
         raise SkillError(str(exc)) from exc
 
 
-def build_registry(files_root: Path) -> "SkillRegistry":
+def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRegistry":
     files_root.mkdir(parents=True, exist_ok=True)
     files_root = files_root.resolve()
     legal_corpus = LegalCorpus(Path(__file__).resolve().with_name("legal_data"))
@@ -3316,6 +3325,19 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         except DistilarError as exc:
             raise SkillError(str(exc)) from exc
 
+    def distilar_persona_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DistilarPersonaInput)
+        try:
+            return persona_distilar(
+                corpus=data.corpus,
+                familia=data.familia,
+                nome=data.nome,
+                modo=data.modo,
+                ai_provider=ai_provider,
+            )
+        except DistilarError as exc:
+            raise SkillError(str(exc)) from exc
+
     def distilar_dimensoes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, DistilarDimensoesInput)
         try:
@@ -3883,6 +3905,7 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.desinstalar", "Plano de desinstalação", "Monta o comando de remoção por gerenciador (`dpkg:`, `rpm:`, `pip:`, `npm:`, `msi:{GUID}`) ou por um `.msi` da quarentena, com risco declarado e token de uso único.", "Sistema", SistemaDesinstalarInput, sistema_desinstalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.executar", "Execução do plano", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("distilar.persona", "Perfil gerado por IA", "Pede o rascunho ao provedor externo configurado no .env, monta o SKILL.md com front matter determinístico e submete o texto ao lastro e ao gate de qualidade. Exporta o material para o provedor e consome tokens: exige confirmação.", "Pessoa", DistilarPersonaInput, distilar_persona_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("distilar.perfil", "Perfil a partir do material", "Mede o corpus por dimensão da família escolhida, extrai citações candidatas com fonte e linha, e diz o que está coberto, parcial ou sem evidência.", "Pessoa", DistilarPerfilInput, distilar_perfil_handler, timeout_seconds=60),
         SkillDefinition("distilar.dimensoes", "Dimensões do perfil", "Publica as quatro famílias (colega, relação, figura pública e dono do agente) com as dimensões que cada perfil precisa cobrir e os sinais lexicais usados na busca.", "Pessoa", DistilarDimensoesInput, distilar_dimensoes_handler, timeout_seconds=10),
         SkillDefinition("distilar.esboco", "Esqueleto do perfil", "Monta o SKILL.md e o manifest.json propostos, com slug portátil, front matter e uma seção por dimensão marcada como coberta, parcial ou sem evidência. Não escreve persona nem grava arquivo.", "Pessoa", DistilarEsbocoInput, distilar_esboco_handler, timeout_seconds=60),

@@ -15,7 +15,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.34.0"
+VERSAO = "0.35.0"
 MAX_TEXTO = 200_000
 MODOS = ("lite", "full", "ultra")
 

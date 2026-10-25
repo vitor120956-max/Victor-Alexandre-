@@ -412,9 +412,9 @@ def test_api_lista_as_tres_skills_novas(client):
     assert {"sistema.privilegio", "sistema.elevar", "sistema.elevar_executar"} <= ids
 
 
-def test_registro_conta_as_duzentas_e_sete_skills(client):
+def test_registro_conta_as_duzentas_e_oito_skills(client):
     resposta = client.get("/api/skills")
-    assert len(resposta.json()["skills"]) == 207
+    assert len(resposta.json()["skills"]) == 208
 
 
 @pytest.mark.skipif(not E._sudo(), reason="sudo não instalado nesta máquina")

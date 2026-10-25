@@ -6,6 +6,7 @@ de um perfil escrito.
 """
 from __future__ import annotations
 
+import importlib
 import json
 
 import pytest
@@ -391,13 +392,12 @@ def client():
     return TestClient(create_app(registry=None))
 
 
-def test_api_lista_as_oito_skills(client):
+def test_api_lista_as_nove_skills_de_pessoa(client):
     ids = {item["id"] for item in client.get("/api/skills").json()["skills"]}
-    assert len([item for item in ids if item.startswith("distilar.")]) == 8
+    assert len([item for item in ids if item.startswith("distilar.")]) == 9
 
 
-def test_api_registro_conta_207(client):
-    assert len(client.get("/api/skills").json()["skills"]) == 207
+
 
 
 def test_api_perfil_responde(client):
@@ -431,3 +431,192 @@ def test_api_esboco_devolve_conteudo(client):
     corpo = resposta.json()["result"]
     assert corpo["slug"] == "ana-souza"
     assert corpo["conteudo"].startswith("---")
+
+
+# ---------------------------------------------------------------------------
+# Geração com provedor externo (0.35.0)
+# ---------------------------------------------------------------------------
+
+PERFIL_GERADO = """## Padrões de decisão
+
+- Revisa o PR antes de subir porque já quebrou produção (conversa-ana.txt:1).
+- Prefere combinar o formato antes da reunião (conversa-ana.txt:7).
+
+## Padrão técnico
+
+- Teste antes de deploy, sem atalho (conversa-ana.txt:2).
+
+## Fluxo de trabalho
+
+- Abre o chamado, revisa o diff e só então pede revisão (conversa-ana.txt:8).
+
+## Voz
+
+- Frase curta, ritmo direto, sem metáfora (conversa-ana.txt:3).
+
+## Comportamento no time
+
+- Discordou do prazo na reunião, mas falou na hora (conversa-ana.txt:3).
+
+## Limites
+
+- Não sabe kubernetes e delega para o time de infra (conversa-ana.txt:5).
+
+## Limites honestos
+
+- O perfil não afirma nada sobre a vida pessoal além do que está nas fontes.
+- Não há evidência sobre este ponto no material fornecido.
+
+## Fontes
+
+- https://exemplo.org/conversa-ana
+- https://exemplo.org/email-ana
+
+source weight: 2
+source weight: 3
+"""
+
+
+class ProvedorFalso:
+    def __init__(self, resposta: str = PERFIL_GERADO, configured: bool = True):
+        self.resposta = resposta
+        self._configured = configured
+        self.pedidos: list = []
+
+    @property
+    def configured(self) -> bool:
+        return self._configured
+
+    def status(self):
+        return {"configured": self._configured, "provider": "falso", "model": "falso-1", "external": True}
+
+    async def generate(self, request):
+        self.pedidos.append(request)
+        return self.resposta
+
+
+def test_persona_sem_provedor_recusa():
+    with pytest.raises(D.DistilarError, match="IA externa não configurada"):
+        importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=None)
+
+
+def test_persona_com_provedor_desconfigurado_recusa():
+    with pytest.raises(D.DistilarError, match="JARVIS_AI_API_KEY"):
+        importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=ProvedorFalso(configured=False))
+
+
+def test_persona_exporta_material_e_devolve_rascunho():
+    falso = ProvedorFalso()
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, nome="Ana Souza", ai_provider=falso)
+    assert dados["exportado"] is True
+    assert dados["executed"] is False and dados["readOnly"] is True
+    assert dados["slug"] == "ana-souza"
+    assert dados["conteudo"].startswith("---\nname: distilly-ana-souza")
+    assert dados["metrics"]["caracteresEnviados"] == len(CORPUS.strip()[:24_000])
+    assert len(falso.pedidos) == 1
+
+
+def test_persona_envia_material_como_dado():
+    falso = ProvedorFalso()
+    importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=falso)
+    pedido = falso.pedidos[0]
+    assert "conversa-ana.txt" in pedido.material
+    assert pedido.max_tokens >= 2_000
+    assert "dados citáveis" not in pedido.message
+
+
+def test_persona_roda_lastro_e_gate():
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=ProvedorFalso())
+    assert dados["verificacao"]["lastro"]["afirmacoes"] >= 5
+    assert dados["verificacao"]["qualidade"]["checagens"] == 13
+    assert "gatePassam" in dados["metrics"]
+
+
+def test_persona_recusa_resposta_curta():
+    with pytest.raises(D.DistilarError, match="abaixo do mínimo"):
+        importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=ProvedorFalso("curto"))
+
+
+def test_persona_limpa_cerca_de_codigo():
+    falso = ProvedorFalso("```markdown\n" + PERFIL_GERADO + "\n```")
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=falso)
+    assert "```" not in dados["corpo"]
+
+
+def test_persona_trunca_material_grande():
+    falso = ProvedorFalso()
+    grande = CORPUS + "\n" + ("Ana: linha de recheio para testar o corte do envio\n" * 900)
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=grande, ai_provider=falso)
+    assert dados["metrics"]["truncado"] is True
+    assert dados["metrics"]["caracteresEnviados"] == 24_000
+    assert any("truncado" in item["title"].lower() for item in dados["findings"])
+
+
+def test_persona_sempre_avisa_que_foi_modelo():
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=ProvedorFalso())
+    assert any("gerado por modelo" in item["title"].lower() for item in dados["findings"])
+
+
+def test_persona_recusa_corpus_vazio():
+    with pytest.raises(D.DistilarError, match="Texto vazio"):
+        importlib.import_module("server.distilar_ia").persona(corpus="   ", ai_provider=ProvedorFalso())
+
+
+def test_persona_aceita_provedor_sincrono():
+    class Sincrono:
+        configured = True
+
+        def status(self):
+            return {"provider": "sincrono", "model": "s1"}
+
+        def generate(self, request):
+            return PERFIL_GERADO
+
+    dados = importlib.import_module("server.distilar_ia").persona(corpus=CORPUS, ai_provider=Sincrono())
+    assert dados["metrics"]["caracteresRecebidos"] > 200
+
+
+def test_api_persona_exige_confirmacao(tmp_path):
+    from server.skill_registry import build_registry
+
+    registry = build_registry(tmp_path / "files", ai_provider=ProvedorFalso())
+    cliente = TestClient(create_app(registry=registry))
+    resposta = cliente.post(
+        "/api/skills/distilar.persona/execute",
+        json={"parameters": {"corpus": CORPUS, "nome": "Ana"}},
+    )
+    corpo = resposta.json()
+    assert corpo["ok"] is False
+    assert corpo["error"]["code"] == "CONFIRMATION_REQUIRED"
+
+
+def test_api_persona_confirma_e_gera(tmp_path):
+    from server.skill_registry import build_registry
+
+    registry = build_registry(tmp_path / "files", ai_provider=ProvedorFalso())
+    cliente = TestClient(create_app(registry=registry))
+    resposta = cliente.post(
+        "/api/skills/distilar.persona/execute",
+        json={"parameters": {"corpus": CORPUS, "nome": "Ana"}, "confirmed": True},
+    )
+    corpo = resposta.json()
+    assert corpo["ok"] is True
+    assert corpo["result"]["exportado"] is True
+
+
+def test_api_persona_sem_chave_recusa(tmp_path):
+    from server.skill_registry import build_registry
+
+    registry = build_registry(tmp_path / "files")
+    cliente = TestClient(create_app(registry=registry))
+    resposta = cliente.post(
+        "/api/skills/distilar.persona/execute",
+        json={"parameters": {"corpus": CORPUS, "nome": "Ana"}, "confirmed": True},
+    )
+    corpo = resposta.json()
+    assert corpo["ok"] is False
+    assert "JARVIS_AI_API_KEY" in corpo["error"]["message"]
+
+
+def test_api_registro_conta_208(client):
+    assert len(client.get("/api/skills").json()["skills"]) == 208
