@@ -367,6 +367,82 @@ O `cd /d` é obrigatório quando o cmd está em outra unidade (`C:`) e o projeto
 
 Se `py` não existir, use `python`. Se o venv já existir e estiver quebrado, apague a pasta `.venv` e repita.
 
+### `npm error ENOENT … C:\Users\SEU_USUARIO\package.json`
+
+Esse erro não é problema do projeto: é **o comando rodando na pasta errada**. Cada janela do cmd nasce em `C:\Users\SEU_USUARIO`, e o npm procura `package.json` sempre na pasta atual.
+
+```text
+npm error code ENOENT
+npm error path C:\Users\pc\package.json
+npm error enoent Could not read package.json
+```
+
+Confira onde você está antes de qualquer comando:
+
+```bat
+cd
+```
+
+A resposta precisa ser `D:\JARVIS`. Se não for:
+
+```bat
+cd /d D:\JARVIS
+```
+
+Só depois disso `npm install`, `npm run dev` e `npm run checar` funcionam. O `/d` é obrigatório porque `cd D:\JARVIS` sem `/d` troca de pasta mas mantém a unidade `C:`.
+
+### Como saber se o `npm install` terminou de verdade
+
+Contar linhas de `node_modules` serve para ver progresso, mas **não prova que terminou** — dependências opcionais mudam de máquina para máquina. A prova é o `npm ls`:
+
+```bat
+cd /d D:\JARVIS
+```
+
+```bat
+npm ls --depth=0
+```
+
+Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
+
+```text
+jarvis-nucleo-pessoal@0.36.5 D:\JARVIS
++-- @fontsource-variable/manrope@5.3.0
++-- @fontsource/ibm-plex-mono@5.3.0
++-- @types/react-dom@19.3.0
++-- @types/react@19.3.0
++-- @vitejs/plugin-react@4.7.0
++-- concurrently@10.0.6
++-- lucide-react@0.468.0
++-- react-dom@19.3.1
++-- react-router-dom@7.18.4
++-- react@19.3.1
++-- typescript@5.7.3
++-- vite@6.4.5
+`-- vitest@5.0.5
+```
+
+Se faltar algum, rode `npm install` de novo na pasta certa — ele é **idempotente**: baixa só o que falta e não estraga o que já existe. Nunca é preciso apagar `node_modules` para isso.
+
+Conferência rápida dos quatro que quebram o `npm run dev` se faltarem:
+
+```bat
+dir D:\JARVIS\node_modules\vite /b
+dir D:\JARVIS\node_modules\esbuild /b
+dir D:\JARVIS\node_modules\react /b
+dir D:\JARVIS\node_modules\concurrently /b
+```
+
+### Duas janelas de cmd: qual está fazendo o quê
+
+Abrir uma janela nova **não interrompe** o que roda na antiga. Se o `npm install` ficou pendurado numa janela e você abriu outra, a instalação continua viva na primeira. Para não rodar dois ao mesmo tempo:
+
+| Situação | O que fazer |
+|---|---|
+| A janela antiga ainda mostra `npm install` sem prompt | espere nela; não rode outro `npm install` em paralelo |
+| A janela antiga já voltou ao prompt `D:\JARVIS>` | terminou; siga para `py -m venv .venv` |
+| Você fechou a janela antiga | o processo morreu; rode `npm install` de novo na pasta certa |
+
 ### Quanto tempo demora o `npm install` (e como saber se travou)
 
 O `npm install` fica **em silêncio** por vários minutos. Isso é normal, não é travamento: ele resolve a árvore inteira, baixa tudo para o cache em `C:\Users\SEU_USUARIO\AppData\Local\npm-cache` e só então descompacta em `node_modules`.
@@ -489,7 +565,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.36.4"` e `"skills": 209`.
+Esperado: `"version": "0.36.5"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -586,6 +662,8 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 | `.venv/bin/pip` não existe | caminho de Linux | no Windows é `.venv\Scripts\pip` |
 | `python` não reconhecido (Windows) | Python sem PATH | reinstalar marcando “Add python.exe to PATH” |
 | `npm install` falha em pendrive FAT32 | sistema de arquivos sem suporte | formatar em NTFS ou ext4 |
+| `npm error ENOENT … C:\Users\pc\package.json` | comando rodou fora da pasta do projeto | `cd /d D:\JARVIS` antes de qualquer `npm` |
+| `npm ls` mostra `UNMET DEPENDENCY` | instalação interrompida | rodar `npm install` de novo (é idempotente) |
 | `.venv` quebrou depois de trocar de porta USB | caminho absoluto mudou | apagar `.venv` e recriar na máquina |
 | `Token de host inválido` | token de outro projeto/cópia | ler `storage/host-token.txt` desta cópia |
 | `A origem não existe` | caminho errado | informar o caminho completo da pasta Downloads |
@@ -605,7 +683,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.4` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.36.5` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
