@@ -166,9 +166,9 @@ Regras que valem mesmo sem runtime: término pode começar antes da preparação
 ## Verificação
 
 ```bash
-npm test                                   # 41 testes web + 1.396 de API
+npm test                                   # 41 testes web + 1.526 de API
 .venv/bin/python -m pytest server/tests/test_agency.py -q
-curl -s http://localhost:8000/api/health   # 0.29.0, 176 skills
+curl -s http://localhost:8000/api/health   # 0.30.0, 186 skills
 ```
 
 Os testes de `server/tests/test_agency.py` cobrem as regras de cada análise, a supressão do watchdog, o mandato não ampliável, a linha de base e os caminhos da API.

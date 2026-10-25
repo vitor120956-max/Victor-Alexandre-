@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
+from .sistema import token_host as sistema_token_host
 from .skill_registry import SkillError, SkillRegistry, build_registry
 from .workspace import MAX_DOCUMENT_BYTES, VISIBLE_EXTENSIONS, download_url, regular_file, safe_path
 
@@ -122,11 +123,22 @@ def create_app(
     files_root = Path(files_root_value).expanduser() if files_root_value else PROJECT_ROOT / "storage" / "user-files"
     skill_registry = registry or build_registry(files_root)
     estacao_runtime = estacao or EstacaoRuntime(root=skill_registry.files_root)
+    # A camada de host exige prova de acesso: o token aparece aqui, no terminal de
+    # quem subiu a API, e nunca numa resposta HTTP.
+    if os.getenv("JARVIS_HOST_TOKEN_SILENCIOSO", "0") != "1":
+        _token_host = sistema_token_host()
+        if _token_host:
+            print(
+                "JARVIS modo host: token em storage/host-token.txt -> "
+                f"{_token_host[:4]}…{_token_host[-4:]} "
+                f"(rede={'ligada' if os.getenv('JARVIS_HOST_REDE') == '1' else 'desligada'}, "
+                f"instalar={'ligado' if os.getenv('JARVIS_HOST_INSTALAR') == '1' else 'desligado'})"
+            )
 
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.29.0",
+        version="0.30.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -160,7 +172,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.29.0",
+            "version": "0.30.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
         }

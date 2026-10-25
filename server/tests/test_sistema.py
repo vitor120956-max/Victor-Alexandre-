@@ -1,0 +1,978 @@
+"""Testes da camada de host (0.30.0): disco, pastas, drivers, Bluetooth, rede e instalador.
+
+A camada lê a máquina de verdade, então cada teste isola o diretório de estado
+(token, quarentena e auditoria) num tmp_path e substitui as fontes voláteis —
+`/proc`, PowerShell e rede — por fixtures. Nenhum teste abre socket de verdade.
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from server import sistema as S
+from server.app import create_app
+
+
+@pytest.fixture(autouse=True)
+def estado(tmp_path, monkeypatch):
+    monkeypatch.setattr(S, "STORAGE", tmp_path)
+    monkeypatch.setattr(S, "TOKEN_ARQUIVO", tmp_path / "host-token.txt")
+    monkeypatch.setattr(S, "QUARENTENA", tmp_path / "host-downloads")
+    monkeypatch.setattr(S, "AUDITORIA", tmp_path / "host-audit.jsonl")
+    monkeypatch.delenv(S.AMBIENTE_REDE, raising=False)
+    monkeypatch.delenv(S.AMBIENTE_INSTALAR, raising=False)
+    S._CONFIRMACAO.clear()
+    yield tmp_path
+    S._CONFIRMACAO.clear()
+
+
+@pytest.fixture
+def token(estado):
+    return S.token_host()
+
+
+@pytest.fixture
+def rede_ligada(monkeypatch):
+    monkeypatch.setenv(S.AMBIENTE_REDE, "1")
+
+
+@pytest.fixture
+def instalacao_ligada(monkeypatch):
+    monkeypatch.setenv(S.AMBIENTE_REDE, "1")
+    monkeypatch.setenv(S.AMBIENTE_INSTALAR, "1")
+
+
+def _textos(resultado):
+    return " ".join(item["title"] + " " + item["problem"] for item in resultado["findings"])
+
+
+# ---------------------------------------------------------------------------
+# Token de host
+# ---------------------------------------------------------------------------
+
+
+def test_token_e_criado_no_primeiro_uso(estado):
+    token = S.token_host()
+    assert len(token) >= 20
+    assert (estado / "host-token.txt").read_text(encoding="utf-8").strip() == token
+
+
+def test_token_e_estavel_entre_chamadas(estado):
+    assert S.token_host() == S.token_host()
+
+
+def test_token_existente_e_reaproveitado(estado):
+    (estado / "host-token.txt").write_text("token-fixo-de-teste\n", encoding="utf-8")
+    assert S.token_host() == "token-fixo-de-teste"
+
+
+def test_token_vazio_no_arquivo_e_refeito(estado):
+    (estado / "host-token.txt").write_text("   \n", encoding="utf-8")
+    assert S.token_host() != ""
+
+
+def test_sem_token_a_leitura_e_recusada():
+    with pytest.raises(S.SistemaError, match="token"):
+        S.disco(autorizacao="")
+
+
+def test_token_errado_e_recusado(token):
+    with pytest.raises(S.SistemaError, match="inválido"):
+        S.disco(autorizacao="outro-valor")
+
+
+def test_token_aceita_espaco_em_volta(token):
+    assert S.disco(autorizacao=f"  {token}  ")["readOnly"] is True
+
+
+def test_capacidades_esconde_o_token(monkeypatch):
+    dados = S.capacidades()
+    assert "token_configurado" in dados
+    assert "shell_livre" in dados
+    assert S.capacidades()["rede"] is False
+
+
+def test_capacidades_reflete_as_variaveis(monkeypatch):
+    monkeypatch.setenv(S.AMBIENTE_REDE, "1")
+    monkeypatch.setenv(S.AMBIENTE_INSTALAR, "1")
+    dados = S.capacidades()
+    assert dados["rede"] is True and dados["instalar"] is True
+
+
+# ---------------------------------------------------------------------------
+# Ambiente
+# ---------------------------------------------------------------------------
+
+
+def test_ambiente_devolve_linhas_do_sistema(token):
+    dados = S.ambiente(autorizacao=token)
+    chaves = [linha["chave"] for linha in dados["rows"]]
+    assert "Sistema" in chaves and "Núcleos" in chaves and "Python" in chaves
+    assert dados["executed"] is False and dados["readOnly"] is True
+
+
+def test_ambiente_detecta_container(monkeypatch, token):
+    monkeypatch.setattr(S, "_container", lambda: {"provavel": True, "evidencias": ["/.dockerenv presente"]})
+    dados = S.ambiente(autorizacao=token)
+    assert dados["metrics"]["container"] is True
+    assert "contêiner" in _textos(dados)
+
+
+def test_ambiente_sem_container_nao_alerta(monkeypatch, token):
+    monkeypatch.setattr(S, "_container", lambda: {"provavel": False, "evidencias": []})
+    dados = S.ambiente(autorizacao=token)
+    assert dados["metrics"]["container"] is False
+
+
+def test_ambiente_avisa_rede_desligada(token):
+    dados = S.ambiente(autorizacao=token)
+    assert any(item["location"] == S.AMBIENTE_REDE for item in dados["findings"])
+
+
+def test_ambiente_avisa_instalacao_desligada(token):
+    dados = S.ambiente(autorizacao=token)
+    assert any(item["location"] == S.AMBIENTE_INSTALAR for item in dados["findings"])
+
+
+def test_ambiente_modo_lite_so_traz_must(monkeypatch, token):
+    monkeypatch.setattr(S, "_container", lambda: {"provavel": True, "evidencias": []})
+    dados = S.ambiente(autorizacao=token, modo="lite")
+    assert all(item["group"] == "must" for item in dados["findings"])
+
+
+def test_ambiente_modo_invalido(token):
+    with pytest.raises(S.SistemaError, match="Modo"):
+        S.ambiente(autorizacao=token, modo="turbo")
+
+
+def test_ambiente_ultra_devolve_perguntas(token):
+    dados = S.ambiente(autorizacao=token, modo="ultra")
+    assert dados["questions"]
+
+
+# ---------------------------------------------------------------------------
+# Disco
+# ---------------------------------------------------------------------------
+
+
+def _montagem(monkeypatch, itens):
+    monkeypatch.setattr(S, "_montagens_posix", lambda: itens)
+
+
+def test_disco_mede_montagem_real(monkeypatch, token, tmp_path):
+    _montagem(monkeypatch, [{"dispositivo": "/dev/sda1", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    dados = S.disco(autorizacao=token)
+    assert dados["metrics"]["unidades"] == 1
+    linha = dados["rows"][0]
+    assert linha["total"] > 0 and 0 <= linha["livrePct"] <= 100
+
+
+def test_disco_soma_total_e_livre(monkeypatch, token, tmp_path):
+    _montagem(monkeypatch, [{"dispositivo": "/dev/sda1", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    dados = S.disco(autorizacao=token)
+    assert dados["metrics"]["usado"] + dados["metrics"]["livre"] == dados["metrics"]["total"]
+
+
+def test_disco_alerta_em_disco_quase_cheio(monkeypatch, token, tmp_path):
+    class Uso:
+        total = 1000
+        used = 980
+        free = 20
+
+    _montagem(monkeypatch, [{"dispositivo": "x", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    monkeypatch.setattr(S.shutil, "disk_usage", lambda _ponto: Uso())
+    dados = S.disco(autorizacao=token)
+    assert any("cheio" in item["title"].lower() for item in dados["findings"])
+    assert dados["metrics"]["menorLivrePct"] == 2
+
+
+def test_disco_alerta_em_pouco_espaco(monkeypatch, token, tmp_path):
+    class Uso:
+        total = 1000
+        used = 880
+        free = 120
+
+    _montagem(monkeypatch, [{"dispositivo": "x", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    monkeypatch.setattr(S.shutil, "disk_usage", lambda _ponto: Uso())
+    dados = S.disco(autorizacao=token)
+    assert any(item["group"] == "should" for item in dados["findings"])
+
+
+def test_disco_ignora_volatil_no_alerta(monkeypatch, token, tmp_path):
+    class Uso:
+        total = 1000
+        used = 990
+        free = 10
+
+    _montagem(monkeypatch, [{"dispositivo": "tmpfs", "ponto": str(tmp_path), "tipo": "tmpfs", "volatil": True}])
+    monkeypatch.setattr(S.shutil, "disk_usage", lambda _ponto: Uso())
+    dados = S.disco(autorizacao=token)
+    assert dados["findings"] == []
+    assert dados["rows"][0]["volatil"] is True
+
+
+def test_disco_nao_lista_filesystem_pseudo(monkeypatch, token, tmp_path):
+    texto = "\n".join(
+        [
+            f"proc /proc proc rw 0 0",
+            f"selinuxfs /sys/fs/selinux selinuxfs rw 0 0",
+            f"ramfs /run/credentials/x ramfs rw 0 0",
+        ]
+    )
+    monkeypatch.setattr(S, "_ler_arquivo", lambda *_a, **_k: texto)
+    assert S._montagens_posix() == []
+
+
+def test_disco_deduplica_bind_do_mesmo_dispositivo(monkeypatch, token, tmp_path):
+    texto = f"/dev/sda {tmp_path} ext4 rw 0 0\n/dev/sda {tmp_path} ext4 rw 0 0\n"
+    monkeypatch.setattr(S, "_ler_arquivo", lambda *_a, **_k: texto)
+    assert len(S._montagens_posix()) == 1
+
+
+def test_disco_ignora_total_zero(monkeypatch, token, tmp_path):
+    class Uso:
+        total = 0
+        used = 0
+        free = 0
+
+    _montagem(monkeypatch, [{"dispositivo": "x", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    monkeypatch.setattr(S.shutil, "disk_usage", lambda _ponto: Uso())
+    dados = S.disco(autorizacao=token)
+    assert dados["metrics"]["unidades"] == 0
+
+
+def test_disco_caminho_informado_sem_leitura(monkeypatch, token):
+    def falhar(_ponto):
+        raise PermissionError
+
+    monkeypatch.setattr(S.shutil, "disk_usage", falhar)
+    dados = S.disco(caminhos="/inexistente", autorizacao=token)
+    assert any("sem leitura" in item["title"].lower() for item in dados["findings"])
+
+
+def test_disco_filtra_por_minimo(monkeypatch, token, tmp_path):
+    class Uso:
+        total = 1000
+        used = 100
+        free = 900
+
+    _montagem(monkeypatch, [{"dispositivo": "x", "ponto": str(tmp_path), "tipo": "ext4", "volatil": False}])
+    monkeypatch.setattr(S.shutil, "disk_usage", lambda _ponto: Uso())
+    assert S.disco(autorizacao=token, minimo=95)["rows"] == []
+
+
+def test_disco_sem_unidade_alerta(monkeypatch, token):
+    _montagem(monkeypatch, [])
+    dados = S.disco(autorizacao=token)
+    assert any("nenhuma unidade" in item["title"].lower() for item in dados["findings"])
+
+
+# ---------------------------------------------------------------------------
+# Pastas
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def arvore(tmp_path):
+    raiz = tmp_path / "raiz"
+    (raiz / "sub" / "fundo").mkdir(parents=True)
+    (raiz / "a.txt").write_text("aaa", encoding="utf-8")
+    (raiz / "sub" / "b.md").write_text("bbbb", encoding="utf-8")
+    (raiz / "sub" / "fundo" / "c.log").write_text("c", encoding="utf-8")
+    (raiz / ".oculto").write_text("x", encoding="utf-8")
+    return raiz
+
+
+def test_pastas_lista_nome_tipo_e_tamanho(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=0, autorizacao=token)
+    por_nome = {linha["nome"]: linha for linha in dados["rows"]}
+    assert por_nome["a.txt"]["tipo"] == "arquivo" and por_nome["a.txt"]["bytes"] == 3
+    assert por_nome["sub"]["tipo"] == "pasta"
+
+
+def test_pastas_nao_le_conteudo(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=2, autorizacao=token)
+    texto = json.dumps(dados, ensure_ascii=False)
+    assert "aaa" not in texto and "bbbb" not in texto
+
+
+def test_pastas_respeita_profundidade(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=0, autorizacao=token)
+    nomes = {linha["nome"] for linha in dados["rows"]}
+    assert "b.md" not in nomes and "sub" in nomes
+
+
+def test_pastas_desce_ate_a_profundidade(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=3, autorizacao=token)
+    assert "c.log" in {linha["nome"] for linha in dados["rows"]}
+
+
+def test_pastas_oculta_por_padrao(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=1, autorizacao=token)
+    assert ".oculto" not in {linha["nome"] for linha in dados["rows"]}
+
+
+def test_pastas_inclui_ocultos_quando_pedido(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=1, incluir_ocultos=True, autorizacao=token)
+    assert ".oculto" in {linha["nome"] for linha in dados["rows"]}
+
+
+def test_pastas_trunca_no_limite(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=4, limite=2, autorizacao=token)
+    assert len(dados["rows"]) == 2
+    assert dados["metrics"]["truncado"] is True
+
+
+def test_pastas_alerta_truncamento(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=4, limite=1, autorizacao=token)
+    assert any("truncada" in item["title"].lower() for item in dados["findings"])
+
+
+def test_pastas_profundidade_limitada(arvore, token):
+    dados = S.pastas(raiz=str(arvore), profundidade=99, autorizacao=token)
+    assert dados["metrics"]["profundidade"] == S.MAX_PROFUNDIDADE
+
+
+def test_pastas_caminho_inexistente(token):
+    with pytest.raises(S.SistemaError, match="não existe"):
+        S.pastas(raiz="/caminho/que/nao/existe", autorizacao=token)
+
+
+def test_pastas_arquivo_como_raiz(arvore, token):
+    with pytest.raises(S.SistemaError, match="Não é uma pasta"):
+        S.pastas(raiz=str(arvore / "a.txt"), autorizacao=token)
+
+
+def test_pastas_reconhece_cofre_pelo_nome(tmp_path, token):
+    raiz = tmp_path / "home"
+    (raiz / ".ssh").mkdir(parents=True)
+    (raiz / ".ssh" / "id_rsa").write_text("segredo", encoding="utf-8")
+    dados = S.pastas(raiz=str(raiz), profundidade=2, incluir_ocultos=True, autorizacao=token)
+    protegidos = [linha for linha in dados["rows"] if linha["protegido"]]
+    assert protegidos
+    assert all(linha["bytes"] == 0 for linha in protegidos if linha["tipo"] == "arquivo")
+    assert "segredo" not in json.dumps(dados)
+
+
+def test_pastas_chave_e_reconhecida(tmp_path, token):
+    assert S._protegido(tmp_path / "chave.pem") is True
+    assert S._protegido(tmp_path / "arquivo.txt") is False
+
+
+def test_pastas_link_simbolico_nao_e_seguido(tmp_path, token):
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    (raiz / "real").mkdir()
+    (raiz / "atalho").symlink_to(raiz / "real")
+    dados = S.pastas(raiz=str(raiz), profundidade=2, autorizacao=token)
+    atalho = next(linha for linha in dados["rows"] if linha["nome"] == "atalho")
+    assert atalho["tipo"] == "link"
+
+
+def test_pastas_vazia_avisa(tmp_path, token):
+    raiz = tmp_path / "vazia"
+    raiz.mkdir()
+    dados = S.pastas(raiz=str(raiz), autorizacao=token)
+    assert any("vazia" in item["title"].lower() for item in dados["findings"])
+
+
+def test_pastas_sem_permissao_conta_negado(tmp_path, token, monkeypatch):
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    (raiz / "x.txt").write_text("x", encoding="utf-8")
+    original = os.scandir
+
+    def negar(caminho):
+        if str(caminho).endswith("raiz"):
+            raise PermissionError
+        return original(caminho)
+
+    monkeypatch.setattr(S.os, "scandir", negar)
+    dados = S.pastas(raiz=str(raiz), autorizacao=token)
+    assert dados["metrics"]["negados"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Drivers
+# ---------------------------------------------------------------------------
+
+
+def test_drivers_le_modulos_do_kernel(monkeypatch, token):
+    texto = "snd_hda_intel 573440 3 - Live 0x0000000000000000\nbtusb 61440 0 - Live 0x0\n"
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_ler_arquivo", lambda caminho, *_a, **_k: texto if "modules" in str(caminho) else "")
+    dados = S.drivers(autorizacao=token)
+    assert dados["metrics"]["itens"] == 2
+    assert dados["rows"][0]["nome"] == "snd_hda_intel"
+    assert dados["rows"][0]["bytes"] == 573440
+
+
+def test_drivers_filtra_por_nome(monkeypatch, token):
+    texto = "snd_hda_intel 573440 3 - Live 0x0\nbtusb 61440 0 - Live 0x0\n"
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_ler_arquivo", lambda caminho, *_a, **_k: texto if "modules" in str(caminho) else "")
+    dados = S.drivers(filtro="bt", autorizacao=token)
+    assert [linha["nome"] for linha in dados["rows"]] == ["btusb"]
+
+
+def test_drivers_windows_parseia_json(monkeypatch, token):
+    saida = json.dumps(
+        [
+            {"DeviceName": "Intel Bluetooth", "DriverVersion": "22.1", "DriverProviderName": "Intel", "IsSigned": True},
+            {"DeviceName": "Adaptador RTL", "DriverVersion": "", "DriverProviderName": "Realtek", "IsSigned": False},
+        ]
+    )
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, saida, ""))
+    dados = S.drivers(autorizacao=token)
+    assert dados["metrics"]["itens"] == 2
+    assert dados["metrics"]["naoAssinados"] == 1
+
+
+def test_drivers_windows_sem_powershell(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (127, "", "comando não encontrado"))
+    dados = S.drivers(autorizacao=token)
+    assert any("indisponível" in item["title"].lower() for item in dados["findings"])
+
+
+def test_drivers_windows_json_invalido(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "não é json", ""))
+    assert S._drivers_windows()[0] == []
+
+
+def test_drivers_plataforma_sem_fonte(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Darwin")
+    dados = S.drivers(autorizacao=token)
+    assert dados["metrics"]["itens"] == 0
+    assert any("nenhum driver" in item["title"].lower() for item in dados["findings"])
+
+
+def test_drivers_sem_versao_gera_achado(monkeypatch, token):
+    texto = "modulo_sem_versao 1024 0 - Live 0x0\n"
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_ler_arquivo", lambda caminho, *_a, **_k: texto if "modules" in str(caminho) else "")
+    dados = S.drivers(autorizacao=token)
+    assert dados["metrics"]["semVersao"] == 1
+
+
+def test_drivers_nao_executa_shell(monkeypatch, token):
+    chamadas = []
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_ler_arquivo", lambda *_a, **_k: "")
+    monkeypatch.setattr(S.subprocess, "run", lambda *a, **k: chamadas.append(a) or (_ for _ in ()).throw(AssertionError("shell")))
+    S.drivers(autorizacao=token)
+    assert chamadas == []
+
+
+# ---------------------------------------------------------------------------
+# Bluetooth
+# ---------------------------------------------------------------------------
+
+
+def test_bluetooth_linux_le_adaptadores(monkeypatch, token, tmp_path):
+    base = tmp_path / "bluetooth"
+    adaptador = base / "hci0"
+    adaptador.mkdir(parents=True)
+    (adaptador / "address").write_text("AA:BB:CC:DD:EE:FF", encoding="utf-8")
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: S._adaptadores_linux.__wrapped__(base) if hasattr(S._adaptadores_linux, "__wrapped__") else [{"nome": "hci0", "tipo": "adaptador", "endereco": "AA:BB:CC:DD:EE:FF"}])
+    dados = S.bluetooth(autorizacao=token)
+    assert dados["metrics"]["adaptadores"] == 1
+
+
+def test_bluetooth_sem_adaptador_alerta(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: [])
+    monkeypatch.setattr(S, "_emparelhados_linux", lambda: [])
+    dados = S.bluetooth(autorizacao=token)
+    assert any("nenhum adaptador" in item["title"].lower() for item in dados["findings"])
+    assert dados["counts"]["must"] == 1
+
+
+def test_bluetooth_adaptador_sem_pareamento(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: [{"nome": "hci0", "tipo": "adaptador", "endereco": "AA"}])
+    monkeypatch.setattr(S, "_emparelhados_linux", lambda: [])
+    dados = S.bluetooth(autorizacao=token)
+    assert any("pareado" in item["title"].lower() for item in dados["findings"])
+
+
+def test_bluetooth_adaptador_desligado(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: [{"nome": "hci0", "tipo": "adaptador", "estado": "disabled"}])
+    monkeypatch.setattr(S, "_emparelhados_linux", lambda: [{"nome": "fone", "mac": "11"}])
+    dados = S.bluetooth(autorizacao=token)
+    assert any("desligado" in item["title"].lower() for item in dados["findings"])
+
+
+def test_bluetooth_windows_parseia(monkeypatch, token):
+    saida = json.dumps(
+        [
+            {"FriendlyName": "Intel Bluetooth", "Status": "OK", "InstanceId": "USB\\VID_8087"},
+            {"FriendlyName": "Fone BT", "Status": "OK", "InstanceId": "BTHENUM\\XX"},
+        ]
+    )
+    monkeypatch.setattr(S.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, saida, ""))
+    dados = S.bluetooth(autorizacao=token)
+    assert dados["metrics"]["adaptadores"] == 1
+    assert dados["metrics"]["emparelhados"] == 1
+
+
+def test_bluetooth_filtro(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: [{"nome": "hci0", "tipo": "adaptador"}])
+    monkeypatch.setattr(S, "_emparelhados_linux", lambda: [{"nome": "Galaxy Buds", "mac": "11"}])
+    dados = S.bluetooth(filtro="galaxy", autorizacao=token)
+    assert len(dados["rows"]) == 1
+
+
+def test_bluetooth_nao_pareia(monkeypatch, token):
+    monkeypatch.setattr(S.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(S, "_adaptadores_linux", lambda: [])
+    monkeypatch.setattr(S, "_emparelhados_linux", lambda: [])
+    texto = " ".join(S.bluetooth(autorizacao=token)["limitations"]).lower()
+    assert "não pareia" in texto or "não inicia varredura" in texto
+
+
+# ---------------------------------------------------------------------------
+# Rede: guardas de URL
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost/",
+        "http://127.0.0.1:8000/api/health",
+        "http://10.0.0.1/",
+        "http://192.168.0.1/",
+        "http://172.16.0.1/",
+        "http://169.254.1.1/",
+        "http://0.0.0.0/",
+        "http://printer.local/",
+    ],
+)
+def test_rede_bloqueia_endereco_privado(url):
+    with pytest.raises(S.SistemaError):
+        S._url_segura(url)
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://example.com/x", "javascript:alert(1)", ""])
+def test_rede_so_aceita_http(url):
+    with pytest.raises(S.SistemaError):
+        S._url_segura(url)
+
+
+def test_rede_host_que_nao_resolve():
+    with pytest.raises(S.SistemaError, match="resolve"):
+        S._url_segura("https://dominio-que-nao-existe-zzz.invalid/")
+
+
+def test_rede_host_publico_passa():
+    assert S._url_segura("https://example.com/") == "https://example.com/"
+
+
+def test_rede_desligada_recusa(monkeypatch, token):
+    with pytest.raises(S.SistemaError, match="Rede desligada"):
+        S.rede(acao="buscar", consulta="x", autorizacao=token)
+
+
+def test_rede_exige_token_antes_da_rede(rede_ligada):
+    with pytest.raises(S.SistemaError, match="token"):
+        S.rede(acao="buscar", consulta="x", autorizacao="")
+
+
+def test_rede_acao_invalida(rede_ligada, token):
+    with pytest.raises(S.SistemaError, match="Ação inválida"):
+        S.rede(acao="baixar", url="https://example.com/a.msi", autorizacao=token)
+
+
+def test_rede_busca_sem_consulta(rede_ligada, token):
+    with pytest.raises(S.SistemaError, match="consulta"):
+        S.rede(acao="buscar", consulta="  ", autorizacao=token)
+
+
+def test_rede_busca_devolve_linhas(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(
+        S,
+        "_buscar_ddg",
+        lambda *_a, **_k: [{"titulo": "Driver Bluetooth", "url": "https://exemplo.com/driver"}],
+    )
+    dados = S.rede(acao="buscar", consulta="driver bluetooth", autorizacao=token)
+    assert dados["rows"][0]["titulo"] == "Driver Bluetooth"
+    assert dados["executed"] is False and dados["readOnly"] is True
+
+
+def test_rede_busca_vazia_alerta(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "_buscar_ddg", lambda *_a, **_k: [])
+    dados = S.rede(acao="buscar", consulta="nada", autorizacao=token)
+    assert any("sem resultado" in item["title"].lower() for item in dados["findings"])
+
+
+def test_rede_olhar_extrai_texto(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(
+        S,
+        "_baixar_texto",
+        lambda *_a, **_k: ("<html><body><p>Olá <b>mundo</b></p><script>x()</script></body></html>", "text/html", 200),
+    )
+    dados = S.rede(acao="olhar", url="https://example.com/", autorizacao=token)
+    assert "Olá mundo" in dados["markdown"]
+    assert "x()" not in dados["markdown"]
+
+
+def test_texto_de_html_remove_tag_e_entidade():
+    assert S._texto_de_html("<p>a&nbsp;&amp;&nbsp;b</p>") == "a & b"
+
+
+def test_rede_olhar_pagina_grande_recusa(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "MAX_PAGINA", 10)
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"x" * 100, "text/html", 200))
+    with pytest.raises(S.SistemaError, match="maior"):
+        S.rede(acao="olhar", url="https://example.com/", autorizacao=token)
+
+
+class _Resposta:
+    """Resposta HTTP falsa que consome o buffer como um socket de verdade."""
+
+    def __init__(self, dados, tipo, status):
+        self._dados = dados
+        self._posicao = 0
+        self.status = status
+        self.headers = {"content-type": tipo}
+
+    def read(self, limite=-1):
+        if limite < 0:
+            bloco = self._dados[self._posicao :]
+        else:
+            bloco = self._dados[self._posicao : self._posicao + limite]
+        self._posicao += len(bloco)
+        return bloco
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Download
+# ---------------------------------------------------------------------------
+
+
+def test_baixar_exige_rede(monkeypatch, token):
+    with pytest.raises(S.SistemaError, match="Rede desligada"):
+        S.baixar(url="https://example.com/a.msi", autorizacao=token)
+
+
+def test_baixar_grava_na_quarentena(monkeypatch, rede_ligada, token, estado):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"conteudo", "application/octet-stream", 200))
+    dados = S.baixar(url="https://example.com/fone.msi", autorizacao=token)
+    arquivo = Path(dados["download"]["arquivo"])
+    assert arquivo.exists() and arquivo.read_bytes() == b"conteudo"
+    assert arquivo.parent == estado / "host-downloads"
+    assert len(dados["download"]["sha256"]) == 64
+
+
+def test_baixar_marca_executado(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"x", "application/octet-stream", 200))
+    dados = S.baixar(url="https://example.com/a.msi", autorizacao=token)
+    assert dados["executed"] is True and dados["readOnly"] is False
+
+
+def test_baixar_registra_auditoria(monkeypatch, rede_ligada, token, estado):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"x", "application/octet-stream", 200))
+    S.baixar(url="https://example.com/a.msi", autorizacao=token)
+    linhas = (estado / "host-audit.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert json.loads(linhas[0])["acao"] == "baixar"
+
+
+def test_baixar_recusa_acima_do_limite(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "MAX_DOWNLOAD", 4)
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"123456789", "application/octet-stream", 200))
+    with pytest.raises(S.SistemaError, match="maior"):
+        S.baixar(url="https://example.com/a.msi", autorizacao=token)
+
+
+def test_baixar_vazio_alerta(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"", "application/octet-stream", 200))
+    dados = S.baixar(url="https://example.com/a.msi", autorizacao=token)
+    assert any("vazio" in item["title"].lower() for item in dados["findings"])
+
+
+def test_baixar_extensao_desconhecida_alerta(monkeypatch, rede_ligada, token):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"x", "text/plain", 200))
+    dados = S.baixar(url="https://example.com/leiame.txt", autorizacao=token)
+    assert any("não é instalador" in item["title"].lower() for item in dados["findings"])
+
+
+def test_baixar_nome_perigoso_e_sanitizado(monkeypatch, rede_ligada, token, estado):
+    monkeypatch.setattr(S, "urlopen", lambda *_a, **_k: _Resposta(b"x", "application/octet-stream", 200))
+    dados = S.baixar(url="https://example.com/..%2F..%2Fetc%2Fpasswd.msi", autorizacao=token)
+    arquivo = Path(dados["download"]["arquivo"])
+    assert arquivo.parent == estado / "host-downloads"
+    assert "/" not in arquivo.name.replace(str(arquivo.parent), "")
+
+
+# ---------------------------------------------------------------------------
+# Instalação
+# ---------------------------------------------------------------------------
+
+
+def _baixar_fake(estado, nome="fone.msi", dados=b"abc"):
+    pasta = estado / "host-downloads"
+    pasta.mkdir(parents=True, exist_ok=True)
+    arquivo = pasta / f"0000-{nome}"
+    arquivo.write_bytes(dados)
+    return arquivo
+
+
+def test_instalar_planeja_pip(token):
+    dados = S.instalar(pacote="pip:rich", autorizacao=token)
+    assert dados["rows"][2]["valor"].endswith("-m pip install rich")
+    assert dados["executed"] is False and dados["readOnly"] is True
+    assert len(dados["confirmacao"]) == 8
+
+
+def test_instalar_planeja_npm(token):
+    dados = S.instalar(pacote="npm:typescript", autorizacao=token)
+    assert dados["rows"][2]["valor"] == "npm install typescript"
+
+
+@pytest.mark.parametrize("nome", ["foo; rm -rf /", "a b", "$(whoami)", "a|b", "a&&b", "a`b`"])
+def test_instalar_recusa_metacaractere(token, nome):
+    with pytest.raises(S.SistemaError, match="inválido"):
+        S.instalar(pacote=f"pip:{nome}", autorizacao=token)
+
+
+def test_instalar_exige_arquivo_ou_pacote(token):
+    with pytest.raises(S.SistemaError, match="Informe"):
+        S.instalar(autorizacao=token)
+
+
+def test_instalar_recusa_arquivo_fora_da_quarentena(token):
+    with pytest.raises(S.SistemaError, match="quarentena"):
+        S.instalar(arquivo="/etc/passwd", autorizacao=token)
+
+
+def test_instalar_aceita_arquivo_da_quarentena(estado, token):
+    arquivo = _baixar_fake(estado)
+    dados = S.instalar(arquivo=str(arquivo), autorizacao=token)
+    assert dados["metrics"]["tipo"] == "msi"
+    assert dados["metrics"]["risco"] == "médio"
+
+
+def test_instalar_recusa_extensao_nao_suportada(estado, token):
+    arquivo = _baixar_fake(estado, nome="pacote.zip")
+    with pytest.raises(S.SistemaError, match="Extensão"):
+        S.instalar(arquivo=str(arquivo), autorizacao=token)
+
+
+def test_instalar_exe_tem_risco_alto(estado, token):
+    arquivo = _baixar_fake(estado, nome="setup.exe")
+    dados = S.instalar(arquivo=str(arquivo), autorizacao=token)
+    assert dados["metrics"]["risco"] == "alto"
+    assert dados["counts"]["must"] >= 1
+
+
+def test_instalar_appimage_nao_tem_comando(estado, token):
+    arquivo = _baixar_fake(estado, nome="app.AppImage")
+    dados = S.instalar(arquivo=str(arquivo), autorizacao=token)
+    assert dados["rows"][2]["valor"] == "(somente chmod +x)"
+
+
+def test_instalar_avisa_trava_desligada(estado, token):
+    arquivo = _baixar_fake(estado)
+    dados = S.instalar(arquivo=str(arquivo), autorizacao=token)
+    assert any(item["location"] == S.AMBIENTE_INSTALAR for item in dados["findings"])
+
+
+def test_instalar_token_e_unico_por_plano(estado, token):
+    a = S.instalar(pacote="pip:a", autorizacao=token)["confirmacao"]
+    b = S.instalar(pacote="pip:a", autorizacao=token)["confirmacao"]
+    assert a != b
+
+
+# ---------------------------------------------------------------------------
+# Execução
+# ---------------------------------------------------------------------------
+
+
+def test_executar_exige_trava(estado, rede_ligada, token):
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    with pytest.raises(S.SistemaError, match="Instalação desligada"):
+        S.executar(confirmacao=token_plano, autorizacao=token)
+
+
+def test_executar_confirmacao_desconhecida(instalacao_ligada, token):
+    with pytest.raises(S.SistemaError, match="desconhecida"):
+        S.executar(confirmacao="deadbeef", autorizacao=token)
+
+
+def test_executar_confirma_e_roda(monkeypatch, instalacao_ligada, token):
+    chamadas = []
+
+    def falso(comando, timeout=20):
+        chamadas.append(comando)
+        return 0, "ok", ""
+
+    monkeypatch.setattr(S, "_rodar", falso)
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    dados = S.executar(confirmacao=token_plano, autorizacao=token)
+    assert dados["executed"] is True and dados["readOnly"] is False
+    assert dados["metrics"]["codigo"] == 0
+    assert chamadas and chamadas[0][-2:] == ["install", "rich"]
+
+
+def test_executar_token_serve_uma_vez(monkeypatch, instalacao_ligada, token):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    S.executar(confirmacao=token_plano, autorizacao=token)
+    with pytest.raises(S.SistemaError, match="desconhecida"):
+        S.executar(confirmacao=token_plano, autorizacao=token)
+
+
+def test_executar_token_expirado(monkeypatch, instalacao_ligada, token):
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    S._CONFIRMACAO[token_plano]["expira"] = time.time() - 1
+    with pytest.raises(S.SistemaError, match="expirada"):
+        S.executar(confirmacao=token_plano, autorizacao=token)
+
+
+def test_executar_codigo_diferente_de_zero_alerta(monkeypatch, instalacao_ligada, token):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (1, "", "falhou"))
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    dados = S.executar(confirmacao=token_plano, autorizacao=token)
+    assert any("erro" in item["title"].lower() for item in dados["findings"])
+
+
+def test_executar_registra_auditoria(monkeypatch, instalacao_ligada, token, estado):
+    monkeypatch.setattr(S, "_rodar", lambda *_a, **_k: (0, "", ""))
+    token_plano = S.instalar(pacote="pip:rich", autorizacao=token)["confirmacao"]
+    S.executar(confirmacao=token_plano, autorizacao=token)
+    linhas = (estado / "host-audit.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert json.loads(linhas[-1])["acao"] == "instalar"
+
+
+def test_executar_appimage_so_marca_executavel(estado, instalacao_ligada, token):
+    arquivo = _baixar_fake(estado, nome="app.AppImage")
+    token_plano = S.instalar(arquivo=str(arquivo), autorizacao=token)["confirmacao"]
+    dados = S.executar(confirmacao=token_plano, autorizacao=token)
+    assert dados["execucao"]["acao"] == "chmod"
+    assert os.access(arquivo, os.X_OK)
+
+
+def test_e_rodar_comando_inexistente_devolve_127():
+    assert S._rodar(["binario-que-nao-existe-zzz"])[0] == 127
+
+
+def test_e_rodar_respeita_timeout(monkeypatch):
+    import subprocess
+
+    def estourar(*_a, **_k):
+        raise subprocess.TimeoutExpired("x", 1)
+
+    monkeypatch.setattr(S.subprocess, "run", estourar)
+    assert S._rodar(["x"], timeout=1)[0] == 124
+
+
+# ---------------------------------------------------------------------------
+# Catálogo
+# ---------------------------------------------------------------------------
+
+
+def test_catalogo_lista_dez_operacoes():
+    dados = S.catalogo()
+    assert len(dados["operacoes"]) == 10
+
+
+def test_catalogo_lista_cinco_guardas():
+    assert len(S.catalogo()["guardas"]) == 5
+
+
+def test_catalogo_declara_o_que_nao_faz():
+    texto = " ".join(S.catalogo()["nao_faz"]).lower()
+    assert "shell livre" in texto and "assinatura" in texto and "bluetooth" in texto
+
+
+def test_catalogo_nao_expoe_token():
+    assert S.token_host() not in json.dumps(S.catalogo())
+
+
+def test_catalogo_e_somente_leitura():
+    dados = S.catalogo()
+    assert dados["executed"] is False and dados["readOnly"] is True
+
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def client(tmp_path):
+    app = create_app(registry=None)
+    return TestClient(app)
+
+
+def test_api_health_na_versao_nova(client):
+    dados = client.get("/api/health").json()
+    assert dados["version"] == "0.30.0"
+    assert dados["skills"] == 186
+
+
+def test_api_lista_as_dez_skills_de_sistema(client):
+    ids = [item["id"] for item in client.get("/api/skills").json()["skills"]]
+    assert len([item for item in ids if item.startswith("sistema.")]) == 10
+
+
+def test_api_sistema_disco_exige_token(client):
+    resposta = client.post("/api/skills/sistema.disco/execute", json={"parameters": {}}).json()
+    assert resposta["ok"] is False
+    assert resposta["error"]["code"] == "SKILL_ERROR"
+    assert "token" in resposta["error"]["message"]
+
+
+def test_api_sistema_regras_responde(client):
+    resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
+    assert resposta["ok"] is True
+    assert resposta["result"]["versao"] == "0.30.0"
+
+
+def test_api_baixar_exige_confirmacao(client):
+    resposta = client.post(
+        "/api/skills/sistema.baixar/execute",
+        json={"parameters": {"url": "https://example.com/a.msi"}, "autorizacao": ""},
+    ).json()
+    assert resposta["ok"] is False
+    assert resposta["error"]["code"] == "CONFIRMATION_REQUIRED"
+
+
+def test_api_executar_exige_confirmacao(client):
+    resposta = client.post(
+        "/api/skills/sistema.executar/execute",
+        json={"parameters": {"confirmacao": "abcd1234"}},
+    ).json()
+    assert resposta["error"]["code"] == "CONFIRMATION_REQUIRED"
+
+
+def test_api_instalar_nao_exige_confirmacao(client):
+    resposta = client.post("/api/skills/sistema.instalar/execute", json={"parameters": {"pacote": "pip:rich"}}).json()
+    assert resposta["error"]["code"] == "SKILL_ERROR"
+
+
+def test_api_skill_inexistente(client):
+    assert client.post("/api/skills/sistema.nada/execute", json={"parameters": {}}).status_code == 404
+
+
+def test_api_parametro_extra_recusado(client):
+    corpo = client.post("/api/skills/sistema.regras/execute", json={"parameters": {"x": 1}, "dryRun": True}).json()
+    assert corpo["ok"] is False

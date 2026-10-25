@@ -129,6 +129,19 @@ from .continuidade import (
     portao as portao_continuidade,
     retomada as retomada_continuidade,
 )
+from .sistema import (
+    SistemaError,
+    ambiente as ambiente_sistema,
+    baixar as baixar_sistema,
+    bluetooth as bluetooth_sistema,
+    catalogo as sistema_catalogo,
+    disco as disco_sistema,
+    drivers as drivers_sistema,
+    executar as executar_sistema,
+    instalar as instalar_sistema,
+    pastas as pastas_sistema,
+    rede as rede_sistema,
+)
 from .portabilidade import (
     PortabilidadeError,
     auditar as auditar_portabilidade,
@@ -1010,6 +1023,80 @@ class ContinuidadeMedicoInput(BaseModel):
     planos: str = Field(min_length=10, max_length=1_800_000, title="Diretório de planos", json_schema_extra={"format": "textarea", "description": "Bundle `>>> <plano>/<arquivo>` com task_plan.md, progress.md, findings.md, ledger e atestação."})
     ativo: str = Field(default="", max_length=120, title="Plano ativo", json_schema_extra={"description": "Nome declarado como ativo; quando não resolve, nenhum outro plano é substituído."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+
+
+class SistemaAmbienteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    detalhe: Literal["lite", "full"] = Field(default="full", title="Detalhe")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host", json_schema_extra={"description": "Valor de `storage/host-token.txt`. Sem ele a camada recusa: leitura real do host exige prova de acesso."})
+
+
+class SistemaDiscoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminhos: str = Field(default="", max_length=2_000, title="Unidades", json_schema_extra={"description": "Lista separada por vírgula; vazio mede todas as montagens do host."})
+    minimo: int = Field(default=0, ge=0, le=100, title="Mínimo livre (%)", json_schema_extra={"description": "Filtra unidades abaixo desse percentual livre."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaPastasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    raiz: str = Field(default=".", max_length=1_000, title="Raiz")
+    profundidade: int = Field(default=2, ge=0, le=6, title="Profundidade")
+    limite: int = Field(default=300, ge=1, le=2_000, title="Entradas")
+    incluir_ocultos: bool = Field(default=False, title="Incluir ocultos")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaDriversInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filtro: str = Field(default="", max_length=120, title="Filtro por nome")
+    classe: str = Field(default="", max_length=120, title="Classe do dispositivo")
+    limite: int = Field(default=120, ge=1, le=200, title="Itens")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaBluetoothInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filtro: str = Field(default="", max_length=120, title="Filtro por nome")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaRedeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acao: Literal["buscar", "olhar"] = Field(default="buscar", title="Ação")
+    consulta: str = Field(default="", max_length=400, title="Consulta", json_schema_extra={"description": "Termo de busca; usado só em `buscar`."})
+    url: str = Field(default="", max_length=2_000, title="URL", json_schema_extra={"description": "Obrigatória em `olhar`. Endereço privado, local e link-local é recusado."})
+    limite: int = Field(default=8, ge=1, le=25, title="Resultados")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaBaixarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=8, max_length=2_000, title="URL do arquivo", json_schema_extra={"description": "O arquivo vai para `storage/host-downloads` e nunca é executado por esta skill."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaInstalarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(default="", max_length=1_000, title="Arquivo da quarentena", json_schema_extra={"description": "Caminho em `storage/host-downloads`, produzido por `sistema.baixar`."})
+    pacote: str = Field(default="", max_length=200, title="Pacote", json_schema_extra={"description": "`pip:<nome>` ou `npm:<nome>` para gerenciador de pacotes."})
+    silencioso: bool = Field(default=True, title="Instalação silenciosa")
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class SistemaExecutarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmacao: str = Field(min_length=4, max_length=64, title="Confirmação de uso único", json_schema_extra={"description": "Token devolvido por `sistema.instalar`; vale 10 minutos e serve uma vez."})
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
 class PortabilidadeAuditarInput(BaseModel):
@@ -2878,6 +2965,92 @@ def build_registry(files_root: Path) -> "SkillRegistry":
     def continuidade_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return continuidade_catalogo()
 
+    def sistema_ambiente_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaAmbienteInput)
+        try:
+            return ambiente_sistema(detalhe=data.detalhe, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_disco_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaDiscoInput)
+        try:
+            return disco_sistema(caminhos=data.caminhos, minimo=data.minimo, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_pastas_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaPastasInput)
+        try:
+            return pastas_sistema(
+                raiz=data.raiz,
+                profundidade=data.profundidade,
+                limite=data.limite,
+                incluir_ocultos=data.incluir_ocultos,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_drivers_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaDriversInput)
+        try:
+            return drivers_sistema(filtro=data.filtro, classe=data.classe, limite=data.limite, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_bluetooth_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaBluetoothInput)
+        try:
+            return bluetooth_sistema(filtro=data.filtro, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_rede_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaRedeInput)
+        try:
+            return rede_sistema(
+                acao=data.acao,
+                consulta=data.consulta,
+                url=data.url,
+                limite=data.limite,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_baixar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaBaixarInput)
+        try:
+            return baixar_sistema(url=data.url, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_instalar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaInstalarInput)
+        try:
+            return instalar_sistema(
+                arquivo=data.arquivo,
+                pacote=data.pacote,
+                silencioso=data.silencioso,
+                modo=data.modo,
+                autorizacao=data.autorizacao,
+            )
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_executar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaExecutarInput)
+        try:
+            return executar_sistema(confirmacao=data.confirmacao, modo=data.modo, autorizacao=data.autorizacao)
+        except SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def sistema_regras_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return sistema_catalogo()
+
     def portabilidade_auditar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, PortabilidadeAuditarInput)
         try:
@@ -3353,6 +3526,16 @@ def build_registry(files_root: Path) -> "SkillRegistry":
         SkillDefinition("continuidade.livro", "Livro de execução", "Valida o `ledger-<agente>.jsonl`: JSON por linha, seis eventos, tick inteiro e crescente, resumo de até 200 caracteres sem quebra, agente sanitizado, lacuna e ordem.", "Continuidade", ContinuidadeLivroInput, continuidade_livro_handler, timeout_seconds=15),
         SkillDefinition("continuidade.medico", "Médico do diretório", "Diagnostica o conjunto de planos: arquivo obrigatório faltando, plano sem livro ou atestação, título duplicado, plano ativo inexistente e ambiguidade quando dois planos têm fase aberta.", "Continuidade", ContinuidadeMedicoInput, continuidade_medico_handler, timeout_seconds=20),
         SkillDefinition("continuidade.regras", "Catálogo de continuidade", "Publica os arquivos do plano, os dois formatos de status, os seis eventos, os cinco guardas do portão, o orçamento da injeção, as doze regras e os limites.", "Continuidade", EmptyInput, continuidade_regras_handler, timeout_seconds=5),
+        SkillDefinition("sistema.ambiente", "Ambiente do host", "Descreve a máquina que executa a API: sistema, arquitetura, núcleos, memória, tempo ligado, detecção de contêiner e o estado das três travas (token de host, rede e instalação).", "Sistema", SistemaAmbienteInput, sistema_ambiente_handler, timeout_seconds=20),
+        SkillDefinition("sistema.disco", "Espaço em disco", "Mede total, usado e livre por unidade montada, ignorando pseudo-filesystems e bind mounts repetidos, e alerta em 15% e 5% livres.", "Sistema", SistemaDiscoInput, sistema_disco_handler, timeout_seconds=20),
+        SkillDefinition("sistema.pastas", "Inventário de pastas", "Enumera nomes, tipos, tamanhos e datas até a profundidade pedida, sem ler conteúdo; cofre, chave e token aparecem só pelo nome.", "Sistema", SistemaPastasInput, sistema_pastas_handler, timeout_seconds=30),
+        SkillDefinition("sistema.drivers", "Drivers e módulos", "Lista módulos do kernel no Linux e drivers PnP assinados no Windows, apontando item sem versão e driver sem assinatura.", "Sistema", SistemaDriversInput, sistema_drivers_handler, timeout_seconds=40),
+        SkillDefinition("sistema.bluetooth", "Bluetooth", "Lista adaptadores e dispositivos pareados e diagnostica o caso do fone: sem rádio, adaptador desligado ou nada pareado.", "Sistema", SistemaBluetoothInput, sistema_bluetooth_handler, timeout_seconds=30),
+        SkillDefinition("sistema.rede", "Busca e leitura na web", "Busca na web ou lê o texto de uma página, com rede desligada por padrão e bloqueio de endereço privado, laço local e link-local.", "Sistema", SistemaRedeInput, sistema_rede_handler, timeout_seconds=60),
+        SkillDefinition("sistema.baixar", "Download para quarentena", "Baixa um arquivo para `storage/host-downloads`, com teto de 256 MB e SHA-256; nada é executado nesta skill.", "Sistema", SistemaBaixarInput, sistema_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
+        SkillDefinition("sistema.executar", "Execução do instalador", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("sistema.regras", "Catálogo do host", "Publica as três travas, a allowlist de instaladores, os limites de leitura e download, e a lista do que a camada recusa fazer.", "Sistema", EmptyInput, sistema_regras_handler, timeout_seconds=5),
         SkillDefinition("portabilidade.auditar", "Auditar bundle de skills", "Lê o `SKILL.md` de cada pasta e confere nome, slug, descrição, script citado no corpo, `allowed-tools`, licença, tamanho e arquivo solto — antes de qualquer conversão.", "Portabilidade", PortabilidadeAuditarInput, portabilidade_auditar_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.converter", "Converter para ferramenta", "Monta o plano arquivo a arquivo para os treze alvos — pasta, espelho, regra ou convenção — dizendo o que é copiado, reescrito, embutido, gerado e descartado.", "Portabilidade", PortabilidadeConverterInput, portabilidade_converter_handler, timeout_seconds=20),
         SkillDefinition("portabilidade.deriva", "Deriva fonte × espelho", "Compara a árvore fonte com a árvore publicada por conteúdo ou hash e classifica cada caminho em igual, alterado, faltando, sobrando ou não comparável, com achado para ponteiro quebrado.", "Portabilidade", PortabilidadeDerivaInput, portabilidade_deriva_handler, timeout_seconds=20),

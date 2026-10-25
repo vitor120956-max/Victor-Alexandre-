@@ -1,0 +1,122 @@
+/* --- camada de sistema --------------------------------------------------- */
+.sistema-page .diagram-form input,
+.sistema-page .diagram-form select {
+  font-family: var(--mono);
+  font-size: 7.2px;
+  line-height: 1.6;
+}
+
+.sistema-page .diagram-tabs button small {
+  white-space: nowrap;
+}
+
+.sistema-dupla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 720px) {
+  .sistema-dupla { grid-template-columns: 1fr; }
+}
+
+.sistema-page .continuidade-check.is-warning {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.sistema-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 7px;
+  line-height: 1.55;
+  border-left: 2px solid var(--muted-3, #3a4250);
+  padding-left: 8px;
+}
+.sistema-aviso svg { flex: none; margin-top: 1px; }
+
+.sistema-hash {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #26303c);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel, #101720) 60%, transparent);
+}
+.sistema-hash span {
+  font-family: var(--mono);
+  font-size: 6.4px;
+  letter-spacing: .08em;
+  color: var(--muted-2);
+}
+.sistema-hash code {
+  font-family: var(--mono);
+  font-size: 6.8px;
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+}
+.sistema-hash button {
+  font-size: 6.6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line, #26303c);
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.sistema-hash button:hover { color: var(--text); border-color: var(--accent); }
+
+.sistema-shell {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #26303c);
+  background: color-mix(in srgb, #05080c 70%, transparent);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 6.8px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 320px;
+}
+
+.sistema-listas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .sistema-listas { grid-template-columns: 1fr; }
+}
+.sistema-listas h4 {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 6.6px;
+  letter-spacing: .08em;
+  color: var(--muted-2);
+  text-transform: uppercase;
+}
+.sistema-listas ul {
+  margin: 0;
+  padding-left: 14px;
+  display: grid;
+  gap: 4px;
+}
+.sistema-listas li {
+  font-size: 7px;
+  line-height: 1.55;
+  color: var(--muted-2);
+}
+.sistema-listas code {
+  font-family: var(--mono);
+  color: var(--text-soft);
+}
+
+.sistema-page .diagram-table td:first-child code { word-break: break-all; }
+.sistema-page .diagram-table code { overflow-wrap: anywhere; }
