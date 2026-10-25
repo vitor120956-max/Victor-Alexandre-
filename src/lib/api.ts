@@ -249,6 +249,27 @@ export async function getAIStatus(): Promise<AIStatus> {
   return apiFetch<AIStatus>('/api/ai/status');
 }
 
+export interface PesquisaFonte {
+  titulo: string;
+  url: string;
+  lida: boolean;
+}
+
+export interface PesquisaResposta {
+  ok: boolean;
+  pergunta: string;
+  modo: 'ia' | 'sem-ia';
+  resposta: string | null;
+  fontes: PesquisaFonte[];
+  trecho: string;
+  avisos: string[];
+  limites: string[];
+}
+
+export async function requestPesquisa(pergunta: string, autorizacao: string): Promise<{ ok: boolean; result: PesquisaResposta }> {
+  return apiFetch('/api/pesquisa/responder', { method: 'POST', body: JSON.stringify({ pergunta, autorizacao }) });
+}
+
 export async function requestAIChat(input: {
   message: string;
   history: Array<{ role: 'user' | 'jarvis'; content: string }>;

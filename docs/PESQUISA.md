@@ -7,9 +7,37 @@ Resposta curta para a pergunta mais comum: **o JARVIS consegue usar a web para r
 | Abrir uma busca no navegador | sim | chat: `pesquisar por X` |
 | Buscar na web de dentro do JARVIS | sim | skill `sistema.rede`, ação `buscar` |
 | Ler o texto de uma página | sim | skill `sistema.rede`, ação `olhar` |
-| **Redigir a resposta a partir do que leu** | **não** | falta ligar as duas pontas |
+| **Redigir a resposta a partir do que leu** | **sim, desde a 0.38.0** | chat: `pesquisar e responder X` |
 
-Ou seja: as peças existem separadas. O que não existe é o fluxo "pesquise, leia e me responda" automático.
+Desde a 0.38.0 as duas pontas estão ligadas: o comando `pesquisar e responder X` busca, lê as primeiras páginas e manda o texto ao modelo como material citável. Sem provedor configurado ele não falha — devolve as fontes e o trecho lido, sem resumo.
+
+## Pesquisa com fonte, no chat
+
+```text
+token SEU_TOKEN
+pesquisar e responder quem foi Machado de Assis
+```
+
+O `token` guarda o valor **só na memória desta aba**: não vai para o `localStorage` nem para o backup exportado. Some ao recarregar a página — é para isso mesmo.
+
+O que o JARVIS faz, em ordem:
+
+1. verifica o token e se a API subiu com `JARVIS_HOST_REDE=1`;
+2. busca os 6 primeiros resultados no DuckDuckGo;
+3. lê o texto das **2 primeiras** páginas (endereço privado é recusado);
+4. monta o material com título, URL e conteúdo de cada fonte;
+5. pede a resposta ao modelo com esse material, que entra como dado, nunca como instrução;
+6. devolve a resposta **e a lista de fontes**, marcando quais foram lidas.
+
+| Situação | O que você recebe |
+|---|---|
+| IA configurada | resposta redigida + fontes |
+| IA não configurada | fontes + trecho da primeira página, sem resumo |
+| Página que não abre | aviso citando o endereço, e a pesquisa continua nas outras |
+| Busca sem resultado | aviso explícito — ele não inventa link |
+| Provedor com erro (401, 429) | aviso com o motivo e as fontes continuam listadas |
+
+Variantes aceitas: `pesquise na web e me explique ...`, `buscar e responder ...`, `responder com fontes ...`.
 
 ## O que o chat faz
 
@@ -58,19 +86,17 @@ set JARVIS_HOST_REDE=1
 
 Não há resumo: o que vem é o texto da página, truncado. Quem interpreta é você.
 
-## O que mudaria com uma IA configurada
-
-Com chave, o JARVIS **responde** perguntas abertas — mas com o conhecimento que o modelo já tem, **não** com o resultado de uma busca feita agora.
-
-O canal para isso já existe: o campo `material` da requisição de IA aceita até 60.000 caracteres de texto do usuário e o envia como dado citável, nunca como instrução. Hoje, porém, **nada alimenta esse canal com resultado de busca**. Ligar as duas pontas é um trabalho de integração, não uma configuração.
-
-Enquanto isso não existe, a divisão é esta:
+## O que cada modo entrega
 
 | Sem chave | Com chave |
 |---|---|
-| a skill **encontra** e **lê** | a IA **explica** |
-| você interpreta | a IA interpreta, sem citar fonte |
-| nada sai da sua máquina (fora a busca e a página) | a pergunta vai ao provedor |
+| a skill **encontra** e **lê**; a busca com fonte devolve links + trecho | o comando `pesquisar e responder` **redige** a resposta com o texto lido |
+| você interpreta | a IA interpreta **citando as fontes** |
+| a pergunta não sai da máquina | pergunta e páginas lidas vão ao provedor |
+
+A diferença técnica está no campo `material` da requisição de IA: ele aceita até 60.000 caracteres de texto e o provedor o trata como **dado citável, nunca como instrução**. É o que impede uma página maliciosa de sequestrar o comportamento do modelo — o texto entra como material, não como ordem.
+
+As páginas lidas também passam pelo timeout do servidor: uma página que demora mais que o limite vira aviso e a pesquisa continua. Nada é gravado em disco: o material existe só durante a resposta.
 
 ## Limites que precisam ficar ditos
 

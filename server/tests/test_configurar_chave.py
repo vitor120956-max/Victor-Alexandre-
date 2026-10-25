@@ -1,4 +1,4 @@
-"""Testes do `configurar-chave.py` (0.37.7).
+"""Testes do `configurar-chave.py` (0.38.0).
 
 O script existe porque o Bloco de Notas do Windows 10 antigo (1607) não lê
 quebra de linha Unix e amassa o `.env`. Ele grava em CRLF, preserva as outras

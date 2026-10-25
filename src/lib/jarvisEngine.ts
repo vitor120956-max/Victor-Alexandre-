@@ -22,6 +22,8 @@ export type Intent =
   | { type: 'focus:stop' }
   | { type: 'focus:status' }
   | { type: 'web:search'; query: string }
+  | { type: 'pesquisa:responder'; pergunta: string }
+  | { type: 'host:token'; token: string }
   | { type: 'web:open'; destination: string; url: string }
   | { type: 'automation:summary' }
   | { type: 'automation:organize' }
@@ -128,6 +130,23 @@ function cleanTaskTitle(value: string): string {
     .replace(/\s+(?:com\s+)?prioridade\s+(?:alta|m[ée]dia|baixa)\b/gi, '')
     .replace(/\s+(?:é\s+)?urgente\b/gi, '')
     .trim();
+}
+
+/**
+ * Tira a cortesia do pedido para reconhecer "quero que você abra o YouTube"
+ * com a mesma regra que reconhece "abrir YouTube".
+ */
+export function normalizarPedidoDeAbertura(text: string): string {
+  let saida = text
+    .replace(/^(?:ei|oi|ola|jarvis|por favor|pf|pfv)[,\s]+/g, '')
+    .replace(/^(?:eu\s+)?(?:quero|queria|gostaria)(?:\s+(?:que|q)\s+(?:voce|vc|tu))?\s+/, '')
+    .replace(/^(?:voce\s+)?(?:pode|poderia|consegue|consegues|da\s+pra|da\s+para)\s+/, '')
+    .replace(/^(?:me\s+)/, '');
+  saida = saida
+    .replace(/\b(?:pra mim|para mim|no meu pc|no pc|no meu computador|aqui|agora)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return saida;
 }
 
 export function parseCommand(rawInput: string): Intent {
@@ -344,10 +363,22 @@ export function parseCommand(rawInput: string): Intent {
   if (/organizar prioridades|organizar tarefas|ordene (?:as )?tarefas/.test(text)) return { type: 'automation:organize' };
   if (/exportar (?:memoria|dados|backup)|fazer backup|backup da memoria/.test(text)) return { type: 'automation:backup' };
 
+  const token = input.match(/^(?:token|chave de host)\s+([A-Za-z0-9_\-+=/.]{8,})$/) ?? raw.match(/^(?:token|chave de host)\s+(\S{8,})$/);
+  if (token) return { type: 'host:token', token: token[1] };
+
+  const pesquisaRespondida = input.match(
+    /^(?:pesquis(?:ar|e|a)|busc(?:ar|e|a))\s+(?:(?:na|pela)\s+(?:web|internet)\s+)?e\s+(?:me\s+)?(?:responder|responda|explicar|explique|explica|resumir|resuma|dizer|diga)\s+(?:sobre\s+|por\s+)?(.+)$/i,
+  )
+    ?? input.match(/^(?:respond(?:a|er)|explic(?:a|ar))\s+com\s+(?:as\s+)?fontes?\s+(.+)$/i);
+  if (pesquisaRespondida?.[1]?.trim()) {
+    return { type: 'pesquisa:responder', pergunta: pesquisaRespondida[1].replace(/[?]+$/g, '').trim() };
+  }
+
   const search = input.match(/^(?:pesquisar|pesquise|procurar|procure|buscar|busque)(?:\s+na\s+(?:web|internet))?\s+(?:por\s+|sobre\s+)?(.+)$/i);
   if (search) return { type: 'web:search', query: search[1].replace(/[?]+$/g, '').trim() };
 
-  const open = text.match(/^(?:abrir|abra|acessar|acesse)\s+(?:o\s+|a\s+)?(.+)$/);
+  const pedido = normalizarPedidoDeAbertura(text);
+  const open = pedido.match(/^(?:abrir|abra|abre|acessar|acesse)\s+(?:(?:o|a|uma)\s+)?(?:tela\s+)?(?:d[oa]\s+|de\s+)?(.+)$/);
   if (open) {
     const key = open[1].replace(/[!.\s]+$/g, '').trim();
     const destination = destinations[key];
@@ -363,7 +394,8 @@ export const helpText = [
   '• Memória — “anotar minha ideia sobre o JARVIS” ou “mostrar notas”.',
   '• Foco — “iniciar foco de 25 minutos”, “pausar foco” ou “retomar foco”.',
   '• Cálculos — “calcular (1250 * 0,18) + 40”.',
-  '• Web — “pesquisar por automação pessoal” abre a busca no Google numa aba nova; o JARVIS não lê os resultados. Para pesquisa lida de verdade, use a skill “Busca e leitura na web” em Skills, com a rede ligada.',
+  '• Web — “pesquisar por automação pessoal” abre a busca no Google numa aba nova; o JARVIS não lê os resultados.',
+  '• Pesquisa com fonte — “pesquisar e responder quem foi Machado de Assis” busca, lê as primeiras páginas e pede a resposta ao modelo. Precisa da rede ligada (JARVIS_HOST_REDE=1) e do token: envie “token SEU_TOKEN” uma vez nesta aba. Sem IA configurada, ele devolve as fontes e o trecho lido, sem resumo (a skill “Busca e leitura na web” faz só encontrar e ler).',
   '• Python — “analisar texto JARVIS organiza minha rotina” ou “python status”.',
   '• Legislação — “artigo 49 do CDC” ou “pesquisar na legislação sobre proteção de dados”.',
   '• Documentos — “listar documentos” ou “ler PDF documentos/relatorio.pdf”. Criação exige confirmação na página Documentos.',

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, requestAIChat } from '../lib/api';
+import { executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, requestAIChat, requestPesquisa } from '../lib/api';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
@@ -118,6 +118,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [pythonSkills, setPythonSkills] = useState<PythonSkill[]>([]);
   const [aiStatus, setAIStatus] = useState<AIStatus>(initialAIStatus);
   const [processing, setProcessing] = useState<'ai' | 'python' | null>(null);
+  // Token de host fica só na memória desta aba: não é persistido e não entra no backup.
+  const [hostToken, setHostToken] = useState('');
   const completionRef = useRef('');
 
   const dismissToast = useCallback((id: string) => {
@@ -640,6 +642,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? `Nenhuma sessão ativa. Hoje você acumulou ${formatDuration(focus.elapsedToday)} de foco.`
           : `O foco está ${focus.status === 'running' ? 'em andamento' : focus.status === 'paused' ? 'pausado' : 'concluído'}, com ${formatTime(focus.remaining)} restantes. Total de hoje: ${formatDuration(focus.elapsedToday)}.`;
         break;
+      case 'host:token': {
+        setHostToken(intent.token);
+        reply = 'Token de host guardado apenas nesta aba. Ele não é salvo no navegador nem no backup. Use “pesquisar e responder ...”.';
+        break;
+      }
+      case 'pesquisa:responder': {
+        if (!hostToken) {
+          reply = [
+            'Para isso eu preciso do token de host, que fica em storage/host-token.txt nesta máquina.',
+            'Copie a linha e envie aqui no formato: token SEU_TOKEN',
+            'Depois repita o pedido. O token vale só nesta aba e não é gravado.',
+          ].join('\n\n');
+          break;
+        }
+        setProcessing('python');
+        void requestPesquisa(intent.pergunta, hostToken)
+          .then(({ result }) => {
+            const fontes = result.fontes.map((fonte, indice) => `${indice + 1}. ${fonte.titulo || fonte.url} — ${fonte.url}`).join('\n');
+            if (result.modo === 'ia' && result.resposta) {
+              appendJarvisMessage([result.resposta, '', 'Fontes:', fontes].join('\n'), 'ai');
+            } else {
+              const cabeca = `Encontrei ${result.fontes.length} fonte(s), mas a IA não está configurada para redigir. O texto abaixo é o que foi lido da página, sem resumo:`;
+              const trecho = result.trecho ? `\n\n“${result.trecho.slice(0, 900)}…”` : '';
+              appendJarvisMessage([cabeca, '', fontes, trecho].join('\n'), 'python');
+            }
+            if (result.avisos.length) appendJarvisMessage(`Avisos: ${result.avisos.join(' · ')}`);
+          })
+          .catch((error: unknown) => {
+            const detalhe = error instanceof Error ? error.message : 'falha desconhecida';
+            appendJarvisMessage(`Não consegui pesquisar: ${detalhe}`);
+          })
+          .finally(() => setProcessing(null));
+        return;
+      }
       case 'web:search': {
         const url = `https://www.google.com/search?q=${encodeURIComponent(intent.query)}`;
         const opened = window.open(url, '_blank');
@@ -686,7 +722,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     appendJarvisMessage(reply);
-  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
+  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     if (patch.notifications && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {

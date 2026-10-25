@@ -20,14 +20,24 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
+from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
-from .sistema import token_host as sistema_token_host
+from .sistema import SistemaError, token_host as sistema_token_host
 from .skill_registry import SkillError, SkillRegistry, build_registry
 from .workspace import MAX_DOCUMENT_BYTES, VISIBLE_EXTENSIONS, download_url, regular_file, safe_path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAX_BODY_BYTES = 2_000_000
 MAX_UPLOAD_BODY_BYTES = MAX_DOCUMENT_BYTES + 1_000_000
+
+
+class PesquisaRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    pergunta: str = Field(min_length=3, max_length=400)
+    autorizacao: str = Field(default="")
+    limite: int = Field(default=6, ge=1, le=10)
+    paginas: int = Field(default=2, ge=0, le=3)
 
 
 class ExecuteRequest(BaseModel):
@@ -153,7 +163,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.37.7",
+        version="0.38.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -188,7 +198,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.37.7",
+            "version": "0.38.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
@@ -364,6 +374,23 @@ def create_app(
         except Exception:
             return JSONResponse(status_code=502, content={"ok": False, "error": {"code": "AI_UNAVAILABLE", "message": "A camada de IA não conseguiu concluir a resposta."}})
         return {"ok": True, "content": content, "provider": provider.status()["provider"], "external": True}
+
+    @application.post("/api/pesquisa/responder")
+    async def pesquisa_responder_rota(payload: PesquisaRequest) -> dict[str, Any]:
+        try:
+            resultado = await pesquisa_responder(
+                payload.pergunta,
+                autorizacao=payload.autorizacao,
+                provedor=provider,
+                limite=payload.limite,
+                paginas=payload.paginas,
+            )
+        except SistemaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "PESQUISA_RECUSADA", "message": str(exc)}},
+            )
+        return {"ok": True, "result": resultado}
 
     # ------------------------------------------------------------ estação real
 
