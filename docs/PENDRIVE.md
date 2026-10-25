@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.37.2 D:\JARVIS
+jarvis-nucleo-pessoal@0.37.3 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -613,7 +613,7 @@ Validado numa cópia limpa (sem `node_modules`, sem `dist`, sem `.git`): `/api/h
 | `npm run dev` (desenvolvimento) | sim | sim | **9.198** | 18 MB + 139 MB = **157 MB** | 5173 + 8000 |
 | `py iniciar.py` (sem Node) | **não** | **não** | **~4.400** | 18 MB + 103 MB = **121 MB** | **8000** |
 
-Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` (0.37.2, sem o extra `standard`) = **103 MB**, **31 pacotes** e **4.410 arquivos** — era 124 MB e 36 pacotes antes de tirar o `PyYAML`. O `npm install` grava **9.198 arquivos**; o `pip` grava pouco mais de **4.400**, cerca de metade, e nenhum deles é arquivo pequeno de dependência JavaScript, que é o que dói num pendrive USB 2.0.
+Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` (0.37.3, sem o extra `standard`) = **103 MB**, **31 pacotes** e **4.410 arquivos** — era 124 MB e 36 pacotes antes de tirar o `PyYAML`. O `npm install` grava **9.198 arquivos**; o `pip` grava pouco mais de **4.400**, cerca de metade, e nenhum deles é arquivo pequeno de dependência JavaScript, que é o que dói num pendrive USB 2.0.
 
 O `iniciar.py` aceita `--porta 8080` e `--host 0.0.0.0` (para acessar de outro aparelho na rede local). Ele também troca sozinho para o Python do `.venv` quando existir.
 
@@ -679,6 +679,26 @@ JARVIS_AI_MODEL=gpt-4o-mini
 JARVIS_AI_API_KEY=valor-da-chave
 ```
 
+### Onde conseguir a chave sem pagar
+
+Não existe chave grátis da OpenAI — site que oferece isso está revendendo chave vazada. Servem três provedores compatíveis, **nenhum deles pede cartão**:
+
+| Provedor | Camada gratuita | Base | Chave em |
+|---|---|---|---|
+| Groq | ~1.000 requisições/dia, 30 por minuto | `https://api.groq.com/openai/v1` | <https://console.groq.com/keys> |
+| Google AI Studio | cota diária por modelo | `https://generativelanguage.googleapis.com/v1beta/openai` | <https://aistudio.google.com/apikey> |
+| OpenRouter | 50 requisições/dia (modelos `:free`) | `https://openrouter.ai/api/v1` | <https://openrouter.ai/keys> |
+
+O passo a passo de cada um, com o que digitar em cada campo e o aviso de privacidade (o plano gratuito do Google usa suas conversas para treinar; o do Groq não), está em [`CONFIGURAR-IA.md`](CONFIGURAR-IA.md) §0.
+
+Com a chave em mãos, o teste rápido é:
+
+```bat
+.venv\Scripts\python configurar-chave.py --testar
+```
+
+Ele faz uma chamada de verdade e responde `FUNCIONOU` ou o motivo em português (401 chave, 404 modelo, 429 cota). Sem reiniciar nada.
+
 > **Cuidado no Bloco de Notas antigo.** Se você baixou uma cópia anterior à 0.37.1, o `.env` e o `.env.example` vêm com quebra de linha Unix e o Notepad do Windows 10 1607 mostra tudo numa linha só. Se salvar nesse estado, o arquivo é amassado e a chave se perde. Ou use o `configurar-chave.py`, ou no Bloco de Notas faça **Arquivo → Novo**, cole as quatro linhas acima e salve como `D:\JARVIS\.env` (tipo **Todos os arquivos**) — arquivo novo já sai com a quebra de linha certa.
 
 O `.env` está no `.gitignore`: não entra no Git e não deve ser compartilhado junto com o pendrive.
@@ -705,7 +725,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.37.2"` e `"skills": 209`.
+Esperado: `"version": "0.37.3"` e `"skills": 209`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -805,7 +825,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 | `npm error ENOENT … C:\Users\pc\package.json` | comando rodou fora da pasta do projeto | `cd /d D:\JARVIS` antes de qualquer `npm` |
 | `npm ls` mostra `UNMET DEPENDENCY` | instalação interrompida | rodar `npm install` de novo (é idempotente) |
 | `.venv` quebrou depois de trocar de porta USB | caminho absoluto mudou | apagar `.venv` e recriar na máquina |
-| `Building wheel for pyyaml ... error` / `Microsoft Visual C++ 14.0 or greater is required` | `PyYAML` não tem wheel para Python 3.15 no Windows; vinha pelo `uvicorn[standard]` | usar o `requirements.txt` da 0.37.2 (sem `[standard]`) e rodar o `pip install` de novo — o `pip` aborta **tudo** quando um pacote falha, então até aqui nada foi instalado (§1) |
+| `Building wheel for pyyaml ... error` / `Microsoft Visual C++ 14.0 or greater is required` | `PyYAML` não tem wheel para Python 3.15 no Windows; vinha pelo `uvicorn[standard]` | usar o `requirements.txt` da 0.37.3 (sem `[standard]`) e rodar o `pip install` de novo — o `pip` aborta **tudo** quando um pacote falha, então até aqui nada foi instalado (§1) |
 | `Faltam as bibliotecas Python` mas o `.venv` existe | o `pip install` parou no meio; o `.venv` está vazio | subir `pip list` e conferir; quase sempre é o caso da linha acima |
 | `Token de host inválido` | token de outro projeto/cópia | ler `storage/host-token.txt` desta cópia |
 | `A origem não existe` | caminho errado | informar o caminho completo da pasta Downloads |
@@ -825,7 +845,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.37.2` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.37.3` e `209`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

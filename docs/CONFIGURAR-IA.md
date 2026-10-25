@@ -2,6 +2,88 @@
 
 A camada generativa é opcional. As skills locais e Python não dependem dela.
 
+## 0. Onde conseguir uma chave sem pagar
+
+**Não existe chave grátis da OpenAI.** A OpenAI não tem mais camada gratuita de API desde 2024. Todo site que oferece "chave OpenAI grátis" está revendendo chave vazada ou compartilhada: ela para de funcionar em horas e todo mundo que a usa lê o que você escreve. Não use.
+
+O JARVIS fala o formato **OpenAI Chat Completions**, então serve qualquer provedor compatível. Estes três têm camada gratuita de verdade e **não pedem cartão**:
+
+| Provedor | O que é grátis | Base para o `JARVIS_AI_BASE_URL` | Onde pegar a chave |
+|---|---|---|---|
+| **Groq** | 30 req/min e cerca de **1.000 requisições por dia** nos modelos abertos | `https://api.groq.com/openai/v1` | <https://console.groq.com/keys> |
+| **Google AI Studio** (Gemini) | cota diária por modelo, mostrada no próprio painel | `https://generativelanguage.googleapis.com/v1beta/openai` | <https://aistudio.google.com/apikey> |
+| **OpenRouter** | **50 req/dia** em modelos com `:free` no nome (1.000/dia depois de comprar US$ 10 em créditos, uma vez só) | `https://openrouter.ai/api/v1` | <https://openrouter.ai/keys> |
+
+Números conferidos em **25/10/2026**. Limite de camada gratuita muda sem aviso; o painel do provedor manda mais que esta tabela.
+
+### Privacidade de cada um
+
+| Provedor | Usa suas conversas para treinar? |
+|---|---|
+| Groq | **não** por padrão |
+| OpenRouter | depende do modelo de origem; os `:free` variam |
+| Google AI Studio | **sim** na camada gratuita, fora da União Europeia, Reino Unido e Suíça — o Brasil entra nessa |
+
+Se a conversa tiver dado sensível, prefira o Groq ou simplesmente não configure IA externa: as 209 skills locais continuam funcionando sem chave nenhuma.
+
+### Passo a passo — Groq (o mais rápido, ~3 minutos)
+
+1. Abra <https://console.groq.com/keys>.
+2. Crie a conta com e-mail ou com a conta do Google. **Não pede cartão.**
+3. Clique em **Create API Key**, dê um nome qualquer (ex.: `jarvis`) e confirme.
+4. **Copie a chave agora** — ela aparece uma vez só, começando com `gsk_`. Se perder, crie outra.
+5. Anote também o **nome do modelo** que aparece em *Models* no menu. Use o identificador exato, sem inventar.
+
+Depois, no `cmd`:
+
+```bat
+cd /d D:\JARVIS
+.venv\Scripts\python configurar-chave.py
+```
+
+Responda:
+
+```text
+Provedor [OpenAI]: Groq
+Base da API [https://api.openai.com/v1]: https://api.groq.com/openai/v1
+Modelo [gpt-4o-mini]: nome-que-voce-copiou-do-painel
+Chave (não aparece ao digitar): gsk_...
+```
+
+### Passo a passo — Google AI Studio
+
+1. Abra <https://aistudio.google.com/apikey> com a sua conta Google.
+2. **Create API key** num projeto novo. **Não pede cartão.**
+3. Copie a chave (começa com `AIza`).
+4. No `configurar-chave.py`, use provedor `Gemini`, base `https://generativelanguage.googleapis.com/v1beta/openai` e o modelo no formato `gemini-...` que o painel mostrar.
+
+Não acrescente `/chat/completions` na base: o servidor põe esse caminho sozinho. Barra sobrando no fim é removida pelo script.
+
+### Passo a passo — OpenRouter
+
+1. Abra <https://openrouter.ai/keys> e entre com e-mail ou GitHub.
+2. **Create Key**, copie (começa com `sk-or-v1-`).
+3. Provedor `OpenRouter`, base `https://openrouter.ai/api/v1`.
+4. O modelo **precisa** terminar em `:free`, por exemplo `nvidia/nemotron-3-super:free`. **Não esqueça o `:free`, ou a chamada vira cobrança.**
+
+### Confira antes de reiniciar o servidor
+
+```bat
+.venv\Scripts\python configurar-chave.py --testar
+```
+
+Ele faz uma chamada real de 8 tokens e responde em português:
+
+| Saída | Significa |
+|---|---|
+| `FUNCIONOU. O modelo respondeu: ...` | chave, base e modelo estão certos |
+| `a chave foi recusada (HTTP 401)` | copiou a chave pela metade ou ela foi apagada |
+| `base ou modelo não encontrado (HTTP 404)` | nome do modelo errado — copie de novo do painel |
+| `cota ou limite de requisições estourado (HTTP 429)` | acabou a cota do dia; espere ou troque de provedor |
+| `Falhou na conexão` | internet, proxy ou firewall bloqueando |
+
+O teste não imprime a chave. Você pode rodá-lo quantas vezes quiser.
+
 ## 1. Escolha um provedor compatível
 
 O backend chama `POST {JARVIS_AI_BASE_URL}/chat/completions` com o formato OpenAI Chat Completions. Consulte a documentação do provedor escolhido para obter:

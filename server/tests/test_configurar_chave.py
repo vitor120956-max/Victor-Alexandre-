@@ -1,4 +1,4 @@
-"""Testes do `configurar-chave.py` (0.37.2).
+"""Testes do `configurar-chave.py` (0.37.3).
 
 O script existe porque o Bloco de Notas do Windows 10 antigo (1607) não lê
 quebra de linha Unix e amassa o `.env`. Ele grava em CRLF, preserva as outras
@@ -143,3 +143,119 @@ def test_script_nao_esta_no_gitignore_e_e_versionado():
     linhas = {linha.strip() for linha in texto.splitlines()}
     assert "configurar-chave.py" not in linhas
     assert CAMINHO.is_file()
+
+
+# ---------------------------------------------------------------------------
+# --testar: faz uma chamada real e traduz o erro em português.
+# Os testes usam um servidor falso no lugar da rede.
+# ---------------------------------------------------------------------------
+
+class RespostaFalsa:
+    def __init__(self, status, corpo=None):
+        self.status_code = status
+        self._corpo = corpo
+
+    def json(self):
+        if self._corpo is None:
+            raise ValueError("sem json")
+        return self._corpo
+
+
+@pytest.fixture()
+def httpx_falso(monkeypatch):
+    import httpx
+
+    caixa = {"resposta": RespostaFalsa(200, {"choices": [{"message": {"content": "ok"}}]}), "erro": None, "pedido": None}
+
+    def post(url, headers=None, json=None, timeout=None):
+        caixa["pedido"] = {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        if caixa["erro"] is not None:
+            raise caixa["erro"]
+        return caixa["resposta"]
+
+    monkeypatch.setattr(httpx, "post", post)
+    return caixa
+
+
+def test_tester_sucesso_mostra_a_resposta(script, httpx_falso, capsys):
+    assert script.tester("https://api.exemplo.com/v1", "modelo-x", "sk-teste-1234567890") is True
+    saida = capsys.readouterr().out
+    assert "FUNCIONOU" in saida
+    assert "ok" in saida
+    assert "sk-teste-1234567890" not in saida
+
+
+def test_tester_nao_vaza_a_chave_no_cabecalho(script, httpx_falso, capsys):
+    script.tester("https://api.exemplo.com/v1", "modelo-x", "sk-segredo-abcdefgh")
+    assert "sk-segredo-abcdefgh" not in capsys.readouterr().out
+    assert httpx_falso["pedido"]["headers"]["Authorization"] == "Bearer sk-segredo-abcdefgh"
+
+
+def test_tester_monta_a_url_sem_barra_dupla(script, httpx_falso):
+    script.tester("https://api.exemplo.com/v1/", "modelo-x", "sk-1")
+    assert httpx_falso["pedido"]["url"] == "https://api.exemplo.com/v1/chat/completions"
+
+
+def test_tester_sem_chave_nao_chama_a_rede(script, httpx_falso, capsys):
+    assert script.tester("https://api.exemplo.com/v1", "modelo-x", "") is False
+    assert httpx_falso["pedido"] is None
+    assert "Não há chave" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "status,esperado",
+    [
+        (401, "recusada"),
+        (404, "não encontrado"),
+        (429, "limite"),
+        (500, "HTTP 500"),
+    ],
+)
+def test_tester_traduz_os_erros(script, httpx_falso, capsys, status, esperado):
+    httpx_falso["resposta"] = RespostaFalsa(status)
+    assert script.tester("https://api.exemplo.com/v1", "modelo-x", "sk-1") is False
+    assert esperado in capsys.readouterr().out
+
+
+def test_tester_com_falha_de_rede(script, httpx_falso, capsys):
+    import httpx
+
+    httpx_falso["erro"] = httpx.ConnectError("sem rede")
+    assert script.tester("https://api.exemplo.com/v1", "modelo-x", "sk-1") is False
+    assert "conexão" in capsys.readouterr().out
+
+
+def test_testar_sozinho_confere_sem_gravar(script, httpx_falso, tmp_path, capsys):
+    script.principal(["--chave", "sk-teste-1234567890"])
+    antes = (tmp_path / ".env").read_bytes()
+    assert script.principal(["--testar"]) == 0
+    assert (tmp_path / ".env").read_bytes() == antes
+    assert "FUNCIONOU" in capsys.readouterr().out
+
+
+def test_testar_junto_com_chave_grava_e_confere(script, httpx_falso, tmp_path, capsys):
+    assert script.principal(["--chave", "sk-teste-1234567890", "--testar"]) == 0
+    assert b"JARVIS_AI_API_KEY=sk-teste-1234567890" in (tmp_path / ".env").read_bytes()
+    assert "FUNCIONOU" in capsys.readouterr().out
+
+
+def test_script_oferece_o_teste_de_verdade():
+    texto = CAMINHO.read_text(encoding="utf-8")
+    assert "--testar" in texto
+    assert "FUNCIONOU" in texto
+    assert "429" in texto
+
+
+def test_doc_ensina_onde_conseguir_chave_sem_pagar():
+    texto = (RAIZ / "docs" / "CONFIGURAR-IA.md").read_text(encoding="utf-8")
+    baixo = texto.lower()
+    for provedor in ("groq", "aistudio.google.com", "openrouter"):
+        assert provedor in baixo, f"falta {provedor} na lista de provedores gratuitos"
+    assert "não existe chave grátis da openai" in baixo
+    assert "nenhum" in baixo and "cartão" in baixo
+
+
+def test_doc_do_pendrive_aponta_para_os_provedores():
+    texto = (RAIZ / "docs" / "PENDRIVE.md").read_text(encoding="utf-8")
+    assert "console.groq.com/keys" in texto
+    assert "CONFIGURAR-IA.md" in texto

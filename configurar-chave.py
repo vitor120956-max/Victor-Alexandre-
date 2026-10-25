@@ -110,6 +110,64 @@ def perguntar(rotulo: str, padrao: str) -> str:
     return resposta or padrao
 
 
+def tester(base: str, modelo: str, chave: str) -> bool:
+    """Faz uma chamada mínima de verdade e diz, em português, o que aconteceu.
+
+    Não imprime a chave nem o corpo cru da resposta do provedor.
+    """
+    if not chave:
+        print("Não há chave gravada para testar. Rode sem --testar e informe a chave.")
+        return False
+    if not base or not modelo:
+        print("Faltam JARVIS_AI_BASE_URL ou JARVIS_AI_MODEL no .env.")
+        return False
+
+    url = f"{base.rstrip('/')}/chat/completions"
+    print(f"Testando {modelo} em {url} ...")
+    try:
+        import httpx  # noqa: PLC0415 - só é necessário aqui
+    except ImportError:
+        print("O pacote httpx não está instalado; não dá para testar agora.")
+        return False
+
+    try:
+        resposta = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
+            json={
+                "model": modelo,
+                "messages": [{"role": "user", "content": "responda apenas: ok"}],
+                "max_tokens": 8,
+            },
+            timeout=45.0,
+        )
+    except httpx.HTTPError as exc:
+        print(f"Falhou na conexão: {type(exc).__name__}. Verifique a internet e a base da API.")
+        return False
+
+    if resposta.status_code == 200:
+        try:
+            texto_resposta = resposta.json()["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            print("HTTP 200, mas a resposta não tem o formato esperado. Confira a base: ela precisa ser compatível com OpenAI.")
+            return False
+        amostra = " ".join(str(texto_resposta).split())[:80]
+        print(f"FUNCIONOU. O modelo respondeu: {amostra!r}")
+        return True
+
+    mapa = {
+        401: "a chave foi recusada (HTTP 401). Confira se copiou a chave inteira.",
+        403: "a chave não tem permissão para este modelo (HTTP 403).",
+        404: "base ou modelo não encontrado (HTTP 404). Copie o nome exato do modelo no painel do provedor.",
+        422: "o provedor recusou o formato do pedido (HTTP 422). Provavelmente é o nome do modelo.",
+        429: "cota ou limite de requisições estourado (HTTP 429). Tente mais tarde.",
+    }
+    print(mapa.get(resposta.status_code, f"o provedor respondeu HTTP {resposta.status_code}."))
+    if resposta.status_code in (400, 404, 422):
+        print("Dica: o nome do modelo muda com o tempo. Copie o identificador exato que aparece no painel do provedor.")
+    return False
+
+
 def principal(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Grava a chave de IA no .env sem abrir editor de texto."
@@ -122,6 +180,11 @@ def principal(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--chave",
         help="Grava a chave direto. Prefira deixar em branco: o padrão é digitar sem eco, sem deixar rastro no histórico.",
+    )
+    parser.add_argument(
+        "--testar",
+        action="store_true",
+        help="Depois de gravar (ou com o que já está no .env), faz uma chamada real e diz se a chave, a base e o modelo funcionam.",
     )
     args = parser.parse_args(argv)
 
@@ -141,6 +204,17 @@ def principal(argv: list[str] | None = None) -> int:
         gravar(definir(texto, CHAVE, ""))
         print(f"Chave apagada em {ENV}. As outras variáveis continuam iguais.")
         return 0
+
+    # `--testar` sozinho confere o que já está gravado; junto de um valor a
+    # gravar, ele confere depois de gravar.
+    escrevendo = args.chave is not None or bool(args.provedor or args.base or args.modelo)
+    if args.testar and not escrevendo:
+        prova = tester(
+            ler_valor(texto, "JARVIS_AI_BASE_URL") or CAMPOS["JARVIS_AI_BASE_URL"],
+            ler_valor(texto, "JARVIS_AI_MODEL") or CAMPOS["JARVIS_AI_MODEL"],
+            ler_valor(texto, CHAVE) or "",
+        )
+        return 0 if prova else 1
 
     print("Configurar a IA externa do JARVIS")
     print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")
@@ -187,6 +261,11 @@ def principal(argv: list[str] | None = None) -> int:
     print(f"  base:     {base}")
     print(f"  modelo:   {modelo}")
     print(f"  chave:    {mascarar(chave)}")
+    if args.testar:
+        print()
+        tester(base, modelo, chave)
+        print()
+
     print("\nAgora reinicie o servidor para ele ler o arquivo novo:")
     if os.name == "nt":
         print(r"  Ctrl+C na janela atual, depois: .venv\Scripts\python iniciar.py")
