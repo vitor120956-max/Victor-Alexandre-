@@ -19,7 +19,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 260 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 264 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -82,6 +82,10 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `procura o livro Dom Casmurro` | `cultura.buscar` (Gutendex, sem chave) | não |
 | `baixa o livro 59863` | `cultura.baixar` (Gutenberg → biblioteca) | **sim** |
 | `faz uma persona do livro Dom Casmurro` | `cultura.persona` (mede estilo, grava o cartão) | **sim** |
+| `abre o bloco de notas` · `abre a calculadora` | `pc.abrir-programa` (lista fechada) | **sim** |
+| `abre o arquivo contrato.pdf` | `pc.abrir-arquivo` (só pastas do usuário) | **sim** |
+| `qual é o meu ip` · `quanto tem de espaço em disco` | `pc.comando` (lista fechada, só leitura) | **sim** |
+| `quais programas você abre` | `pc.programas` (só lê) | não |
 
 Pergunta com `?` nunca dispara a skill de cópia: no máximo ela mostra o estado.
 `abre o drive` e `pausa o drive` continuam indo para a busca normal.
@@ -135,7 +139,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 260 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 264 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 

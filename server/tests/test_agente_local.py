@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "260 skills" in texto
+    assert "264 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 260 skills, uma por uma
+# ------------------------------------- cobertura: as 264 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 260 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 264 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2221,3 +2221,76 @@ def test_formatar_catalogo_do_topico() -> None:
     )
     assert "tópico “agent-skills”" in texto
     assert "total agora: 140" in texto
+
+
+# ------------------------------------------------------ camada do PC (0.54.0)
+
+
+def test_pedido_para_abrir_programa() -> None:
+    from server.agente_local import _pedido_direto_de_pc
+
+    pedido = _pedido_direto_de_pc("abre o bloco de notas")
+    assert pedido["skill_id"] == "pc.abrir-programa"
+    assert pedido["parametros"]["nome"] == "bloco de notas"
+    assert pedido["confirma"] is True
+    assert _pedido_direto_de_pc("abre a calculadora")["parametros"]["nome"] == "calculadora"
+
+
+def test_pedido_para_abrir_arquivo() -> None:
+    from server.agente_local import _pedido_direto_de_pc
+
+    pedido = _pedido_direto_de_pc("abre o arquivo contrato.pdf")
+    assert pedido["skill_id"] == "pc.abrir-arquivo"
+    assert pedido["parametros"]["caminho"] == "contrato.pdf"
+    assert _pedido_direto_de_pc("abre o arquivo do mês") is None
+
+
+def test_pedido_de_comando_pronto_do_pc() -> None:
+    from server.agente_local import _pedido_direto_de_pc
+
+    assert _pedido_direto_de_pc("qual é o meu ip")["parametros"]["nome"] == "ip"
+    assert _pedido_direto_de_pc("roda o ipconfig")["parametros"]["nome"] == "ip"
+    assert _pedido_direto_de_pc("quanto tem de espaço em disco")["parametros"]["nome"] == "disco"
+
+
+def test_pedido_de_listar_programas() -> None:
+    from server.agente_local import _pedido_direto_de_pc
+
+    pedido = _pedido_direto_de_pc("quais programas você abre")
+    assert pedido["skill_id"] == "pc.programas"
+    assert pedido["confirma"] is False
+
+
+def test_abrir_gmail_nao_vira_programa() -> None:
+    from server.agente_local import _pedido_direto_de_pc
+
+    assert _pedido_direto_de_pc("abre o gmail com as faturas") is None
+    assert _pedido_direto_de_pc("abre o drive") is None
+
+
+def test_formatar_programas_do_pc() -> None:
+    texto = formatar_resultado(
+        {
+            "ligado": False,
+            "variavel": "JARVIS_HOST_PC",
+            "programas": [{"nome": "notepad", "rotulo": "Bloco de notas", "executavel": "notepad.exe"}],
+            "comandos": [{"nome": "ip", "rotulo": "Endereços de rede", "linha": "ipconfig"}],
+            "nota": "Lista fechada.",
+        }
+    )
+    assert "Camada do PC: desligada" in texto
+    assert "Bloco de notas" in texto
+    assert "Endereços de rede" in texto
+
+
+def test_formatar_saida_de_comando() -> None:
+    texto = formatar_resultado(
+        {
+            "rotulo": "Endereços de rede",
+            "linha": "ipconfig",
+            "saida": "192.168.0.10",
+            "codigo": 0,
+        }
+    )
+    assert "`ipconfig`" in texto
+    assert "192.168.0.10" in texto

@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import catalogo, correio, cultura, drive_setup, github, habilidades, mesa
+from . import catalogo, correio, cultura, drive_setup, github, habilidades, mesa, pc
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2041,6 +2041,21 @@ class HabilidadesImportarVariasInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     links: str = Field(min_length=10, max_length=8_000, title="Links", json_schema_extra={"format": "textarea", "description": "Um link por linha (ou separados por espaço). Até 20 por chamada."})
     limite: int = Field(default=10, ge=1, le=20, title="Quantos importar")
+
+
+class PcProgramaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nome: str = Field(min_length=2, max_length=40, title="Programa", json_schema_extra={"description": "Da lista fechada: notepad, calc, mspaint, explorer, cmd, powershell, taskmgr, control, charmap, magnify."})
+
+
+class PcArquivoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(min_length=3, max_length=400, title="Arquivo", json_schema_extra={"description": "Dentro de storage/, Downloads, Documentos ou Área de trabalho. PDF, Office, texto, imagem, áudio ou vídeo."})
+
+
+class PcComandoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nome: Literal["ip", "ip-tudo", "sistema", "processos", "usuarios", "versao", "disco", "data", "boot"] = Field(title="Comando", json_schema_extra={"description": "Comando de leitura da lista fechada — não é linha digitada."})
 
 
 class CatalogoTopicoInput(BaseModel):
@@ -3858,6 +3873,36 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             f"Não achei a planilha “{bruto}”. Deixe o CSV em {raiz_storage / nome} (ou em Downloads)."
         )
 
+    def pc_programas_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return pc.programas()
+
+    def pc_abrir_programa_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PcProgramaInput)
+        if dry_run:
+            return {"abriria": data.nome, "nota": "Simulação: nada foi aberto."}
+        try:
+            return pc.abrir_programa(data.nome)
+        except pc.PcError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def pc_abrir_arquivo_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PcArquivoInput)
+        if dry_run:
+            return {"abriria": data.caminho, "nota": "Simulação: nada foi aberto."}
+        try:
+            return pc.abrir_arquivo(data.caminho)
+        except pc.PcError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def pc_comando_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PcComandoInput)
+        if dry_run:
+            return {"rodaria": data.nome, "nota": "Simulação: nada foi executado."}
+        try:
+            return pc.rodar_comando(data.nome)
+        except pc.PcError as exc:
+            raise SkillError(str(exc)) from exc
+
     def catalogo_topico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CatalogoTopicoInput)
         try:
@@ -4803,6 +4848,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
         SkillDefinition("habilidades.importar-varias", "Importar várias habilidades", "Recebe uma lista de links (uma por linha) e importa até 20 de uma vez; um link que falha não derruba os outros e volta com o motivo. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarVariasInput, habilidades_importar_varias_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("pc.programas", "Programas e comandos do PC", "Lista o que ele consegue abrir (bloco de notas, calculadora, paint, explorer, cmd, powershell…) e quais comandos de leitura sabe rodar. Só lê a lista; não abre nada.", "PC", EmptyInput, pc_programas_handler, timeout_seconds=10),
+        SkillDefinition("pc.abrir-programa", "Abrir programa no PC", "Abre um programa da lista fechada, sem argumento e sem caminho livre. Exige `JARVIS_HOST_PC=1` e confirmação; no Linux/macOS a skill recusa e explica.", "PC", PcProgramaInput, pc_abrir_programa_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("pc.abrir-arquivo", "Abrir arquivo no PC", "Abre um documento com o programa padrão do Windows, só dentro de storage/, Downloads, Documentos, Desktop ou OneDrive, e só de formato de leitura — `.exe`, `.bat`, `.ps1` e `.lnk` são recusados.", "PC", PcArquivoInput, pc_abrir_arquivo_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("pc.comando", "Comando pronto do PC", "Roda um comando de leitura da lista fechada (ipconfig, systeminfo, tasklist, ver, query user, disco, data, boot) e devolve a saída. O comando é escolhido por nome — não existe linha livre para injetar nada.", "PC", PcComandoInput, pc_comando_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("catalogo.topico", "Catálogo de um tópico do GitHub", "Lê os repositórios de um tópico do GitHub (ex.: `agent-skills`), encontra os `SKILL.md` de cada um e soma tudo ao catálogo local. Uma leva de 12 repositórios gasta 13 dos 60 pedidos por hora do GitHub público.", "Catálogo", CatalogoTopicoInput, catalogo_topico_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("habilidades.adaptar", "Adaptar habilidade para uso próprio", "Transforma o guia importado em skill local de procedimento (`local.proc-…`), com passos numerados, que passa a responder no chat pelo nome. Continua sendo uma lista de passos, não código executando sozinho.", "Habilidades", HabilidadeAdaptarInput, habilidades_adaptar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("cultura.fontes", "Fontes de livros livres", "Mostra onde baixar livro completo e gratuito — Gutenberg, Standard Ebooks, Open Library, Wikisource, Domínio Público, LibriVox e DOAB — com o que cada um tem, a licença e o que precisa (quase sempre nada).", "Cultura", EmptyInput, cultura_fontes_handler, timeout_seconds=10),

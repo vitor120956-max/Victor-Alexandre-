@@ -1749,6 +1749,75 @@ _RE_BAIXAR_LIVRO = re.compile(
 )
 
 
+_RE_LISTAR_PC = re.compile(
+    r"\b(?:quais|que)\b[^.]*\b(?:programas?|comandos?)\b[^.]*\b(?:abre|abrir|roda|rodar|consegue|sabe)\b",
+    re.I,
+)
+_RE_ABRIR_PROGRAMA = re.compile(
+    r"\b(?:abre|abrir|abra|inicia|iniciar|lance|lan[çc]ar|executa|executar)\b\s+"
+    r"(?:o |a |os |as )?(?:programa\s+)?(?P<nome>[\wÀ-ÿ .-]{2,40}?)\s*(?:para mim|agora|por favor)?$",
+    re.I,
+)
+_RE_ABRIR_ARQUIVO = re.compile(
+    r"\b(?:abre|abrir|abra|mostra|mostrar|exibe|exibir)\b\s+(?:o\s+|a\s+)?(?:arquivo|pdf|documento|planilha|imagem)\s+"
+    r"(?P<caminho>[^\n]+)$",
+    re.I,
+)
+_COMANDOS_FALADOS: tuple[tuple[str, str], ...] = (
+    ("ip-tudo", r"\bip (?:completo|detalhado)\b|\bmac address\b|\bipconfig /all\b"),
+    ("ip", r"\bipconfig\b|\bqual (?:é|e) o meu ip\b|\bmeu ip\b|\bmeu endere[çc]o de rede\b"),
+    ("sistema", r"\binforma[çc][õo]es do sistema\b|\bconfigura[çc][ãa]o do (?:pc|computador)\b|\bsysteminfo\b"),
+    ("processos", r"\bprocessos (?:rodando|abertos|do pc)\b|\btasklist\b"),
+    ("usuarios", r"\bquem est[áa] logado\b|\busu[áa]rios logados\b|\bsess[õo]es abertas\b"),
+    ("versao", r"\bvers[ãa]o do windows\b|\bqual windows\b"),
+    ("disco", r"\bespa[çc]o (?:em )?disco\b|\bdisco livre\b|\bquanto (?:tem|sobra) de (?:espa[çc]o|disco)\b"),
+    ("data", r"\bque (?:dia|horas?) (?:é|e|s[ãa]o) (?:hoje|agora)?\b|\bdata e hora do pc\b"),
+    ("boot", r"\bquando (?:o )?(?:pc|computador) (?:foi )?ligado\b|\b[úu]ltimo boot\b|\buptime\b"),
+)
+
+
+def _pedido_direto_de_pc(termo: str) -> dict[str, Any] | None:
+    """Abrir programa, abrir arquivo e comandos prontos do PC."""
+    from . import pc
+
+    texto = (termo or "").strip()
+
+    if _RE_LISTAR_PC.search(texto):
+        return {"skill_id": "pc.programas", "nome": "Programas e comandos do PC", "parametros": {}, "confirma": False}
+
+    achado = _RE_ABRIR_ARQUIVO.search(texto)
+    if achado:
+        caminho = achado.group("caminho").strip(" .")
+        if ("." in caminho or "/" in caminho or "\\" in caminho) and len(caminho) >= 4:
+            return {
+                "skill_id": "pc.abrir-arquivo",
+                "nome": "Abrir arquivo no PC",
+                "parametros": {"caminho": caminho[:400]},
+                "confirma": True,
+            }
+
+    achado = _RE_ABRIR_PROGRAMA.search(texto)
+    if achado:
+        nome = " ".join(achado.group("nome").lower().split())
+        if nome in pc.APELIDOS or nome in pc.PROGRAMAS:
+            return {
+                "skill_id": "pc.abrir-programa",
+                "nome": "Abrir programa no PC",
+                "parametros": {"nome": nome},
+                "confirma": True,
+            }
+
+    for chave, padrao in _COMANDOS_FALADOS:
+        if re.search(padrao, texto, re.I):
+            return {
+                "skill_id": "pc.comando",
+                "nome": "Comando pronto do PC",
+                "parametros": {"nome": chave},
+                "confirma": True,
+            }
+    return None
+
+
 def _pedido_direto_de_cultura(termo: str) -> dict[str, Any] | None:
     """Livros livres: fontes, busca, download e persona de escrita."""
     texto = (termo or "").strip()
@@ -1847,6 +1916,30 @@ def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
 
     if _RE_LISTAR_HABILIDADES.search(texto) and "http" not in texto:
         return {"skill_id": "habilidades.listar", "nome": "Habilidades importadas", "parametros": {}, "confirma": False}
+    return None
+
+
+def _formatar_pc(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para abrir programa/arquivo e para os comandos prontos."""
+    if isinstance(resultado.get("programas"), list) and isinstance(resultado.get("comandos"), list):
+        ligado = "ligada" if resultado.get("ligado") else "desligada"
+        linhas = [f"Camada do PC: {ligado} (`{resultado.get('variavel')}=1` liga).", ""]
+        linhas.append("Programas que eu abro:")
+        linhas += [
+            f"• {item['rotulo']} — `{item['nome']}`"
+            for item in resultado["programas"]
+        ]
+        linhas += ["", "Comandos de leitura que eu rodo:"]
+        linhas += [f"• {item['rotulo']} — `{item['nome']}`" for item in resultado["comandos"]]
+        if resultado.get("nota"):
+            linhas += ["", str(resultado["nota"])]
+        return "\n".join(linhas)
+
+    if resultado.get("aberto") and resultado.get("resposta"):
+        return str(resultado["resposta"])
+
+    if resultado.get("saida") is not None and resultado.get("linha"):
+        return f"{resultado.get('rotulo')} — `{resultado['linha']}`\n\n{resultado['saida'] or '(sem saída)'}"
     return None
 
 
@@ -2242,6 +2335,10 @@ def formatar_resultado(resultado: Any) -> str:
         return str(resultado)[:LIMITE_RESPOSTA]
 
     especial = _formatar_catalogo(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_pc(resultado)
     if especial is not None:
         return especial
 
@@ -3028,6 +3125,10 @@ async def _resolver(
     # 0b7. Livros livres e adaptação de habilidade importada.
     if direto is None:
         direto = _pedido_direto_de_cultura(termo)
+
+    # 0b8. PC: abrir programa, abrir arquivo e comandos prontos.
+    if direto is None:
+        direto = _pedido_direto_de_pc(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:
