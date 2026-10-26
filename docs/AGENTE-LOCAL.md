@@ -178,7 +178,7 @@ com nome próprio — não é código novo.
 .venv/bin/python -m pytest server/tests/test_agente_local.py -q
 ```
 
-151 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
+153 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
 são funções injetadas.
 
 ## Aprender com a página

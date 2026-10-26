@@ -255,8 +255,8 @@ Limites, sem enfeite:
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **41** (14 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 10 em `test_dados.py`, 7 em `test_agente_local.py`) |
-| Testes do agente local | **151** |
-| Suíte da API | **2.218** |
+| Testes do agente local | **153** |
+| Suíte da API | **2.220** |
 | Skills no registro | **229** (12 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

@@ -1453,3 +1453,24 @@ def test_formatar_drive_copia_resume_o_que_foi_feito() -> None:
     assert "154 arquivo" in texto
     assert ".env atualizado" in texto
     assert "Nada foi apagado do PC" in texto
+
+
+def test_formatar_drive_desfazer_nao_despeja_dicionario() -> None:
+    texto = formatar_resultado(
+        {"modo": "desfazer", "mensagem": "Tirei as linhas do `.env`.", "aviso": "Reinicie o JARVIS."}
+    )
+    assert texto.strip() == "Tirei as linhas do `.env`.\nReinicie o JARVIS."
+
+
+def test_formatar_drive_configurado_nao_manda_configurar_de_novo() -> None:
+    texto = formatar_resultado(
+        {
+            "detectado": True,
+            "drive": "G:/Meu Drive",
+            "configurado": True,
+            "env": {"biblioteca": "G:/x", "repos": "G:/y"},
+            "areas": [{"nome": "biblioteca", "configurada": True, "arquivos": 6, "mb": 0.1}],
+        }
+    )
+    assert "tira a biblioteca do drive" in texto
+    assert "diga \"configura o Google Drive pra mim\"" not in texto

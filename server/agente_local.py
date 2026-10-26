@@ -1210,6 +1210,11 @@ def _valor_legivel(valor: Any) -> str:
 def _formatar_drive(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para as skills de Drive (estado, planejar, aplicar, desfazer)."""
     if "areas" not in resultado and "vai_acontecer" not in resultado:
+        if str(resultado.get("modo") or "") == "desfazer" and "mensagem" in resultado:
+            texto = [str(resultado["mensagem"])]
+            if resultado.get("aviso"):
+                texto.append(str(resultado["aviso"]))
+            return "\n".join(texto)
         return None
     if "passos" in resultado and "areas" not in resultado:
         return None
@@ -1275,7 +1280,10 @@ def _formatar_drive(resultado: dict[str, Any]) -> str | None:
     if isinstance(env, dict):
         aponta = bool(env.get("biblioteca") or env.get("repos"))
         linhas.append(f".env: {'aponta para o Drive' if aponta else 'não aponta para o Drive'}")
-    linhas.append('Para levar de verdade, diga "configura o Google Drive pra mim".')
+    if resultado.get("configurado"):
+        linhas.append('Está tudo no Drive. Para voltar ao PC, diga "tira a biblioteca do drive".')
+    else:
+        linhas.append('Para levar de verdade, diga "configura o Google Drive pra mim".')
     return "\n".join(linhas)
 
 
