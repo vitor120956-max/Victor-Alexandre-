@@ -1,4 +1,4 @@
-"""Testes do agente local (0.41.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.42.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -602,7 +602,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "215 skills" in texto
+    assert "223 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -615,7 +615,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.41.0)
+# ------------------------------------------------- memória do agente (0.42.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -810,7 +810,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 215 skills, uma por uma
+# ------------------------------------- cobertura: as 223 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -856,7 +856,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 215 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 223 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -1125,3 +1125,27 @@ def test_stderr_com_codigo_zero_nao_vira_erro():
     texto = formatar_resultado({"comando": "python -m x --help", "codigo": 0, "saida": "", "erro": "Usage: x"})
     assert "Avisos do programa" in texto
     assert "Erro:" not in texto
+
+
+def test_resposta_vem_da_biblioteca_antes_da_web(tmp_path: Path, monkeypatch):
+    from server import biblioteca
+
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    biblioteca.importar_texto(
+        "Manual de custo",
+        "O rateio do custo indireto distribui a despesa entre os produtos. "
+        "O critério precisa ser estável e documentado, senão a margem mente. " * 3,
+    )
+    duble = registro(raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "como funciona o rateio de custo indireto",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "biblioteca"
+    assert resultado["via"] == "biblioteca"
+    assert "Manual de custo" in resultado["resposta"]
+    assert duble.execucoes == []

@@ -281,7 +281,7 @@ export interface AgenteSkill {
 export interface AgenteResultado {
   ok: boolean;
   pedido: string;
-  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada' | 'confirmar';
+  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada' | 'confirmar' | 'biblioteca';
   skill: AgenteSkill | null;
   confianca: number;
   parametros: Record<string, unknown>;

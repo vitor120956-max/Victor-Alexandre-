@@ -274,6 +274,8 @@ from .taste import (
 from .taste_rules import audit_copy, audit_tells, lint_page
 from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
+from . import biblioteca as bib
+from . import dados as dados_locais
 from .repos import (
     ReposError,
     analisar as analisar_repositorio,
@@ -1907,6 +1909,48 @@ class TasteJudgeInput(BaseModel):
     mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
+class BibliotecaImportarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(min_length=3, max_length=500, title="Arquivo", json_schema_extra={"description": "Caminho dentro de `storage/` ou arquivo da pasta Downloads. Aceita PDF, EPUB, DOCX, TXT, MD, RST, VTT e SRT."})
+    titulo: str = Field(default="", max_length=160, title="Título")
+    tipo: Literal["auto", "livro", "video", "pesquisa", "documento"] = Field(default="auto", title="Tipo")
+
+
+class BibliotecaListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class BibliotecaBuscarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consulta: str = Field(min_length=3, max_length=400, title="Assunto")
+    limite: int = Field(default=5, ge=1, le=20, title="Quantos trechos")
+
+
+class BibliotecaCorrelacoesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    termo: str = Field(default="", max_length=120, title="Termo", json_schema_extra={"description": "Vazio mostra termos presentes em duas ou mais fontes."})
+
+
+class BibliotecaDigestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fonte: str = Field(min_length=2, max_length=120, title="Fonte (slug)")
+    gravar: bool = Field(default=False, title="Gravar SKILL.md", json_schema_extra={"description": "Grava em `storage/biblioteca/fichas/<slug>/SKILL.md`."})
+
+
+class BibliotecaRemoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fonte: str = Field(min_length=2, max_length=120, title="Fonte (slug)")
+
+
+class ArmazenamentoStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ArmazenamentoPlanejarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destino: str = Field(min_length=2, max_length=300, title="Novo destino", json_schema_extra={"description": "Pasta em outro disco, como `C:/JARVIS-DADOS`."})
+
+
 class ReposBaixarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     url: str = Field(min_length=3, max_length=300, title="Repositório", json_schema_extra={"description": "`dono/repo` ou endereço do GitHub. Só público, só `.zip` — não precisa de Git."})
@@ -3359,6 +3403,100 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             return slug_de_repo(dono, nome)
         return texto
 
+    def _caminho_da_biblioteca(bruto: str) -> Path:
+        raiz_storage = dados_locais.raiz().resolve()
+        downloads = (Path.home() / "Downloads").resolve()
+        alvo = Path(bruto).expanduser()
+        candidatos = [alvo] if alvo.is_absolute() else [raiz_storage / alvo, downloads / alvo]
+        for candidato in candidatos:
+            try:
+                resolvido = candidato.resolve()
+            except OSError:
+                continue
+            if resolvido == raiz_storage or raiz_storage in resolvido.parents:
+                return resolvido
+            if resolvido == downloads or downloads in resolvido.parents:
+                return resolvido
+        raise SkillError("Só importo arquivo de dentro de storage/ ou da pasta Downloads.")
+
+    def biblioteca_importar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaImportarInput)
+        try:
+            return bib.importar(
+                _caminho_da_biblioteca(data.caminho),
+                titulo=data.titulo,
+                tipo=data.tipo,
+            )
+        except bib.BibliotecaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def biblioteca_listar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        fontes = bib.listar()
+        return {"total": len(fontes), "fontes": fontes}
+
+    def biblioteca_buscar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaBuscarInput)
+        return {"consulta": data.consulta, "achados": bib.buscar(data.consulta, limite=data.limite)}
+
+    def biblioteca_correlacoes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaCorrelacoesInput)
+        return {"termo": data.termo, "correlacoes": bib.correlacoes(data.termo)}
+
+    def biblioteca_digest_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaDigestInput)
+        try:
+            resultado = bib.digest(data.fonte)
+            if data.gravar:
+                resultado["arquivo"] = str(bib.gravar_digest(data.fonte))
+            return resultado
+        except bib.BibliotecaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def biblioteca_remover_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaRemoverInput)
+        if not bib.remover(data.fonte):
+            raise SkillError("Fonte não encontrada na biblioteca.")
+        return {"removido": True, "fonte": data.fonte}
+
+    def armazenamento_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        relatorio = dados_locais.relatorio()
+        usado = relatorio["bytes_total"]
+        livre = relatorio["disco_livre"]
+        return {
+            "raiz": relatorio["raiz"],
+            "padrao": relatorio["padrao"],
+            "variavel": relatorio["variavel"],
+            "configurada": relatorio["configurada"],
+            "areas": [item for item in relatorio["areas"] if item["existe"]],
+            "total_mb": round(usado / 1e6, 1),
+            "livre_gb": round(livre / 1e9, 1),
+            "disco_total_gb": round(relatorio["disco_total"] / 1e9, 1),
+        }
+
+    def armazenamento_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ArmazenamentoPlanejarInput)
+        destino = Path(data.destino).expanduser()
+        if not destino.is_absolute():
+            raise SkillError("O destino precisa ser caminho absoluto, como `C:/JARVIS-DADOS`.")
+        relatorio = dados_locais.relatorio()
+        origem = Path(relatorio["raiz"])
+        if origem.resolve() == destino.resolve():
+            raise SkillError("O destino é a pasta atual; nada a mover.")
+        return {
+            "origem": str(origem),
+            "destino": str(destino),
+            "bytes": relatorio["bytes_total"],
+            "arquivos": relatorio["arquivos_total"],
+            "passos": [
+                f"1. Feche a API (Ctrl+C na janela do iniciar.py).",
+                f"2. No cmd: robocopy \"{origem}\" \"{destino}\" /E /R:1 /W:1 /NFL /NDL",
+                f"3. No .env do projeto: {dados_locais.VARIAVEL}={destino}",
+                "4. Suba a API de novo; `armazenamento.status` mostra a raiz nova.",
+                f"5. Confira as contagens e só então apague {origem}.",
+            ],
+            "aviso": "A cópia é feita por você, com o Windows mostrando o progresso. O JARVIS não move nem apaga dado sozinho.",
+        }
+
     def repos_baixar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, ReposBaixarInput)
         if dry_run:
@@ -4092,6 +4230,14 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("portabilidade.regras", "Catálogo de portabilidade", "Publica os treze alvos com estilo, base e o que cada um carrega, as dez regras de conversão, os limites e o que a camada não faz.", "Portabilidade", EmptyInput, portabilidade_regras_handler, timeout_seconds=5),
         SkillDefinition("estacao.memoria", "Revisar notas e skills", "Checa as notas do agente (tamanho, segredo, fato sem dia, absoluto) e as skills que ele escreveu (gatilho, passos, verificação, gatilho repetido).", "Estação", EstacaoMemoriaInput, estacao_memoria_handler, timeout_seconds=10),
         SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
+        SkillDefinition("biblioteca.importar", "Importar para a biblioteca", "Lê um PDF, EPUB, DOCX, TXT, MD, RST ou legenda VTT/SRT e grava em seções pesquisáveis em `storage/biblioteca`, com página e título. Não move o original, não usa modelo e não resume.", "Biblioteca", BibliotecaImportarInput, biblioteca_importar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("biblioteca.listar", "Listar a biblioteca", "Mostra as fontes importadas com tipo, seções, tamanho e data.", "Biblioteca", BibliotecaListarInput, biblioteca_listar_handler, timeout_seconds=15),
+        SkillDefinition("biblioteca.buscar", "Buscar na biblioteca", "Procura por assunto nas seções de todas as fontes com BM25 e devolve trecho real, seção, página e cobertura do pedido.", "Biblioteca", BibliotecaBuscarInput, biblioteca_buscar_handler, timeout_seconds=30),
+        SkillDefinition("biblioteca.correlacoes", "Correlações entre fontes", "Mostra termos presentes em duas ou mais fontes e, com um termo, os vizinhos que aparecem junto nas seções — a correlação é medida, não inventada.", "Biblioteca", BibliotecaCorrelacoesInput, biblioteca_correlacoes_handler, timeout_seconds=45),
+        SkillDefinition("biblioteca.digest", "Ficha da fonte", "Monta um `SKILL.md` determinístico com sumário, termos mais frequentes, números citados e passagens para conferir, toda linha referenciada à seção ou página.", "Biblioteca", BibliotecaDigestInput, biblioteca_digest_handler, side_effects=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("biblioteca.remover", "Remover da biblioteca", "Apaga as seções gravadas da fonte e tira do índice; o arquivo original não é tocado.", "Biblioteca", BibliotecaRemoverInput, biblioteca_remover_handler, side_effects=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("armazenamento.status", "Onde ficam os dados", "Mostra a raiz em uso, se veio de `JARVIS_DADOS`, o tamanho de cada área e o espaço livre do disco — o retrato antes de mover qualquer coisa.", "Armazenamento", ArmazenamentoStatusInput, armazenamento_status_handler, timeout_seconds=30),
+        SkillDefinition("armazenamento.planejar", "Plano para mudar de disco", "Compara a pasta atual com o destino e publica os cinco passos exatos, incluindo o `robocopy` e a linha do `.env`. Não copia, não move, não apaga.", "Armazenamento", ArmazenamentoPlanejarInput, armazenamento_planejar_handler, timeout_seconds=15),
         SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),
         SkillDefinition("repos.listar", "Listar repositórios", "Lista o que já está em `storage/repos` com data, tamanho, linguagens e se tem skill no padrão Agent Skills.", "Repositórios", ReposListarInput, repos_listar_handler, timeout_seconds=10),

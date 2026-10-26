@@ -2,7 +2,7 @@
 
 O caminho é sempre o mesmo, e nenhum passo chama modelo:
 
-1. **procura** o pedido nas 215 skills do registro, por palavra (nome, categoria,
+1. **procura** o pedido nas 223 skills do registro, por palavra (nome, categoria,
    descrição, campos do formulário);
 2. achando, **preenche os parâmetros** a partir da própria frase — número,
    endereço, caminho, enum, texto colado — e **executa**;
@@ -27,6 +27,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal
 
+from . import biblioteca
 from .pesquisa import responder as pesquisa_responder
 from .sistema import SistemaError
 
@@ -1613,6 +1614,18 @@ async def _resolver(
         base["parametros"] = {receita.campo: entrada_texto}
         base["confianca"] = 1.0
         base["resposta"] = f"{'Criei' if criada else 'Usei'} a skill local “{skill.nome}” ({skill.id}).\n\n{resultado.get('resultado', '')}"
+        return base
+
+    # 3b. Biblioteca: livro, vídeo ou pesquisa importados nesta máquina.
+    try:
+        achado_biblioteca = biblioteca.responder(termo)
+    except Exception:
+        achado_biblioteca = None
+    if achado_biblioteca is not None:
+        base["acao"] = "biblioteca"
+        base["via"] = "biblioteca"
+        base["confianca"] = float(achado_biblioteca.get("cobertura") or 0.0)
+        base["resposta"] = str(achado_biblioteca["resposta"])
         return base
 
     # 4. Web, sem modelo: fontes e trecho.

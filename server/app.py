@@ -18,6 +18,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import dados as dados_locais
 from .agente_local import (
     RECEITAS,
     AgenteError,
@@ -179,6 +180,7 @@ def create_app(
     agente_root: Path | None = None,
 ) -> FastAPI:
     load_dotenv(PROJECT_ROOT / ".env")
+    dados_locais.apontar()
     provider = ai_provider or OpenAICompatibleProvider()
     files_root_value = os.getenv("JARVIS_FILES_ROOT", "").strip()
     files_root = Path(files_root_value).expanduser() if files_root_value else PROJECT_ROOT / "storage" / "user-files"
@@ -201,7 +203,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.41.0",
+        version="0.42.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -236,7 +238,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.41.0",
+            "version": "0.42.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
