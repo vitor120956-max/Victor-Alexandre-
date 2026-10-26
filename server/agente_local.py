@@ -259,7 +259,7 @@ _CAMPOS_CAMINHO = {"path", "caminho", "arquivo", "file", "filename", "pasta", "d
 _CAMPOS_ID = {"planId", "planid", "id", "chamada", "chamadaid", "artifactid", "runid"}
 
 _RE_URL = re.compile(r"https?://[^\s<>\"']+")
-_RE_ENDERECO = re.compile(r"https?://\S+|\b[\w.-]+/[\w.-]+\b")
+_RE_ENDERECO = re.compile(r"https?://\S+|\b[\w.-]*[A-Za-z][\w.-]*(?:/[\w.-]+)+")
 # Endereço curto de repositório ("dono/repo") só vale em campo de URL.
 _RE_REPO = re.compile(r"\b([A-Za-z0-9][\w.-]{1,60}/[A-Za-z0-9][\w.-]{1,60})\b")
 _RE_CAMINHO = re.compile(
@@ -1032,6 +1032,24 @@ def _formatar_repositorio(resultado: dict[str, Any]) -> str | None:
     return None
 
 
+def _formatar_fonte_da_biblioteca(resultado: dict[str, Any]) -> str | None:
+    """Resultado de `biblioteca.importar`: uma linha em vez de sete campos."""
+    if "slug" not in resultado or "secoes" not in resultado or "achados" in resultado:
+        return None
+    titulo = str(resultado.get("titulo") or resultado["slug"])
+    secoes = int(resultado.get("secoes") or 0)
+    detalhe = f"{secoes} " + ("seção" if secoes == 1 else "seções")
+    palavras = resultado.get("total_palavras")
+    if isinstance(palavras, int):
+        detalhe += f", {palavras} palavras"
+    idioma = resultado.get("idioma")
+    if isinstance(idioma, str) and idioma:
+        detalhe += f", idioma {idioma}"
+    origem = resultado.get("origem")
+    sufixo = f" Origem: {origem}." if isinstance(origem, str) and origem else ""
+    return f'Fonte “{titulo}” na biblioteca: {detalhe}. Slug: `{resultado["slug"]}`.{sufixo}'
+
+
 def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
@@ -1040,6 +1058,10 @@ def formatar_resultado(resultado: Any) -> str:
     especial = _formatar_repositorio(resultado)
     if especial is not None:
         return especial
+
+    fonte = _formatar_fonte_da_biblioteca(resultado)
+    if fonte is not None:
+        return fonte
 
     partes: list[str] = []
     usados: set[str] = set()

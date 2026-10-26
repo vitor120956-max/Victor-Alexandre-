@@ -892,6 +892,7 @@ def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
     casos = {
         "importar a foto da pagina Downloads/contrato.jpg": "biblioteca.importar",
         "importar o pdf escaneado Downloads/contrato.pdf": "biblioteca.importar",
+        "importar o pdf biblioteca/entrada/custos.pdf": "biblioteca.importar",
         "baixar a legenda do video https://youtu.be/dQw4w9WgXcQ": "biblioteca.video",
         "qual o estado do ocr": "biblioteca.ocr",
     }
@@ -900,6 +901,39 @@ def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
         assert ranking, frase
         assert ranking[0]["entrada"].skill_id == esperada, frase
         assert ranking[0]["score"] >= 0.5, (frase, ranking[0]["score"])
+
+
+def test_resultado_de_importacao_vira_uma_linha_legivel():
+    texto = formatar_resultado(
+        {
+            "slug": "custos-c617b4",
+            "titulo": "custos",
+            "tipo": "livro",
+            "origem": "custos.pdf",
+            "caracteres": 198,
+            "secoes": 1,
+            "total_palavras": 19,
+        }
+    )
+    assert "Fonte “custos” na biblioteca" in texto
+    assert "1 seção," in texto
+    assert "custos-c617b4" in texto
+    assert "- tipo:" not in texto
+
+
+def test_resultado_de_video_mostra_o_idioma():
+    texto = formatar_resultado(
+        {
+            "slug": "aula-de-rateio",
+            "titulo": "Aula de rateio",
+            "secoes": 6,
+            "total_palavras": 1800,
+            "idioma": "pt-BR",
+            "origem": "https://youtu.be/dQw4w9WgXcQ",
+        }
+    )
+    assert "6 seções" in texto
+    assert "idioma pt-BR" in texto
 
 
 # ------------------------------------------------- confirmação de efeito
