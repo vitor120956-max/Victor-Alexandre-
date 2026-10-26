@@ -255,9 +255,9 @@ Limites, sem enfeite:
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **88** (34 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 17 em `test_dados.py`, 27 em `test_agente_local.py`) |
-| Testes do agente local | **176** (6 novos: clique com confirmação e formatação da mesa) |
+| Testes do agente local | **178** (8 novos: clique com confirmação, fonte pelo pedido e aviso sem token) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.286** |
+| Suíte da API | **2.288** |
 | Skills no registro | **237** (18 novas: biblioteca.*, armazenamento.* e mesa.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

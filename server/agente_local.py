@@ -1812,6 +1812,14 @@ def _pedido_direto_de_pesquisa(termo: str) -> dict[str, Any] | None:
     return {"consulta": consulta, "fonte": _FONTE_APELIDOS.get(nome, nome)}
 
 
+_NOME_DA_FONTE = {
+    "auto": "todas as fontes (DuckDuckGo, Wikipédia e YouTube)",
+    "duckduckgo": "DuckDuckGo",
+    "wikipedia": "Wikipédia",
+    "youtube": "YouTube",
+}
+
+
 def fonte_do_pedido(pedido: str) -> str:
     """"pesquisa no youtube sobre X" → youtube; "no google" → auto (as três).
 
@@ -2417,6 +2425,18 @@ async def _resolver(
         base["fontes"] = achado["fontes"]
         base["avisos"].extend(achado["avisos"])
         base["parametros"] = {"consulta": pesquisa["consulta"], "fonte": pesquisa["fonte"]}
+        if achado["acao"] == "nada":
+            # O aviso antigo ("não achei skill nem receita") não faz sentido num
+            # pedido que já dizia onde buscar. E, principalmente: não é o token.
+            motivo = "; ".join(achado["avisos"] or ["nenhuma fonte respondeu"])
+            onde = _NOME_DA_FONTE.get(pesquisa["fonte"], pesquisa["fonte"])
+            linhas = [f"Tentei buscar “{pesquisa['consulta']}” em {onde} e não deu: {motivo}"]
+            if "rede" not in motivo.lower():
+                linhas.append(
+                    "A busca não usa token: confira a internet do PC. Se uma fonte cair, as "
+                    "outras continuam — tente de novo sem dizer a fonte para eu usar as três."
+                )
+            base["resposta"] = "\n".join(linhas)
         return base
 
     # 0b2. Google Drive: regra antes do ranking (a palavra "drive" dilui tudo).

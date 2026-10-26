@@ -1792,3 +1792,45 @@ def test_formatar_mesa_status_lista_janelas() -> None:
         {"suportado": True, "x": 5, "y": 9, "largura": 1920, "altura": 1080, "janelas": ["Chrome"]}
     )
     assert "Cursor em (5, 9)" in texto and "Chrome" in texto
+
+
+def test_pesquisa_no_youtube_repassa_a_fonte(tmp_path: Path) -> None:
+    vistas: list[str] = []
+
+    def buscar(**kwargs: Any) -> dict[str, Any]:
+        vistas.append(kwargs.get("fonte", "?"))
+        return {"rows": [{"titulo": "Aula", "url": "https://youtube.com/watch?v=1", "fonte": "youtube", "tipo": "video"}]}
+
+    resultado = asyncio.run(
+        atender(
+            "pesquisa no youtube sobre python",
+            registry=registro(raiz=tmp_path),
+            raiz=tmp_path,
+            buscar=buscar,
+            ler=leitura_falsa,
+        )
+    )
+    assert vistas == ["youtube"]
+    assert resultado["parametros"] == {"consulta": "python", "fonte": "youtube"}
+    assert "[youtube]" in resultado["resposta"]
+
+
+def test_pesquisa_sem_rede_nao_pede_token(tmp_path: Path) -> None:
+    from server.sistema import SistemaError
+
+    def quebrada(**_: Any) -> dict[str, Any]:
+        raise SistemaError("Rede desligada. Suba a API com JARVIS_HOST_REDE=1.")
+
+    resultado = asyncio.run(
+        atender(
+            "pesquisa no youtube sobre python",
+            registry=registro(raiz=tmp_path),
+            raiz=tmp_path,
+            buscar=quebrada,
+            ler=leitura_falsa,
+        )
+    )
+    texto = resultado["resposta"]
+    assert "Tentei buscar “python” em YouTube" in texto
+    assert "token" not in texto.lower()
+    assert texto.count("JARVIS_HOST_REDE") == 1
