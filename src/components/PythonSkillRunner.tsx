@@ -27,7 +27,7 @@ function resultText(execution: SkillExecution): string {
 }
 
 export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | null; onClose: () => void }) {
-  const { executeSkill, pushToast } = useApp();
+  const { executeSkill, pushToast, hostToken, modoDono } = useApp();
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [dryRun, setDryRun] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -36,12 +36,18 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
   const [requestError, setRequestError] = useState('');
 
   useEffect(() => {
-    setParameters(initialParameters(skill));
+    const iniciais = initialParameters(skill);
+    // Token de host: o que você digitou no chat uma vez vale para o formulário,
+    // e some quando o modo dono está ligado (a API preenche sozinha).
+    if (skill && 'autorizacao' in skill.inputSchema.properties && !modoDono && hostToken) {
+      iniciais.autorizacao = hostToken;
+    }
+    setParameters(iniciais);
     setDryRun(Boolean(skill?.sideEffects));
     setConfirmed(false);
     setExecution(null);
     setRequestError('');
-  }, [skill]);
+  }, [skill, hostToken, modoDono]);
 
   const update = (name: string, value: unknown) => {
     setParameters((current) => ({ ...current, [name]: value }));
@@ -120,7 +126,12 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
         <div className="python-runner">
           <div className="python-runner-intro"><span><Code2 size={18} /></span><div><strong>{skill.id}</strong><p>{skill.description}</p></div></div>
           <form onSubmit={submit} className="form-stack">
-            {Object.entries(skill.inputSchema.properties).map(([name, property]) => renderField(name, property))}
+            {modoDono && 'autorizacao' in skill.inputSchema.properties && (
+              <p className="form-note">Modo dono ligado: esta API está na sua máquina, então o token de host é preenchido sozinho. A confirmação e as travas continuam valendo.</p>
+            )}
+            {Object.entries(skill.inputSchema.properties)
+              .filter(([name]) => !(modoDono && name === 'autorizacao'))
+              .map(([name, property]) => renderField(name, property))}
             {Object.keys(skill.inputSchema.properties).length === 0 && <p className="form-note">Esta skill não precisa de parâmetros. A execução consultará o núcleo Python diretamente.</p>}
             {skill.dryRunSupported && <div className="setting-row dry-run-row"><div><strong>Modo de simulação</strong><p>Valida tudo e mostra o que seria feito, sem gravar alterações.</p></div><button type="button" className={`switch ${dryRun ? 'switch-on' : ''}`} role="switch" aria-checked={dryRun} onClick={() => { setDryRun((value) => !value); setExecution(null); }}><span /></button></div>}
             {skill.requiresConfirmation && !dryRun && <label className="confirmation-box"><ShieldAlert size={18} /><span>Revise os parâmetros e confirme a gravação na área isolada do JARVIS.</span><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /></label>}

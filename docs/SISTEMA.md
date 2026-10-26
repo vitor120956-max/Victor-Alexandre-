@@ -10,7 +10,7 @@ Isso muda o contrato do projeto. Até a 0.29.0, toda resposta marcava `executed:
 
 | # | Trava | Padrão | Como ligar |
 |---|---|---|---|
-| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token |
+| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.57.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
 | 2 | **Rede** | desligada | `JARVIS_HOST_REDE=1` ao subir a API |
 | 3 | **Instalação** | desligada | `JARVIS_HOST_INSTALAR=1` (implica rede) |
 
@@ -24,6 +24,46 @@ O token é impresso assim, com só oito caracteres visíveis:
 
 ```
 JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, instalar=ligado)
+```
+
+## Modo dono: instalar sem digitar o token (0.57.0)
+
+O token de host não é chave de ninguém: é uma string que o próprio JARVIS sorteia
+e guarda em `storage/host-token.txt`. Mas copiar e colar aquilo a cada instalação
+é atrito. O **modo dono** tira esse atrito sem apagar as travas:
+
+```bat
+set JARVIS_HOST_CONFIAR_LOCAL=1
+```
+
+Com ele ligado, a API preenche o token sozinha **somente quando a requisição vem
+da própria máquina** (`127.0.0.1` / `::1`). Requisição de outra máquina da rede
+continua obrigada a digitar o token, mesmo com o modo ligado. Quando preenche, a
+resposta traz `"autorizadoPor": "modo-dono-local"`.
+
+**O que continua valendo no modo dono:**
+
+1. `JARVIS_HOST_INSTALAR=1` — a trava de instalação é outra, e não muda;
+2. o plano mostrado antes (`sistema.instalar`), com comando, risco e assinatura;
+3. o token de uso único do plano — quando existe **um** plano pendente, ele é
+   usado automaticamente; com dois, o JARVIS **não escolhe por você** e pede o
+   código;
+4. a confirmação da tela (`confirmed: true`), que o servidor exige.
+
+**O que ele custa, dito sem enfeite:** com o modo ligado, qualquer programa que
+rode **como você, nesta máquina**, pode disparar instalação pela API sem saber o
+token. Antes, ele precisaria abrir `storage/host-token.txt` — que está legível
+para o seu usuário. Ou seja: o modo dono não abre a porta para a rede e não abre
+para página de outro site (o bloqueio de origem continua), mas reduz a exigência
+de quem já está dentro da máquina. Se você usa o computador compartilhado, deixe
+desligado.
+
+**Bloqueio de origem (vale sempre).** Requisição `POST` para `/api/` com
+`Origin` de outro site é recusada com `403 ORIGEM_RECUSADA`. É o que impede uma
+página maliciosa aberta no navegador de chamar a API local.
+
+```text
+GET /api/health  →  { "version": "0.57.0", "skills": 281, "confiarLocal": true }
 ```
 
 ## As doze skills

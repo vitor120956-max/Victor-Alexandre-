@@ -9,7 +9,7 @@ de modelo nenhum:
 3. **Git de leitura** — ver branch, commits e o que mudou, sem tocar no
    repositório.
 
-As doze skills novas (0.56.0) estão descritas abaixo. Nenhuma delas chama provedor
+As doze skills novas (0.57.0) estão descritas abaixo. Nenhuma delas chama provedor
 de IA, nenhuma instala nada e nenhuma precisa de chave.
 
 ---

@@ -63,6 +63,7 @@ interface AppContextValue {
   toasts: Toast[];
   backendOnline: boolean;
   backendVersion: string | null;
+  modoDono: boolean;
   pythonSkills: PythonSkill[];
   aiStatus: AIStatus;
   processing: 'ai' | 'python' | null;
@@ -117,6 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
+  const [modoDono, setModoDono] = useState(false);
   const [pythonSkills, setPythonSkills] = useState<PythonSkill[]>([]);
   const [aiStatus, setAIStatus] = useState<AIStatus>(initialAIStatus);
   const [processing, setProcessing] = useState<'ai' | 'python' | null>(null);
@@ -183,11 +185,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const [health, catalog, ai] = await Promise.all([getBackendHealth(), listPythonSkills(), getAIStatus()]);
       setBackendOnline(health.ok);
       setBackendVersion(health.version);
+      setModoDono(Boolean(health.confiarLocal));
       setPythonSkills(catalog);
       setAIStatus(ai);
     } catch {
       setBackendOnline(false);
       setBackendVersion(null);
+      setModoDono(false);
       setPythonSkills([]);
       setAIStatus(initialAIStatus);
     }
@@ -1017,6 +1021,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toasts,
     backendOnline,
     backendVersion,
+    modoDono,
     pythonSkills,
     aiStatus,
     processing,

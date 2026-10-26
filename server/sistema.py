@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web
 from .review import common, finalize, finding
 
-VERSAO = "0.56.0"
+VERSAO = "0.57.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -55,6 +55,7 @@ AUDITORIA = STORAGE / "host-audit.jsonl"
 
 AMBIENTE_REDE = "JARVIS_HOST_REDE"
 AMBIENTE_INSTALAR = "JARVIS_HOST_INSTALAR"
+AMBIENTE_CONFIAR_LOCAL = "JARVIS_HOST_CONFIAR_LOCAL"
 
 MAX_TEXTO = 1_800_000
 MAX_ROWS = 200
@@ -187,10 +188,47 @@ def _autorizado(autorizacao: str) -> tuple[bool, str]:
     return True, ""
 
 
+def confiar_local() -> bool:
+    """Modo dono: quem já está na própria máquina não digita o token.
+
+    Desligado por padrão. Ligado com `JARVIS_HOST_CONFIAR_LOCAL=1`, a API
+    preenche o token de host sozinha **quando a requisição vem do próprio PC**
+    (127.0.0.1, ::1). Requisição de outra máquina da rede continua precisando
+    do token digitado, mesmo com o modo ligado.
+
+    O que continua valendo no modo dono: `JARVIS_HOST_INSTALAR=1`, o plano
+    mostrado antes, o token de uso único do plano e a confirmação da tela.
+    """
+    return os.environ.get(AMBIENTE_CONFIAR_LOCAL, "0").strip() == "1"
+
+
+def planos_pendentes() -> list[dict[str, Any]]:
+    """Planos de instalação gerados e ainda dentro dos 10 minutos."""
+    agora = time.time()
+    vivos: list[dict[str, Any]] = []
+    for token, registro in list(_CONFIRMACAO.items()):
+        if registro.get("expira", 0) < agora:
+            _CONFIRMACAO.pop(token, None)
+            continue
+        vivos.append(
+            {
+                "confirmacao": token,
+                "acao": registro.get("acao", "instalar"),
+                "arquivo": registro.get("arquivo", ""),
+                "rotulo": registro.get("rotulo", ""),
+                "tipo": registro.get("tipo", ""),
+                "expira_em": max(0, int(registro.get("expira", 0) - agora)),
+            }
+        )
+    return sorted(vivos, key=lambda item: item["expira_em"])
+
+
 def capacidades() -> dict[str, Any]:
     """O que está ligado agora, sem revelar o token."""
     return {
         "token_configurado": bool(token_host()),
+        "confiar_local": confiar_local(),
+        "planos_pendentes": len(planos_pendentes()),
         "rede": os.environ.get(AMBIENTE_REDE, "0") == "1",
         "instalar": os.environ.get(AMBIENTE_INSTALAR, "0") == "1",
         "shell_livre": False,

@@ -159,6 +159,8 @@ export interface BackendHealth {
   version: string;
   time: string;
   skills: number;
+  /** Modo dono: ligado com JARVIS_HOST_CONFIAR_LOCAL=1. Nesta máquina o token não é digitado. */
+  confiarLocal?: boolean;
 }
 
 export class ApiError extends Error {

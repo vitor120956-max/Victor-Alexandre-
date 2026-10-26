@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -35,6 +35,7 @@ from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
+from . import sistema as sistema_mod
 from .sistema import SistemaError, token_host as sistema_token_host
 from .skill_registry import SkillError, SkillRegistry, build_registry
 from .workspace import MAX_DOCUMENT_BYTES, VISIBLE_EXTENSIONS, download_url, regular_file, safe_path
@@ -160,6 +161,64 @@ class RateLimiter:
         return True
 
 
+# Quem está na própria máquina: 127.0.0.1 e ::1. O "testclient" é o cliente
+# de teste do Starlette, que não tem IP real — só existe em teste.
+ENDERECOS_LOCAIS = {"127.0.0.1", "::1", "localhost", "testclient"}
+
+def _veio_da_propria_maquina(request: Request) -> bool:
+    return bool(request.client) and request.client.host in ENDERECOS_LOCAIS
+
+def _mesma_origem(request: Request) -> bool:
+    """Recusa página de fora tentando disparar a API (CSRF).
+
+    O navegador sempre manda `Origin` quando a página é de outro site. Se a
+    origem não for local nem o próprio host da API, a requisição não passa.
+    """
+    cabecalho = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not cabecalho:
+        return True
+    try:
+        nome = (urlparse(cabecalho).hostname or "").lower()
+    except ValueError:
+        return False
+    if not nome:
+        return False
+    if nome in ENDERECOS_LOCAIS:
+        return True
+    proprio = (request.headers.get("host") or "").split(":")[0].lower()
+    return bool(proprio) and nome == proprio
+
+def _autorizacao_do_dono(
+    request: Request,
+    definition: Any,
+    parametros: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Modo dono: completa o token de host e o plano quando o pedido é daqui.
+
+    Nada é preenchido quando `JARVIS_HOST_CONFIAR_LOCAL` está desligado
+    (o padrão) ou quando a requisição vem de outra máquina.
+    """
+    if not sistema_mod.confiar_local() or not _veio_da_propria_maquina(request):
+        return parametros, False
+    dados = dict(parametros)
+    preencheu = False
+    try:
+        campos = set((definition.input_model.model_json_schema().get("properties") or {}))
+    except Exception:  # schema quebrado não vira bypass
+        return parametros, False
+    if "autorizacao" in campos and not str(dados.get("autorizacao") or "").strip():
+        token = sistema_token_host()
+        if token:
+            dados["autorizacao"] = token
+            preencheu = True
+    if definition.id == "sistema.executar" and not str(dados.get("confirmacao") or "").strip():
+        pendentes = sistema_mod.planos_pendentes()
+        if len(pendentes) == 1:
+            dados["confirmacao"] = pendentes[0]["confirmacao"]
+            preencheu = True
+    return dados, preencheu
+
+
 def pasta_da_interface(base: Path | None = None) -> Path | None:
     """Onde está a interface já compilada: `dist` (build local) ou `web-dist` (embutida no Git).
 
@@ -200,13 +259,14 @@ def create_app(
                 f"(rede={'ligada' if os.getenv('JARVIS_HOST_REDE') == '1' else 'desligada'}, "
                 f"instalar={'ligado' if os.getenv('JARVIS_HOST_INSTALAR') == '1' else 'desligado'}, "
                 f"root={'ligado' if os.getenv('JARVIS_HOST_ROOT') == '1' else 'desligado'}, "
-                f"pc={'ligado' if os.getenv('JARVIS_HOST_PC') == '1' else 'desligado'})"
+                f"pc={'ligado' if os.getenv('JARVIS_HOST_PC') == '1' else 'desligado'}, "
+                f"dono={'LIGADO (sem digitar token nesta máquina)' if sistema_mod.confiar_local() else 'desligado'})"
             )
 
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.56.0",
+        version="0.57.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -215,6 +275,18 @@ def create_app(
 
     @application.middleware("http")
     async def protect_api(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if request.url.path.startswith("/api/") and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            if not _mesma_origem(request):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "ORIGEM_RECUSADA",
+                            "message": "Requisição de outra origem. O JARVIS só aceita pedidos da própria tela.",
+                        },
+                    },
+                )
         if request.url.path.startswith("/api/"):
             content_length = request.headers.get("content-length")
             body_limit = MAX_UPLOAD_BODY_BYTES if request.url.path in {"/api/files/upload", "/api/reverse/upload"} else MAX_BODY_BYTES
@@ -241,9 +313,10 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.56.0",
+            "version": "0.57.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
+            "confiarLocal": sistema_mod.confiar_local(),
             "interface": interface.name if interface else "ausente",
         }
 
@@ -252,7 +325,7 @@ def create_app(
         return {"ok": True, "skills": skill_registry.list()}
 
     @application.post("/api/skills/{skill_id}/execute")
-    async def execute_skill(skill_id: str, payload: ExecuteRequest) -> dict[str, Any]:
+    async def execute_skill(skill_id: str, payload: ExecuteRequest, request: Request) -> dict[str, Any]:
         try:
             definition = skill_registry.get(skill_id)
         except SkillError as exc:
@@ -262,16 +335,20 @@ def create_app(
                 "ok": False,
                 "error": {"code": "CONFIRMATION_REQUIRED", "message": "Confirme a gravação antes de executar esta skill."},
             }
+        parametros = payload.parameters
+        preencheu = False
+        if not payload.dry_run:
+            parametros, preencheu = _autorizacao_do_dono(request, definition, payload.parameters)
         started = time.perf_counter()
         try:
-            result = await skill_registry.execute(skill_id, payload.parameters, payload.dry_run)
+            result = await skill_registry.execute(skill_id, parametros, payload.dry_run)
         except SkillError as exc:
             return {"ok": False, "error": {"code": "SKILL_ERROR", "message": str(exc)}}
         except Exception as exc:
             # Detalhes de infraestrutura e entradas do usuário não vazam na resposta.
             print(f"Skill {skill_id} falhou com {type(exc).__name__}")
             return {"ok": False, "error": {"code": "INTERNAL_ERROR", "message": "A skill falhou. Nenhum detalhe interno foi exposto."}}
-        return {
+        resposta = {
             "ok": True,
             "skill": skill_id,
             "dryRun": payload.dry_run,
@@ -279,6 +356,9 @@ def create_app(
             "durationMs": round((time.perf_counter() - started) * 1000, 2),
             "executedAt": datetime.now(timezone.utc).isoformat(),
         }
+        if preencheu:
+            resposta["autorizadoPor"] = "modo-dono-local"
+        return resposta
 
     @application.post("/api/files/upload")
     async def upload_user_file(
@@ -439,13 +519,21 @@ def create_app(
     # ------------------------------------------------------------ agente local
 
     @application.post("/api/agente/executar")
-    async def agente_executar(payload: AgenteRequest) -> dict[str, Any]:
+    async def agente_executar(request: Request, payload: AgenteRequest) -> dict[str, Any]:
+        autorizacao = payload.autorizacao
+        if (
+            not autorizacao.strip()
+            and sistema_mod.confiar_local()
+            and _veio_da_propria_maquina(request)
+        ):
+            # Modo dono: quem está na própria máquina não digita o token.
+            autorizacao = sistema_token_host()
         try:
             resultado = await agente_atender(
                 payload.pedido,
                 registry=skill_registry,
                 raiz=pasta_agente,
-                autorizacao=payload.autorizacao,
+                autorizacao=autorizacao,
                 criar=payload.criar,
                 consultar_web=payload.consultar_web,
                 confirmar=payload.confirmar,

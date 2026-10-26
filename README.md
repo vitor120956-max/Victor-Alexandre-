@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.56.0.**
+**Versão atual: 0.57.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -61,6 +61,8 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 **Agenda, sem calendário na nuvem:** `marca audiência amanhã às 14h`, `o que eu tenho para hoje`, `minha agenda da semana`, `conclui o compromisso audiência` — `agenda.marcar`, `agenda.listar`, `agenda.concluir` e `agenda.remover`. A data é interpretada **sem modelo** e devolvida por extenso (`terça-feira, 27/10/2026 às 14:00`) para você conferir; se a frase não tiver data reconhecível, ele **recusa em vez de adivinhar**. Fica num `agenda.json` na raiz de dados. **Não avisa sozinho** — você pergunta, ele responde. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
 **Backup que abre:** `faz backup dos meus dados em E:/JARVIS-backups`, `quanto vai pesar o backup`, `quais backups eu tenho`, `restaura o backup … para D:/restaurado` — `backup.planejar`, `backup.criar`, `backup.listar` e `backup.restaurar`. Compacta `storage/` sem `.venv`, `node_modules`, `.git` nem a pasta de backups; grava SHA-256 ao lado, confere o `.zip` logo depois de escrever e avisa quando o destino está **no mesmo disco** dos dados (cópia no mesmo HD não protege de HD morto). Restaura só em pasta vazia, recusando caminho que escape dela. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
+
+**Instalar sem digitar token — só de dentro da máquina:** `set JARVIS_HOST_CONFIAR_LOCAL=1` liga o **modo dono**. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
 **Git só de leitura:** `como está o git`, `o que mudou no git`, `últimos commits do git`, `qual o remoto do git` — `git.status`, `git.diff`, `git.log` e `git.remoto`. Quatro consultas com argumentos fixos, `shell=False`, `GIT_TERMINAL_PROMPT=0` e teto de 20 s; só aceita repositório dentro do projeto, da raiz de dados ou de `storage/repos`. **Não faz `commit`, `push`, `pull`, `checkout` nem `reset`** — nem como texto livre, porque não existe campo para linha de comando. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
