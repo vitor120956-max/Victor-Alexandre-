@@ -145,3 +145,21 @@ def test_modulo_nao_esta_no_gitignore():
     raiz = Path(__file__).resolve().parents[2]
     ignorados = {linha.strip() for linha in (raiz / ".gitignore").read_text(encoding="utf-8").splitlines()}
     assert "server/github.py" not in ignorados
+
+
+def test_arvore_filtra_pelo_sufixo():
+    bruto = {
+        "tree": [
+            {"type": "blob", "path": "skills/a/SKILL.md"},
+            {"type": "blob", "path": "skills/b/SKILL.md"},
+            {"type": "blob", "path": "README.md"},
+            {"type": "tree", "path": "skills"},
+        ]
+    }
+    caminhos = github.arvore("a/b", sufixo="SKILL.md", baixar=resposta({"/git/trees/": bruto}))
+    assert caminhos == ["skills/a/SKILL.md", "skills/b/SKILL.md"]
+
+
+def test_arvore_respeita_o_limite():
+    bruto = {"tree": [{"type": "blob", "path": f"s/{i}/SKILL.md"} for i in range(10)]}
+    assert len(github.arvore("a/b", sufixo="SKILL.md", limite=3, baixar=resposta({"/git/trees/": bruto}))) == 3

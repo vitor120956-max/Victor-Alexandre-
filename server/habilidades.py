@@ -59,11 +59,59 @@ class HabilidadeError(ValueError):
 
 # ------------------------------------------------------------------ endereços
 
+def _skills_do_repositorio(url: str) -> list[str]:
+    """Repositório sem `SKILL.md` na raiz: descobre onde estão os arquivos.
+
+    Um repositório como `vercel-labs/agent-skills` guarda dezenas de habilidades
+    em pastas. Em vez de adivinhar caminho, a árvore da API diz onde cada
+    `SKILL.md` está — e o import pega os primeiros.
+    """
+    from . import github  # import local: evita ciclo na carga do pacote
+
+    host = (urlparse(url).hostname or "").lower()
+    if host not in {"github.com", "www.github.com"}:
+        return []
+    _, dono, repo, ref, _ = _pedacos(url)
+    if not dono or not repo:
+        return []
+    try:
+        caminhos = github.arvore(f"{dono}/{repo}", ref=ref or "", sufixo="SKILL.md", limite=200)
+    except github.GithubError:
+        return []
+    base = f"https://raw.githubusercontent.com/{dono}/{repo}/{ref or 'HEAD'}"
+    return [f"{base}/{caminho}" for caminho in caminhos[:MAX_TENTATIVAS]]
+
+
+def _via_api(url: str) -> str | None:
+    """`raw.githubusercontent.com` bloqueado? A API do GitHub entrega o mesmo texto.
+
+    Isso importa na prática: muita rede de escritório e de operadora bloqueia
+    `raw.*`, e a API (`api.github.com`) passa. O conteúdo é idêntico — só não é
+    servido como arquivo estático.
+    """
+    from . import github  # import local: evita ciclo na carga do pacote
+
+    partes = [p for p in urlparse(url).path.split("/") if p]
+    if not urlparse(url).hostname or not urlparse(url).hostname.lower().endswith("raw.githubusercontent.com"):
+        return None
+    if len(partes) < 4:
+        return None
+    dono, repo, ref = partes[0], partes[1], partes[2]
+    caminho = "/".join(partes[3:])
+    try:
+        return github.arquivo(f"{dono}/{repo}", caminho, ref=ref, limite=MAX_TEXTO)["texto"]
+    except github.GithubError:
+        return None
+
+
 def _baixar(url: str) -> str:
     """Mesmo cliente da busca: UA de navegador, teto de página, sem token."""
     try:
         return busca_web._baixar(url)  # noqa: SLF001 — mesma camada de leitura
     except busca_web.BuscaError as exc:
+        alternativa = _via_api(url)
+        if alternativa:
+            return alternativa
         raise HabilidadeError(f"Não consegui baixar {url}: {exc}") from exc
 
 
@@ -268,10 +316,10 @@ def remover(ref: str, raiz: Path | None = None) -> bool:
 
 # ------------------------------------------------------------------ importar
 
-def _texto_de_habilidade(url: str, baixar: Baixar) -> tuple[str, str, list[str], list[str]]:
+def _texto_de_habilidade(url: str, baixar: Baixar) -> tuple[str, str, list[str], list[str], list[str]]:
     """Acha o markdown da habilidade a partir do que foi colado.
 
-    Devolve `(texto, endereço_que_funcionou, tentativas, erros)`. Link de
+    Devolve `(texto, endereço_que_funcionou, tentativas, erros, descobertos)`. Link de
     catálogo (skills.sh, clawhub) é seguido até o GitHub — a página é vitrine,
     o `SKILL.md` é o conteúdo.
     """
@@ -300,17 +348,26 @@ def _texto_de_habilidade(url: str, baixar: Baixar) -> tuple[str, str, list[str],
             continue
         limpo = texto.lstrip()
         if limpo.startswith(("#", "---")):
-            return texto, candidato, tentativas, erros
+            return texto, candidato, tentativas, erros, []
         if "<html" in limpo.lower():
             # Vitrine: procura o link do arquivo dentro dela.
             for link in _links_do_catalogo(texto):
                 for alvo in enderecos_candidatos(link):
                     achado = tentar(alvo)
                     if achado is not None and achado.lstrip().startswith(("#", "---")):
-                        return achado, alvo, tentativas, erros
+                        return achado, alvo, tentativas, erros, []
             erros.append(f"{candidato}: é uma página de catálogo, sem link direto para o SKILL.md")
             continue
-        return texto, candidato, tentativas, erros
+        return texto, candidato, tentativas, erros, []
+
+    # Último recurso: é um repositório com as habilidades dentro de pastas?
+    descobertos = _skills_do_repositorio(url)
+    for alvo in descobertos:
+        if alvo in tentativas:
+            continue
+        achado = tentar(alvo)
+        if achado is not None and achado.lstrip().startswith(("#", "---")):
+            return achado, alvo, tentativas, erros, descobertos
 
     raise HabilidadeError(
         "Não achei um SKILL.md em nenhum endereço tentado ("
@@ -328,7 +385,7 @@ def importar(
 ) -> dict[str, Any]:
     """Puxa a habilidade do link, interpreta e guarda. Devolve a ficha curta."""
     baixar = baixar or _baixar
-    texto, achado, tentativas, erros = _texto_de_habilidade(url, baixar)
+    texto, achado, tentativas, erros, descobertos = _texto_de_habilidade(url, baixar)
     padrao = _slug(Path(urlparse(achado).path).stem) or _slug(nome) or "habilidade"
     ficha = interpretar(texto, padrao=padrao)
     itens = carregar(raiz)
@@ -356,6 +413,7 @@ def importar(
         "tamanho": registro["tamanho"],
         "novo": anterior is None,
         "tentativas": tentativas,
+        "outros": [item for item in descobertos if item != achado][:8],
     }
 
 

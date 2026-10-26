@@ -197,6 +197,35 @@ def arquivo(
     }
 
 
+def arvore(
+    repositorio: str,
+    *,
+    ref: str = "",
+    baixar: BaixarJson | None = None,
+    limite: int = 400,
+    sufixo: str = "",
+) -> list[str]:
+    """Caminhos de arquivo do repositório inteiro, de uma vez (árvore recursiva).
+
+    Serve para achar onde estão os `SKILL.md` de um repositório de habilidades,
+    sem baixar o `.zip` e sem clonar. `sufixo` filtra pelo fim do caminho.
+    """
+    dono, nome = _partes(repositorio)
+    fetch = baixar or _json
+    alvo = (ref or "HEAD").strip()
+    bruto = fetch(_url_repo(dono, nome, f"/git/trees/{quote(alvo)}?recursive=1"))
+    itens = bruto.get("tree") if isinstance(bruto.get("tree"), list) else []
+    caminhos = [
+        str(item.get("path"))
+        for item in itens
+        if isinstance(item, dict)
+        and item.get("type") == "blob"
+        and item.get("path")
+        and (not sufixo or str(item.get("path")).lower().endswith(sufixo.lower()))
+    ]
+    return caminhos[:limite]
+
+
 def buscar(consulta: str, *, limite: int = 5, baixar: BaixarJson | None = None) -> list[dict[str, Any]]:
     """Procura repositório público por palavra — ordenado por estrelas."""
     termo = (consulta or "").strip()

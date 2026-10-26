@@ -1497,6 +1497,12 @@ def _formatar_habilidade(resultado: dict[str, Any]) -> str | None:
         if resultado.get("descricao"):
             linhas.append(f"Resumo: {resultado['descricao']}")
         linhas.append(f"Tamanho: {resultado.get('tamanho')} caractere(s). Ficou guardada em storage/habilidades.json.")
+        outros = resultado.get("outros") or []
+        if outros:
+            linhas.append(
+                f"Esse endereço tem mais {len(outros)} habilidade(s). Importei esta; para outra, "
+                f"cole o link da pasta — por exemplo {outros[0]}"
+            )
         linhas.append("Use com: " f"`usa a habilidade {resultado['slug']} para <seu pedido>`.")
         return "\n".join(linhas)
 

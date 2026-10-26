@@ -196,3 +196,29 @@ def test_modulo_nao_esta_no_gitignore():
     raiz = Path(__file__).resolve().parents[2]
     ignorados = {linha.strip() for linha in (raiz / ".gitignore").read_text(encoding="utf-8").splitlines()}
     assert "server/habilidades.py" not in ignorados
+
+
+def test_repositorio_com_pastas_descobre_o_primeiro_skill_md(tmp_path: Path, monkeypatch):
+    """`vercel-labs/agent-skills` não tem SKILL.md na raiz: a árvore da API acha."""
+    monkeypatch.setattr(
+        "server.github.arvore",
+        lambda *a, **k: ["skills/composition-patterns/SKILL.md", "skills/react-best-practices/SKILL.md"],
+    )
+    baixar = baixar_com(
+        {
+            "https://raw.githubusercontent.com/vercel-labs/agent-skills/HEAD/skills/composition-patterns/SKILL.md": SKILL,
+            "https://raw.githubusercontent.com/vercel-labs/agent-skills/HEAD/skills/react-best-practices/SKILL.md": SKILL.replace(
+                "frontend-design", "react-best-practices"
+            ),
+        }
+    )
+    ficha = habilidades.importar("https://github.com/vercel-labs/agent-skills", raiz=tmp_path, baixar=baixar)
+    assert ficha["url"].endswith("composition-patterns/SKILL.md")
+    assert len(ficha["outros"]) == 1
+    assert ficha["outros"][0].endswith("react-best-practices/SKILL.md")
+
+
+def test_sem_arvore_e_sem_skill_md_avisa(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("server.github.arvore", lambda *a, **k: [])
+    with pytest.raises(habilidades.HabilidadeError):
+        habilidades.importar("https://github.com/a/b", raiz=tmp_path, baixar=baixar_com({}))

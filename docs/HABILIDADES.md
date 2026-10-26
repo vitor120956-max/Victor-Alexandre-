@@ -46,9 +46,13 @@ O token de host **não** é pedido: é texto, não binário.
 |---|---|
 | `github.com/dono/repo/blob/main/caminho/SKILL.md` | vira `raw.githubusercontent.com/...` e vem como texto |
 | `github.com/dono/repo/tree/main/skills/nome` | tenta `.../skills/nome/SKILL.md` |
-| `github.com/dono/repo` | tenta `SKILL.md`, `skills/<repo>/SKILL.md`, `.claude/skills/<repo>/SKILL.md` |
+| `github.com/dono/repo` | tenta `SKILL.md`, `skills/<repo>/SKILL.md`, `.claude/skills/<repo>/SKILL.md` — e, se não houver, **varre a árvore do repositório** e pega o primeiro `SKILL.md` que achar |
 | botão **Raw** do GitHub | passa direto |
 | `skills.sh/...` ou `clawhub.ai/...` | baixa a página, acha o link do GitHub dentro dela e segue até o `SKILL.md` |
+
+Repositório com dezenas de habilidades (como `vercel-labs/agent-skills`) funciona
+assim: ele importa a primeira e avisa **quantas outras existem**, com o link da
+pasta para você escolher a próxima.
 
 Se nenhum endereço devolver markdown, ele **não inventa**: responde que não achou e
 pede o link do arquivo — no GitHub, o do botão **Raw**.
@@ -82,6 +86,7 @@ pública do GitHub:
 | `github.arquivos` | o que tem dentro de uma pasta (pasta/arquivo, tamanho, caminho) |
 | `github.arquivo` | o texto de um arquivo, decodificado do base64 da API |
 | `github.buscar` | repositórios públicos por palavra, ordenados por estrelas |
+| `github.arvore` (interna) | todos os caminhos do repositório de uma vez, para descobrir onde estão os `SKILL.md` |
 
 Limites honestos: **60 pedidos por hora** por endereço IP, só repositório **público**,
 sem `push`, sem *issue*, sem `clone`. Para trazer o repositório inteiro existe
@@ -130,8 +135,8 @@ O arquivo é JSON legível — dá para abrir no Bloco de Notas, copiar e apagar
 
 ## O que dá para testar sem rede
 
-Tudo. Os 34 testes de `server/tests/test_habilidades.py` e `server/tests/test_github.py`
+Tudo. Os 38 testes de `server/tests/test_habilidades.py` e `server/tests/test_github.py`
 usam um baixador falso: cobrem front matter, link `blob` → `raw`, `tree` → `SKILL.md`,
 página de catálogo seguindo link interno, marcação “novo” × “atualizado”, corte no
-limite, remoção, base64 da API, pasta que não é arquivo e o aviso de limite de 60
-pedidos por hora. Nenhum deles abre um socket.
+limite, remoção, base64 da API, pasta que não é arquivo, a árvore que descobre `SKILL.md` dentro de
+pastas e o aviso de limite de 60 pedidos por hora. Nenhum deles abre um socket.

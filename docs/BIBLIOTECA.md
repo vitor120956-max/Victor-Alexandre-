@@ -256,9 +256,9 @@ Limites, sem enfeite:
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **88** (34 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 17 em `test_dados.py`, 27 em `test_agente_local.py`) |
 | Testes do agente local | **183** (13 novos: mesa, fonte pelo pedido e habilidades importadas) |
-| Testes das habilidades de fora | **34** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
+| Testes das habilidades de fora | **38** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.327** |
+| Suíte da API | **2.331** |
 | Skills no registro | **245** (26 novas: biblioteca.*, armazenamento.*, mesa.*, habilidades.* e github.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
