@@ -2,7 +2,7 @@
 
 O caminho é sempre o mesmo, e nenhum passo chama modelo:
 
-1. **procura** o pedido nas 223 skills do registro, por palavra (nome, categoria,
+1. **procura** o pedido nas 225 skills do registro, por palavra (nome, categoria,
    descrição, campos do formulário);
 2. achando, **preenche os parâmetros** a partir da própria frase — número,
    endereço, caminho, enum, texto colado — e **executa**;

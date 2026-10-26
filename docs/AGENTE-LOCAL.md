@@ -11,7 +11,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 223 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 225 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 20 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, lê a primeira página e devolve fontes + trecho | rede (`JARVIS_HOST_REDE=1`) e token de host |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -84,15 +84,31 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 223 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 225 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
+
+## As skills novas também caem aqui
+
+`biblioteca.ocr`, `biblioteca.video`, `biblioteca.importar` e todo o resto do
+catálogo entram na busca por palavra como qualquer outra skill — e como elas
+têm efeito, a execução para na confirmação:
+
+```text
+importar a foto da página Downloads/contrato.jpg
+→ skill biblioteca.importar · parâmetros caminho=Downloads/contrato.jpg
+→ “Responda ‘sim, pode’ para eu seguir.”
+```
+
+O que o agente **não** faz sozinho: escolher por você que um vídeo do YouTube
+deve ser baixado só porque você colou o link — isso exige o pedido explícito.
 
 ## O que ele faz quando o pedido é vago
 
 | Situação | Resposta |
 |---|---|
 | Achou a skill, mas falta um campo | “Encontrei a skill X, mas falta o campo Y” |
+| A skill escolhida grava, baixa ou executa | pede o “sim, pode” e mostra os parâmetros antes |
 | Duas skills parecidas, mesma nota | lista as três mais próximas e pede para você escolher |
 | Nenhuma skill, mas uma receita serve | cria a skill local, guarda em `storage/agente-local/skills.json` e executa |
 | Nada serve e a web está ligada | fontes numeradas + trecho lido, com aviso de que não criou skill |

@@ -35,7 +35,7 @@ from html import unescape
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import dados
+from . import dados, ocr, video
 from .texto import frases, normalizar, palavras, todas_as_palavras
 
 MAX_ARQUIVO = 60 * 1024 * 1024
@@ -55,6 +55,13 @@ FORMATOS = {
     ".rst": "documento",
     ".vtt": "video",
     ".srt": "video",
+    ".png": "imagem",
+    ".jpg": "imagem",
+    ".jpeg": "imagem",
+    ".webp": "imagem",
+    ".bmp": "imagem",
+    ".tif": "imagem",
+    ".tiff": "imagem",
 }
 
 
@@ -186,6 +193,17 @@ def _ler_simples(caminho: Path) -> list[tuple[int | None, str]]:
     return [(None, bruto.decode("utf-8", errors="replace"))]
 
 
+def _ler_imagem(caminho: Path) -> list[tuple[int | None, str]]:
+    """Foto de página, print ou digitalização: só OCR resolve."""
+    try:
+        texto = ocr.extrair_imagem(caminho.read_bytes())
+    except ocr.OcrError as exc:
+        raise BibliotecaError(str(exc)) from exc
+    if not texto.strip():
+        raise BibliotecaError("O OCR não achou texto nesta imagem.")
+    return [(None, texto)]
+
+
 def _ler(caminho: Path, sufixo: str) -> list[tuple[int | None, str]]:
     if sufixo == ".pdf":
         return _ler_pdf(caminho)
@@ -195,6 +213,8 @@ def _ler(caminho: Path, sufixo: str) -> list[tuple[int | None, str]]:
         return _ler_epub(caminho)
     if sufixo in {".vtt", ".srt"}:
         return _ler_legenda(caminho)
+    if FORMATOS.get(sufixo) == "imagem":
+        return _ler_imagem(caminho)
     return _ler_simples(caminho)
 
 
@@ -382,6 +402,7 @@ def importar(
     titulo: str = "",
     tipo: str = "auto",
     origem: str = "",
+    usar_ocr: bool = True,
 ) -> dict[str, Any]:
     """Lê um arquivo e grava as seções. Não move nem apaga o original."""
     alvo = Path(caminho).expanduser()
@@ -396,9 +417,20 @@ def importar(
             "Formato não suportado. Aceito: " + ", ".join(sorted(FORMATOS)) + "."
         )
     blocos = _ler(alvo, sufixo)
+    texto_total = sum(len(texto) for _, texto in blocos)
+
+    # PDF escaneado devolve quase nada de texto: aí o OCR entra, se existir.
+    if sufixo == ".pdf" and usar_ocr and ocr.precisa_ocr("".join(t for _, t in blocos), max(1, len(blocos))):
+        try:
+            blocos = ocr.extrair_pdf(alvo)
+        except ocr.OcrError as exc:
+            raise BibliotecaError(
+                "Este PDF não tem texto (página escaneada). " + str(exc)
+            ) from exc
+        texto_total = sum(len(texto) for _, texto in blocos)
+
     if not blocos:
         raise BibliotecaError("Não saiu texto do arquivo (digitalizado sem OCR?).")
-    texto_total = sum(len(texto) for _, texto in blocos)
     categoria = tipo if tipo != "auto" else FORMATOS[sufixo]
     return _registrar(
         titulo=titulo or _nome_de(alvo),
@@ -451,6 +483,26 @@ def _registrar(
     outras = [item for item in _ler_indice() if item.get("slug") != slug]
     _gravar_indice([fonte, *outras])
     return {**fonte, "total_palavras": sum(len(palavras(secao["texto"])) for secao in secoes)}
+
+
+def importar_video(
+    url: str,
+    *,
+    buscar: Any = None,
+    titulo: str = "",
+) -> dict[str, Any]:
+    """Baixa a legenda do YouTube e importa como fonte do tipo "video"."""
+    try:
+        baixada = video.legenda(url, buscar=buscar)
+    except video.VideoError as exc:
+        raise BibliotecaError(str(exc)) from exc
+    fonte = importar_texto(
+        titulo or baixada["titulo"],
+        baixada["texto"],
+        tipo="video",
+        origem=baixada["url"],
+    )
+    return {**fonte, "video_id": baixada["video_id"], "idioma": baixada["idioma"]}
 
 
 def remover(slug: str) -> bool:

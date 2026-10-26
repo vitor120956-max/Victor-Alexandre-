@@ -276,6 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
+from . import ocr as ocr_local
 from .repos import (
     ReposError,
     analisar as analisar_repositorio,
@@ -1916,6 +1917,16 @@ class BibliotecaImportarInput(BaseModel):
     tipo: Literal["auto", "livro", "video", "pesquisa", "documento"] = Field(default="auto", title="Tipo")
 
 
+class BibliotecaVideoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=3, max_length=300, title="Vídeo do YouTube", json_schema_extra={"description": "Endereço do vídeo. O texto vem da legenda publicada (inclusive a automática); sem legenda não há o que baixar."})
+    titulo: str = Field(default="", max_length=160, title="Título", json_schema_extra={"description": "Vazio usa o título do próprio vídeo."})
+
+
+class BibliotecaOcrInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class BibliotecaListarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3430,6 +3441,21 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except bib.BibliotecaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def biblioteca_video_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaVideoInput)
+        try:
+            return bib.importar_video(data.url, titulo=data.titulo)
+        except bib.BibliotecaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def biblioteca_ocr_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        situacao = ocr_local.status()
+        return {
+            **situacao,
+            "como_instalar": ocr_local.INSTRUCOES,
+            "aceita": ["PDF escaneado", "PNG", "JPG", "JPEG", "WEBP", "BMP", "TIF", "TIFF"],
+        }
+
     def biblioteca_listar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         fontes = bib.listar()
         return {"total": len(fontes), "fontes": fontes}
@@ -4230,7 +4256,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("portabilidade.regras", "Catálogo de portabilidade", "Publica os treze alvos com estilo, base e o que cada um carrega, as dez regras de conversão, os limites e o que a camada não faz.", "Portabilidade", EmptyInput, portabilidade_regras_handler, timeout_seconds=5),
         SkillDefinition("estacao.memoria", "Revisar notas e skills", "Checa as notas do agente (tamanho, segredo, fato sem dia, absoluto) e as skills que ele escreveu (gatilho, passos, verificação, gatilho repetido).", "Estação", EstacaoMemoriaInput, estacao_memoria_handler, timeout_seconds=10),
         SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
-        SkillDefinition("biblioteca.importar", "Importar para a biblioteca", "Lê um PDF, EPUB, DOCX, TXT, MD, RST ou legenda VTT/SRT e grava em seções pesquisáveis em `storage/biblioteca`, com página e título. Não move o original, não usa modelo e não resume.", "Biblioteca", BibliotecaImportarInput, biblioteca_importar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("biblioteca.importar", "Importar para a biblioteca", "Lê um PDF, EPUB, DOCX, TXT, MD, RST, legenda VTT/SRT ou imagem (PNG, JPG, TIF) e grava em seções pesquisáveis em `storage/biblioteca`, com página e título. PDF escaneado passa pelo OCR quando não sai texto. Não move o original, não usa modelo e não resume.", "Biblioteca", BibliotecaImportarInput, biblioteca_importar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("biblioteca.video", "Legenda de vídeo do YouTube", "Baixa a legenda já publicada de um vídeo do YouTube (inclusive a automática), escolhe pt-BR, pt, en ou es e importa o texto como fonte do tipo vídeo. Não transcreve áudio: vídeo sem legenda é recusado com essa explicação.", "Biblioteca", BibliotecaVideoInput, biblioteca_video_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),
+        SkillDefinition("biblioteca.ocr", "Estado do OCR", "Diz se existe motor de OCR instalado (Tesseract, `winocr` ou RapidOCR), com os idiomas e o comando de instalação. Sem motor, a importação de imagem e de PDF escaneado é recusada com esta explicação.", "Biblioteca", BibliotecaOcrInput, biblioteca_ocr_handler, timeout_seconds=20),
         SkillDefinition("biblioteca.listar", "Listar a biblioteca", "Mostra as fontes importadas com tipo, seções, tamanho e data.", "Biblioteca", BibliotecaListarInput, biblioteca_listar_handler, timeout_seconds=15),
         SkillDefinition("biblioteca.buscar", "Buscar na biblioteca", "Procura por assunto nas seções de todas as fontes com BM25 e devolve trecho real, seção, página e cobertura do pedido.", "Biblioteca", BibliotecaBuscarInput, biblioteca_buscar_handler, timeout_seconds=30),
         SkillDefinition("biblioteca.correlacoes", "Correlações entre fontes", "Mostra termos presentes em duas ou mais fontes e, com um termo, os vizinhos que aparecem junto nas seções — a correlação é medida, não inventada.", "Biblioteca", BibliotecaCorrelacoesInput, biblioteca_correlacoes_handler, timeout_seconds=45),

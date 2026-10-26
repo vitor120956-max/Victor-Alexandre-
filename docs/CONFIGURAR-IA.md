@@ -24,7 +24,7 @@ Números conferidos em **25/10/2026**. Limite de camada gratuita muda sem aviso;
 | OpenRouter | depende do modelo de origem; os `:free` variam |
 | Google AI Studio | **sim** na camada gratuita, fora da União Europeia, Reino Unido e Suíça — o Brasil entra nessa |
 
-Se a conversa tiver dado sensível, prefira o Groq ou simplesmente não configure IA externa: as 223 skills locais continuam funcionando sem chave nenhuma.
+Se a conversa tiver dado sensível, prefira o Groq ou simplesmente não configure IA externa: as 225 skills locais continuam funcionando sem chave nenhuma.
 
 ### Passo a passo — Groq (o mais rápido, ~3 minutos)
 
@@ -86,7 +86,7 @@ O teste não imprime a chave. Você pode rodá-lo quantas vezes quiser.
 
 ### Modelo local: sem chave, sem limite e sem internet
 
-**Você não é obrigado a ter chave.** A camada de IA é opcional: sem chave nenhuma, as **223 skills** locais, a legislação, os documentos, a memória e as tarefas continuam funcionando. O que fica de fora é só o chat aberto (`IA EXTERNA`) e o `distilar.persona`.
+**Você não é obrigado a ter chave.** A camada de IA é opcional: sem chave nenhuma, as **225 skills** locais, a legislação, os documentos, a memória e as tarefas continuam funcionando. O que fica de fora é só o chat aberto (`IA EXTERNA`) e o `distilar.persona`.
 
 Se você quer o chat também, sem chave e sem limite de requisições, dá para rodar o modelo **na sua máquina**. O custo não é dinheiro, é RAM e paciência: a resposta sai bem mais devagar que num provedor de nuvem.
 

@@ -437,7 +437,7 @@ def test_esquecer_recusa_entrada_ambigua() -> None:
 
 def test_catalogo_publica_vias_pesos_e_limites() -> None:
     catalogo = memoria_catalogo()
-    assert catalogo["versao"] == "0.42.1"
+    assert catalogo["versao"] == "0.43.0"
     assert [item["via"] for item in catalogo["vias"]] == list(VIAS)
     assert catalogo["roteamento"]["limiar"] == LIMIAR_ROTA
     assert catalogo["recall"]["bm25"]["k1"] == 1.2
@@ -466,7 +466,7 @@ def test_registro_tem_as_sete_skills_de_memoria() -> None:
     itens = registry.list()
     memoria = [item for item in itens if item["id"].startswith("memoria.")]
     assert len(memoria) == 7
-    assert len(itens) == 223
+    assert len(itens) == 225
     assert all(item["category"] == "Memória" for item in memoria)
     assert all(item["sideEffects"] is False for item in memoria)
 

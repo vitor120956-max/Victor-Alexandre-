@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.42.1
+# Biblioteca e armazenamento — 0.43.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -20,9 +20,16 @@ Nenhuma das duas usa modelo de linguagem.
 | `.docx` | `python-docx` | seções por título |
 | `.md` `.markdown` `.rst` `.txt` | leitura direta | seções por título |
 | `.vtt` `.srt` | legenda com tempo removido | seções por bloco de fala |
+| `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.tif` `.tiff` | OCR da imagem | uma seção com o texto lido |
+| PDF escaneado | `pypdf` não acha texto → OCR página por página | seções com **página** |
 
 Um arquivo só entra se estiver em `storage/` (ou subpasta) **ou** na sua pasta
 **Downloads**. O original não é movido nem apagado.
+
+PDF com pouco texto por página (menos de 40 caracteres) é tratado como
+digitalizado e passa pelo OCR. Para **forçar** o OCR num PDF que tem camada de
+texto ruim, apague a camada ou importe a imagem da página — `usar_ocr` existe na
+função, não na skill.
 
 ```text
 biblioteca.importar   caminho=Downloads/contabilidade.pdf
@@ -31,6 +38,8 @@ biblioteca.buscar     consulta=critério de rateio
 biblioteca.correlacoes termo=rateio
 biblioteca.digest     fonte=contabilidade-4f2a1c gravar=true
 biblioteca.remover    fonte=contabilidade-4f2a1c
+biblioteca.video      url=https://youtu.be/dQw4w9WgXcQ
+biblioteca.ocr
 ```
 
 ---
@@ -68,7 +77,7 @@ Repare no que **não** existe: resumo escrito por modelo, opinião, "provavelmen
 A ordem de resolução do agente local agora é:
 
 ```text
-apelido ensinado → resposta guardada → skill → receita → biblioteca → web → não sei
+apelido ensinado → resposta guardada → skill forte → biblioteca → faixa média → receita → web → não sei
 ```
 
 Então basta perguntar:
@@ -146,23 +155,84 @@ copia nada.
 | Caracteres por fonte | 4.000.000 |
 | Seções por fonte | 4.000 |
 | Trecho devolvido | 1.200 caracteres |
-| Formatos | PDF, EPUB, DOCX, TXT, MD, RST, VTT, SRT |
+| Formatos | PDF, EPUB, DOCX, TXT, MD, RST, VTT, SRT, PNG, JPG, WEBP, BMP, TIF |
+| Páginas por OCR | 40 por arquivo |
+| Resolução do OCR | 200 dpi |
 
-- **PDF digitalizado (imagem) não funciona** — sem OCR não sai texto; a camada
-  diz isso em vez de fingir.
-- **Não há legendas automáticas do YouTube** — baixe o `.vtt` e importe.
+- **Sem motor de OCR, imagem e PDF escaneado são recusados** com o comando de
+  instalação — a camada não inventa texto que não leu.
+- **Vídeo sem legenda não é transcrito.** O JARVIS baixa a legenda que o YouTube
+  já publica (inclusive a automática); se não houver nenhuma, ele diz isso.
 - **Sem tradução, sem resumo abstrativo, sem modelo.**
 - Correlação é coocorrência de palavras, não relação de causa.
 
 ---
 
-## 8. Medido
+## 8. OCR: papel, foto e PDF escaneado
+
+Três motores, tentados nesta ordem — o primeiro que existir atende:
+
+| Motor | Onde funciona | Precisa de |
+|---|---|---|
+| **Tesseract** | Windows, Linux e macOS | `tesseract.exe` instalado + `pip install pytesseract pypdfium2` |
+| **winocr** | Windows 10 build 15063+ | `pip install winocr` (usa o OCR do próprio Windows) |
+| **RapidOCR** | qualquer plataforma | `pip install rapidocr-onnxruntime` (não instala em Python 3.15) |
+
+O Tesseract é o único que o **Windows 10 1607** aceita, e é o recomendado:
+instale pelo pacote da UB Mannheim marcando o idioma **Portuguese**, depois
+
+```bat
+.venv\Scripts\pip install pytesseract pypdfium2
+.venv\Scripts\python -c "from server import ocr; print(ocr.status())"
+```
+
+Se o executável ficou fora do PATH e de `Program Files`, aponte no `.env`:
+
+```text
+JARVIS_TESSERACT=C:\Program Files\Tesseract-OCR\tesseract.exe
+```
+
+O que o OCR faz com o PDF: rasteriza as páginas com `pypdfium2` a 200 dpi, lê
+cada uma e devolve `(página, texto)` — no máximo **40 páginas** por arquivo. Não
+existe OCR na nuvem aqui: a imagem não sai da máquina.
+
+O que ele **não** faz: endireitar foto torta, separar coluna de tabela, corrigir
+palavra errada, traduzir. Texto reconhecido errado entra errado — a ficha
+(`biblioteca.digest`) mostra os números citados justamente para você conferir.
+
+---
+
+## 9. Legenda do YouTube, sozinha
+
+`biblioteca.video url=<endereço>` faz o caminho inteiro: abre a página do vídeo,
+lê as faixas de legenda, escolhe **pt-BR**, **pt**, **en** ou **es** nessa ordem
+(aceita a automática), baixa o `json3` e importa o texto como fonte do tipo
+`video`, guardando o link como origem.
+
+```text
+biblioteca.video url=https://www.youtube.com/watch?v=dQw4w9WgXcQ
+→ { "slug": "aula-de-rateio-9c31ab", "tipo": "video", "idioma": "pt-BR",
+    "secoes": 6, "caracteres": 18422 }
+```
+
+Limites, sem enfeite:
+
+- **não transcreve áudio** — vídeo sem legenda publicada não entra;
+- a página do YouTube muda; se as faixas não vierem, o erro diz que não vieram;
+- vídeo pedindo consentimento de cookie pode exigir abrir uma vez no navegador;
+- legenda automática tem erro de reconhecimento de fala — e ele fica no texto.
+
+---
+
+## 10. Medido
 
 | Verificação | Resultado |
 |---|---|
 | Testes da biblioteca | **22** (PDF gerado com reportlab, EPUB e DOCX montados no teste) |
+| Testes do OCR | **13** (motor falso por monkeypatch: o sandbox não tem Tesseract) |
+| Testes da legenda | **18** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do agente local | **127** |
-| Suíte da API | **2.108** |
-| Skills no registro | **223** (8 novas: biblioteca.* e armazenamento.*) |
+| Suíte da API | **2.139** |
+| Skills no registro | **225** (10 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |

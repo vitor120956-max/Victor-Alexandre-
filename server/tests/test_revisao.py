@@ -712,7 +712,7 @@ def test_registro_tem_as_sete_skills_de_revisao(tmp_path) -> None:
     revisao = [item for item in itens if item["id"].startswith("revisao.")]
     assert len(revisao) == 7
     assert {item["category"] for item in revisao} == {"Revisão"}
-    assert len(itens) == 223
+    assert len(itens) == 225
     assert all(item["sideEffects"] is False for item in revisao)
 
 

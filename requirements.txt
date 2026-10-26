@@ -13,3 +13,7 @@ python-pptx>=1.0,<2.0
 pypdf>=5.1,<7.0
 reportlab>=4.2,<5.0
 python-multipart>=0.0.20,<1.0
+# OCR opcional: PDF escaneado e foto de página viram texto.
+# O executável do Tesseract não vem pelo pip — veja a skill biblioteca.ocr.
+pypdfium2>=4.30,<6.0
+pytesseract>=0.3.10,<1.0
