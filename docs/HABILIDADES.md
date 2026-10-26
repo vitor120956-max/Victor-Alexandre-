@@ -36,6 +36,7 @@ provedor, sem API. Então a habilidade não vira raciocínio sozinha — vira **
 | `quais habilidades você importou` | lista nome, descrição e origem de cada uma |
 | `usa a habilidade <nome> para <pedido>` | devolve o roteiro inteiro, com a sua pergunta em cima e a fonte embaixo |
 | `esquece a habilidade <nome>` | apaga do arquivo local |
+| `importa estas habilidades: <link 1> <link 2> …` | importa até **20 por chamada**; um link que falha não derruba os outros |
 
 Nada é instalado, nada é executado, nada sai da máquina a não ser a leitura do link.
 O token de host **não** é pedido: é texto, não binário.

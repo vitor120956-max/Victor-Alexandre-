@@ -1429,9 +1429,128 @@ _RE_APLICAR_HABILIDADE = re.compile(
 )
 
 
+_RE_TRIAGEM_CORREIO = re.compile(
+    r"\b(?:triagem|triar|tria|filtra\w*|filtrar|prioriza\w*|separa\w*|quais)\b[^.]*"
+    r"\b(?:e-?mails?|correio|caixa de entrada|gmail)\b"
+    r"|\b(?:e-?mails?|correio|gmail|caixa de entrada)\b[^.]*\b(?:filtra\w*|triagem|prioriza\w*|importantes?|urgentes?)\b"
+    r"|\b(?:e-?mails?|correio)\s+(?:importantes?|urgentes?)\b",
+    re.I,
+)
+_RE_PADROES_CORREIO = re.compile(
+    r"\b(?:padr(?:[õo]es|ã?o)|estilo|jeito|como eu escrevo|analisa\w*|analisar)\b[^.]*"
+    r"\b(?:e-?mails?|correio|mensagens|gmail|caixa)\b",
+    re.I,
+)
+_RE_ESCREVER_EMAIL = re.compile(
+    r"\b(?:rascunh\w+|escrev\w+|escreva|redig\w+|monta\w*|prepara\w*|faz|faça)\b[^.]*?"
+    r"\b(?:e-?mail|mensagem|correio)\b(?P<resto>.*)$",
+    re.I,
+)
+
+
+def _limpar_destino(bruto: str) -> tuple[str, str, str]:
+    """“para a Ana sobre o relatório: ponto 1; ponto 2” → (Ana, relatório, pontos)."""
+    resto = (bruto or "").strip(" :,.!")
+    pontos = ""
+    if ":" in resto:
+        resto, pontos = resto.split(":", 1)
+        pontos = pontos.strip()
+    assunto = ""
+    achado = re.search(r"\b(?:sobre|falando de|a respeito de|com (?:o )?assunto|assunto)\s+(.+)$", resto, re.I)
+    if achado:
+        resto = resto[: achado.start()].strip()
+        assunto = achado.group(1).strip(" .,!")
+    destino = re.sub(r"^(?:o|a|os|as|sr\.?|sra\.?|dr\.?|dra\.?)\s+", "", resto.strip(), flags=re.I).strip(" .,!")
+    assunto = re.sub(r"^(?:o|a|os|as)\s+", "", assunto.strip(), flags=re.I)
+    return destino, assunto, pontos
+
+
+def _pedido_direto_de_correio(termo: str) -> dict[str, Any] | None:
+    """E-mail exportado: triagem por importância, padrão de escrita e rascunho."""
+    texto = (termo or "").strip()
+
+    achado = _RE_ESCREVER_EMAIL.search(texto)
+    if achado and re.search(r"\b(?:para|pra|ao|à)\b", achado.group("resto") or "", re.I):
+        resto = achado.group("resto")
+        resto = re.sub(r"^\s*(?:para|pra|ao|à)\b", "para", resto, flags=re.I)
+        destino, assunto, pontos = _limpar_destino(resto.replace("para", "", 1) if resto.lower().startswith("para") else resto)
+        if destino and assunto:
+            parametros: dict[str, Any] = {"para": destino[:200], "assunto": assunto[:160]}
+            if pontos:
+                parametros["pontos"] = pontos[:4000]
+            return {"skill_id": "correio.rascunho", "nome": "Rascunhar e-mail no seu estilo", "parametros": parametros, "confirma": False}
+
+    if _RE_TRIAGEM_CORREIO.search(texto):
+        return {"skill_id": "correio.triar", "nome": "Triar e-mail por importância", "parametros": {}, "confirma": False}
+
+    if _RE_PADROES_CORREIO.search(texto):
+        return {"skill_id": "correio.padroes", "nome": "Meu jeito de escrever", "parametros": {}, "confirma": False}
+    return None
+
+
+def _formatar_correio(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para a camada de correio."""
+    if "mensagens" in resultado and "por_categoria" in resultado:
+        total = int(resultado.get("total") or 0)
+        urgentes = int(resultado.get("urgentes") or 0)
+        linhas = [f"Triagem de {total} mensagem(ns): {urgentes} urgente(s).", ""]
+        for item in resultado.get("mensagens") or []:
+            vence = f" — vence {item['vencimento']}" if item.get("vencimento") else ""
+            dias = item.get("dias_para_vencer")
+            if isinstance(dias, int) and dias >= 0:
+                vence += f" (em {dias} dia(s))"
+            linhas.append(f"[{item.get('prioridade')}] {item.get('rotulo')} — {item.get('assunto') or '(sem assunto)'}")
+            linhas.append(f"    de {item.get('de') or '?'}{vence}")
+        if resultado.get("por_categoria"):
+            resumo = ", ".join(f"{chave}: {valor}" for chave, valor in resultado["por_categoria"].items())
+            linhas += ["", f"Por categoria — {resumo}."]
+        linhas += ["", "Nada foi aberto no Gmail: isto é o que você exportou em storage/correio."]
+        return "\n".join(linhas)
+
+    if "total_enviadas" in resultado:
+        linhas = [
+            f"Seu jeito de escrever (medido em {resultado['total_enviadas']} e-mail(s) enviado(s)):",
+            "",
+            f"• Saudação mais comum: {resultado.get('saudacao') or 'nenhuma detectada'}",
+            f"• Fecho mais comum: {resultado.get('fecho') or 'nenhum detectado'}",
+            f"• Assinatura: {resultado.get('assinatura') or 'sem assinatura curta no fim'}",
+            f"• Tamanho: média de {resultado.get('palavras_media')} palavras (mediana {resultado.get('palavras_mediana')})",
+            f"• Usa lista com marcadores: {resultado.get('usa_lista')}% das mensagens",
+        ]
+        if resultado.get("assuntos"):
+            linhas.append("• Assuntos recentes: " + " · ".join(resultado["assuntos"][:3]))
+        linhas += ["", "Para escrever no seu estilo: `escreve um e-mail para fulano sobre o assunto: ponto 1; ponto 2`."]
+        return "\n".join(linhas)
+
+    if resultado.get("para") and resultado.get("corpo") and "avisos" in resultado:
+        linhas = [f"Para: {resultado['para']}", f"Assunto: {resultado['assunto']}", "", resultado["corpo"].rstrip()]
+        if resultado.get("avisos"):
+            linhas += ["", "— " + " ".join(resultado["avisos"][:2])]
+        return "\n".join(linhas)
+
+    if "arquivos" in resultado and isinstance(resultado.get("arquivos"), list):
+        itens = resultado["arquivos"]
+        if not itens:
+            return f"Nenhum arquivo de correio em {resultado.get('pasta')}. Exporte do Gmail e ponha ali."
+        linhas = [f"Correio exportado em {resultado.get('pasta')} ({len(itens)} arquivo(s)):"]
+        linhas += [f"• {item['nome']} — {item['formato']}, {item['bytes']} byte(s)" for item in itens[:30]]
+        return "\n".join(linhas)
+    return None
+
+
 def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
     """Habilidades de fora: importar de um link, listar e usar como roteiro."""
     texto = (termo or "").strip()
+
+    links = re.findall(r"https?://[^\s,;]+", texto)
+    if len(links) >= 2 and re.search(r"\bhabilidades?\b", texto, re.I):
+        limpos = [link.rstrip(").,;]}") for link in links]
+        return {
+            "skill_id": "habilidades.importar-varias",
+            "nome": "Importar várias habilidades",
+            "parametros": {"links": "\n".join(limpos[:20]), "limite": min(20, len(limpos))},
+            "confirma": True,
+        }
 
     achado = _RE_IMPORTAR_HABILIDADE.search(texto)
     if achado:
@@ -1487,6 +1606,19 @@ def _formatar_habilidade(resultado: dict[str, Any]) -> str | None:
             cabeca.append("(texto cortado no limite — peça com `limite` maior para ver tudo)")
         corpo = [cabeca[0], *cabeca[1:], "", str(resultado["texto"]).strip(), "", str(resultado["lembrete"])]
         return "\n".join(corpo)
+
+    if isinstance(resultado.get("importadas"), list) and "falhas" in resultado:
+        linhas = [f"Importei {len(resultado['importadas'])} de {resultado.get('tentadas')} habilidade(s)."]
+        for item in resultado["importadas"][:20]:
+            linhas.append(f"• {item.get('nome')} (`{item.get('slug')}`) — {item.get('tamanho')} caractere(s)")
+        if resultado.get("falhas"):
+            linhas.append("")
+            linhas.append("Não deu para importar:")
+            linhas += [f"• {falha['url']} — {falha['erro']}" for falha in resultado["falhas"][:5]]
+        if resultado.get("restantes"):
+            linhas.append("")
+            linhas.append(f"Sobraram {resultado['restantes']} link(s); mande o resto em outra leva (até 20 por vez).")
+        return "\n".join(linhas)
 
     if resultado.get("slug") and resultado.get("novo") is not None and "tentativas" in resultado:
         estado = "importada" if resultado["novo"] else "atualizada"
@@ -1789,6 +1921,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_correio(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_habilidade(resultado)
     if especial is not None:
@@ -2553,6 +2689,10 @@ async def _resolver(
     # 0b4. Habilidades de fora: link colado, lista ou uso como roteiro.
     if direto is None:
         direto = _pedido_direto_de_habilidade(termo)
+
+    # 0b5. Correio exportado: triagem, padrão de escrita e rascunho.
+    if direto is None:
+        direto = _pedido_direto_de_correio(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:

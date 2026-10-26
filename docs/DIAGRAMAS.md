@@ -424,7 +424,7 @@ A prévia usa `<iframe sandbox="">`: nenhum script do artefato executa. O botão
 
 ```bash
 npm run dev
-curl -s http://localhost:8000/api/health   # 0.50.0, 245 skills
+curl -s http://localhost:8000/api/health   # 0.51.0, 250 skills
 curl -s -X POST http://localhost:8000/api/skills/diagram.type/execute \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"pedido":"onde o tempo foi num checkout lento"}}'

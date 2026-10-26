@@ -222,3 +222,40 @@ def test_sem_arvore_e_sem_skill_md_avisa(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("server.github.arvore", lambda *a, **k: [])
     with pytest.raises(habilidades.HabilidadeError):
         habilidades.importar("https://github.com/a/b", raiz=tmp_path, baixar=baixar_com({}))
+
+
+def test_importar_varias_mantem_as_duas_quando_o_slug_repete(tmp_path: Path):
+    baixar = baixar_com(
+        {
+            "https://raw.githubusercontent.com/a/b/main/x/SKILL.md": "# Skill\n\nUm.\n",
+            "https://raw.githubusercontent.com/c/d/main/y/SKILL.md": "# Skill\n\nDois.\n",
+        }
+    )
+    resultado = habilidades.importar_varias(
+        "https://github.com/a/b/blob/main/x/SKILL.md e https://github.com/c/d/blob/main/y/SKILL.md",
+        raiz=tmp_path,
+        baixar=baixar,
+    )
+    assert [item["slug"] for item in resultado["importadas"]] == ["skill", "skill-2"]
+    assert len(habilidades.carregar(tmp_path)) == 2
+
+
+def test_importar_varias_conta_falhas_e_restantes(tmp_path: Path):
+    baixar = baixar_com({"https://raw.githubusercontent.com/a/b/main/x/SKILL.md": SKILL})
+    links = "\n".join(
+        [
+            "https://github.com/a/b/blob/main/x/SKILL.md",
+            "https://github.com/a/b/blob/main/nao-existe/SKILL.md",
+            "https://github.com/a/b/blob/main/tres/SKILL.md",
+        ]
+    )
+    resultado = habilidades.importar_varias(links, raiz=tmp_path, baixar=baixar, limite=2)
+    assert resultado["tentadas"] == 2
+    assert len(resultado["importadas"]) == 1
+    assert len(resultado["falhas"]) == 1
+    assert resultado["restantes"] == 1
+
+
+def test_importar_varias_sem_link_recusa(tmp_path: Path):
+    with pytest.raises(habilidades.HabilidadeError):
+        habilidades.importar_varias("nenhum link aqui", raiz=tmp_path)

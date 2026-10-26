@@ -1,4 +1,4 @@
-"""Testes do agente local (0.50.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.51.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "245 skills" in texto
+    assert "250 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.50.0)
+# ------------------------------------------------- memória do agente (0.51.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 245 skills, uma por uma
+# ------------------------------------- cobertura: as 250 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 245 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 250 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.50.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.51.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.50.0)
+# ------------------------------------------------------- Google Drive (0.51.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1722,7 +1722,7 @@ def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
     assert base["resposta"].count("sim, pode") == 1
 
 
-# --------------------------------------------- mouse e teclado (0.50.0)
+# --------------------------------------------- mouse e teclado (0.51.0)
 
 SKILL_MESA_CLICAR = {
     "id": "mesa.clicar",
@@ -1836,7 +1836,7 @@ def test_pesquisa_sem_rede_nao_pede_token(tmp_path: Path) -> None:
     assert texto.count("JARVIS_HOST_REDE") == 1
 
 
-# ------------------------------------------ habilidades de fora (0.50.0)
+# ------------------------------------------ habilidades de fora (0.51.0)
 
 
 def test_importar_habilidade_do_link_pede_confirmacao(tmp_path: Path) -> None:
@@ -1907,3 +1907,87 @@ def test_formatar_guia_com_tarefa() -> None:
     assert "Para: revisar o plano" in texto
     assert "Pergunte o objetivo" in texto
     assert "roteiro em texto" in texto
+
+
+# ----------------------------------------------- correio e lote (0.51.0)
+
+
+def test_pedido_de_triagem_vai_para_o_correio(tmp_path: Path) -> None:
+    from server.agente_local import _pedido_direto_de_correio
+
+    pedido = _pedido_direto_de_correio("entra no meu gmail e filtra por importância")
+    assert pedido["skill_id"] == "correio.triar"
+    assert _pedido_direto_de_correio("meus emails importantes")["skill_id"] == "correio.triar"
+
+
+def test_pedido_de_padrao_de_email() -> None:
+    from server.agente_local import _pedido_direto_de_correio
+
+    pedido = _pedido_direto_de_correio("qual é o meu padrão de e-mail")
+    assert pedido["skill_id"] == "correio.padroes"
+
+
+def test_pedido_de_rascunho_separa_destino_assunto_e_pontos() -> None:
+    from server.agente_local import _pedido_direto_de_correio
+
+    pedido = _pedido_direto_de_correio("escreve um e-mail para a Ana sobre o relatório: enviar planilha; pedir retorno")
+    assert pedido["skill_id"] == "correio.rascunho"
+    assert pedido["parametros"]["para"] == "Ana"
+    assert pedido["parametros"]["assunto"] == "relatório"
+    assert pedido["parametros"]["pontos"] == "enviar planilha; pedir retorno"
+
+
+def test_formatar_triagem() -> None:
+    texto = formatar_resultado(
+        {
+            "total": 2,
+            "urgentes": 1,
+            "por_categoria": {"Intimação / processo": 1, "Newsletter / promoção": 1},
+            "mensagens": [
+                {"prioridade": 100, "rotulo": "Intimação / processo", "assunto": "Intimação nº 1", "de": "tj@tj.jus.br", "vencimento": "", "dias_para_vencer": None},
+                {"prioridade": 5, "rotulo": "Newsletter / promoção", "assunto": "Promo", "de": "p@loja.com", "vencimento": "", "dias_para_vencer": None},
+            ],
+        }
+    )
+    assert "Triagem de 2 mensagem" in texto and "1 urgente" in texto
+    assert "[100] Intimação / processo" in texto
+    assert "nada foi aberto no gmail" in texto.lower()
+
+
+def test_formatar_rascunho_mostra_aviso() -> None:
+    texto = formatar_resultado(
+        {
+            "para": "ana@x.com",
+            "assunto": "entrega",
+            "corpo": "Olá,\n\nSegue.\n\nAbraços,\nVictor\n",
+            "palavras": 6,
+            "baseado_em": 1,
+            "avisos": ["Rascunho montado a partir do seu padrão — revise antes de enviar.", "Nada foi enviado."],
+        }
+    )
+    assert "Para: ana@x.com" in texto and "Abraços" in texto
+    assert "revise antes de enviar" in texto
+
+
+def test_varios_links_viram_importacao_em_lote() -> None:
+    from server.agente_local import _pedido_direto_de_habilidade
+
+    pedido = _pedido_direto_de_habilidade(
+        "importa estas habilidades: https://github.com/a/b/blob/main/x/SKILL.md e https://github.com/c/d/blob/main/y/SKILL.md"
+    )
+    assert pedido["skill_id"] == "habilidades.importar-varias"
+    assert pedido["parametros"]["limite"] == 2
+    assert pedido["parametros"]["links"].count("http") == 2
+
+
+def test_formatar_lote_com_falha() -> None:
+    texto = formatar_resultado(
+        {
+            "tentadas": 2,
+            "importadas": [{"slug": "a", "nome": "A", "tamanho": 10}],
+            "falhas": [{"url": "https://x/SKILL.md", "erro": "404"}],
+            "restantes": 0,
+        }
+    )
+    assert "Importei 1 de 2" in texto
+    assert "Não deu para importar" in texto

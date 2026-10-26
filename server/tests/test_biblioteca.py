@@ -1,4 +1,4 @@
-"""Testes da biblioteca (0.50.0): aprender com livro, vídeo e pesquisa.
+"""Testes da biblioteca (0.51.0): aprender com livro, vídeo e pesquisa.
 
 Sem rede e sem modelo: os arquivos são montados na hora (PDF com reportlab,
 EPUB e DOCX com as bibliotecas já instaladas) e a busca é BM25 puro.

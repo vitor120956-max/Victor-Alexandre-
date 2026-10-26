@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import drive_setup, github, habilidades, mesa
+from . import correio, drive_setup, github, habilidades, mesa
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2037,6 +2037,31 @@ class HabilidadesImportarInput(BaseModel):
     nome: str = Field(default="", max_length=80, title="Apelido", json_schema_extra={"description": "Opcional: força o nome quando o arquivo não tem front matter."})
 
 
+class HabilidadesImportarVariasInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    links: str = Field(min_length=10, max_length=8_000, title="Links", json_schema_extra={"format": "textarea", "description": "Um link por linha (ou separados por espaço). Até 20 por chamada."})
+    limite: int = Field(default=10, ge=1, le=20, title="Quantos importar")
+
+
+class CorreioPastaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pasta: str = Field(default="", max_length=500, title="Pasta", json_schema_extra={"description": "Vazio usa `storage/correio`. Aceita caminho dentro de `storage/` ou da pasta Downloads."})
+
+
+class CorreioTriarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pasta: str = Field(default="", max_length=500, title="Pasta")
+    limite: int = Field(default=25, ge=1, le=200, title="Quantas mensagens mostrar")
+
+
+class CorreioRascunhoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    para: str = Field(min_length=3, max_length=200, title="Para quem", json_schema_extra={"description": "Nome ou e-mail do destinatário."})
+    assunto: str = Field(min_length=3, max_length=160, title="Assunto")
+    pontos: str = Field(default="", max_length=4_000, title="Pontos", json_schema_extra={"format": "textarea", "description": "Um ponto por linha. Vazio escreve só a abertura e o fecho."})
+    pasta: str = Field(default="", max_length=500, title="Pasta dos enviados", json_schema_extra={"description": "De onde tirar o seu padrão. Vazio usa `storage/correio`."})
+
+
 class HabilidadesAplicarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     habilidade: str = Field(min_length=2, max_length=80, title="Habilidade", json_schema_extra={"description": "Nome ou slug do que já foi importado."})
@@ -3720,6 +3745,66 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         itens = habilidades.listar()
         return {"total": len(itens), "habilidades": itens, "arquivo": str(_raiz_habilidades())}
 
+    def habilidades_importar_varias_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, HabilidadesImportarVariasInput)
+        try:
+            return habilidades.importar_varias(data.links, limite=data.limite)
+        except habilidades.HabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def _pasta_do_correio(bruto: str) -> Path:
+        """Só `storage/` ou a pasta Downloads do usuário — o resto é recusado."""
+        if not (bruto or "").strip():
+            return correio.pasta_padrao()
+        raiz_storage = dados_locais.raiz().resolve()
+        downloads = (Path.home() / "Downloads").resolve()
+        alvo = Path(bruto).expanduser()
+        candidatos = [alvo] if alvo.is_absolute() else [raiz_storage / bruto, downloads / bruto]
+        for candidato in candidatos:
+            try:
+                resolvido = candidato.resolve()
+            except OSError:
+                continue
+            if resolvido == raiz_storage or raiz_storage in resolvido.parents:
+                return resolvido
+            if resolvido == downloads or downloads in resolvido.parents:
+                return resolvido
+        raise SkillError("Só leio correio de dentro de storage/ ou da pasta Downloads.")
+
+    def correio_arquivos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CorreioPastaInput)
+        try:
+            itens = correio.arquivos(_pasta_do_correio(data.pasta))
+        except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+        return {"pasta": str(_pasta_do_correio(data.pasta)), "total": len(itens), "arquivos": itens}
+
+    def correio_triar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CorreioTriarInput)
+        try:
+            return correio.triar(_pasta_do_correio(data.pasta), limite=data.limite)
+        except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def correio_padroes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CorreioPastaInput)
+        try:
+            return correio.padroes(_pasta_do_correio(data.pasta))
+        except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def correio_rascunho_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CorreioRascunhoInput)
+        try:
+            return correio.rascunho(
+                data.para,
+                data.assunto,
+                data.pontos.splitlines(),
+                pasta=_pasta_do_correio(data.pasta),
+            )
+        except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+
     def habilidades_aplicar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, HabilidadesAplicarInput)
         try:
@@ -4550,6 +4635,11 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("mesa.focar", "Focar janela", "Traz para a frente a primeira janela cujo título contenha o trecho informado.", "Mesa", MesaFocarInput, mesa_handler("focar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
+        SkillDefinition("habilidades.importar-varias", "Importar várias habilidades", "Recebe uma lista de links (uma por linha) e importa até 20 de uma vez; um link que falha não derruba os outros e volta com o motivo. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarVariasInput, habilidades_importar_varias_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("correio.arquivos", "Correio exportado", "Lista os `.eml` e `.mbox` disponíveis em `storage/correio` (ou na pasta downloads) — o que você exportou do Gmail. Só lê nome, formato e tamanho.", "Correio", CorreioPastaInput, correio_arquivos_handler, timeout_seconds=15),
+        SkillDefinition("correio.triar", "Triar e-mail por importância", "Lê os e-mails exportados e classifica por regra determinística: intimação/processo, fatura/boleto (com vencimento), governo, segurança, pessoal e newsletter. Ordena por prioridade. Não conecta no Gmail.", "Correio", CorreioTriarInput, correio_triar_handler, timeout_seconds=60),
+        SkillDefinition("correio.padroes", "Meu jeito de escrever", "Mede só as mensagens enviadas: saudação, fecho, assinatura, tamanho médio, uso de lista. Serve de base para o rascunho sair no seu estilo.", "Correio", CorreioPastaInput, correio_padroes_handler, timeout_seconds=60),
+        SkillDefinition("correio.rascunho", "Rascunhar e-mail no seu estilo", "Escreve um e-mail novo copiando o seu padrão (saudação, fecho, assinatura) e os pontos que você ditar. Devolve texto para revisar — não envia nada e não fala com o Gmail.", "Correio", CorreioRascunhoInput, correio_rascunho_handler, timeout_seconds=60),
         SkillDefinition("habilidades.aplicar", "Usar habilidade importada", "Devolve o roteiro da habilidade junto com a sua pergunta, para ser seguido passo a passo. Sem modelo configurado, é texto de apoio — não é código executado.", "Habilidades", HabilidadesAplicarInput, habilidades_aplicar_handler, timeout_seconds=15),
         SkillDefinition("habilidades.remover", "Esquecer habilidade", "Tira a habilidade de `storage/habilidades.json`. Nada fora desse arquivo é tocado.", "Habilidades", HabilidadesRemoverInput, habilidades_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=10),
         SkillDefinition("github.repo", "Ficha de repositório", "Lê a API pública do GitHub e descreve o repositório: estrelas, linguagem, licença, branch padrão e tópicos. Sem token, até 60 pedidos por hora.", "GitHub", GithubRepoInput, github_repo_handler, timeout_seconds=30),

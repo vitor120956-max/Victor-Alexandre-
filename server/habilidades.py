@@ -30,7 +30,7 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from urllib.parse import urlparse
 
 from . import busca_web, dados
@@ -382,12 +382,23 @@ def importar(
     raiz: Path | None = None,
     baixar: Baixar | None = None,
     nome: str = "",
+    evitar: Iterable[str] = (),
 ) -> dict[str, Any]:
-    """Puxa a habilidade do link, interpreta e guarda. Devolve a ficha curta."""
+    """Puxa a habilidade do link, interpreta e guarda. Devolve a ficha curta.
+
+    `evitar` são slugs já usados nesta rodada (importação em lote): em vez de o
+    segundo `SKILL.md` sobrescrever o primeiro, ele ganha sufixo `-2`, `-3`…
+    """
     baixar = baixar or _baixar
     texto, achado, tentativas, erros, descobertos = _texto_de_habilidade(url, baixar)
     padrao = _slug(Path(urlparse(achado).path).stem) or _slug(nome) or "habilidade"
     ficha = interpretar(texto, padrao=padrao)
+    base = ficha["slug"]
+    usados = set(evitar)
+    contador = 1
+    while ficha["slug"] in usados:
+        contador += 1
+        ficha["slug"] = f"{base}-{contador}"
     itens = carregar(raiz)
     anterior = _achar(ficha["slug"], itens)
     agora = datetime.now(timezone.utc).isoformat()
@@ -414,6 +425,58 @@ def importar(
         "novo": anterior is None,
         "tentativas": tentativas,
         "outros": [item for item in descobertos if item != achado][:8],
+    }
+
+
+_RE_LINK = re.compile(r"https?://[^\s,;]+")
+
+
+def links_no_texto(texto: str) -> list[str]:
+    """Todos os links colados, sem repetir e sem pontuação grudada no fim."""
+    vistos: list[str] = []
+    for bruto in _RE_LINK.findall(texto or ""):
+        limpo = bruto.rstrip(").,;]>}")
+        if limpo not in vistos:
+            vistos.append(limpo)
+    return vistos
+
+
+def importar_varias(
+    texto: str,
+    *,
+    raiz: Path | None = None,
+    baixar: Baixar | None = None,
+    limite: int = 10,
+) -> dict[str, Any]:
+    """Importa vários links de uma vez — uma lista de 100 skills vem assim.
+
+    Falha em um link não derruba os outros: cada erro volta em `falhas`, com o
+    motivo, para você corrigir o link e repetir só ele.
+    """
+    links = links_no_texto(texto)
+    if not links:
+        raise HabilidadeError("Não achei link nenhum no texto colado — mande um por linha.")
+    quantos = max(1, min(int(limite), 20))
+    alvos = links[:quantos]
+    importadas: list[dict[str, Any]] = []
+    falhas: list[dict[str, str]] = []
+    usados: set[str] = set()
+    for link in alvos:
+        try:
+            ficha = importar(link, raiz=raiz, baixar=baixar, evitar=usados)
+        except HabilidadeError as exc:
+            falhas.append({"url": link, "erro": str(exc)[:200]})
+            continue
+        # Dois arquivos chamados `SKILL.md` gerariam o mesmo slug: o segundo já
+        # vem com sufixo, sem sobrescrever o primeiro.
+        usados.add(ficha["slug"])
+        importadas.append(ficha)
+    return {
+        "tentadas": len(alvos),
+        "importadas": importadas,
+        "falhas": falhas,
+        "restantes": max(0, len(links) - len(alvos)),
+        "links": links,
     }
 
 

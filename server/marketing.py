@@ -24,7 +24,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .review import common, finalize, finding
 
-VERSAO = "0.50.0"
+VERSAO = "0.51.0"
 MAX_TEXTO = 200_000
 MAX_URLS = 60
 
