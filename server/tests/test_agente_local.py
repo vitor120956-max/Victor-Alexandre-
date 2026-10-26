@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "264 skills" in texto
+    assert "269 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 264 skills, uma por uma
+# ------------------------------------- cobertura: as 269 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 264 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 269 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2294,3 +2294,167 @@ def test_formatar_saida_de_comando() -> None:
     )
     assert "`ipconfig`" in texto
     assert "192.168.0.10" in texto
+
+
+# ------------------------------------------- instalador de programa (0.55.0)
+
+
+def test_pedido_de_onde_guardar_o_instalador() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("onde você salva o instalador?")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.destinos"
+    assert direto["confirma"] is False
+
+
+def test_pedido_de_onde_deixar_o_arquivo_do_programa() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("onde deixa o arquivo do programa")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.destinos"
+
+
+def test_pedido_de_ram_do_pc_vira_maquina_medida() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("quanto de ram tem meu pc")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.maquina"
+
+
+def test_pedido_de_compatibilidade_do_programa() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("meu pc aguenta o programa Photoshop?")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.analisar"
+    assert direto["parametros"] == {}
+
+
+def test_pedido_com_link_analisa_sem_baixar() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("esse programa roda no meu pc? https://exemplo.com/setup.exe")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.analisar"
+    assert direto["parametros"]["url"] == "https://exemplo.com/setup.exe"
+    assert direto["confirma"] is False
+
+
+def test_pedido_com_link_e_baixar_pede_confirmacao() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("baixa o programa do link https://exemplo.com/setup.exe")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.baixar"
+    assert direto["confirma"] is True
+    assert direto["parametros"]["url"].startswith("https://exemplo.com")
+
+
+def test_pedido_de_arquivo_instalador_pelo_nome() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    direto = _pedido_direto_de_instalador("o setup.msi roda no meu pc")
+    assert direto is not None
+    assert direto["skill_id"] == "instalador.analisar"
+    assert direto["parametros"] == {"arquivo": "setup.msi"}
+
+
+def test_abrir_programa_do_pc_nao_vira_instalador() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    assert _pedido_direto_de_instalador("abre o bloco de notas") is None
+
+
+def test_baixar_livro_nao_vira_instalador() -> None:
+    from server.agente_local import _pedido_direto_de_instalador
+
+    assert _pedido_direto_de_instalador("baixa o livro Dom Casmurro") is None
+
+
+def test_formatar_destinos_do_instalador() -> None:
+    texto = formatar_resultado(
+        {
+            "pasta_base": "D:/JARVIS/storage/host-downloads",
+            "opcoes": [
+                {
+                    "nome": "padrao",
+                    "rotulo": "Quarentena (padrão)",
+                    "caminho": "D:/JARVIS/storage/host-downloads",
+                    "livre_gb": 12.5,
+                    "nota": "É daqui que a instalação aceita.",
+                    "recomendado": True,
+                }
+            ],
+            "fora": [
+                {"nome": "Downloads", "caminho": "C:/Users/Ana/Downloads", "livre_gb": 30.0, "nota": "instalar não"}
+            ],
+            "nota": "Mudar de pasta não muda a trava.",
+        }
+    )
+    assert "Quarentena (padrão)" in texto
+    assert "12.5 GB livres" in texto
+    assert "guardar sim, instalar não" in texto
+
+
+def test_formatar_maquina_medida() -> None:
+    texto = formatar_resultado(
+        {
+            "windows": {"build": 14393},
+            "plataforma": "Windows 10 1607 (build 14393)",
+            "arquitetura": "x64",
+            "bits": 64,
+            "ram_gb": 4.0,
+            "nucleos": 4,
+            "dotnet": ["4.8"],
+            "discos": [{"nome": "C:", "livre_gb": 20.0, "total_gb": 100.0}],
+            "nota": "Medido agora.",
+        }
+    )
+    assert "Windows 10 1607" in texto
+    assert "4.0 GB" in texto
+    assert "C:" in texto
+
+
+def test_formatar_veredito_do_instalador() -> None:
+    texto = formatar_resultado(
+        {
+            "veredito": "não roda",
+            "resposta": "Veredito: **não roda**.\nArquivo: app.msix.",
+        }
+    )
+    assert "não roda" in texto
+
+
+def test_pedido_da_leva_de_habilidades() -> None:
+    from server.agente_local import _pedido_direto_de_habilidade
+
+    for frase in (
+        "importa as 8 habilidades do skills.sh",
+        "puxa aquelas habilidades que te mostrei",
+        "adiciona todas essas habilidades",
+    ):
+        direto = _pedido_direto_de_habilidade(frase)
+        assert direto is not None, frase
+        assert direto["skill_id"] == "habilidades.pack"
+        assert direto["confirma"] is True
+
+
+def test_habilidade_com_link_nao_vira_leva() -> None:
+    from server.agente_local import _pedido_direto_de_habilidade
+
+    direto = _pedido_direto_de_habilidade(
+        "importa a habilidade https://github.com/x/y/blob/main/SKILL.md"
+    )
+    assert direto is not None
+    assert direto["skill_id"] == "habilidades.importar"
+
+
+def test_listar_habilidades_nao_vira_leva() -> None:
+    from server.agente_local import _pedido_direto_de_habilidade
+
+    direto = _pedido_direto_de_habilidade("quais habilidades você importou")
+    assert direto is not None
+    assert direto["skill_id"] == "habilidades.listar"

@@ -58,6 +58,32 @@ pasta para você escolher a próxima.
 Se nenhum endereço devolver markdown, ele **não inventa**: responde que não achou e
 pede o link do arquivo — no GitHub, o do botão **Raw**.
 
+## A leva pronta (as oito do print do skills.sh)
+
+Em vez de colar oito links um por um, existe `habilidades.pack`: ele importa a
+leva inteira pela API do GitHub — oito pedidos, dentro do limite de 60 por hora.
+
+| Nome | Repositório | Categoria | O que dá para fazer com ela |
+|---|---|---|---|
+| `frontend-design` | `anthropics/skills` | design | direção visual, tipografia, contraste |
+| `web-design-guidelines` | `vercel-labs/agent-skills` | design | conferir UI contra as diretrizes web |
+| `react-best-practices` | `vercel-labs/agent-skills` | código | desempenho em React/Next |
+| `react-components` | `google-labs-code/stitch-skills` | código | componentes a partir do Stitch |
+| `remotion` | `google-labs-code/stitch-skills` | vídeo | roteiro de vídeo com Remotion |
+| `grill-me` | `RobMitt/grill-me-skill` | revisão | sabatina do seu plano antes de começar |
+| `grill-with-docs` | `Caph-dev/delegate-grill-with-docs` | revisão | sabatina com documentação ao lado |
+| `nano-banana-pro` | `YouMind-OpenLab/…` | imagem | *prompts* de imagem — geração exige serviço pago |
+
+No chat: **“importa as 8 habilidades do skills.sh”**. Ele mostra a lista antes
+(dry run), pede confirmação e devolve o que entrou e o que falhou. Para usar uma
+delas numa pergunta sua: **“usa a habilidade frontend-design para uma landing
+page de estúdio de tatuagem”** — o roteiro volta junto com o seu pedido.
+
+`find-skills` e `browser-use` não estão na leva: o primeiro é um comando do
+próprio `skills.sh` (não é `SKILL.md` de repositório) e o segundo não existe mais
+em `vercel-labs/agent-skills` — o repositório tem nove skills, e nenhuma com esse
+nome. Em vez de inventar link, a leva traz só o que foi conferido.
+
 ## Os limites, ditos sem rodeio
 
 1. **Habilidade não é código que roda.** Ela é um roteiro para você (ou para um modelo)

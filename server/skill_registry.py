@@ -276,7 +276,17 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import catalogo, correio, cultura, drive_setup, github, habilidades, mesa, pc
+from . import (
+    catalogo,
+    correio,
+    cultura,
+    drive_setup,
+    github,
+    habilidades,
+    instalador,
+    mesa,
+    pc,
+)
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2058,6 +2068,23 @@ class PcComandoInput(BaseModel):
     nome: Literal["ip", "ip-tudo", "sistema", "processos", "usuarios", "versao", "disco", "data", "boot"] = Field(title="Comando", json_schema_extra={"description": "Comando de leitura da lista fechada — não é linha digitada."})
 
 
+class InstaladorAnalisarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(default="", max_length=400, title="Arquivo baixado", json_schema_extra={"description": "Instalador já na quarentena (caminho completo ou só o nome). Deixe vazio se for analisar um link."})
+    url: str = Field(default="", max_length=500, title="Link do instalador", json_schema_extra={"description": "Página ou arquivo oficial. Sem baixar, só o cabeçalho HTTP é lido."})
+    min_os: str = Field(default="", max_length=40, title="Windows exigido", json_schema_extra={"description": "O que o site do fabricante pede: 1607, 1809, 21H2, Windows 11…"})
+    ram_gb: float = Field(default=0, ge=0, le=512, title="RAM exigida (GB)")
+    disco_gb: float = Field(default=0, ge=0, le=10_000, title="Disco exigido (GB)")
+    arquitetura: str = Field(default="", max_length=20, title="Arquitetura exigida", json_schema_extra={"description": "x64, x86 ou arm64, se o site declara."})
+
+
+class InstaladorBaixarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=10, max_length=500, title="Link do instalador")
+    destino: str = Field(default="padrao", max_length=40, title="Onde guardar", json_schema_extra={"description": "`padrao`, `programas`, `temporarios`, `por-data` ou um nome simples de pasta dentro da quarentena."})
+    autorizacao: str = Field(default="", max_length=120, title="Token de host", json_schema_extra={"description": "Token de `storage/host-token.txt`. Também exige `JARVIS_HOST_REDE=1`."})
+
+
 class CatalogoTopicoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topico: str = Field(default="agent-skills", min_length=2, max_length=60, title="Tópico do GitHub", json_schema_extra={"description": "Como `agent-skills`. Vira `github.com/topics/<tópico>`."})
@@ -3823,6 +3850,17 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         itens = habilidades.listar()
         return {"total": len(itens), "habilidades": itens, "arquivo": str(_raiz_habilidades())}
 
+    def habilidades_pack_handler(_data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        if dry_run:
+            return {
+                "importaria": [item["nome"] for item in habilidades.PACK],
+                "nota": "Simulação: nada foi importado.",
+            }
+        try:
+            return habilidades.importar_pack()
+        except habilidades.HabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
     def habilidades_importar_varias_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, HabilidadesImportarVariasInput)
         try:
@@ -3872,6 +3910,37 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         raise SkillError(
             f"Não achei a planilha “{bruto}”. Deixe o CSV em {raiz_storage / nome} (ou em Downloads)."
         )
+
+    def instalador_maquina_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return instalador.maquina()
+
+    def instalador_destinos_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return instalador.destinos()
+
+    def instalador_analisar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, InstaladorAnalisarInput)
+        try:
+            return instalador.analisar(
+                arquivo=data.arquivo,
+                url=data.url,
+                min_os=data.min_os,
+                ram_gb=data.ram_gb,
+                disco_gb=data.disco_gb,
+                arquitetura=data.arquitetura,
+            )
+        except instalador.InstaladorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def instalador_baixar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, InstaladorBaixarInput)
+        if dry_run:
+            return {"baixaria": data.url, "destino": data.destino, "nota": "Simulação: nada foi baixado."}
+        try:
+            return instalador.baixar(
+                url=data.url, destino=data.destino, autorizacao=data.autorizacao
+            )
+        except instalador.InstaladorError as exc:
+            raise SkillError(str(exc)) from exc
 
     def pc_programas_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return pc.programas()
@@ -4845,9 +4914,14 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("mesa.digitar", "Digitar", "Digita num campo em foco, com acento (Unicode). Não aperta Enter sozinho.", "Mesa", MesaDigitarInput, mesa_handler("digitar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("mesa.teclar", "Apertar tecla", "Aperta uma tecla ou atalho: `enter`, `tab`, `esc`, `ctrl+c`, `ctrl+v`, `alt+f4`.", "Mesa", MesaTeclarInput, mesa_handler("teclar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("mesa.focar", "Focar janela", "Traz para a frente a primeira janela cujo título contenha o trecho informado.", "Mesa", MesaFocarInput, mesa_handler("focar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("habilidades.pack", "A leva de habilidades do skills.sh", "Importa de uma vez as oito habilidades publicadas que você viu no skills.sh/clawhub (frontend-design, web-design-guidelines, react-best-practices, react-components, remotion, grill-me, grill-with-docs, nano-banana-pro). Puxa o `SKILL.md` de cada uma pela API pública do GitHub e guarda o texto; falha em uma não derruba as outras. Não instala nem executa nada.", "Habilidades", EmptyInput, habilidades_pack_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
         SkillDefinition("habilidades.importar-varias", "Importar várias habilidades", "Recebe uma lista de links (uma por linha) e importa até 20 de uma vez; um link que falha não derruba os outros e volta com o motivo. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarVariasInput, habilidades_importar_varias_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("instalador.maquina", "Meu PC, medido", "Diz o Windows e o build, a arquitetura, a RAM, os núcleos, o espaço livre de cada disco e o .NET instalado — a régua usada para dizer se um programa roda. Só lê.", "Instalador", EmptyInput, instalador_maquina_handler, timeout_seconds=10),
+        SkillDefinition("instalador.destinos", "Onde guardar o instalador", "Mostra as pastas possíveis para o arquivo do programa, com o espaço livre de cada uma, e o que fica fora da quarentena (guardar sim, instalar não). Só lê.", "Instalador", EmptyInput, instalador_destinos_handler, timeout_seconds=10),
+        SkillDefinition("instalador.analisar", "O programa roda no meu PC?", "Lê o cabeçalho do instalador (EXE, MSI, MSIX, APPX, ZIP) sem executar e compara com o PC medido: arquitetura, versão mínima de Windows declarada no binário, .NET exigido, RAM, disco e assinatura. Devolve “roda / roda com ressalva / não roda”, com o motivo. Aceita também o que a página do fabricante exige.", "Instalador", InstaladorAnalisarInput, instalador_analisar_handler, timeout_seconds=45),
+        SkillDefinition("instalador.baixar", "Baixar instalador para a pasta escolhida", "Baixa pela quarentena (rede + token), guarda na subpasta escolhida com SHA-256 e já analisa se roda neste PC. Move o arquivo — não executa e não instala.", "Instalador", InstaladorBaixarInput, instalador_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("pc.programas", "Programas e comandos do PC", "Lista o que ele consegue abrir (bloco de notas, calculadora, paint, explorer, cmd, powershell…) e quais comandos de leitura sabe rodar. Só lê a lista; não abre nada.", "PC", EmptyInput, pc_programas_handler, timeout_seconds=10),
         SkillDefinition("pc.abrir-programa", "Abrir programa no PC", "Abre um programa da lista fechada, sem argumento e sem caminho livre. Exige `JARVIS_HOST_PC=1` e confirmação; no Linux/macOS a skill recusa e explica.", "PC", PcProgramaInput, pc_abrir_programa_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.abrir-arquivo", "Abrir arquivo no PC", "Abre um documento com o programa padrão do Windows, só dentro de storage/, Downloads, Documentos, Desktop ou OneDrive, e só de formato de leitura — `.exe`, `.bat`, `.ps1` e `.lnk` são recusados.", "PC", PcArquivoInput, pc_abrir_arquivo_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),

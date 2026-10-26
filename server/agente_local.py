@@ -1763,6 +1763,34 @@ _RE_ABRIR_ARQUIVO = re.compile(
     r"(?P<caminho>[^\n]+)$",
     re.I,
 )
+_RE_ONDE_GUARDAR = re.compile(
+    r"\b(?:onde|em que (?:pasta|lugar)|qual (?:é a )?pasta)\b[^.]{0,90}\b"
+    r"(?:salv\w*|guard\w*|deix\w*|coloc\w*|baix\w*)\b",
+    re.I,
+)
+_RE_ASSUNTO_ARQUIVO = re.compile(
+    r"\b(?:programa|instalador|aplicativo|app|arquivo|execut[áa]vel|download)\b", re.I
+)
+_RE_PC_CONFIG = re.compile(
+    r"\b(?:meu (?:pc|computador|m[áa]quina)|este pc|neste pc|deste pc)\b[^.]{0,60}\b"
+    r"(?:aguenta|rodaria|roda|suporta|configura\w*|especifica\w*|requisitos|ram|mem[óo]ria)\b"
+    r"|\b(?:quanta mem[óo]ria|quant[oa]s? (?:de )?(?:ram|mem[óo]ria))\b"
+    r"[^.]{0,50}\b(?:meu )?(?:pc|computador|m[áa]quina)\b"
+    r"|\b(?:configura\w*|especifica\w*|requisitos)\b[^.]{0,40}\b"
+    r"(?:do|deste|no) (?:meu )?(?:pc|computador|m[áa]quina)\b",
+    re.I,
+)
+_RE_URL = re.compile(r"https?://[^\s<>\"']+", re.I)
+_RE_BAIXAR_ARQUIVO = re.compile(r"\b(?:baix\w*|baixe|download|puxa\w*)\b", re.I)
+_RE_INSTALAR_VERBO = re.compile(
+    r"\b(?:instal\w*|roda\w*|rodar|funciona\w*|compat[íi]vel|aguenta\w*|serve)\b", re.I
+)
+_RE_ARQUIVO_INSTALADOR = re.compile(
+    r"\b[\w.-]+\.(?:exe|msi|msix|appx|msu|zip|dmg|deb|rpm|apk)\b", re.I
+)
+_RE_ANALISAR_ARQUIVO = re.compile(
+    r"\b(?:analis\w*|confere|conferir|verifica\w*|testa\w*|checa\w*|compat[íi]vel)\b", re.I
+)
 _COMANDOS_FALADOS: tuple[tuple[str, str], ...] = (
     ("ip-tudo", r"\bip (?:completo|detalhado)\b|\bmac address\b|\bipconfig /all\b"),
     ("ip", r"\bipconfig\b|\bqual (?:é|e) o meu ip\b|\bmeu ip\b|\bmeu endere[çc]o de rede\b"),
@@ -1815,6 +1843,75 @@ def _pedido_direto_de_pc(termo: str) -> dict[str, Any] | None:
                 "parametros": {"nome": chave},
                 "confirma": True,
             }
+    return None
+
+
+def _pedido_direto_de_instalador(termo: str) -> dict[str, Any] | None:
+    """Onde guardar, se roda no PC e o download do instalador para a pasta escolhida."""
+    texto = (termo or "").strip()
+
+    if _RE_ONDE_GUARDAR.search(texto) and _RE_ASSUNTO_ARQUIVO.search(texto):
+        return {
+            "skill_id": "instalador.destinos",
+            "nome": "Onde guardar o instalador",
+            "parametros": {},
+            "confirma": False,
+        }
+
+    link = _RE_URL.search(texto)
+    if link:
+        url = link.group(0).strip(" .,)")
+        if _RE_BAIXAR_ARQUIVO.search(texto) and _RE_ASSUNTO_ARQUIVO.search(texto):
+            return {
+                "skill_id": "instalador.baixar",
+                "nome": "Baixar instalador para a pasta escolhida",
+                "parametros": {"url": url},
+                "confirma": True,
+            }
+        if _RE_INSTALAR_VERBO.search(texto):
+            return {
+                "skill_id": "instalador.analisar",
+                "nome": "O programa roda no meu PC?",
+                "parametros": {"url": url},
+                "confirma": False,
+            }
+        return None
+
+    arquivo = _RE_ARQUIVO_INSTALADOR.search(texto)
+    if arquivo and (_RE_ANALISAR_ARQUIVO.search(texto) or _RE_INSTALAR_VERBO.search(texto)):
+        return {
+            "skill_id": "instalador.analisar",
+            "nome": "O programa roda no meu PC?",
+            "parametros": {"arquivo": arquivo.group(0)},
+            "confirma": False,
+        }
+
+    if _RE_PC_CONFIG.search(texto):
+        if re.search(r"\b(?:programa|instalador|aplicativo)\b", texto, re.I):
+            return {
+                "skill_id": "instalador.analisar",
+                "nome": "O programa roda no meu PC?",
+                "parametros": {},
+                "confirma": False,
+            }
+        return {
+            "skill_id": "instalador.maquina",
+            "nome": "Meu PC, medido",
+            "parametros": {},
+            "confirma": False,
+        }
+
+    if (
+        _RE_INSTALAR_VERBO.search(texto)
+        and re.search(r"\b(?:programa|instalador|aplicativo)\b", texto, re.I)
+        and re.search(r"\b(?:d[áa] para|posso|consigo|consegue)\b", texto, re.I)
+    ):
+        return {
+            "skill_id": "instalador.analisar",
+            "nome": "O programa roda no meu PC?",
+            "parametros": {},
+            "confirma": False,
+        }
     return None
 
 
@@ -1879,9 +1976,27 @@ def _pedido_direto_de_cultura(termo: str) -> dict[str, Any] | None:
     return None
 
 
+_RE_PACK_HABILIDADES = re.compile(
+    r"\b(?:importa|importe|puxa|puxe|baixa|baixe|traz|traga|adiciona|adicione)\b"
+    r"[^.]{0,70}\b(?:leva|pack|pacote|conjunto|todas|aquelas|essas|as \d+)\b"
+    r"[^.]{0,40}\bhabilidades?\b"
+    r"|\bhabilidades?\b[^.]{0,40}\b(?:do|de)\s+skills\.sh\b"
+    r"|\bskills\.sh\b[^.]{0,40}\bhabilidades?\b",
+    re.I,
+)
+
+
 def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
     """Habilidades de fora: importar de um link, listar e usar como roteiro."""
     texto = (termo or "").strip()
+
+    if _RE_PACK_HABILIDADES.search(texto) and "http" not in texto:
+        return {
+            "skill_id": "habilidades.pack",
+            "nome": "A leva de habilidades do skills.sh",
+            "parametros": {},
+            "confirma": True,
+        }
 
     links = re.findall(r"https?://[^\s,;]+", texto)
     if len(links) >= 2 and re.search(r"\bhabilidades?\b", texto, re.I):
@@ -1940,6 +2055,62 @@ def _formatar_pc(resultado: dict[str, Any]) -> str | None:
 
     if resultado.get("saida") is not None and resultado.get("linha"):
         return f"{resultado.get('rotulo')} — `{resultado['linha']}`\n\n{resultado['saida'] or '(sem saída)'}"
+    return None
+
+
+def _formatar_instalador(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para onde guardar, o PC medido e o veredito de compatibilidade."""
+    if isinstance(resultado.get("opcoes"), list) and resultado.get("pasta_base"):
+        linhas = ["Onde o instalador pode ficar:", ""]
+        for opcao in resultado["opcoes"]:
+            livre = (
+                f"{opcao['livre_gb']:g} GB livres"
+                if opcao.get("livre_gb") is not None
+                else "espaço não medido"
+            )
+            marca = " — recomendado" if opcao.get("recomendado") else ""
+            linhas.append(f"• {opcao.get('rotulo')} (`{opcao.get('nome')}`) — {livre}{marca}")
+            linhas.append(f"    {opcao.get('nota')}")
+        fora = resultado.get("fora") or []
+        if fora:
+            linhas += ["", "Fora da quarentena — guardar sim, instalar não:"]
+            for item in fora[:6]:
+                livre = (
+                    f"{item['livre_gb']:g} GB livres"
+                    if item.get("livre_gb") is not None
+                    else "espaço não medido"
+                )
+                linhas.append(f"• {item.get('nome')} — {item.get('caminho')} — {livre}")
+        if resultado.get("nota"):
+            linhas += ["", str(resultado["nota"])]
+        linhas += ["", "Para escolher: `instalador.baixar` com o campo `destino`."]
+        return "\n".join(linhas)
+
+    if "windows" in resultado and resultado.get("plataforma") and "veredito" not in resultado:
+        linhas = [
+            f"Seu PC: {resultado.get('plataforma')} — {resultado.get('arquitetura')} "
+            f"({resultado.get('bits')} bits).",
+            f"RAM: {resultado.get('ram_gb')} GB · núcleos: {resultado.get('nucleos')}",
+        ]
+        if resultado.get("dotnet"):
+            linhas.append(".NET Framework: " + ", ".join(resultado["dotnet"]))
+        discos = resultado.get("discos") or []
+        if discos:
+            linhas.append("")
+            linhas.append("Discos:")
+            linhas += [
+                f"• {disco.get('nome')} — {disco.get('livre_gb')} GB livres de {disco.get('total_gb')} GB"
+                for disco in discos
+            ]
+        if resultado.get("nota"):
+            linhas += ["", str(resultado["nota"])]
+        return "\n".join(linhas)
+
+    if resultado.get("analise") and resultado.get("resposta"):
+        return str(resultado["resposta"])
+
+    if resultado.get("veredito") and resultado.get("resposta"):
+        return str(resultado["resposta"])
     return None
 
 
@@ -2335,6 +2506,10 @@ def formatar_resultado(resultado: Any) -> str:
         return str(resultado)[:LIMITE_RESPOSTA]
 
     especial = _formatar_catalogo(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_instalador(resultado)
     if especial is not None:
         return especial
 
@@ -3129,6 +3304,10 @@ async def _resolver(
     # 0b8. PC: abrir programa, abrir arquivo e comandos prontos.
     if direto is None:
         direto = _pedido_direto_de_pc(termo)
+
+    # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
+    if direto is None:
+        direto = _pedido_direto_de_instalador(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:

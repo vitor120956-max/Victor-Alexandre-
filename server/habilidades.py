@@ -431,6 +431,79 @@ def importar(
 _RE_LINK = re.compile(r"https?://[^\s,;]+")
 
 
+PACK: tuple[dict[str, str], ...] = (
+    {
+        "nome": "frontend-design",
+        "categoria": "design",
+        "url": "https://github.com/anthropics/skills/blob/HEAD/skills/frontend-design/SKILL.md",
+    },
+    {
+        "nome": "web-design-guidelines",
+        "categoria": "design",
+        "url": "https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/web-design-guidelines/SKILL.md",
+    },
+    {
+        "nome": "react-best-practices",
+        "categoria": "código",
+        "url": "https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/react-best-practices/SKILL.md",
+    },
+    {
+        "nome": "react-components",
+        "categoria": "código",
+        "url": "https://github.com/google-labs-code/stitch-skills/blob/HEAD/plugins/stitch-build/skills/react-components/SKILL.md",
+    },
+    {
+        "nome": "remotion",
+        "categoria": "vídeo",
+        "url": "https://github.com/google-labs-code/stitch-skills/blob/HEAD/plugins/stitch-build/skills/remotion/SKILL.md",
+    },
+    {
+        "nome": "grill-me",
+        "categoria": "revisão",
+        "url": "https://github.com/RobMitt/grill-me-skill/blob/HEAD/SKILL.md",
+    },
+    {
+        "nome": "grill-with-docs",
+        "categoria": "revisão",
+        "url": "https://github.com/Caph-dev/delegate-grill-with-docs/blob/HEAD/SKILL.md",
+    },
+    {
+        "nome": "nano-banana-pro",
+        "categoria": "imagem",
+        "url": "https://github.com/YouMind-OpenLab/nano-banana-pro-prompts-recommend-skill/blob/HEAD/SKILL.md",
+    },
+)
+
+
+def importar_pack(*, raiz: Path | None = None, baixar: Baixar | None = None) -> dict[str, Any]:
+    """Importa a leva de habilidades que ele viu publicadas (skills.sh, clawhub).
+
+    Uma falha não derruba as outras: cada item volta com o motivo. São 8 leituras
+    de `api.github.com` — cabe no limite de 60 por hora do GitHub sem token.
+    """
+    importadas: list[dict[str, Any]] = []
+    falhas: list[dict[str, str]] = []
+    for item in PACK:
+        try:
+            ficha = importar(item["url"], raiz=raiz, baixar=baixar, nome=item["nome"])
+        except HabilidadeError as exc:
+            falhas.append({"nome": item["nome"], "erro": str(exc)[:200]})
+            continue
+        ficha["categoria"] = item["categoria"]
+        importadas.append(ficha)
+    return {
+        "tentadas": len(PACK),
+        "importadas": importadas,
+        "falhas": falhas,
+        "total": len(importadas),
+        "resposta": (
+            f"Importei {len(importadas)} de {len(PACK)} habilidades da leva."
+            if importadas
+            else "Não consegui importar nenhuma habilidade da leva."
+        ),
+    }
+
+
 def links_no_texto(texto: str) -> list[str]:
     """Todos os links colados, sem repetir e sem pontuação grudada no fim."""
     vistos: list[str] = []

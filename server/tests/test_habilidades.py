@@ -321,3 +321,53 @@ def test_adaptar_recusa_guia_sem_passos(tmp_path: Path):
     habilidades.importar("https://github.com/a/b/blob/main/skills/prosa/SKILL.md", raiz=store, baixar=lambda url: texto)
     with pytest.raises(habilidades.HabilidadeError):
         habilidades.adaptar("prosa", raiz=store, pasta_agente=tmp_path)
+
+
+# ------------------------------------------------------- a leva do skills.sh
+
+
+def test_pack_tem_oito_habilidades_com_nome_unico():
+    nomes = [item["nome"] for item in habilidades.PACK]
+    assert len(nomes) == 8
+    assert len(set(nomes)) == 8
+    for item in habilidades.PACK:
+        assert item["url"].startswith("https://github.com/")
+        assert item["categoria"]
+
+
+def test_importar_pack_importa_as_oito(tmp_path):
+    """Cada link devolve um SKILL.md próprio; todas entram no arquivo."""
+    raiz = Path(tmp_path)
+
+    def baixar(url: str) -> str:
+        partes = [parte for parte in url.split("/") if parte]
+        pasta = partes[-2] if partes[-2] not in {"HEAD", "main"} else partes[2]
+        return f"---\nname: {pasta}\ndescription: guia de {pasta}\n---\n# {pasta}\n\n1. Passo um\n2. Passo dois\n"
+
+    resultado = habilidades.importar_pack(raiz=raiz, baixar=baixar)
+    assert resultado["tentadas"] == 8
+    assert resultado["total"] == 8
+    assert resultado["falhas"] == []
+    assert len(habilidades.carregar(raiz)) == 8
+
+
+def test_importar_pack_uma_falha_nao_derruba_as_outras(monkeypatch, tmp_path):
+    def baixar(url: str) -> str:
+        if "grill-me" in url:
+            raise BuscaError("404")
+        return "---\nname: ok-" + url.rsplit("/", 2)[-2].lower() + "\ndescription: guia\n---\n# Guia\n"
+
+    resultado = habilidades.importar_pack(raiz=tmp_path, baixar=baixar)
+    assert resultado["total"] == 7
+    assert len(resultado["falhas"]) == 1
+    assert "grill-me" in resultado["falhas"][0]["nome"]
+
+
+def test_importar_pack_sem_rede_nao_mente(monkeypatch, tmp_path):
+    def explodir(url: str) -> str:
+        raise BuscaError("sem rede")
+
+    resultado = habilidades.importar_pack(raiz=tmp_path, baixar=explodir)
+    assert resultado["total"] == 0
+    assert len(resultado["falhas"]) == 8
+    assert "não consegui" in resultado["resposta"].lower() or "nenhuma" in resultado["resposta"].lower()
