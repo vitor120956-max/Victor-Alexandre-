@@ -235,8 +235,8 @@ Limites, sem enfeite:
 | Testes do OCR | **13** (motor falso por monkeypatch: o sandbox não tem Tesseract) |
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
-| Testes do agente local | **127** |
-| Suíte da API | **2.140** |
+| Testes do agente local | **128** |
+| Suíte da API | **2.141** |
 | Skills no registro | **225** (10 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

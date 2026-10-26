@@ -21,6 +21,7 @@ from server.agente_local import (
     carregar_locais,
     criar_skill,
     entrada_de_local,
+    entrada_de_skill,
     executar_receita,
     extrair_parametros,
     formatar_resultado,
@@ -880,6 +881,25 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
         except Exception as exc:  # schema recusou o exemplo
             problemas.append((skill["id"], str(exc).splitlines()[0][:120]))
     assert problemas == [], problemas[:10]
+
+
+def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
+    """As duas frentes da 0.43.0 entram pela busca por frase, como as outras."""
+    from server.skill_registry import build_registry
+
+    reg = build_registry(tmp_path)
+    entradas = [entrada_de_skill(item) for item in reg.list()]
+    casos = {
+        "importar a foto da pagina Downloads/contrato.jpg": "biblioteca.importar",
+        "importar o pdf escaneado Downloads/contrato.pdf": "biblioteca.importar",
+        "baixar a legenda do video https://youtu.be/dQw4w9WgXcQ": "biblioteca.video",
+        "qual o estado do ocr": "biblioteca.ocr",
+    }
+    for frase, esperada in casos.items():
+        ranking = pesquisar(frase, entradas)
+        assert ranking, frase
+        assert ranking[0]["entrada"].skill_id == esperada, frase
+        assert ranking[0]["score"] >= 0.5, (frase, ranking[0]["score"])
 
 
 # ------------------------------------------------- confirmação de efeito
