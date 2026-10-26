@@ -1234,11 +1234,19 @@ def _formatar_drive(resultado: dict[str, Any]) -> str | None:
     linhas: list[str] = []
     modo = str(resultado.get("modo") or "")
     if modo == "usar" and "mensagem" in resultado:
-        copiados = resultado.get("copiados", 0)
-        linhas.append(
-            f"Pronto: {copiados} arquivo(s), {_br(float(resultado.get('mb_copiados') or 0), 1)} MB "
-            f"para {resultado.get('destino', '')}."
-        )
+        copiados = int(resultado.get("copiados") or 0)
+        if copiados:
+            linhas.append(
+                f"Pronto: {copiados} arquivo(s), {_br(float(resultado.get('mb_copiados') or 0), 1)} MB "
+                f"para {resultado.get('destino', '')}."
+            )
+        else:
+            # Pasta vazia não é erro: o JARVIS só ainda não tinha livro nenhum.
+            linhas.append(f"Configurado: o JARVIS agora usa {resultado.get('destino', '')}.")
+            linhas.append(
+                "As pastas estavam vazias, então nada foi copiado — os próximos livros e "
+                "repositórios vão direto para o Drive."
+            )
         for item in resultado.get("areas") or []:
             if not isinstance(item, dict):
                 continue
@@ -1293,7 +1301,12 @@ def _formatar_drive(resultado: dict[str, Any]) -> str | None:
         aponta = bool(env.get("biblioteca") or env.get("repos"))
         linhas.append(f".env: {'aponta para o Drive' if aponta else 'não aponta para o Drive'}")
     if resultado.get("configurado"):
-        linhas.append('Está tudo no Drive. Para voltar ao PC, diga "tira a biblioteca do drive".')
+        if not resultado.get("total_arquivos"):
+            linhas.append(
+                "Está configurado, mas ainda não há livro nenhum: importe um "
+                "(ex.: `importar C:\\Users\\Você\\Downloads\\livro.pdf`) e confira aqui."
+            )
+        linhas.append('Para voltar ao PC, diga "tira a biblioteca do drive".')
     else:
         linhas.append('Para levar de verdade, diga "configura o Google Drive pra mim".')
     return "\n".join(linhas)

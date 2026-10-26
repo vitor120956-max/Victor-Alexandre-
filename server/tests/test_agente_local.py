@@ -1507,3 +1507,35 @@ def test_confirmacao_mantem_autorizacao_em_skill_que_declara_o_campo(tmp_path: P
     )
     assert resultado["acao"] == "executado"
     assert duble.execucoes[0][1]["autorizacao"] == "sim, pode"
+
+
+def test_formatar_drive_sem_arquivo_explica_que_as_pastas_estavam_vazias() -> None:
+    texto = formatar_resultado(
+        {
+            "modo": "usar",
+            "mensagem": "ok",
+            "copiados": 0,
+            "mb_copiados": 0,
+            "destino": "G:/Meu Drive/JARVIS-DADOS",
+            "env": "D:/JARVIS/.env",
+            "areas": [],
+        }
+    )
+    assert "Configurado: o JARVIS agora usa" in texto
+    assert "nada foi copiado" in texto
+    assert "0 arquivo" not in texto
+
+
+def test_formatar_drive_configurado_e_vazio_ensina_a_importar() -> None:
+    texto = formatar_resultado(
+        {
+            "detectado": True,
+            "drive": "G:/Meu Drive",
+            "configurado": True,
+            "total_arquivos": 0,
+            "env": {"biblioteca": "G:/x", "repos": "G:/y"},
+            "areas": [{"nome": "biblioteca", "configurada": True, "arquivos": 0, "mb": 0}],
+        }
+    )
+    assert "ainda não há livro nenhum" in texto
+    assert "importar" in texto
