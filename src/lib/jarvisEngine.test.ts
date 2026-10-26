@@ -161,10 +161,35 @@ describe('pesquisa com resposta e token de host', () => {
 });
 
 describe('helpText — pesquisa com fonte', () => {
-  it('ensina o comando de token e avisa o que acontece sem IA', () => {
-    expect(helpText).toMatch(/token SEU_TOKEN/);
+  it('ensina que buscar não pede token e avisa o que acontece sem IA', () => {
+    expect(helpText).toMatch(/não pede token/i);
     expect(helpText).toMatch(/JARVIS_HOST_REDE=1/);
     expect(helpText).toMatch(/sem resumo/i);
+    expect(helpText).toMatch(/DuckDuckGo/);
+  });
+
+  it('reconhece “no youtube” como fonte de verdade, não atalho do navegador', () => {
+    expect(parseCommand('pesquisa no youtube sobre python')).toMatchObject({
+      type: 'pesquisa:responder',
+      pergunta: 'python',
+      fonte: 'youtube',
+    });
+    expect(parseCommand('busca na wikipedia sobre café')).toMatchObject({
+      type: 'pesquisa:responder',
+      fonte: 'wikipedia',
+    });
+    expect(parseCommand('pesquisar no google sobre impostos')).toMatchObject({
+      type: 'pesquisa:responder',
+      fonte: 'auto',
+    });
+  });
+
+  it('sem fonte dita, a busca simples continua abrindo o navegador', () => {
+    expect(parseCommand('pesquisar por automação pessoal').type).toBe('web:search');
+    expect(parseCommand('pesquisar na internet sobre automação pessoal')).toEqual({
+      type: 'web:search',
+      query: 'automação pessoal',
+    });
   });
 });
 

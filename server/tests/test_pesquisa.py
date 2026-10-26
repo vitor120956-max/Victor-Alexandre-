@@ -1,4 +1,4 @@
-"""Testes de `server/pesquisa.py` (0.48.0) — busca, leitura e resposta com fonte.
+"""Testes de `server/pesquisa.py` (0.49.0) — busca, leitura e resposta com fonte.
 
 A rede não é usada aqui: `buscar` e `ler` são injetados, e o provedor é um
 dublê. Isso permite cobrir o fluxo inteiro sem depender do DuckDuckGo.
@@ -208,10 +208,75 @@ def test_rota_recusa_sem_rede_ligada(tmp_path, monkeypatch):
     assert resposta.json()["error"]["code"] == "PESQUISA_RECUSADA"
 
 
-def test_rota_recusa_token_invalido(cliente):
+def test_rota_busca_nao_exige_token(cliente, monkeypatch):
+    """Pesquisar é leitura: token errado não bloqueia mais (0.49.0)."""
+    from server import busca_web
+
+    monkeypatch.setattr(
+        busca_web,
+        "buscar",
+        lambda *_a, **_k: {
+            "consulta": "quem foi Machado",
+            "fonte": "auto",
+            "resultados": [
+                {"titulo": "Machado de Assis", "url": "https://pt.wikipedia.org/wiki/Machado_de_Assis", "fonte": "wikipedia", "tipo": "verbete"}
+            ],
+            "responderam": ["wikipedia"],
+            "falhas": [],
+        },
+    )
+    monkeypatch.setattr(
+        "server.sistema.rede",
+        lambda **kwargs: {
+            "rows": [{"titulo": "Machado de Assis", "url": "https://pt.wikipedia.org/wiki/Machado_de_Assis", "fonte": "wikipedia"}],
+            "sections": ["## Conteúdo da página", "", "Machado de Assis foi um escritor brasileiro."],
+        },
+    )
     resposta = cliente.post("/api/pesquisa/responder", json={"pergunta": "quem foi Machado", "autorizacao": "errado"})
+    assert resposta.status_code == 200
+    assert resposta.json()["ok"] is True
+
+
+def test_rota_repassa_a_fonte_pedida(cliente, monkeypatch):
+    """A fonte vem da interface: `youtube` não pode virar busca genérica."""
+    vistas: list[str] = []
+
+    def rede(**kwargs):
+        vistas.append(kwargs.get("fonte", "?"))
+        return {
+            "rows": [{"titulo": "Aula de Python", "url": "https://www.youtube.com/watch?v=abc", "fonte": "youtube"}],
+            "sections": ["sem texto"],
+        }
+
+    monkeypatch.setattr("server.pesquisa.rede_padrao", rede)
+
+    resposta = cliente.post(
+        "/api/pesquisa/responder",
+        json={"pergunta": "aula de python", "autorizacao": "", "fonte": "youtube", "paginas": 0},
+    )
+    assert resposta.status_code == 200
+    assert vistas == ["youtube"]
+    assert resposta.json()["result"]["fontes"][0]["fonte"] == "youtube"
+
+
+def test_rota_recusa_fonte_inventada(cliente):
+    resposta = cliente.post(
+        "/api/pesquisa/responder",
+        json={"pergunta": "aula de python", "autorizacao": "", "fonte": "bing"},
+    )
+    assert resposta.status_code == 422
+
+
+def test_rota_avisa_quando_todas_as_fontes_falham(cliente, monkeypatch):
+    from server import busca_web
+
+    def quebrada(*_a, **_k):
+        raise busca_web.BuscaError("sem rede")
+
+    monkeypatch.setattr(busca_web, "buscar", quebrada)
+    resposta = cliente.post("/api/pesquisa/responder", json={"pergunta": "quem foi Machado", "autorizacao": ""})
     assert resposta.status_code == 400
-    assert "token" in resposta.json()["error"]["message"].lower()
+    assert resposta.json()["error"]["code"] == "PESQUISA_RECUSADA"
 
 
 def test_rota_valida_o_tamanho_da_pergunta(cliente):

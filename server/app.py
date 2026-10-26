@@ -51,6 +51,8 @@ class PesquisaRequest(BaseModel):
     autorizacao: str = Field(default="")
     limite: int = Field(default=6, ge=1, le=10)
     paginas: int = Field(default=2, ge=0, le=3)
+    # Sem chave de API: a fonte é escolhida aqui, não no provedor.
+    fonte: str = Field(default="auto", pattern="^(auto|duckduckgo|wikipedia|youtube)$")
 
 
 class AgenteRequest(BaseModel):
@@ -203,7 +205,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.48.0",
+        version="0.49.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -238,7 +240,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.48.0",
+            "version": "0.49.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
@@ -424,6 +426,7 @@ def create_app(
                 provedor=provider,
                 limite=payload.limite,
                 paginas=payload.paginas,
+                fonte=payload.fonte,
             )
         except SistemaError as exc:
             return JSONResponse(

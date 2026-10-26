@@ -351,6 +351,94 @@ def _banda_do_pedido(texto: str) -> dict[str, int]:
     return {}
 
 
+# ---------------------------------------------------------------- mesa (mouse)
+
+_RE_CLICAR = re.compile(r"\b(?:clica|clicar|clique)\b", re.I)
+_RE_COORD = re.compile(r"\(?\s*(\d{1,4})\s*[,x ]\s*(\d{1,4})\s*\)?")
+_RE_MOVER = re.compile(
+    r"\b(?:move|mover|leva|levar|arrasta|arrastar)\b.*?(?P<x>\d{1,4})\s*[,x ]\s*(?P<y>\d{1,4})", re.I
+)
+_RE_DIGITAR = re.compile(
+    r"\b(?:digita|digitar|escreve|escrever|digite)\s+(?:(?:o|a)\s+)?(?:(?:texto|mensagem|seguinte)\s*:?\s*)?(?P<texto>.+)$",
+    re.I,
+)
+_RE_TECLAR = re.compile(
+    r"\b(?:aperta|apertar|tecla|pressiona|pressionar)\s+(?:a\s+tecla\s+)?(?P<tecla>[\w+ ]{2,20})$", re.I
+)
+_RE_FOCAR = re.compile(
+    r"\b(?:foca|focar|traz|trazer)\b(?:\s+(?:a|o|na|no))?\s+(?:janela\s+)?(?:d[oa]\s+)?(?P<janela>[\w .-]{2,60})$",
+    re.I,
+)
+_RE_MESA_STATUS = re.compile(r"\b(?:onde (?:esta|está|ta) o (?:mouse|cursor)|status da mesa|mesa status)\b", re.I)
+
+
+def _pedido_direto_de_mesa(termo: str) -> dict[str, Any] | None:
+    """Mouse e teclado: regra explícita, com coordenada obrigatória para clicar."""
+    texto = (termo or "").strip()
+    if _RE_MESA_STATUS.search(texto):
+        return {"skill_id": "mesa.status", "nome": "Onde está o mouse", "parametros": {}, "confirma": False}
+
+    achado = _RE_DIGITAR.search(texto)
+    if achado:
+        conteudo = achado.group("texto").strip().strip("\"'")
+        if len(conteudo) >= 1:
+            return {
+                "skill_id": "mesa.digitar",
+                "nome": "Digitar",
+                "parametros": {"texto": conteudo[:2000]},
+                "confirma": True,
+            }
+
+    if _RE_CLICAR.search(texto) and not re.search(r"\bdrive\b", texto, re.I):
+        parametros: dict[str, Any] = {}
+        coordenada = _RE_COORD.search(texto)
+        if coordenada:
+            parametros["x"] = int(coordenada.group(1))
+            parametros["y"] = int(coordenada.group(2))
+        botao = re.search(r"\bbot[aã]o\s+(?:d[oa]\s+)?(esquerd\w+|direit\w+|meio)\b", texto, re.I)
+        if botao:
+            escolhido = botao.group(1).lower()
+            parametros["botao"] = "direito" if escolhido.startswith("direit") else (
+                "meio" if escolhido == "meio" else "esquerdo"
+            )
+        elif re.search(r"\b(?:com o |no )?bot[aã]o direito\b|\bdireito\b", texto, re.I):
+            parametros["botao"] = "direito"
+        if "duplo" in texto.lower():
+            parametros["vezes"] = 2
+        return {"skill_id": "mesa.clicar", "nome": "Clicar", "parametros": parametros, "confirma": True}
+
+    achado = _RE_MOVER.search(texto)
+    if achado:
+        return {
+            "skill_id": "mesa.mover",
+            "nome": "Mover o mouse",
+            "parametros": {"x": int(achado.group("x")), "y": int(achado.group("y"))},
+            "confirma": True,
+        }
+
+    achado = _RE_TECLAR.search(texto)
+    if achado:
+        tecla = achado.group("tecla").strip().lower()
+        # "ctrl v" e "ctrl mais v" viram "ctrl+v"; "page down" vira "page_down".
+        tecla = re.sub(r"\s*(?:mais|\+)\s*", "+", tecla)
+        tecla = re.sub(r"^(ctrl|alt|shift)\s+", r"\1+", tecla)
+        tecla = re.sub(r"\s+", "_", tecla).replace("control", "ctrl")
+        if tecla:
+            return {"skill_id": "mesa.teclar", "nome": "Apertar tecla", "parametros": {"tecla": tecla}, "confirma": True}
+
+    achado = _RE_FOCAR.search(texto)
+    if achado:
+        janela = achado.group("janela").strip()
+        if janela.lower() not in {"janela", "tela"}:
+            return {
+                "skill_id": "mesa.focar",
+                "nome": "Focar janela",
+                "parametros": {"janela": janela},
+                "confirma": True,
+            }
+    return None
+
+
 AVISO_FECHAR_DRIVE = (
     "Fechar o app para a sincronização, mas também derruba a unidade `G:` — e a "
     "biblioteca do JARVIS mora nela. Enquanto estiver fechado, não acho livro nenhum. "
@@ -1324,6 +1412,53 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+def _formatar_mesa(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para mouse, teclado e janelas."""
+    acao = str(resultado.get("acao") or "")
+    if acao not in {"mover", "clicar", "digitar", "teclar", "focar"} and "janelas" not in resultado:
+        return None
+
+    if "janelas" in resultado and acao not in {"mover", "clicar", "digitar", "teclar", "focar"}:
+        if not resultado.get("suportado"):
+            return str(resultado.get("motivo") or "Mouse e teclado só existem no Windows.")
+        linhas = [
+            f"Cursor em ({resultado.get('x')}, {resultado.get('y')}) — tela {resultado.get('largura')}x{resultado.get('altura')}.",
+            "Janelas abertas:",
+        ]
+        linhas += [f"  • {titulo}" for titulo in (resultado.get("janelas") or [])[:15]]
+        return "\n".join(linhas)
+
+    if acao == "mover":
+        if resultado.get("interrompido"):
+            return (
+                "Parei: você mexeu o mouse no meio do caminho, então não continuei "
+                f"(fiquei em {tuple(resultado.get('parou_em') or [])})."
+            )
+        destino = resultado.get("para") or []
+        return f"Cursor em ({destino[0]}, {destino[1]})." if destino else "Cursor movido."
+
+    if acao == "clicar":
+        if not resultado.get("clicou"):
+            return "Não cliquei: o movimento foi interrompido."
+        em = resultado.get("em") or []
+        vezes = int(resultado.get("vezes") or 1)
+        rotulo = {"esquerdo": "esquerdo", "direito": "direito", "meio": "do meio"}.get(
+            str(resultado.get("botao")), str(resultado.get("botao"))
+        )
+        return f"Clique {rotulo} {'duplo' if vezes == 2 else ''} em ({em[0]}, {em[1]}).".replace("  ", " ")
+
+    if acao == "digitar":
+        return f'Digitei {resultado.get("caracteres")} caractere(s): “{resultado.get("amostra")}”.'
+
+    if acao == "teclar":
+        return f"Apertei {resultado.get('tecla')}."
+
+    if acao == "focar":
+        return f"Trouxe para a frente: {resultado.get('janela')}."
+
+    return None
+
+
 def _formatar_app_do_drive(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para fechar/abrir o app do Drive."""
     if resultado.get("app") != "drive":
@@ -1555,6 +1690,10 @@ def formatar_resultado(resultado: Any) -> str:
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
 
+    especial = _formatar_mesa(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_app_do_drive(resultado)
     if especial is not None:
         return especial
@@ -1618,6 +1757,74 @@ def formatar_resultado(resultado: Any) -> str:
 
 # ------------------------------------------------------------------- web
 
+_RE_FONTE_PEDIDO = re.compile(
+    r"\b(?:no|na|pelo|pela|do|da|em)\s+"
+    r"(youtube|wikipedia|wiki|duckduckgo|ddg|google|web|internet|sites?)\b",
+    re.I,
+)
+_FONTE_APELIDOS = {
+    "wiki": "wikipedia",
+    "google": "auto",  # sem chave não dá para ler o Google: responde com todas
+    "web": "auto",
+    "internet": "auto",
+    "site": "auto",
+    "sites": "auto",
+    "ddg": "duckduckgo",
+}
+_RE_VERBO_PESQUISA = re.compile(
+    r"^\s*(?:jarvis[,\s]+)?(?:pesquisa|pesquisar|pesquise|procura|procurar|procure|"
+    r"busca|buscar|busque|consulta|consultar)\b",
+    re.I,
+)
+
+
+def _limpar_consulta(texto: str) -> str:
+    """Tira o verbo, a fonte e o "sobre" — sobra o assunto."""
+    limpo = _RE_VERBO_PESQUISA.sub("", texto)
+    limpo = re.sub(
+        r"\b(?:no|na|pelo|pela|do|da|em)\s+"
+        r"(?:youtube|wikipedia|wiki|duckduckgo|ddg|google|web|internet|sites?)\b",
+        " ",
+        limpo,
+        flags=re.I,
+    )
+    limpo = re.sub(r"^\s*(?:o|a|os|as)?\s*(?:sobre|por|de)\s+", " ", limpo, flags=re.I)
+    limpo = re.sub(r"\s+(?:na web|na internet|no google|no youtube|na wikipedia)$", " ", limpo, flags=re.I)
+    return re.sub(r"\s+", " ", limpo).strip(" ?!.,")
+
+
+def _pedido_direto_de_pesquisa(termo: str) -> dict[str, Any] | None:
+    """"pesquisa no youtube sobre X": vai direto para a web, sem passar pelo ranking.
+
+    Sem regra, o pedido casava com `biblioteca.video` (que é legenda de vídeo) e
+    o usuário recebia uma sugestão em vez da busca.
+    """
+    texto = (termo or "").strip()
+    if not _RE_VERBO_PESQUISA.search(texto):
+        return None
+    achado = _RE_FONTE_PEDIDO.search(texto)
+    if not achado:
+        return None
+    consulta = _limpar_consulta(texto)
+    if len(consulta) < 2:
+        return None
+    nome = achado.group(1).lower()
+    return {"consulta": consulta, "fonte": _FONTE_APELIDOS.get(nome, nome)}
+
+
+def fonte_do_pedido(pedido: str) -> str:
+    """"pesquisa no youtube sobre X" → youtube; "no google" → auto (as três).
+
+    O Google não tem página de resultado parseável sem chave; "no google" é o
+    pedido genérico, então responde com todas as fontes em vez de fingir.
+    """
+    achado = _RE_FONTE_PEDIDO.search(pedido or "")
+    if not achado:
+        return "auto"
+    nome = achado.group(1).lower()
+    return _FONTE_APELIDOS.get(nome, nome)
+
+
 async def procurar_na_web(
     pergunta: str,
     *,
@@ -1626,6 +1833,7 @@ async def procurar_na_web(
     ler: Callable[..., dict[str, Any]] | None = None,
     limite: int = 6,
     paginas: int = 1,
+    fonte: str | None = None,
 ) -> dict[str, Any]:
     """Busca e lê sem modelo: devolve fontes e trecho, nunca um resumo inventado."""
     try:
@@ -1637,6 +1845,7 @@ async def procurar_na_web(
             ler=ler,
             limite=limite,
             paginas=paginas,
+            fonte=fonte or fonte_do_pedido(pergunta),
         )
     except SistemaError as exc:
         return {
@@ -1652,7 +1861,8 @@ async def procurar_na_web(
     linhas = ["Não tenho skill nem receita para isso. Procurei na web e isto é o que existe:"]
     for indice, fonte in enumerate(fontes, start=1):
         marca = " (lida)" if fonte.get("lida") else ""
-        linhas.append(f"{indice}. {fonte.get('titulo') or 'sem título'} — {fonte.get('url')}{marca}")
+        origem = f"[{fonte['fonte']}] " if fonte.get("fonte") else ""
+        linhas.append(f"{indice}. {origem}{fonte.get('titulo') or 'sem título'} — {fonte.get('url')}{marca}")
     if trecho:
         linhas.append("")
         linhas.append(f"Trecho de {fontes[0]['url'] if fontes else 'uma das páginas'}:")
@@ -2190,8 +2400,31 @@ async def _resolver(
                 )
                 return base
 
+    # 0b1. "pesquisa no youtube sobre X": a fonte está dita, não há o que adivinhar.
+    pesquisa = _pedido_direto_de_pesquisa(termo)
+    if pesquisa is not None:
+        base["via"] = "web"
+        base["confianca"] = 1.0
+        achado = await procurar_na_web(
+            pesquisa["consulta"],
+            autorizacao=autorizacao,
+            buscar=buscar,
+            ler=ler,
+            fonte=pesquisa["fonte"],
+        )
+        base["acao"] = achado["acao"]
+        base["resposta"] = achado["resposta"]
+        base["fontes"] = achado["fontes"]
+        base["avisos"].extend(achado["avisos"])
+        base["parametros"] = {"consulta": pesquisa["consulta"], "fonte": pesquisa["fonte"]}
+        return base
+
     # 0b2. Google Drive: regra antes do ranking (a palavra "drive" dilui tudo).
     direto = _pedido_direto_de_drive(termo)
+
+    # 0b3. Mouse e teclado: coordenada e verbo são sinal forte.
+    if direto is None:
+        direto = _pedido_direto_de_mesa(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:

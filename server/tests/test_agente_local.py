@@ -1,4 +1,4 @@
-"""Testes do agente local (0.48.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.49.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "231 skills" in texto
+    assert "237 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.48.0)
+# ------------------------------------------------- memória do agente (0.49.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 231 skills, uma por uma
+# ------------------------------------- cobertura: as 237 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 231 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 237 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.48.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.49.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.48.0)
+# ------------------------------------------------------- Google Drive (0.49.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1720,3 +1720,75 @@ def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
     _pedir_confirmacao(base, entrada, {"parametros": {"acao": "fechar"}}, aviso="derruba a unidade G:")
     assert "derruba a unidade G:" in base["resposta"]
     assert base["resposta"].count("sim, pode") == 1
+
+
+# --------------------------------------------- mouse e teclado (0.49.0)
+
+SKILL_MESA_CLICAR = {
+    "id": "mesa.clicar",
+    "name": "Clicar",
+    "description": "Clica com o botão esquerdo, direito ou do meio.",
+    "category": "Mesa",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "x": {"type": "integer", "title": "X"},
+            "y": {"type": "integer", "title": "Y"},
+            "botao": {"type": "string", "title": "Botão", "enum": ["esquerdo", "direito", "meio"]},
+        },
+    },
+}
+
+
+def test_clicar_pede_confirmacao_com_coordenada(tmp_path: Path) -> None:
+    duble = registro(SKILL_MESA_CLICAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("clica em 500 300", registry=duble, raiz=tmp_path, consultar_web=False)
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["parametros"] == {"x": 500, "y": 300}
+
+
+def test_clicar_depois_do_sim_executa(tmp_path: Path) -> None:
+    duble = registro(SKILL_MESA_CLICAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "clica em 500 300",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "executado"
+    # `mesa.clicar` não declara `autorizacao`: o "sim" não pode vazar para a skill
+    assert duble.execucoes[0] == ("mesa.clicar", {"x": 500, "y": 300})
+
+
+def test_pesquisa_no_youtube_manda_a_fonte(tmp_path: Path) -> None:
+    from server.agente_local import fonte_do_pedido
+
+    assert fonte_do_pedido("pesquisa no youtube sobre python") == "youtube"
+    assert fonte_do_pedido("procura na wikipedia sobre café") == "wikipedia"
+    assert fonte_do_pedido("pesquisa no google sobre impostos") == "auto"
+
+
+def test_formatar_mesa_mover_interrompido() -> None:
+    texto = formatar_resultado(
+        {"acao": "mover", "interrompido": True, "motivo": "Você mexeu o mouse", "parou_em": [10, 20]}
+    )
+    assert "mexeu o mouse" in texto and "(10, 20)" in texto
+
+
+def test_formatar_mesa_clicar() -> None:
+    texto = formatar_resultado({"acao": "clicar", "clicou": True, "botao": "direito", "vezes": 1, "em": [7, 8]})
+    assert "Clique direito" in texto and "(7, 8)" in texto
+
+
+def test_formatar_mesa_status_lista_janelas() -> None:
+    texto = formatar_resultado(
+        {"suportado": True, "x": 5, "y": 9, "largura": 1920, "altura": 1080, "janelas": ["Chrome"]}
+    )
+    assert "Cursor em (5, 9)" in texto and "Chrome" in texto

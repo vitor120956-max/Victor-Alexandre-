@@ -699,22 +699,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         break;
       case 'host:token': {
         setHostToken(intent.token);
-        reply = 'Token de host guardado apenas nesta aba. Ele não é salvo no navegador nem no backup. Use “pesquisar e responder ...”.';
+        reply = 'Token de host guardado apenas nesta aba. Ele não é salvo no navegador nem no backup. Ele só é exigido para baixar, importar, instalar e executar — pesquisar na web não pede mais token.';
         break;
       }
       case 'pesquisa:responder': {
-        if (!hostToken) {
-          reply = [
-            'Para isso eu preciso do token de host, que fica em storage/host-token.txt nesta máquina.',
-            'Copie a linha e envie aqui no formato: token SEU_TOKEN',
-            'Depois repita o pedido. O token vale só nesta aba e não é gravado.',
-          ].join('\n\n');
-          break;
-        }
+        // Buscar e ler página não pede token desde a 0.49.0: quem grava é que pede.
         setProcessing('python');
-        void requestPesquisa(intent.pergunta, hostToken)
+        void requestPesquisa(intent.pergunta, hostToken ?? '', intent.fonte)
           .then(({ result }) => {
-            const fontes = result.fontes.map((fonte, indice) => `${indice + 1}. ${fonte.titulo || fonte.url} — ${fonte.url}`).join('\n');
+            const fontes = result.fontes
+              .map((fonte, indice) => `${indice + 1}. ${fonte.fonte ? `[${fonte.fonte}] ` : ''}${fonte.titulo || fonte.url} — ${fonte.url}${fonte.lida ? ' (lida)' : ''}`)
+              .join('\n');
             if (result.modo === 'ia' && result.resposta) {
               appendJarvisMessage([result.resposta, '', 'Fontes:', fontes].join('\n'), 'ai');
             } else {
@@ -798,12 +793,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           reply = 'Não tenho um pedido pendente. Diga o que devo procurar, por exemplo “procure na web: quem inventou o pão” — ou use “pesquisar e responder …”.';
           break;
         }
-        if (!hostToken) {
-          reply = 'Para buscar na web eu preciso do token de host: copie de storage/host-token.txt e envie “token SEU_TOKEN”.';
-          break;
-        }
         setProcessing('python');
-        void pesquisarAgente(pedidoFalho, hostToken)
+        void pesquisarAgente(pedidoFalho, hostToken ?? '')
           .then((resultado) => {
             if (resultado.acao === 'web') {
               ultimoFalho.current = '';

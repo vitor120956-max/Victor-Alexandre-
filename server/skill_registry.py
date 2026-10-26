@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import drive_setup
+from . import drive_setup, mesa
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -1189,8 +1189,9 @@ class SistemaRedeInput(BaseModel):
     consulta: str = Field(default="", max_length=400, title="Consulta", json_schema_extra={"description": "Termo de busca; usado só em `buscar`."})
     url: str = Field(default="", max_length=2_000, title="URL", json_schema_extra={"description": "Obrigatória em `olhar`. Endereço privado, local e link-local é recusado."})
     limite: int = Field(default=8, ge=1, le=25, title="Resultados")
+    fonte: Literal["auto", "duckduckgo", "wikipedia", "youtube"] = Field(default="auto", title="Fonte", json_schema_extra={"description": "`auto` consulta DuckDuckGo, Wikipedia e YouTube e intercala os resultados."})
     modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
-    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host", json_schema_extra={"description": "Não é mais exigido para buscar nem ler: só para baixar, instalar e executar."})
 
 
 class SistemaBaixarInput(BaseModel):
@@ -1994,6 +1995,40 @@ class ArmazenamentoDriveBandaInput(BaseModel):
 class ArmazenamentoDriveAppInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     acao: Literal["fechar", "abrir", "estado"] = Field(default="estado", title="Ação", json_schema_extra={"description": "`fechar` para a sincronização (derruba a unidade G:); `abrir` volta; `estado` só olha."})
+
+
+class MesaStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class MesaMoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x: int = Field(ge=0, le=100_000, title="X")
+    y: int = Field(ge=0, le=100_000, title="Y")
+    duracao: float = Field(default=0.25, ge=0, le=3, title="Duração (s)")
+
+
+class MesaClicarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x: int | None = Field(default=None, ge=0, le=100_000, title="X", json_schema_extra={"description": "Vazio clica onde o cursor está."})
+    y: int | None = Field(default=None, ge=0, le=100_000, title="Y")
+    botao: Literal["esquerdo", "direito", "meio"] = Field(default="esquerdo", title="Botão")
+    vezes: int = Field(default=1, ge=1, le=3, title="Vezes")
+
+
+class MesaDigitarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(min_length=1, max_length=2_000, title="Texto")
+
+
+class MesaTeclarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tecla: str = Field(min_length=2, max_length=20, title="Tecla", json_schema_extra={"description": "`enter`, `tab`, `esc`, `ctrl+c`, `ctrl+v`, `alt+f4`…"})
+
+
+class MesaFocarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    janela: str = Field(min_length=2, max_length=120, title="Janela", json_schema_extra={"description": "Um pedaço do título, como `bloco de notas`."})
 
 
 class ReposBaixarInput(BaseModel):
@@ -3430,6 +3465,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                 limite=data.limite,
                 modo=data.modo,
                 autorizacao=data.autorizacao,
+                fonte=data.fonte,
             )
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
@@ -3600,6 +3636,30 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             return drive_setup.fechar(confirmar=not dry_run)
         except drive_setup.DriveError as exc:
             raise SkillError(str(exc)) from exc
+
+    def mesa_handler(acao: str):
+        def executar(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+            try:
+                if acao == "status":
+                    return mesa.status()
+                if acao == "mover":
+                    assert isinstance(data, MesaMoverInput)
+                    return mesa.mover(data.x, data.y, duracao=data.duracao)
+                if acao == "clicar":
+                    assert isinstance(data, MesaClicarInput)
+                    return mesa.clicar(data.x, data.y, botao=data.botao, vezes=data.vezes)
+                if acao == "digitar":
+                    assert isinstance(data, MesaDigitarInput)
+                    return mesa.digitar(data.texto)
+                if acao == "teclar":
+                    assert isinstance(data, MesaTeclarInput)
+                    return mesa.teclar(data.tecla)
+                assert isinstance(data, MesaFocarInput)
+                return mesa.focar(data.janela)
+            except mesa.MesaError as exc:
+                raise SkillError(str(exc)) from exc
+
+        return executar
 
     def armazenamento_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, ArmazenamentoPlanejarInput)
@@ -4330,7 +4390,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("sistema.pastas", "Inventário de pastas", "Enumera nomes, tipos, tamanhos e datas até a profundidade pedida, sem ler conteúdo; cofre, chave e token aparecem só pelo nome.", "Sistema", SistemaPastasInput, sistema_pastas_handler, timeout_seconds=30),
         SkillDefinition("sistema.drivers", "Drivers e módulos", "Lista módulos do kernel no Linux e drivers PnP assinados no Windows, apontando item sem versão e driver sem assinatura.", "Sistema", SistemaDriversInput, sistema_drivers_handler, timeout_seconds=40),
         SkillDefinition("sistema.bluetooth", "Bluetooth", "Lista adaptadores e dispositivos pareados e diagnostica o caso do fone: sem rádio, adaptador desligado ou nada pareado.", "Sistema", SistemaBluetoothInput, sistema_bluetooth_handler, timeout_seconds=30),
-        SkillDefinition("sistema.rede", "Busca e leitura na web", "Busca na web ou lê o texto de uma página, com rede desligada por padrão e bloqueio de endereço privado, laço local e link-local.", "Sistema", SistemaRedeInput, sistema_rede_handler, timeout_seconds=60),
+        SkillDefinition("sistema.rede", "Busca e leitura na web", "Busca sem chave em DuckDuckGo, Wikipedia e YouTube (`fonte=auto` intercala as três) ou lê o texto de uma página. Não pede token de host: é leitura. Endereço privado, laço local e link-local continuam bloqueados.", "Sistema", SistemaRedeInput, sistema_rede_handler, timeout_seconds=90),
         SkillDefinition("sistema.baixar", "Download para quarentena", "Baixa um arquivo para `storage/host-downloads`, com teto de 256 MB e SHA-256; nada é executado nesta skill.", "Sistema", SistemaBaixarInput, sistema_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("sistema.assinatura", "Assinatura e integridade", "Calcula o SHA-256 em fluxo, compara com o hash publicado e verifica a assinatura digital pelo que a plataforma oferece: Authenticode no Windows, rpm -K, dpkg-sig ou gpg para assinatura destacada — declarando quando não é verificável.", "Sistema", SistemaAssinaturaInput, sistema_assinatura_handler, timeout_seconds=60),
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
@@ -4373,6 +4433,12 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.drive-copiar", "Configurar o Drive", "Copia biblioteca e repositórios para `JARVIS-DADOS` dentro do Drive, confere arquivo por arquivo e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`. Não apaga nada e não leva o histórico do agente. Com `modo=desfazer`, só tira as linhas do `.env`.", "Armazenamento", ArmazenamentoDriveCopiarInput, armazenamento_drive_copiar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
         SkillDefinition("armazenamento.drive-banda", "Limitar a banda do Drive", "Grava `BandwidthRxKBPS` e `BandwidthTxKBPS` em `HKCU\\Software\\Google\\DriveFS` — o ajuste que o próprio app do Drive lê — e confere lendo de volta. Vale quando o app reiniciar. `0` remove o limite.", "Armazenamento", ArmazenamentoDriveBandaInput, armazenamento_drive_banda_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("armazenamento.drive-app", "Abrir ou fechar o Drive", "Fecha o app do Google Drive (para a sincronização, mas derruba a unidade `G:`) ou abre de novo. No Windows o app não aceita pausa por linha de comando — fechar é o único caminho sem clique. `estado` só informa se ele está rodando.", "Armazenamento", ArmazenamentoDriveAppInput, armazenamento_drive_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("mesa.status", "Onde está o mouse", "Mostra a posição do cursor, o tamanho da tela e os títulos das janelas abertas. Só olha.", "Mesa", MesaStatusInput, mesa_handler("status"), timeout_seconds=15),
+        SkillDefinition("mesa.mover", "Mover o mouse", "Leva o cursor até (x, y) em passos curtos. Se você mexer o mouse no meio, ele para em vez de continuar.", "Mesa", MesaMoverInput, mesa_handler("mover"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("mesa.clicar", "Clicar", "Clica com o botão esquerdo, direito ou do meio — na posição dada ou onde o cursor estiver.", "Mesa", MesaClicarInput, mesa_handler("clicar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("mesa.digitar", "Digitar", "Digita num campo em foco, com acento (Unicode). Não aperta Enter sozinho.", "Mesa", MesaDigitarInput, mesa_handler("digitar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("mesa.teclar", "Apertar tecla", "Aperta uma tecla ou atalho: `enter`, `tab`, `esc`, `ctrl+c`, `ctrl+v`, `alt+f4`.", "Mesa", MesaTeclarInput, mesa_handler("teclar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("mesa.focar", "Focar janela", "Traz para a frente a primeira janela cujo título contenha o trecho informado.", "Mesa", MesaFocarInput, mesa_handler("focar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("armazenamento.planejar", "Plano para mudar de disco", "Compara a pasta atual com o destino e publica os cinco passos exatos, incluindo o `robocopy` e a linha do `.env`. Não copia, não move, não apaga.", "Armazenamento", ArmazenamentoPlanejarInput, armazenamento_planejar_handler, timeout_seconds=15),
         SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),

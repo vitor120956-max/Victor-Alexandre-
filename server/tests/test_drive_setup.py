@@ -1,4 +1,4 @@
-"""Testes do `drive_setup` (0.48.0): o JARVIS configurando o Drive sem susto."""
+"""Testes do `drive_setup` (0.49.0): o JARVIS configurando o Drive sem susto."""
 from __future__ import annotations
 
 import os
@@ -153,7 +153,7 @@ def test_aplicar_ao_vivo_troca_o_caminho_nesta_sessao(drive: Path, monkeypatch: 
         repos.PASTA_REPOS, repos.INDICE = original
 
 
-# --------------------------------------------------- limite de banda (0.48.0)
+# --------------------------------------------------- limite de banda (0.49.0)
 
 class RegistroFalso:
     """Imita o `winreg` sem tocar em registro nenhum."""
@@ -264,7 +264,7 @@ def test_drive_aberto_reconhece_o_processo() -> None:
     assert drive_setup.drive_aberto(["chrome.exe"]) is False
 
 
-# ------------------------------------- abrir/fechar o app (0.48.0) no Windows
+# ------------------------------------- abrir/fechar o app (0.49.0) no Windows
 
 def test_fechar_exige_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(drive_setup.os, "name", "posix")

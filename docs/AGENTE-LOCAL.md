@@ -5,15 +5,23 @@ correção por apelido, a memória de respostas e o painel chegaram na 0.40.0.
 Quando nenhuma skill ou receita serve, ele procura na web, lê a página e devolve
 o que achou — também sem modelo.
 
+A 0.49.0 tirou o token do caminho da leitura: **buscar e ler página não pedem
+`token`**, só `JARVIS_HOST_REDE=1`. A busca usa três fontes que não cobram chave
+— DuckDuckGo, Wikipédia e YouTube — e diz **de qual delas veio cada resultado**.
+O token continua obrigatório para baixar, instalar e executar (`sistema.baixar`,
+`sistema.executar`, `files.import`, `repos.baixar`), porque essas três gravam no
+disco. Também na 0.49.0 o JARVIS passou a **mexer no mouse e no teclado** quando
+o pedido é esse — sempre com confirmação (ver “Mouse e teclado”).
+
 O caminho tem seis degraus, nesta ordem:
 
 | # | Degrau | O que acontece | Precisa de quê |
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 231 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 237 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
-| 3 | **Web** | busca no DuckDuckGo, lê a primeira página e devolve fontes + trecho | rede (`JARVIS_HOST_REDE=1`) e token de host |
+| 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
 
 Nenhum degrau chama modelo. A pergunta nunca vira custo.
@@ -50,6 +58,13 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `abre o drive` · `volta a sincronizar` | `armazenamento.drive-app` (abrir) | não |
 | `rodar "python -m pacote --help" no repositório dono--repo` | `repos.executar` | **sim** |
 | `ler README.md do repositório dono--repo` | `repos.ler` | não |
+| `pesquisa no youtube sobre X` · `procura na wikipedia sobre X` · `busca na web sobre X` | busca na fonte citada (sem passar pelo ranking) | não |
+| `clica em 500 300` · `duplo clique em 40 50 com o botao direito` | `mesa.clicar` | **sim** |
+| `move o mouse para 800 600` | `mesa.mover` | **sim** |
+| `digita ola mundo` · `digite o texto: ola` | `mesa.digitar` | **sim** |
+| `aperta enter` · `aperta ctrl v` · `aperta page down` | `mesa.teclar` | **sim** |
+| `foca a janela do bloco de notas` | `mesa.focar` | **sim** |
+| `onde esta o mouse` · `status da mesa` | `mesa.status` (só lê) | não |
 
 Pergunta com `?` nunca dispara a skill de cópia: no máximo ela mostra o estado.
 `abre o drive` e `pausa o drive` continuam indo para a busca normal.
@@ -103,7 +118,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 231 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 237 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
@@ -155,8 +170,17 @@ com nome próprio — não é código novo.
   por sinônimo cadastrado; “aquela coisa de somar” não encontra nada.
 - **Termo fraco não executa.** A skill só roda se o pedido casar com o nome, o
   id ou a categoria — descrição sozinha só serve para sugerir.
-- **A web precisa de rede e token.** Sem eles, o degrau 3 é pulado e o agente
-  avisa.
+- **A web precisa de rede, não de token.** Sem `JARVIS_HOST_REDE=1` o degrau 3
+  é pulado e o agente avisa. O token só aparece quando a skill **grava** algo.
+- **Fonte dita não é adivinhada.** “no youtube”, “na wikipedia” e “no duckduckgo”
+  mandam a busca para aquela fonte. “no google” vira as três juntas: o Google não
+  entrega resultado para leitura sem chave paga, e o JARVIS diz isso em vez de
+  fingir que leu.
+- **Uma fonte fora do ar não apaga as outras.** Se o DuckDuckGo cair, a Wikipédia
+  e o YouTube continuam; a resposta mostra “Fontes que responderam” e “Fontes que
+  não responderam”.
+- **Mouse e teclado só existem no Windows.** No Linux e no Mac, `mesa.status`
+  responde `suportado: false` e as outras cinco recusam.
 - **Os passos ficam pendentes até você decidir.** O texto lido da web é guardado
   em `storage/agente-local/pendente.json` (um pedido por vez) para poder virar
   skill; se você não pedir, ele é substituído no próximo pedido.
@@ -215,4 +239,62 @@ O agente devolve `acao: "confirmar"` com os parâmetros já preenchidos e espera
 É o que protege `repos.baixar`, `repos.executar`, `sistema.baixar`, `files.write`
 e companhia de serem disparadas por engano. Na API, quem confirma manda
 `confirmar: true` no corpo de `POST /api/agente/executar`.
+
+O mesmo vale para o mouse e o teclado: as cinco skills que mexem na sua máquina
+(`mesa.mover`, `mesa.clicar`, `mesa.digitar`, `mesa.teclar`, `mesa.focar`)
+declaram efeito colateral e pedem “sim, pode”. `mesa.status` só olha.
+
+## Mouse e teclado
+
+Você autorizou o JARVIS a usar o mouse e o teclado quando precisar. Isso é feito
+em `server/mesa.py`, com `ctypes` e **zero dependência**: nada de pyautogui, nada
+de pacote novo para instalar.
+
+| Skill | O que faz | Pede “sim, pode” |
+| --- | --- | --- |
+| `mesa.status` | diz onde está o cursor, o tamanho da tela e as janelas abertas | não |
+| `mesa.mover` | leva o cursor até `x, y` em passos curtos | **sim** |
+| `mesa.clicar` | clica em `x, y` com `botao` (esquerdo/direito/meio) e `vezes` 1–3 | **sim** |
+| `mesa.digitar` | digita um texto (até 2.000 caracteres) na janela em foco | **sim** |
+| `mesa.teclar` | aperta uma tecla ou combinação (`enter`, `tab`, `esc`, `page_down`, `ctrl+v`, `alt+f4`) | **sim** |
+| `mesa.focar` | traz para frente a janela cujo título contém o texto pedido | **sim** |
+
+Quatro travas, todas testadas com um backend falso (`server/tests/test_mesa.py`):
+
+1. **Freio de pânico.** O movimento é feito em passos de 4 ms. Se o cursor não
+   estiver onde o JARVIS o deixou no passo anterior, é porque **você mexeu o
+   mouse**: ele para na hora e responde “Você mexeu o mouse; parei para não
+   clicar em outra coisa”, com a posição em que parou.
+2. **Coordenada conferida.** Ponto fora da tela não move nada: ele recusa antes
+   de encostar no cursor.
+3. **Texto conferido.** `mesa.digitar` recusa texto vazio, só espaços ou acima de
+   2.000 caracteres. `mesa.clicar` só aceita 1, 2 ou 3 cliques.
+4. **Nada de adivinhação.** Não há captura de tela nem OCR: o JARVIS não “vê” a
+   tela, ele move para onde você mandou. Se a janela mudou de lugar, o clique vai
+   para o lugar errado — por isso a confirmação mostra as coordenadas antes.
+
+Exemplo de conversa:
+
+```text
+você: onde esta o mouse
+ele:  Cursor em (512, 384) · tela 1920×1080 · janelas: Chrome, Bloco de notas
+
+você: abre o bloco de notas
+ele:  (skill de execução; pede confirmação)
+
+você: foca a janela do bloco de notas
+ele:  Vou trazer “bloco de notas” para frente. Responda “sim, pode”.
+
+você: sim, pode
+ele:  Janela “Bloco de notas — Sem título” em foco.
+
+você: digita ola mundo
+ele:  Vou digitar 9 caracteres. Responda “sim, pode”.
+
+você: sim, pode
+ele:  Digitei 9 caracteres.
+
+você: aperta ctrl v
+ele:  Vou apertar ctrl+v. Responda “sim, pode”.
+```
 

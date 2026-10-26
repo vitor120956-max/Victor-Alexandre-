@@ -22,7 +22,7 @@ export type Intent =
   | { type: 'focus:stop' }
   | { type: 'focus:status' }
   | { type: 'web:search'; query: string }
-  | { type: 'pesquisa:responder'; pergunta: string }
+  | { type: 'pesquisa:responder'; pergunta: string; fonte?: FonteWeb }
   | { type: 'agente:skills' }
   | { type: 'agente:executar'; pedido: string }
   | { type: 'agente:corrigir'; alvo: string }
@@ -404,8 +404,16 @@ export function parseCommand(rawInput: string): Intent {
     return { type: 'pesquisa:responder', pergunta: pesquisaRespondida[1].replace(/[?]+$/g, '').trim() };
   }
 
-  const search = input.match(/^(?:pesquisar|pesquise|procurar|procure|buscar|busque)(?:\s+na\s+(?:web|internet))?\s+(?:por\s+|sobre\s+)?(.+)$/i);
-  if (search) return { type: 'web:search', query: search[1].replace(/[?]+$/g, '').trim() };
+  const search = input.match(/^(?:pesquis(?:ar|e|a)|procur(?:ar|e|a)|busc(?:ar|e|a))(?:(?:\s+(?:na|pela)\s+(?:web|internet))|(?:\s+(?:no|na|pelo|pela)\s+(?:youtube|wikipedia|wiki|duckduckgo|ddg|google)))?\s+(?:por\s+|sobre\s+)?(.+)$/i);
+  if (search?.[1]?.trim()) {
+    const fonte = fonteDoPedido(input);
+    const consulta = limparConsulta(search[1]);
+    // Fonte dita (youtube, wikipédia, duckduckgo, google) vai para a busca de
+    // verdade e devolve fontes + trecho, sem token; sem fonte, continua abrindo
+    // o Google numa aba nova.
+    if (fonte) return { type: 'pesquisa:responder', pergunta: consulta, fonte };
+    return { type: 'web:search', query: consulta };
+  }
 
   const pedido = normalizarPedidoDeAbertura(text);
   const open = pedido.match(/^(?:abrir|abra|abre|acessar|acesse)\s+(?:(?:o|a|uma)\s+)?(?:tela\s+)?(?:d[oa]\s+|de\s+)?(.+)$/);
@@ -418,6 +426,33 @@ export function parseCommand(rawInput: string): Intent {
   return { type: 'unknown' };
 }
 
+export type FonteWeb = 'auto' | 'duckduckgo' | 'wikipedia' | 'youtube';
+
+const FONTES_DO_PEDIDO: Record<string, FonteWeb> = {
+  youtube: 'youtube',
+  wikipedia: 'wikipedia',
+  wiki: 'wikipedia',
+  duckduckgo: 'duckduckgo',
+  ddg: 'duckduckgo',
+  // O Google não entrega resultado parseável sem chave paga: responde com as três.
+  google: 'auto',
+};
+
+/** “no youtube” → `youtube`; “no google” → `auto`; sem fonte dita → `undefined`. */
+export function fonteDoPedido(texto: string): FonteWeb | undefined {
+  const achado = texto.match(/\b(?:no|na|pelo|pela|do|da|em)\s+(youtube|wikipedia|wiki|duckduckgo|ddg|google)\b/i);
+  return achado ? FONTES_DO_PEDIDO[achado[1].toLowerCase()] : undefined;
+}
+
+function limparConsulta(texto: string): string {
+  return texto
+    .replace(/\b(?:no|na|pelo|pela|do|da|em)\s+(?:youtube|wikipedia|wiki|duckduckgo|ddg|google|web|internet)\b/i, ' ')
+    .replace(/^(?:o|a|os|as)?\s*(?:sobre|por|de)\s+/i, ' ')
+    .replace(/[?]+$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const helpText = [
   'Estas são as skills que já posso executar localmente:',
   '• Tarefas — “criar tarefa revisar o projeto” ou “concluir tarefa revisar”.',
@@ -425,7 +460,7 @@ export const helpText = [
   '• Foco — “iniciar foco de 25 minutos”, “pausar foco” ou “retomar foco”.',
   '• Cálculos — “calcular (1250 * 0,18) + 40”.',
   '• Web — “pesquisar por automação pessoal” abre a busca no Google numa aba nova; o JARVIS não lê os resultados.',
-  '• Pesquisa com fonte — “pesquisar e responder quem foi Machado de Assis” busca, lê as primeiras páginas e pede a resposta ao modelo. Precisa da rede ligada (JARVIS_HOST_REDE=1) e do token: envie “token SEU_TOKEN” uma vez nesta aba. Sem IA configurada, ele devolve as fontes e o trecho lido, sem resumo (a skill “Busca e leitura na web” faz só encontrar e ler).',
+  '• Pesquisa com fonte — “pesquisar e responder quem foi Machado de Assis” busca, lê as primeiras páginas e pede a resposta ao modelo. Precisa só da rede ligada (JARVIS_HOST_REDE=1): buscar e ler não pede token desde a 0.49.0. A busca usa DuckDuckGo, Wikipédia e YouTube sem chave; diga “no youtube”, “na wikipedia” ou “no google” para escolher. Sem IA configurada, ele devolve as fontes e o trecho lido, sem resumo (a skill “Busca e leitura na web” faz só encontrar e ler).',
   '• Python — “analisar texto JARVIS organiza minha rotina” ou “python status”.',
   '• Legislação — “artigo 49 do CDC” ou “pesquisar na legislação sobre proteção de dados”.',
   '• Documentos — “listar documentos” ou “ler PDF documentos/relatorio.pdf”. Criação exige confirmação na página Documentos.',

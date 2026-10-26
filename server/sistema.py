@@ -42,9 +42,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus, urlparse
 from urllib.request import Request, urlopen
 
+from . import busca_web
 from .review import common, finalize, finding
 
-VERSAO = "0.48.0"
+VERSAO = "0.49.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -205,11 +206,25 @@ def _exigir(autorizacao: str) -> None:
 
 
 def _exigir_rede(autorizacao: str) -> None:
+    """Ação que toca a rede **e** muda algo (baixar, instalar, executar)."""
     _exigir(autorizacao)
+    _exigir_rede_ligada()
+
+
+def _exigir_rede_ligada() -> None:
     if os.environ.get(AMBIENTE_REDE, "0") != "1":
         raise SistemaError(
             "Rede desligada. Suba a API com JARVIS_HOST_REDE=1 para liberar busca, leitura de página e download."
         )
+
+
+def _exigir_leitura() -> None:
+    """Buscar e ler página só leem: não gravam, não executam, não mudam nada.
+
+    Pedir token aqui era atrito sem proteção — o token existe para travar o que
+    mexe na máquina. A trava que continua valendo é `JARVIS_HOST_REDE=1`.
+    """
+    _exigir_rede_ligada()
 
 
 def _exigir_instalar(autorizacao: str) -> None:
@@ -1341,10 +1356,11 @@ def rede(
     limite: int = 8,
     modo: str = "full",
     autorizacao: str = "",
+    fonte: str = "auto",
 ) -> dict[str, Any]:
     """Busca na web ou lê uma página. Nunca grava arquivo."""
     modo = _modo(modo)
-    _exigir_rede(autorizacao)
+    _exigir_leitura()
     acao = (acao or "buscar").strip().lower()
     if acao not in {"buscar", "olhar"}:
         raise SistemaError("Ação inválida: use buscar ou olhar. Download é `sistema.baixar`.")
@@ -1356,20 +1372,38 @@ def rede(
         termo = (consulta or "").strip()
         if not termo:
             raise SistemaError("Informe a consulta.")
-        itens = _buscar_ddg(termo, limite)
-        rows = [{"posicao": i + 1, "titulo": item["titulo"], "url": item["url"]} for i, item in enumerate(itens)]
+        try:
+            achado = busca_web.buscar(termo, limite=limite, fonte=fonte)
+        except busca_web.BuscaError as exc:
+            raise SistemaError(f"Não consegui buscar: {exc}") from exc
+        itens = achado["resultados"]
+        rows = [
+            {
+                "posicao": i + 1,
+                "titulo": item["titulo"],
+                "url": item["url"],
+                "fonte": item.get("fonte", ""),
+                "tipo": item.get("tipo", ""),
+            }
+            for i, item in enumerate(itens)
+        ]
+        responderam = ", ".join(achado["responderam"]) or "nenhuma"
         resumo = [
             f"{len(rows)} resultado(s) para **{termo}**.",
-            "Fonte: DuckDuckGo HTML. Sem resultado significa bloqueio ou consulta sem correspondência — não invente link.",
+            f"Fontes que responderam: {responderam}.",
         ]
+        if achado["falhas"]:
+            resumo.append("Não responderam: " + "; ".join(achado["falhas"]) + ".")
+        if rows:
+            resumo.append("Cada linha diz de qual fonte veio — não invente link.")
         if not rows:
             findings.append(
                 finding(
                     "should",
                     "rede",
                     "Busca sem resultado",
-                    "duckduckgo",
-                    "A consulta não devolveu link parseável.",
+                    "busca-web",
+                    "Nenhuma das fontes devolveu link parseável.",
                     "Bloqueio de rede, captcha ou mudança de marcação produzem o mesmo vazio.",
                     "Tente outra formulação ou informe a URL diretamente em `olhar`.",
                     "Você conclui que o programa não existe.",
@@ -1402,7 +1436,8 @@ def rede(
         rows=rows[:MAX_ROWS],
         metrics={"acao": acao, "resultados": len(rows), "limite": limite},
         limitations=[
-            "Busca usa a página HTML do DuckDuckGo: sem chave, sujeita a bloqueio e a mudança de marcação.",
+            "Busca sem chave: DuckDuckGo (HTML), Wikipedia (API) e YouTube (página de resultados). Cada um pode bloquear ou mudar a marcação.",
+            "Pesquisar e ler página não pede token de host: só leitura. Baixar, instalar e executar continuam pedindo.",
             "Endereço privado, laço local e link-local são bloqueados de propósito.",
             "Nenhum conteúdo de página é resumido por modelo: é o texto extraído, truncado.",
             "Esta operação não grava arquivo; quem baixa é `sistema.baixar`.",

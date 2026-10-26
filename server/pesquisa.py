@@ -53,7 +53,14 @@ def extrair_fontes(resultado_busca: dict[str, Any]) -> list[dict[str, str]]:
         url = str(linha.get("url") or "").strip()
         if not url.startswith(("http://", "https://")):
             continue
-        fontes.append({"titulo": str(linha.get("titulo") or "").strip(), "url": url})
+        fontes.append(
+            {
+                "titulo": str(linha.get("titulo") or "").strip(),
+                "url": url,
+                "fonte": str(linha.get("fonte") or "").strip(),
+                "tipo": str(linha.get("tipo") or "").strip(),
+            }
+        )
     return fontes
 
 
@@ -84,6 +91,7 @@ async def responder(
     ler: Ler | None = None,
     limite: int = 6,
     paginas: int = 2,
+    fonte: str = "auto",
 ) -> dict[str, Any]:
     """Busca, lê as primeiras páginas e pede a resposta ao provedor."""
     termo = (pergunta or "").strip()
@@ -93,7 +101,14 @@ async def responder(
     buscar = buscar or rede_padrao
     ler = ler or rede_padrao
 
-    busca = buscar(acao="buscar", consulta=termo, limite=limite, autorizacao=autorizacao, modo="lite")
+    # `fonte` só existe no `rede` de verdade; um `buscar` injetado nos testes
+    # pode não aceitar — por isso a tentativa com recuo.
+    try:
+        busca = buscar(
+            acao="buscar", consulta=termo, limite=limite, autorizacao=autorizacao, modo="lite", fonte=fonte
+        )
+    except TypeError:
+        busca = buscar(acao="buscar", consulta=termo, limite=limite, autorizacao=autorizacao, modo="lite")
     fontes = extrair_fontes(busca)
     avisos: list[str] = []
     if not fontes:
@@ -131,13 +146,19 @@ async def responder(
         "modo": modo,
         "resposta": resposta,
         "fontes": [
-            {"titulo": fonte["titulo"], "url": fonte["url"], "lida": any(item["url"] == fonte["url"] for item in lidas)}
+            {
+                "titulo": fonte["titulo"],
+                "url": fonte["url"],
+                "fonte": fonte.get("fonte", ""),
+                "tipo": fonte.get("tipo", ""),
+                "lida": any(item["url"] == fonte["url"] for item in lidas),
+            }
             for fonte in fontes
         ],
         "trecho": (lidas[0]["texto"][:LIMITE_TRECHO] if lidas else ""),
         "avisos": avisos,
         "limites": [
-            "A busca usa a página HTML do DuckDuckGo, não o Google.",
+            "A busca usa fontes sem chave: DuckDuckGo, Wikipédia e YouTube — não o Google, que não entrega resultado parseável sem chave paga.",
             "Só as primeiras páginas são lidas; o resto fica como link.",
             "O texto é truncado antes de ir ao modelo.",
         ],

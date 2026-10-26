@@ -10,7 +10,7 @@ Isso muda o contrato do projeto. Até a 0.29.0, toda resposta marcava `executed:
 
 | # | Trava | Padrão | Como ligar |
 |---|---|---|---|
-| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API |
+| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token |
 | 2 | **Rede** | desligada | `JARVIS_HOST_REDE=1` ao subir a API |
 | 3 | **Instalação** | desligada | `JARVIS_HOST_INSTALAR=1` (implica rede) |
 
@@ -104,7 +104,11 @@ O parecer repete o que não é óbvio: **não existe programa leve que faça fon
 
 ## 6. Rede: buscar e ler
 
-Busca usa a página HTML do DuckDuckGo, sem chave e sem SDK. Leitura de página extrai o texto: remove `script`, `style` e `noscript`, tira as tags, resolve as entidades, colapsa espaço.
+A 0.49.0 tirou o token do caminho da leitura: `buscar` e `olhar` só precisam de `JARVIS_HOST_REDE=1`. O token continua obrigatório em `sistema.baixar`, `sistema.executar` e `sistema.elevar_executar`, que gravam ou rodam — a regra é o efeito, não a rede.
+
+Busca usa três fontes que não cobram chave, em `server/busca_web.py`: a página HTML do **DuckDuckGo** (sem chave e sem SDK), a **API da Wikipédia** (opensearch) e a página de resultado do **YouTube**. Sem fonte pedida, as três se intercalam; com `fonte=duckduckgo`, `wikipedia` ou `youtube`, só aquela responde. Cada linha devolve `fonte` e `tipo` (`web`, `enciclopedia`, `video`), e a resposta separa “Fontes que responderam” de “Fontes que não responderam” — uma fonte fora do ar não apaga as outras.
+
+Leitura de página extrai o texto: remove `script`, `style` e `noscript`, tira as tags, resolve as entidades, colapsa espaço.
 
 Antes de qualquer requisição, a URL passa por uma guarda que recusa:
 

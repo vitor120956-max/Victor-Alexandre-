@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.48.0.**
+**Versão atual: 0.49.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,9 +44,11 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 231, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 237, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
-**Pesquisa com fonte:** `pesquisar e responder quem foi Machado de Assis` busca no DuckDuckGo, lê as primeiras páginas e manda o texto ao modelo como material citável. Precisa de três coisas: rede ligada na subida (`JARVIS_HOST_REDE=1`), o token de `storage/host-token.txt` (envie `token SEU_TOKEN` uma vez na conversa — fica só na memória da aba) e um provedor de IA configurado. Sem provedor ele não falha: devolve as fontes e o trecho lido, sem resumo. Detalhes em [`docs/PESQUISA.md`](docs/PESQUISA.md).
+**Mouse e teclado, a seu pedido:** você autorizou o JARVIS a usar o mouse e o teclado quando precisar. `clica em 500 300`, `move o mouse para 800 600`, `digita ola mundo`, `aperta ctrl v`, `foca a janela do bloco de notas` — cada uma pede “sim, pode” antes de encostar no cursor, e se **você mexer o mouse** no meio do movimento ele **para na hora** em vez de clicar em outra coisa. Não há captura de tela nem OCR: ele move para onde você mandou e diz a coordenada na confirmação. `onde esta o mouse` só lê. Em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+
+**Pesquisa com fonte, sem token:** `pesquisar e responder quem foi Machado de Assis` busca no **DuckDuckGo**, na **Wikipédia** ou no **YouTube**, lê as primeiras páginas e devolve as fontes com o trecho lido — marcando de qual plataforma veio cada resultado, e seguindo mesmo quando uma delas cai. Buscar e ler **não pedem token**: basta rede ligada na subida (`JARVIS_HOST_REDE=1`). Se houver um provedor de IA configurado, o texto lido vira material citável para ele resumir; sem provedor ele não falha, entrega fontes + trecho, sem resumo. O token de `storage/host-token.txt` só aparece quando a skill **grava ou executa**. Detalhes em [`docs/PESQUISA.md`](docs/PESQUISA.md).
 
 ## Executar em desenvolvimento
 
@@ -349,7 +351,7 @@ Esta é a primeira camada que toca a máquina em vez de ler texto colado. Depois
 
 A 0.31.0 fechou o ciclo com **verificação de assinatura e integridade** — SHA-256 contra o hash publicado, Authenticode no Windows, `rpm -K`, `dpkg-sig` e `gpg` para assinatura destacada, declarando quando não é verificável — e o **desinstalador simétrico**, que usa o mesmo token de uso único e revalida o hash do arquivo entre o plano e a execução.
 
-Três travas separam leitura de efeito: um **token de host** em `storage/host-token.txt`, gerado no primeiro uso e impresso no terminal; a **rede desligada** até `JARVIS_HOST_REDE=1`; e a **instalação desligada** até `JARVIS_HOST_INSTALAR=1`. Não existe shell livre — o executor só roda uma allowlist fechada (msi, msix, deb, rpm, exe, AppImage, pip, npm) com `shell=False` e nenhum texto do usuário na linha de comando.
+Três travas separam leitura de efeito: a **rede desligada** até `JARVIS_HOST_REDE=1`, que basta para **buscar e ler** página (desde a 0.49.0, sem token); o **token de host** em `storage/host-token.txt`, gerado no primeiro uso e impresso no terminal, exigido só de quem **grava** — baixar, importar, instalar e executar; e a **instalação desligada** até `JARVIS_HOST_INSTALAR=1`. Não existe shell livre — o executor só roda uma allowlist fechada (msi, msix, deb, rpm, exe, AppImage, pip, npm) com `shell=False` e nenhum texto do usuário na linha de comando.
 
 O aviso que a interface repete: os dados são da máquina que executa a API. Num contêiner, é o contêiner — e a skill `sistema.ambiente` detecta isso e diz na cara.
 
@@ -510,7 +512,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **231 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **237 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -645,7 +647,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 231 skills
+├── skill_registry.py        # allowlist, Pydantic e 237 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

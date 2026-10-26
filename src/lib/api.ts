@@ -253,6 +253,10 @@ export interface PesquisaFonte {
   titulo: string;
   url: string;
   lida: boolean;
+  /** De qual plataforma veio: `duckduckgo`, `wikipedia` ou `youtube`. */
+  fonte?: string;
+  /** `web`, `enciclopedia` ou `video`. */
+  tipo?: string;
 }
 
 export interface PesquisaResposta {
@@ -266,8 +270,15 @@ export interface PesquisaResposta {
   limites: string[];
 }
 
-export async function requestPesquisa(pergunta: string, autorizacao: string): Promise<{ ok: boolean; result: PesquisaResposta }> {
-  return apiFetch('/api/pesquisa/responder', { method: 'POST', body: JSON.stringify({ pergunta, autorizacao }) });
+export async function requestPesquisa(
+  pergunta: string,
+  autorizacao = '',
+  fonte?: string,
+): Promise<{ ok: boolean; result: PesquisaResposta }> {
+  return apiFetch('/api/pesquisa/responder', {
+    method: 'POST',
+    body: JSON.stringify(fonte ? { pergunta, autorizacao, fonte } : { pergunta, autorizacao }),
+  });
 }
 
 export interface AgenteSkill {
@@ -374,7 +385,7 @@ export async function esquecerAgente(pedido: string): Promise<number> {
   return resposta.result.removidos;
 }
 
-export async function pesquisarAgente(pedido: string, autorizacao: string): Promise<AgenteResultado> {
+export async function pesquisarAgente(pedido: string, autorizacao = ''): Promise<AgenteResultado> {
   const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado }>(
     '/api/agente/pesquisar',
     { method: 'POST', body: JSON.stringify({ pedido, autorizacao }) },

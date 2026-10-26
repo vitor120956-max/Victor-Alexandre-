@@ -586,9 +586,20 @@ def test_rede_desligada_recusa(monkeypatch, token):
         S.rede(acao="buscar", consulta="x", autorizacao=token)
 
 
-def test_rede_exige_token_antes_da_rede(rede_ligada):
+def test_rede_busca_nao_pede_token(monkeypatch, rede_ligada):
+    """Pesquisar é leitura: a trava que vale é a rede ligada, não o token."""
+    monkeypatch.setattr(
+        S.busca_web,
+        "buscar",
+        lambda *_a, **_k: {"consulta": "x", "fonte": "auto", "resultados": [], "responderam": [], "falhas": []},
+    )
+    dados = S.rede(acao="buscar", consulta="x", autorizacao="")
+    assert dados["readOnly"] is True
+
+
+def test_baixar_continua_exigindo_token(rede_ligada):
     with pytest.raises(S.SistemaError, match="token"):
-        S.rede(acao="buscar", consulta="x", autorizacao="")
+        S.baixar(url="https://example.com/a.msi", autorizacao="")
 
 
 def test_rede_acao_invalida(rede_ligada, token):
@@ -601,20 +612,33 @@ def test_rede_busca_sem_consulta(rede_ligada, token):
         S.rede(acao="buscar", consulta="  ", autorizacao=token)
 
 
-def test_rede_busca_devolve_linhas(monkeypatch, rede_ligada, token):
+def test_rede_busca_devolve_linhas(monkeypatch, rede_ligada):
     monkeypatch.setattr(
-        S,
-        "_buscar_ddg",
-        lambda *_a, **_k: [{"titulo": "Driver Bluetooth", "url": "https://exemplo.com/driver"}],
+        S.busca_web,
+        "buscar",
+        lambda *_a, **_k: {
+            "consulta": "driver bluetooth",
+            "fonte": "auto",
+            "resultados": [
+                {"titulo": "Driver Bluetooth", "url": "https://exemplo.com/driver", "fonte": "duckduckgo", "tipo": "site"}
+            ],
+            "responderam": ["duckduckgo"],
+            "falhas": [],
+        },
     )
-    dados = S.rede(acao="buscar", consulta="driver bluetooth", autorizacao=token)
+    dados = S.rede(acao="buscar", consulta="driver bluetooth")
     assert dados["rows"][0]["titulo"] == "Driver Bluetooth"
+    assert dados["rows"][0]["fonte"] == "duckduckgo"
     assert dados["executed"] is False and dados["readOnly"] is True
 
 
-def test_rede_busca_vazia_alerta(monkeypatch, rede_ligada, token):
-    monkeypatch.setattr(S, "_buscar_ddg", lambda *_a, **_k: [])
-    dados = S.rede(acao="buscar", consulta="nada", autorizacao=token)
+def test_rede_busca_vazia_alerta(monkeypatch, rede_ligada):
+    monkeypatch.setattr(
+        S.busca_web,
+        "buscar",
+        lambda *_a, **_k: {"consulta": "nada", "fonte": "auto", "resultados": [], "responderam": [], "falhas": []},
+    )
+    dados = S.rede(acao="buscar", consulta="nada")
     assert any("sem resultado" in item["title"].lower() for item in dados["findings"])
 
 
@@ -1331,8 +1355,8 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.48.0"
-    assert dados["skills"] == 231
+    assert dados["version"] == "0.49.0"
+    assert dados["skills"] == 237
 
 
 def test_api_lista_as_quinze_skills_de_sistema(client):
@@ -1350,7 +1374,7 @@ def test_api_sistema_disco_exige_token(client):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.48.0"
+    assert resposta["result"]["versao"] == "0.49.0"
 
 
 def test_api_baixar_exige_confirmacao(client):

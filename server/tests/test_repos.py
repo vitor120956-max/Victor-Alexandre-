@@ -1,4 +1,4 @@
-"""Testes da camada de repositórios (0.48.0).
+"""Testes da camada de repositórios (0.49.0).
 
 Nenhum teste chama o GitHub: o download é injetado e o `.zip` é montado na
 memória. A única execução real é um `python script.py` de uma linha, dentro da

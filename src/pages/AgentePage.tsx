@@ -62,12 +62,9 @@ export function AgentePage() {
   };
 
   const procurar = async (pedido: string) => {
-    if (!hostToken) {
-      pushToast('Falta o token de host', 'Envie “token SEU_TOKEN” no chat uma vez e tente de novo.', 'info');
-      return;
-    }
     try {
-      const resultado = await pesquisarAgente(pedido, hostToken);
+      // A busca na web não usa token desde a 0.49.0; ele só vale para o que grava.
+      const resultado = await pesquisarAgente(pedido, hostToken ?? '');
       pushToast(
         resultado.acao === 'web' ? 'Resposta guardada' : 'A busca não trouxe nada',
         resultado.acao === 'web' ? 'O mesmo pedido agora responde da memória.' : resultado.resposta.slice(0, 120),
