@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import correio, drive_setup, github, habilidades, mesa
+from . import catalogo, correio, drive_setup, github, habilidades, mesa
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2043,6 +2043,36 @@ class HabilidadesImportarVariasInput(BaseModel):
     limite: int = Field(default=10, ge=1, le=20, title="Quantos importar")
 
 
+class CatalogoCarregarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(min_length=3, max_length=500, title="Planilha", json_schema_extra={"description": "CSV com `skill` e `repo_url`. Aceita caminho dentro de `storage/` ou da pasta Downloads."})
+
+
+class CatalogoListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fornecedor: str = Field(default="", max_length=80, title="Fornecedor", json_schema_extra={"description": "Como `vercel-labs`, `mattpocock` ou `anthropics`."})
+    categoria: str = Field(default="", max_length=60, title="Categoria", json_schema_extra={"description": "Como `design-media`, `dev-programming` ou `ai-agent`."})
+    texto: str = Field(default="", max_length=120, title="Palavra")
+    de_rank: int = Field(default=0, ge=0, le=9_999, title="Do rank")
+    ate_rank: int = Field(default=0, ge=0, le=9_999, title="Até o rank")
+    limite: int = Field(default=30, ge=1, le=200, title="Quantos mostrar")
+
+
+class CatalogoImportarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quantos: int = Field(default=5, ge=1, le=10, title="Quantas importar", json_schema_extra={"description": "Até 10 por chamada — o GitHub público aceita 60 pedidos por hora."})
+    fornecedor: str = Field(default="", max_length=80, title="Fornecedor")
+    categoria: str = Field(default="", max_length=60, title="Categoria")
+    texto: str = Field(default="", max_length=120, title="Palavra")
+    de_rank: int = Field(default=0, ge=0, le=9_999, title="Do rank")
+    ate_rank: int = Field(default=0, ge=0, le=9_999, title="Até o rank")
+
+
+class CorreioGmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tipo: Literal["faturas", "intimacoes", "governo", "seguranca", "importantes"] = Field(default="importantes", title="Tipo")
+
+
 class CorreioPastaInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pasta: str = Field(default="", max_length=500, title="Pasta", json_schema_extra={"description": "Vazio usa `storage/correio`. Aceita caminho dentro de `storage/` ou da pasta Downloads."})
@@ -3771,6 +3801,72 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                 return resolvido
         raise SkillError("Só leio correio de dentro de storage/ ou da pasta Downloads.")
 
+    def _arquivo_do_catalogo(bruto: str) -> Path:
+        """O CSV do catálogo: em `storage/` (a raiz de dados) ou na pasta Downloads."""
+        raiz_storage = dados_locais.raiz().resolve()
+        downloads = (Path.home() / "Downloads").resolve()
+        # "storage/catalogo-skills.csv" e "catalogo-skills.csv" apontam para o
+        # mesmo lugar: a raiz de dados já É a pasta storage.
+        nome = (bruto or "").strip().replace("\\", "/").lstrip("/")
+        if nome.lower().startswith("storage/"):
+            nome = nome[len("storage/"):]
+        alvo = Path(nome).expanduser()
+        candidatos = [alvo] if alvo.is_absolute() else [raiz_storage / nome, downloads / nome]
+        for candidato in candidatos:
+            try:
+                resolvido = candidato.resolve()
+            except OSError:
+                continue
+            if resolvido == raiz_storage or raiz_storage in resolvido.parents:
+                return resolvido
+            if resolvido == downloads or downloads in resolvido.parents:
+                return resolvido
+        raise SkillError(
+            f"Não achei a planilha “{bruto}”. Deixe o CSV em {raiz_storage / nome} (ou em Downloads)."
+        )
+
+    def catalogo_carregar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CatalogoCarregarInput)
+        try:
+            return catalogo.carregar(_arquivo_do_catalogo(data.caminho))
+        except catalogo.CatalogoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def catalogo_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CatalogoListarInput)
+        try:
+            return catalogo.filtrar(
+                fornecedor=data.fornecedor,
+                categoria=data.categoria,
+                texto=data.texto,
+                de_rank=data.de_rank,
+                ate_rank=data.ate_rank,
+                limite=data.limite,
+            )
+        except catalogo.CatalogoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def catalogo_importar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CatalogoImportarInput)
+        try:
+            return catalogo.importar(
+                quantos=data.quantos,
+                fornecedor=data.fornecedor,
+                categoria=data.categoria,
+                texto=data.texto,
+                de_rank=data.de_rank,
+                ate_rank=data.ate_rank,
+            )
+        except catalogo.CatalogoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def correio_gmail_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CorreioGmailInput)
+        try:
+            return correio.busca_gmail(data.tipo)
+        except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+
     def correio_arquivos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CorreioPastaInput)
         try:
@@ -4636,6 +4732,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
         SkillDefinition("habilidades.importar-varias", "Importar várias habilidades", "Recebe uma lista de links (uma por linha) e importa até 20 de uma vez; um link que falha não derruba os outros e volta com o motivo. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarVariasInput, habilidades_importar_varias_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("catalogo.carregar", "Carregar catálogo de skills", "Lê a planilha CSV de habilidades de terceiros (`skill`, `repo_url`, `vendor`, `category`), tira duplicata e guarda em `storage/catalogo.json` com resumo por categoria e fornecedor. Só grava o índice — não baixa habilidade nenhuma.", "Catálogo", CatalogoCarregarInput, catalogo_carregar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("catalogo.listar", "Listar catálogo", "Filtra o catálogo carregado por fornecedor, categoria, palavra ou faixa de rank. Só lê o índice local.", "Catálogo", CatalogoListarInput, catalogo_listar_handler, timeout_seconds=15),
+        SkillDefinition("catalogo.importar", "Importar do catálogo", "Escolhe linhas do catálogo e traz o `SKILL.md` de cada uma, achando o caminho pela árvore do repositório. Até 10 por chamada (limite do GitHub sem token: 60 pedidos/hora); o que falhar volta com o motivo.", "Catálogo", CatalogoImportarInput, catalogo_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("correio.gmail-busca", "Busca pronta no Gmail", "Monta o link de uma busca do Gmail já filtrada (faturas, intimações, governo, segurança ou não lidos importantes). O filtro roda no seu navegador logado — nada é lido pelo JARVIS e nenhuma chave é pedida.", "Correio", CorreioGmailInput, correio_gmail_handler, timeout_seconds=10),
         SkillDefinition("correio.arquivos", "Correio exportado", "Lista os `.eml` e `.mbox` disponíveis em `storage/correio` (ou na pasta downloads) — o que você exportou do Gmail. Só lê nome, formato e tamanho.", "Correio", CorreioPastaInput, correio_arquivos_handler, timeout_seconds=15),
         SkillDefinition("correio.triar", "Triar e-mail por importância", "Lê os e-mails exportados e classifica por regra determinística: intimação/processo, fatura/boleto (com vencimento), governo, segurança, pessoal e newsletter. Ordena por prioridade. Não conecta no Gmail.", "Correio", CorreioTriarInput, correio_triar_handler, timeout_seconds=60),
         SkillDefinition("correio.padroes", "Meu jeito de escrever", "Mede só as mensagens enviadas: saudação, fecho, assinatura, tamanho médio, uso de lista. Serve de base para o rascunho sair no seu estilo.", "Correio", CorreioPastaInput, correio_padroes_handler, timeout_seconds=60),

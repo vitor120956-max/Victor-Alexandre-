@@ -4,15 +4,29 @@ O pedido que originou esta camada: *“se eu pedir para ele entrar no meu Gmail 
 filtrar por importância — faturas a pagar, intimações, e-mails do governo — ou
 ver os padrões de e-mail que eu mando e copiar para ele enviar um e-mail”*.
 
-Antes de qualquer promessa, o limite: **o JARVIS não entra na sua conta.** Ler a
-caixa em tempo real exige OAuth do Google — isto é, uma credencial — e o projeto
-foi feito sem chave. O que existe aqui é o caminho que funciona **sem credencial**:
-você exporta a sua caixa (ou as mensagens que interessam) e o JARVIS lê o arquivo.
+Há **dois caminhos**, e é importante não confundi-los:
+
+1. **Pela API do Google (OAuth).** Para o JARVIS ler a caixa *sozinho*, por
+   programa, é preciso uma credencial OAuth — não tem como fugir disso. Esse
+   caminho **não** está implementado aqui, e a chave, se você criar, fica só na
+   **sua** máquina (`D:\JARVIS\.env`), nunca no código, nunca no chat, nunca no
+   repositório.
+2. **Pela sua sessão de navegador (sem chave).** Se você já está logado no Gmail
+   no computador, o JARVIS que roda **nesse mesmo PC** pode abrir a página, clicar
+   e ler a tela com `mesa.*`/`navegador.*` — é você quem opera, ele só tecla e
+   clica no que você mandou. É assim que “abre o meu Gmail” funciona sem OAuth.
+   A skill `correio.gmail-busca` monta o **link da busca já filtrada** e você (ou
+   o JARVIS, com a sua autorização) abre na sessão logada.
+
+O caminho offline continua valendo e é o mais estável: você exporta a caixa (ou
+as mensagens que interessam) e o JARVIS lê o arquivo. É o que as quatro skills
+`correio.*` fazem, sem rede e sem credencial.
 
 ## O que dá para fazer hoje
 
 | Você pede | Ele faz |
 |---|---|
+| `abre o gmail com as faturas` | monta o link da busca (`faturas`, `intimações`, `governo`, `segurança` ou `não lidos`) para abrir na sua sessão já logada |
 | `filtra meus e-mails por importância` | lê os `.eml`/`.mbox`, classifica e ordena por prioridade |
 | `quais e-mails são importantes` | mesma triagem, mostrando só o topo |
 | `analisa meus e-mails enviados` | mede o seu jeito: saudação, fecho, assinatura, tamanho, uso de lista |
@@ -73,9 +87,11 @@ foi genérico.
 
 ## O que ele não faz (e por quê)
 
-1. **Não conecta no Gmail.** Sem OAuth, não há leitura em tempo real. Existe a
-   camada `escritorio.*`, que monta os comandos do `gws` — mas ela também só
-   monta: quem autentica é você.
+1. **Não lê o Gmail pela API.** Sem OAuth não há leitura por programa; o que
+   existe é a busca pronta (`correio.gmail-busca`) e a camada `escritorio.*`, que
+   monta os comandos do `gws` — ela monta, quem autentica é você. Ler a tela do
+   navegador logado é outra coisa: depende de você autorizar `mesa.*` e acontece
+   no seu PC, não aqui.
 2. **Não envia e-mail.** O rascunho é texto; enviar é decisão sua no Gmail (ou
    pelo `gws`, com a sua credencial).
 3. **Não apaga, não arquiva, não marca como lido.**
@@ -89,7 +105,8 @@ foi genérico.
 | leitura, triagem, padrões, rascunho | `server/correio.py` |
 | seus e-mails exportados | `storage/correio` (ou `JARVIS_DADOS/correio`) |
 | skills | `correio.arquivos`, `correio.triar`, `correio.padroes`, `correio.rascunho` |
-| testes | `server/tests/test_correio.py` (24, com `.eml` e `.mbox` montados no teste) |
+| busca pronta | `correio.gmail-busca` (só monta o link, não abre nada) |
+| testes | `server/tests/test_correio.py` (27, com `.eml` e `.mbox` montados no teste) |
 
 A pasta aceita também caminho absoluto **dentro de `storage/`** ou da pasta
 **Downloads** — o mesmo confinamento de `files.import`. Qualquer outro caminho é

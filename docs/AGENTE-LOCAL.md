@@ -19,7 +19,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 250 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 254 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -72,6 +72,10 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `filtra meus e-mails por importância` | `correio.triar` (só lê o exportado) | não |
 | `analisa meus e-mails enviados` | `correio.padroes` (só lê) | não |
 | `escreve um e-mail para a Ana sobre o relatório: …` | `correio.rascunho` (texto, nada é enviado) | não |
+| `abre o gmail com as faturas` · `gmail com as intimações` | `correio.gmail-busca` (monta o link; nada é lido) | não |
+| `carrega o catálogo de skills` · `lê o catálogo` | `catalogo.carregar` | **sim** |
+| `lista o catálogo` · `quais skills de design tem no catálogo` | `catalogo.listar` (só lê) | não |
+| `importa as 5 primeiras do catálogo` · `importa as de design do catálogo da vercel` | `catalogo.importar` (até 10 por chamada) | **sim** |
 
 Pergunta com `?` nunca dispara a skill de cópia: no máximo ela mostra o estado.
 `abre o drive` e `pausa o drive` continuam indo para a busca normal.
@@ -125,7 +129,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 250 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 254 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
@@ -143,6 +147,10 @@ importar a foto da página Downloads/contrato.jpg
 
 O que o agente **não** faz sozinho: escolher por você que um vídeo do YouTube
 deve ser baixado só porque você colou o link — isso exige o pedido explícito.
+
+O mesmo vale para o catálogo: `importa o catálogo` sem dizer **quantas** traz as
+**5 primeiras** (nunca “tudo”), e cada leva para em 10 — o GitHub público aceita
+60 pedidos por hora, e três pedidos estourados viram uma hora de espera.
 
 ## O que ele faz quando o pedido é vago
 

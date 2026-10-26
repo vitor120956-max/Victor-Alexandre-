@@ -1468,6 +1468,80 @@ def _limpar_destino(bruto: str) -> tuple[str, str, str]:
     return destino, assunto, pontos
 
 
+_RE_GMAIL_BUSCA = re.compile(
+    r"\b(?:gmail|caixa de entrada|correio)\b[^.]*\b(?:faturas?|boletos?|intima\w*|processos?|cita\w*|governo|receita|"
+    r"detran|seguran\w*|senhas?|c[óo]digos?|n[ãa]o lidos?|importantes?)\b"
+    r"|\b(?:fatura|boleto|intima\w*|processo|governo|receita|detran|senha)\b[^.]*\b(?:no|do|pelo) gmail\b",
+    re.I,
+)
+_RE_CATALOGO_CARREGAR = re.compile(
+    r"\b(?:carrega|carregar|carregue|ler|l[êe]|leia|abre|abrir)\b[^.]*\bcat[áa]logo\b",
+    re.I,
+)
+_RE_CATALOGO_LISTAR = re.compile(
+    r"\b(?:lista|listar|liste|quais|mostra|mostrar|mostre|tem no)\b[^.]*\bcat[áa]logo\b"
+    r"|\bcat[áa]logo\b[^.]*\b(?:tem|lista|mostra)\b",
+    re.I,
+)
+
+
+def _ficha_real(registry: Any, skill_id: str, direto: dict[str, Any]) -> tuple[str, str, str]:
+    """Nome, categoria e descrição do registro — o cartão do chat não fica vazio."""
+    try:
+        definicao = registry.get(skill_id)
+    except Exception:  # skill fora do registro: vale o que a regra declarou
+        return direto["nome"], direto.get("categoria", "Repositórios"), ""
+    return definicao.name, definicao.category, definicao.description
+
+
+def _pedido_direto_de_catalogo(termo: str) -> dict[str, Any] | None:
+    """Catálogo de terceiros: carregar a planilha, filtrar e importar por linha."""
+    texto = (termo or "").strip()
+    if "http" in texto:
+        return None
+
+    achado_importar = re.search(r"\b(?:importa|importar|importe|traz|trazer|puxa|puxar)\b", texto, re.I)
+    filtros = _filtros_do_texto(texto)
+    if _RE_CATALOGO_CARREGAR.search(texto) and achado_importar is None:
+        return {
+            "skill_id": "catalogo.carregar",
+            "nome": "Carregar catálogo de skills",
+            "parametros": {"caminho": "catalogo-skills.csv"},
+            "confirma": True,
+        }
+
+    if achado_importar and re.search(r"\bcat[áa]logo\b", texto, re.I):
+        quantos = re.search(r"\b(\d{1,2})\b", texto)
+        parametros = dict(filtros)
+        parametros["quantos"] = min(10, max(1, int(quantos.group(1)) if quantos else 5))
+        return {"skill_id": "catalogo.importar", "nome": "Importar do catálogo", "parametros": parametros, "confirma": True}
+
+    if _RE_CATALOGO_LISTAR.search(texto):
+        return {"skill_id": "catalogo.listar", "nome": "Listar catálogo", "parametros": filtros, "confirma": False}
+    return None
+
+
+CATEGORIAS_CATALOGO = ("design", "dev", "ai-agent", "office", "knowledge", "content", "life", "business", "it-ops")
+FORNECEDORES_CATALOGO = ("anthropics", "vercel-labs", "mattpocock", "prisma", "supabase", "cloudflare", "remotion", "neondatabase", "heygen", "steipete", "open.feishu")
+
+
+def _filtros_do_texto(texto: str) -> dict[str, Any]:
+    """“as de design da vercel” → categoria/vendor; o resto vira texto livre."""
+    filtros: dict[str, Any] = {}
+    baixo = (texto or "").lower()
+    for categoria in CATEGORIAS_CATALOGO:
+        if categoria in baixo:
+            filtros["categoria"] = categoria
+            break
+    for fornecedor in FORNECEDORES_CATALOGO:
+        # “da vercel” e “do mattpocock” são como se fala; o índice usa o nome completo.
+        procurado = fornecedor.split(".")[0].replace("-labs", "")
+        if fornecedor in baixo or re.search(rf"\b{re.escape(procurado)}\b", baixo):
+            filtros["fornecedor"] = fornecedor
+            break
+    return filtros
+
+
 def _pedido_direto_de_correio(termo: str) -> dict[str, Any] | None:
     """E-mail exportado: triagem por importância, padrão de escrita e rascunho."""
     texto = (termo or "").strip()
@@ -1483,11 +1557,80 @@ def _pedido_direto_de_correio(termo: str) -> dict[str, Any] | None:
                 parametros["pontos"] = pontos[:4000]
             return {"skill_id": "correio.rascunho", "nome": "Rascunhar e-mail no seu estilo", "parametros": parametros, "confirma": False}
 
+    if _RE_GMAIL_BUSCA.search(texto):
+        tipo = "importantes"
+        baixo = texto.lower()
+        if re.search(r"fatura|boleto", baixo):
+            tipo = "faturas"
+        elif re.search(r"intima|processo|cita", baixo):
+            tipo = "intimacoes"
+        elif re.search(r"governo|receita|detran", baixo):
+            tipo = "governo"
+        elif re.search(r"seguran|senha|c[óo]digo", baixo):
+            tipo = "seguranca"
+        return {"skill_id": "correio.gmail-busca", "nome": "Busca pronta no Gmail", "parametros": {"tipo": tipo}, "confirma": False}
+
     if _RE_TRIAGEM_CORREIO.search(texto):
         return {"skill_id": "correio.triar", "nome": "Triar e-mail por importância", "parametros": {}, "confirma": False}
 
     if _RE_PADROES_CORREIO.search(texto):
         return {"skill_id": "correio.padroes", "nome": "Meu jeito de escrever", "parametros": {}, "confirma": False}
+    return None
+
+
+def _formatar_catalogo(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para o catálogo de terceiros."""
+    if resultado.get("por_categoria") and resultado.get("total") and resultado.get("arquivo"):
+        linhas = [f"Catálogo carregado: {resultado['total']} habilidade(s).", f"Arquivo: {resultado['arquivo']}", ""]
+        if resultado.get("por_categoria"):
+            linhas.append("Por categoria: " + ", ".join(f"{k} ({v})" for k, v in resultado["por_categoria"].items()))
+        if resultado.get("por_fornecedor"):
+            linhas.append("Por fornecedor: " + ", ".join(f"{k} ({v})" for k, v in resultado["por_fornecedor"].items()))
+        linhas += ["", "Agora: `importa as 5 primeiras do catálogo` ou `importa as de design do catálogo`."]
+        return "\n".join(linhas)
+
+    if "mostrando" in resultado and isinstance(resultado.get("itens"), list):
+        itens = resultado["itens"]
+        if not itens:
+            return "Nenhuma linha do catálogo bate com esse filtro."
+        linhas = [f"{resultado['total']} linha(s) no filtro — mostrando {len(itens)}:", ""]
+        for item in itens:
+            linhas.append(f"[{item.get('rank')}] {item['skill']} — {item.get('vendor') or '?'} · {item.get('category') or 'sem categoria'}")
+            if item.get("repo_url"):
+                linhas.append(f"    {item['repo_url']}")
+        linhas += ["", "Importe com: `importa as 5 primeiras do catálogo`."]
+        return "\n".join(linhas)
+
+    if "limite_por_chamada" in resultado and "importadas" in resultado:
+        linhas = [f"Importei {len(resultado['importadas'])} de {resultado.get('tentadas')} linha(s) do catálogo."]
+        for item in resultado["importadas"][:10]:
+            linhas.append(f"• [{item.get('rank')}] {item.get('nome')} (`{item.get('slug')}`)")
+        if resultado.get("falhas"):
+            linhas.append("")
+            linhas.append("Não deu para importar:")
+            for falha in resultado["falhas"][:5]:
+                if falha.get("install"):
+                    linhas.append(f"• {falha['skill']} — {falha['erro']}; só pela plataforma: `{falha['install']}`")
+                else:
+                    linhas.append(f"• {falha['skill']} — {falha['erro']}")
+        if resultado.get("restantes"):
+            linhas.append("")
+            linhas.append(
+                f"Ainda há {resultado['restantes']} linha(s) no filtro (as sem `repo_url` voltam sempre como falha). "
+                f"Mande outra leva de até {resultado['limite_por_chamada']}."
+            )
+        return "\n".join(linhas)
+
+    if resultado.get("consulta") and resultado.get("url") and resultado.get("dica"):
+        linhas = [
+            f"Busca pronta no Gmail — {resultado.get('rotulo')}:",
+            "",
+            resultado["url"],
+            "",
+            f"Filtro: {resultado['consulta']}",
+            str(resultado["dica"]),
+        ]
+        return "\n".join(linhas)
     return None
 
 
@@ -1924,6 +2067,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_catalogo(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_correio(resultado)
     if especial is not None:
@@ -2697,6 +2844,10 @@ async def _resolver(
     if direto is None:
         direto = _pedido_direto_de_correio(termo)
 
+    # 0b6. Catálogo de terceiros: carregar a planilha, filtrar e importar.
+    if direto is None:
+        direto = _pedido_direto_de_catalogo(termo)
+
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:
         direto = _pedido_direto_de_repositorio(termo)
@@ -2705,11 +2856,14 @@ async def _resolver(
         # declara esse campo. Sem isso, a confirmação do chat quebrava skills
         # com `extra="forbid"` (a do Drive é uma delas).
         schema_direto = _schema_da_skill(registry, direto["skill_id"])
+        nome_real, categoria_real, descricao_real = _ficha_real(
+            registry, direto["skill_id"], direto
+        )
         entrada_direta = Entrada(
             skill_id=direto["skill_id"],
-            nome=direto["nome"],
-            categoria=direto.get("categoria", "Repositórios"),
-            descricao="",
+            nome=nome_real,
+            categoria=categoria_real,
+            descricao=descricao_real,
             schema=schema_direto,
             fortes=frozenset(),
             fracos=frozenset(),

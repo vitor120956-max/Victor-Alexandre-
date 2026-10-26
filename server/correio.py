@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from email.utils import parseaddr, parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import quote
 
 from . import dados
 
@@ -421,6 +422,54 @@ def padroes(pasta: Path | str | None = None) -> dict[str, Any]:
         "usa_lista": round(100 * com_lista / len(enviadas)),
         "com_pergunta": com_pergunta,
         "assuntos": [mensagem["assunto"] for mensagem in enviadas[:5]],
+    }
+
+
+# ------------------------------------------------------- busca no Gmail
+
+CONSULTAS_GMAIL: dict[str, dict[str, str]] = {
+    "faturas": {
+        "rotulo": "Faturas e boletos",
+        "consulta": "(subject:(fatura OR boleto OR vencimento) OR has:attachment filename:pdf) newer_than:120d",
+    },
+    "intimacoes": {
+        "rotulo": "Intimações e processos",
+        "consulta": "(subject:(intimação OR intimacao OR citação OR citacao OR prazo) OR from:jus.br) newer_than:365d",
+    },
+    "governo": {
+        "rotulo": "Governo",
+        "consulta": "(from:gov.br OR subject:(declaração OR declaracao OR IPVA OR Detran OR Receita)) newer_than:365d",
+    },
+    "seguranca": {
+        "rotulo": "Segurança e acesso",
+        "consulta": "(subject:(código OR codigo OR senha OR verificação OR verificacao OR login)) newer_than:60d",
+    },
+    "importantes": {
+        "rotulo": "Não lidos importantes",
+        "consulta": "is:unread category:primary newer_than:30d",
+    },
+}
+
+
+def busca_gmail(tipo: str = "importantes") -> dict[str, Any]:
+    """Monta o link da busca pronta do Gmail — a que o próprio Gmail executa.
+
+    Não lê a caixa e não pede chave: o filtro roda no navegador onde você já
+    está logado. É o máximo que dá para fazer sem OAuth, e é bem mais útil que
+    um “não posso”.
+    """
+    chave = (tipo or "importantes").strip().lower()
+    if chave not in CONSULTAS_GMAIL:
+        raise CorreioError(
+            "Tipo de busca inválido. Use " + ", ".join(CONSULTAS_GMAIL) + "."
+        )
+    regra = CONSULTAS_GMAIL[chave]
+    return {
+        "tipo": chave,
+        "rotulo": regra["rotulo"],
+        "consulta": regra["consulta"],
+        "url": "https://mail.google.com/mail/u/0/#search/" + quote(regra["consulta"]),
+        "dica": "Abre no seu navegador já logado; nada é enviado para o JARVIS.",
     }
 
 

@@ -276,3 +276,15 @@ def test_modulo_nao_esta_no_gitignore():
     raiz = Path(__file__).resolve().parents[2]
     ignorados = {linha.strip() for linha in (raiz / ".gitignore").read_text(encoding="utf-8").splitlines()}
     assert "server/correio.py" not in ignorados
+
+
+def test_busca_gmail_monta_link_com_filtro():
+    achado = correio.busca_gmail("faturas")
+    assert achado["url"].startswith("https://mail.google.com/mail/u/0/#search/")
+    assert "fatura" in achado["consulta"].lower()
+    assert "nada é enviado" in achado["dica"].lower() or "nada" in achado["dica"].lower()
+
+
+def test_busca_gmail_tipo_invalido_recusa():
+    with pytest.raises(correio.CorreioError):
+        correio.busca_gmail("tudo")

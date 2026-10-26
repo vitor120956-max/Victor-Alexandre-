@@ -1,4 +1,4 @@
-"""Testes do agente local (0.51.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.52.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "250 skills" in texto
+    assert "254 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.51.0)
+# ------------------------------------------------- memória do agente (0.52.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 250 skills, uma por uma
+# ------------------------------------- cobertura: as 254 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 250 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 254 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.51.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.52.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.51.0)
+# ------------------------------------------------------- Google Drive (0.52.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1722,7 +1722,7 @@ def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
     assert base["resposta"].count("sim, pode") == 1
 
 
-# --------------------------------------------- mouse e teclado (0.51.0)
+# --------------------------------------------- mouse e teclado (0.52.0)
 
 SKILL_MESA_CLICAR = {
     "id": "mesa.clicar",
@@ -1836,7 +1836,7 @@ def test_pesquisa_sem_rede_nao_pede_token(tmp_path: Path) -> None:
     assert texto.count("JARVIS_HOST_REDE") == 1
 
 
-# ------------------------------------------ habilidades de fora (0.51.0)
+# ------------------------------------------ habilidades de fora (0.52.0)
 
 
 def test_importar_habilidade_do_link_pede_confirmacao(tmp_path: Path) -> None:
@@ -1909,7 +1909,7 @@ def test_formatar_guia_com_tarefa() -> None:
     assert "roteiro em texto" in texto
 
 
-# ----------------------------------------------- correio e lote (0.51.0)
+# ----------------------------------------------- correio e lote (0.52.0)
 
 
 def test_pedido_de_triagem_vai_para_o_correio(tmp_path: Path) -> None:
@@ -2001,3 +2001,109 @@ def test_escrever_email_nao_vira_digitacao() -> None:
     assert _pedido_direto_de_mesa(pedido) is None
     assert _pedido_direto_de_correio(pedido)["skill_id"] == "correio.rascunho"
     assert _pedido_direto_de_mesa("escreve oi")["skill_id"] == "mesa.digitar"
+
+
+# ------------------------------------------ catálogo e busca do Gmail (0.52.0)
+
+
+def test_pedido_para_carregar_o_catalogo() -> None:
+    from server.agente_local import _pedido_direto_de_catalogo
+
+    pedido = _pedido_direto_de_catalogo("carrega o catálogo de skills")
+    assert pedido["skill_id"] == "catalogo.carregar"
+    assert pedido["parametros"]["caminho"].endswith(".csv")
+    assert pedido["confirma"] is True
+
+
+def test_pedido_para_listar_o_catalogo() -> None:
+    from server.agente_local import _pedido_direto_de_catalogo
+
+    assert _pedido_direto_de_catalogo("lista o catálogo")["skill_id"] == "catalogo.listar"
+    filtrado = _pedido_direto_de_catalogo("quais skills de design tem no catálogo")
+    assert filtrado["skill_id"] == "catalogo.listar"
+    assert filtrado["parametros"] == {"categoria": "design"}
+
+
+def test_pedido_para_importar_do_catalogo() -> None:
+    from server.agente_local import _pedido_direto_de_catalogo
+
+    pedido = _pedido_direto_de_catalogo("importa as 3 primeiras do catálogo da vercel")
+    assert pedido["skill_id"] == "catalogo.importar"
+    assert pedido["parametros"]["quantos"] == 3
+    assert pedido["parametros"]["fornecedor"] == "vercel-labs"
+    assert pedido["confirma"] is True
+
+
+def test_fora_do_catalogo_nao_dispara() -> None:
+    from server.agente_local import _pedido_direto_de_catalogo
+
+    assert _pedido_direto_de_catalogo("quais habilidades eu já tenho") is None
+    assert _pedido_direto_de_catalogo("importa esta skill: https://github.com/a/b/SKILL.md") is None
+
+
+def test_pedido_de_busca_no_gmail() -> None:
+    from server.agente_local import _pedido_direto_de_correio
+
+    faturas = _pedido_direto_de_correio("abre o gmail com as faturas")
+    assert faturas["skill_id"] == "correio.gmail-busca"
+    assert faturas["parametros"]["tipo"] == "faturas"
+    assert faturas["confirma"] is False
+    assert _pedido_direto_de_correio("gmail com as intimações")["parametros"]["tipo"] == "intimacoes"
+    assert _pedido_direto_de_correio("o que tem de segurança no meu e-mail") is None
+
+
+def test_formatar_catalogo_carregado() -> None:
+    texto = formatar_resultado(
+        {
+            "total": 100,
+            "arquivo": "D:/JARVIS/storage/catalogo.json",
+            "por_categoria": {"design-media": 12, "dev-programming": 40},
+            "por_fornecedor": {"anthropics": 10},
+        }
+    )
+    assert "Catálogo carregado: 100" in texto
+    assert "design-media (12)" in texto
+
+
+def test_formatar_catalogo_lista() -> None:
+    texto = formatar_resultado(
+        {
+            "total": 2,
+            "mostrando": 2,
+            "itens": [
+                {"rank": 1, "skill": "frontend-design", "vendor": "anthropics", "category": "design-media", "repo_url": "https://github.com/anthropics/skills"},
+                {"rank": 2, "skill": "tdd", "vendor": "mattpocock", "category": "dev-programming", "repo_url": ""},
+            ],
+        }
+    )
+    assert "[1] frontend-design — anthropics" in texto
+    assert "[2] tdd" in texto
+
+
+def test_formatar_catalogo_importacao() -> None:
+    texto = formatar_resultado(
+        {
+            "tentadas": 3,
+            "importadas": [{"rank": 1, "nome": "Frontend Design", "slug": "frontend-design"}],
+            "falhas": [{"skill": "nano-banana-pro", "erro": "linha sem endereço de repositório"}],
+            "restantes": 97,
+            "limite_por_chamada": 10,
+        }
+    )
+    assert "Importei 1 de 3" in texto
+    assert "nano-banana-pro" in texto
+    assert "Ainda há 97" in texto
+
+
+def test_formatar_busca_do_gmail() -> None:
+    texto = formatar_resultado(
+        {
+            "rotulo": "Faturas e boletos",
+            "consulta": "subject:(fatura)",
+            "url": "https://mail.google.com/mail/u/0/#search/fatura",
+            "dica": "Abre no seu navegador já logado; nada é enviado para o JARVIS.",
+        }
+    )
+    assert "Faturas e boletos" in texto
+    assert "mail.google.com" in texto
+    assert "já logado" in texto
