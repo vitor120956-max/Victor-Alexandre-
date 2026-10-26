@@ -379,6 +379,9 @@ def _pedido_direto_de_mesa(termo: str) -> dict[str, Any] | None:
         return {"skill_id": "mesa.status", "nome": "Onde está o mouse", "parametros": {}, "confirma": False}
 
     achado = _RE_DIGITAR.search(texto)
+    if achado and re.search(r"\b(?:e-?mail|correio|mensagem)\b", texto, re.I):
+        # “escreve um e-mail para a Ana” é correio, não teclado.
+        achado = None
     if achado:
         conteudo = achado.group("texto").strip().strip("\"'")
         if len(conteudo) >= 1:

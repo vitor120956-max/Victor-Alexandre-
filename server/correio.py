@@ -444,8 +444,10 @@ def rascunho(
     if not titulo:
         raise CorreioError("Diga o assunto do e-mail.")
 
-    lista = pontos.splitlines() if isinstance(pontos, str) else list(pontos or ())
-    lista = [re.sub(r"^[\s\-•*0-9.)]+", "", str(item)).strip() for item in lista]
+    partes = [pontos] if isinstance(pontos, str) else list(pontos or ())
+    # “ponto 1; ponto 2” e lista com ponto e vírgula dentro viram pontos separados.
+    brutos = [pedaco for item in partes for pedaco in re.split(r"[;\n]", str(item))]
+    lista = [re.sub(r"^[\s\-•*0-9.)]+", "", item).strip() for item in brutos]
     lista = [item for item in lista if item]
 
     try:
@@ -459,11 +461,11 @@ def rascunho(
 
     linhas = [f"{abertura.capitalize()}," if abertura else "Olá,", ""]
     if len(lista) <= 1:
-        linhas.append(f"Escrevo sobre {titulo[0].lower() + titulo[1:] if titulo else 'o assunto'}.")
+        linhas.append(f"Escrevo sobre o assunto: {titulo}.")
         if lista:
             linhas.append(lista[0] + ("." if not lista[0].endswith((".", "!", "?")) else ""))
     else:
-        linhas.append(f"Sobre {titulo[0].lower() + titulo[1:]}:")
+        linhas.append(f"Sobre o assunto “{titulo}”:")
         linhas.append("")
         for item in lista:
             linhas.append(f"- {item}")

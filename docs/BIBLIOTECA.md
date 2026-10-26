@@ -255,11 +255,11 @@ Limites, sem enfeite:
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **88** (34 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 17 em `test_dados.py`, 27 em `test_agente_local.py`) |
-| Testes do agente local | **190** (20 novos: mesa, fonte, habilidades e correio) |
+| Testes do agente local | **191** (21 novos: mesa, fonte, habilidades e correio) |
 | Testes das habilidades de fora | **41** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
-| Testes do correio | **24** (`test_correio.py`, com `.eml` e `.mbox` montados no teste) |
+| Testes do correio | **25** (`test_correio.py`, com `.eml` e `.mbox` montados no teste) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.365** |
+| Suíte da API | **2.367** |
 | Skills no registro | **250** (31 novas: biblioteca.*, armazenamento.*, mesa.*, habilidades.*, github.* e correio.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

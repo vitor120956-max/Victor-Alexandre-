@@ -1991,3 +1991,13 @@ def test_formatar_lote_com_falha() -> None:
     )
     assert "Importei 1 de 2" in texto
     assert "Não deu para importar" in texto
+
+
+def test_escrever_email_nao_vira_digitacao() -> None:
+    """“escreve um e-mail” é correio; “escreve oi” continua sendo teclado."""
+    from server.agente_local import _pedido_direto_de_correio, _pedido_direto_de_mesa
+
+    pedido = "escreve um e-mail para a Ana sobre o relatório: enviar planilha"
+    assert _pedido_direto_de_mesa(pedido) is None
+    assert _pedido_direto_de_correio(pedido)["skill_id"] == "correio.rascunho"
+    assert _pedido_direto_de_mesa("escreve oi")["skill_id"] == "mesa.digitar"

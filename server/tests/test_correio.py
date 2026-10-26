@@ -245,8 +245,15 @@ def test_rascunho_sem_enviados_usa_generico(tmp_path: Path):
 def test_rascunho_um_ponto_vira_frase(tmp_path: Path):
     eml(tmp_path, "recebida.eml", rotulos="Inbox")
     rascunho = correio.rascunho("ana@empresa.com", "entrega", ["segue em anexo"], pasta=tmp_path)
-    assert "Escrevo sobre entrega." in rascunho["corpo"]
+    assert "Escrevo sobre o assunto: entrega." in rascunho["corpo"]
     assert "segue em anexo" in rascunho["corpo"]
+
+
+def test_rascunho_separa_pontos_por_ponto_e_virgula(tmp_path: Path):
+    eml(tmp_path, "recebida.eml", rotulos="Inbox")
+    rascunho = correio.rascunho("ana@x.com", "entrega", ["um item; outro item"], pasta=tmp_path)
+    assert "- um item" in rascunho["corpo"]
+    assert "- outro item" in rascunho["corpo"]
 
 
 def test_rascunho_sem_destino_recusa():
