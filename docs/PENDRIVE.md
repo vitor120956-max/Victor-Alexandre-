@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.40.1 D:\JARVIS
+jarvis-nucleo-pessoal@0.41.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -613,7 +613,7 @@ Validado numa cópia limpa (sem `node_modules`, sem `dist`, sem `.git`): `/api/h
 | `npm run dev` (desenvolvimento) | sim | sim | **9.198** | 18 MB + 139 MB = **157 MB** | 5173 + 8000 |
 | `py iniciar.py` (sem Node) | **não** | **não** | **~4.400** | 18 MB + 103 MB = **121 MB** | **8000** |
 
-Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` (0.40.1, sem o extra `standard`) = **103 MB**, **31 pacotes** e **4.410 arquivos** — era 124 MB e 36 pacotes antes de tirar o `PyYAML`. O `npm install` grava **9.198 arquivos**; o `pip` grava pouco mais de **4.400**, cerca de metade, e nenhum deles é arquivo pequeno de dependência JavaScript, que é o que dói num pendrive USB 2.0.
+Medido nesta máquina: cópia do projeto sem `node_modules`/`dist`/`.git` = **18 MB**; `.venv` só com `requirements.txt` (medido na 0.40.1, sem o extra `standard`) = **103 MB**, **31 pacotes** e **4.410 arquivos** — era 124 MB e 36 pacotes antes de tirar o `PyYAML`. O `npm install` grava **9.198 arquivos**; o `pip` grava pouco mais de **4.400**, cerca de metade, e nenhum deles é arquivo pequeno de dependência JavaScript, que é o que dói num pendrive USB 2.0.
 
 O `iniciar.py` aceita `--porta 8080` e `--host 0.0.0.0` (para acessar de outro aparelho na rede local). Ele também troca sozinho para o Python do `.venv` quando existir.
 
@@ -635,7 +635,7 @@ npm run build:embutido
 
 - **Não recarrega ao editar.** Mudou código React? Precisa de `npm run build:embutido` — que exige Node.
 - **Sem testes web.** `npx vitest` continua exigindo `npm install`.
-- **Mesmas 209 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
+- **Mesmas 215 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
 
 ---
 
@@ -691,7 +691,7 @@ Não existe chave grátis da OpenAI — site que oferece isso está revendendo c
 
 O passo a passo de cada um, com o que digitar em cada campo e o aviso de privacidade (o plano gratuito do Google usa suas conversas para treinar; o do Groq não), está em [`CONFIGURAR-IA.md`](CONFIGURAR-IA.md) §0.
 
-**Chave não é obrigatória.** Sem chave nenhuma, as 209 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
+**Chave não é obrigatória.** Sem chave nenhuma, as 215 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
 
 Com a chave em mãos, o teste rápido é:
 
@@ -727,7 +727,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.40.1"` e `"skills": 209`.
+Esperado: `"version": "0.41.0"` e `"skills": 215`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -847,7 +847,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.40.1` e `209`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.41.0` e `215`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

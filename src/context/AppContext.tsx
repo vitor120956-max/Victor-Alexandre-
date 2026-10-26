@@ -124,6 +124,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [hostToken, setHostToken] = useState('');
   // Último pedido que o agente não resolveu: é ele que a correção ensina.
   const ultimoFalho = useRef('');
+  // Pedido que parou para pedir o "sim": a próxima fala pode ser só a autorização.
+  const confirmacaoPendente = useRef<{ pedido: string } | null>(null);
   const completionRef = useRef('');
 
   const dismissToast = useCallback((id: string) => {
@@ -405,6 +407,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sendMessage = useCallback((rawText: string) => {
     const text = rawText.trim();
     if (!text) return;
+    const pendente = confirmacaoPendente.current;
+    if (pendente && /^(sim|pode|confirmo|autorizo|vai|manda|beleza|ok)\b/i.test(text)) {
+      confirmacaoPendente.current = null;
+      setMessages((current) => [
+        ...current,
+        { id: createId('message'), role: 'user' as const, content: text, timestamp: new Date().toISOString() },
+      ].slice(-120));
+      setProcessing('python');
+      void requestAgenteLocal(pendente.pedido, text, true)
+        .then((resultado) => {
+          setProcessing(null);
+          appendJarvisMessage(montarRespostaAgente(resultado), 'python');
+        })
+        .catch((error: unknown) => {
+          setProcessing(null);
+          appendJarvisMessage(`Não consegui confirmar: ${error instanceof Error ? error.message : 'falha desconhecida'}.`);
+        });
+      return;
+    }
     if (processing) {
       pushToast('Aguarde a resposta atual', 'Uma skill ou a IA externa ainda está processando.', 'info');
       return;
@@ -436,6 +457,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setProcessing(null);
             if (resultado.acao === 'nada' || resultado.acao === 'sugerir') {
               ultimoFalho.current = text;
+            }
+            if (resultado.acao === 'confirmar') {
+              confirmacaoPendente.current = { pedido: text };
             }
             if (resultado.resposta.trim()) {
               const dica = resultado.acao === 'nada' || resultado.acao === 'sugerir'

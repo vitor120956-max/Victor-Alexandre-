@@ -59,6 +59,7 @@ class AgenteRequest(BaseModel):
     autorizacao: str = Field(default="")
     criar: bool = True
     consultar_web: bool = Field(default=True, alias="consultarWeb")
+    confirmar: bool = False
 
 
 class EnsinarRequest(BaseModel):
@@ -200,7 +201,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.40.1",
+        version="0.41.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -235,7 +236,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.40.1",
+            "version": "0.41.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "interface": interface.name if interface else "ausente",
@@ -441,6 +442,7 @@ def create_app(
                 autorizacao=payload.autorizacao,
                 criar=payload.criar,
                 consultar_web=payload.consultar_web,
+                confirmar=payload.confirmar,
             )
         except AgenteError as exc:
             return JSONResponse(

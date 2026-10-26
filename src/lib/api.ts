@@ -281,7 +281,7 @@ export interface AgenteSkill {
 export interface AgenteResultado {
   ok: boolean;
   pedido: string;
-  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada';
+  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada' | 'confirmar';
   skill: AgenteSkill | null;
   confianca: number;
   parametros: Record<string, unknown>;
@@ -298,10 +298,14 @@ export interface AgenteReceitas {
   receitas: Array<{ id: string; nome: string; descricao: string; exemplo: string; campo: string }>;
 }
 
-export async function requestAgenteLocal(pedido: string, autorizacao: string): Promise<AgenteResultado> {
+export async function requestAgenteLocal(
+  pedido: string,
+  autorizacao: string,
+  confirmar = false,
+): Promise<AgenteResultado> {
   const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado; error?: { message?: string } }>(
     '/api/agente/executar',
-    { method: 'POST', body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true }) },
+    { method: 'POST', body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true, confirmar }) },
   );
   if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'O agente local recusou o pedido.', 200, 'AGENTE_ERROR');
   return resposta.result;

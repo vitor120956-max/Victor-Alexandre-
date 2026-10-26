@@ -11,7 +11,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 209 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 215 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 20 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, lê a primeira página e devolve fontes + trecho | rede (`JARVIS_HOST_REDE=1`) e token de host |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -84,7 +84,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 209 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 215 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
@@ -142,5 +142,16 @@ com nome próprio — não é código novo.
 .venv/bin/python -m pytest server/tests/test_agente_local.py -q
 ```
 
-112 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
+125 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
 são funções injetadas.
+
+## Confirmação de efeito
+
+Skill que baixa, grava ou executa não roda só porque a frase parecida apareceu.
+O agente devolve `acao: "confirmar"` com os parâmetros já preenchidos e espera um
+“sim, pode”. Vale uma vez: cada novo pedido com efeito pergunta de novo.
+
+É o que protege `repos.baixar`, `repos.executar`, `sistema.baixar`, `files.write`
+e companhia de serem disparadas por engano. Na API, quem confirma manda
+`confirmar: true` no corpo de `POST /api/agente/executar`.
+

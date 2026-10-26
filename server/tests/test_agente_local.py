@@ -1,4 +1,4 @@
-"""Testes do agente local (0.40.1) — skills sem modelo nenhum.
+"""Testes do agente local (0.41.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -602,7 +602,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "209 skills" in texto
+    assert "215 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -615,7 +615,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.40.1)
+# ------------------------------------------------- memória do agente (0.41.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -810,7 +810,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 209 skills, uma por uma
+# ------------------------------------- cobertura: as 215 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -856,7 +856,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 209 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 215 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -880,3 +880,248 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
         except Exception as exc:  # schema recusou o exemplo
             problemas.append((skill["id"], str(exc).splitlines()[0][:120]))
     assert problemas == [], problemas[:10]
+
+
+# ------------------------------------------------- confirmação de efeito
+
+SKILL_BAIXAR = {
+    "id": "repos.baixar",
+    "name": "Baixar repositório",
+    "description": "Baixa um repositório público do GitHub como .zip para storage/repos, sem Git instalado.",
+    "category": "Repositórios",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "title": "Repositório"},
+            "autorizacao": {"type": "string", "title": "Autorização"},
+        },
+        "required": ["url"],
+    },
+}
+
+
+def test_skill_com_efeito_pede_confirmacao_em_vez_de_executar(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["parametros"]["url"] == "virgiliojr94/book-to-skill"
+    assert "Responda “sim, pode”" in resultado["resposta"]
+    assert duble.execucoes == []
+
+
+def test_confirmacao_executa_a_skill_de_verdade(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes == [("repos.baixar", {"url": "virgiliojr94/book-to-skill"})]
+
+
+def test_confirmacao_nao_entra_na_fila_nem_no_historico(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    from server.agente_local import listar_fila, listar_historico
+
+    assert listar_fila(tmp_path) == []
+    assert listar_historico(tmp_path) == []
+
+
+def test_url_completa_do_github_tambem_vira_parametro(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "baixar o repositório https://github.com/virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["parametros"]["url"] == "https://github.com/virgiliojr94/book-to-skill"
+
+
+def test_rota_do_agente_aceita_confirmar(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    app = create_app(registry=duble, agente_root=tmp_path)
+    with TestClient(app) as cliente:
+        primeiro = cliente.post(
+            "/api/agente/executar",
+            json={"pedido": "baixar o repositório virgiliojr94/book-to-skill", "consultarWeb": False},
+        ).json()
+        assert primeiro["result"]["acao"] == "confirmar"
+        segundo = cliente.post(
+            "/api/agente/executar",
+            json={
+                "pedido": "baixar o repositório virgiliojr94/book-to-skill",
+                "consultarWeb": False,
+                "confirmar": True,
+            },
+        ).json()
+        assert segundo["result"]["acao"] == "executado"
+
+
+def test_confirmacao_repassa_a_autorizacao_para_skill(tmp_path: Path):
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert duble.execucoes[0][1]["autorizacao"] == "sim, pode"
+
+
+class RegistroQueRecusa(RegistroFalso):
+    async def execute(self, skill_id: str, parameters: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+        self.execucoes.append((skill_id, parameters))
+        raise RuntimeError("Só repositório público do GitHub.")
+
+
+def test_erro_da_skill_aparece_em_vez_de_virar_sugestao(tmp_path: Path):
+    duble = RegistroQueRecusa([SKILL_BAIXAR], tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "nada"
+    assert "recusou o pedido" in resultado["resposta"]
+    assert "Só repositório público" in resultado["resposta"]
+
+
+def test_resumo_de_repositorio_no_chat():
+    texto = formatar_resultado(
+        {
+            "slug": "dono--repo",
+            "nome": "repo",
+            "arquivos": 130,
+            "bytes": 2_000_000,
+            "sugestao": "Nada foi instalado nem executado.",
+            "linguagens": [{"nome": "Python", "arquivos": 83}],
+            "entradas": [{"comando": "python -m pacote", "porque": "tem __main__.py"}],
+        }
+    )
+    assert "Baixei “repo” — 130 arquivos, 2.0 MB" in texto
+    assert "Python (83)" in texto
+    assert "python -m pacote" in texto
+    assert "Nada foi instalado" in texto
+
+
+def test_saida_de_execucao_no_chat():
+    texto = formatar_resultado({"comando": "python main.py", "codigo": 0, "saida": "rodou 4", "erro": ""})
+    assert "código 0" in texto
+    assert "rodou 4" in texto
+
+
+SKILL_EXEC_REPO = {
+    "id": "repos.executar",
+    "name": "Executar no repositório",
+    "description": "Roda um comando dentro do repositório baixado.",
+    "category": "Repositórios",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "repo": {"type": "string", "title": "Repositório"},
+            "comando": {"type": "string", "title": "Comando"},
+            "autorizacao": {"type": "string", "title": "Autorização"},
+        },
+        "required": ["repo", "comando"],
+    },
+}
+
+SKILL_LER_REPO = {
+    "id": "repos.ler",
+    "name": "Ler arquivo do repositório",
+    "description": "Mostra o texto de um arquivo de dentro do repositório.",
+    "category": "Repositórios",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "repo": {"type": "string", "title": "Repositório"},
+            "caminho": {"type": "string", "title": "Arquivo"},
+        },
+        "required": ["repo", "caminho"],
+    },
+}
+
+
+def test_rodar_comando_no_repositorio_pede_confirmacao(tmp_path: Path):
+    duble = registro(SKILL_EXEC_REPO, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "rodar python -m pacote --help no repositório dono--repo",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["parametros"] == {"repo": "dono--repo", "comando": "python -m pacote --help"}
+    assert duble.execucoes == []
+
+
+def test_rodar_comando_confirmado_leva_autorizacao(tmp_path: Path):
+    duble = registro(SKILL_EXEC_REPO, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "rodar python -m pacote --help no repositório dono--repo",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0][1]["autorizacao"] == "sim, pode"
+
+
+def test_ler_arquivo_do_repositorio_e_direto(tmp_path: Path):
+    duble = registro(SKILL_LER_REPO, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "ler o README.md do repositório dono--repo",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes == [("repos.ler", {"repo": "dono--repo", "caminho": "README.md"})]
+
+
+def test_stderr_com_codigo_zero_nao_vira_erro():
+    texto = formatar_resultado({"comando": "python -m x --help", "codigo": 0, "saida": "", "erro": "Usage: x"})
+    assert "Avisos do programa" in texto
+    assert "Erro:" not in texto

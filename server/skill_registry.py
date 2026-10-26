@@ -274,6 +274,18 @@ from .taste import (
 from .taste_rules import audit_copy, audit_tells, lint_page
 from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
+from .repos import (
+    ReposError,
+    analisar as analisar_repositorio,
+    baixar_repo,
+    executar_no_repo,
+    ler_arquivo as ler_arquivo_repo,
+    listar as listar_repositorios,
+    obter as obter_repositorio,
+    parse_url as parse_url_repo,
+    remover_repo,
+    slug_de as slug_de_repo,
+)
 
 
 class SkillError(Exception):
@@ -1895,6 +1907,41 @@ class TasteJudgeInput(BaseModel):
     mode: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
 
 
+class ReposBaixarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=3, max_length=300, title="Repositório", json_schema_extra={"description": "`dono/repo` ou endereço do GitHub. Só público, só `.zip` — não precisa de Git."})
+    ref: str = Field(default="", max_length=100, title="Branch ou tag", json_schema_extra={"description": "Vazio usa a branch padrão do repositório."})
+    autorizacao: str = Field(default="", max_length=200, title="Autorização", json_schema_extra={"description": "Precisa dizer sim, pode ou baixar."})
+
+
+class ReposAnalisarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo: str = Field(min_length=2, max_length=300, title="Repositório baixado", json_schema_extra={"description": "Slug (`dono--repo`) ou `dono/repo`."})
+
+
+class ReposListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ReposLerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo: str = Field(min_length=2, max_length=300, title="Repositório baixado")
+    caminho: str = Field(min_length=1, max_length=300, title="Arquivo", json_schema_extra={"description": "Caminho relativo dentro do repositório, como `README.md`."})
+
+
+class ReposExecutarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo: str = Field(min_length=2, max_length=300, title="Repositório baixado")
+    comando: str = Field(min_length=3, max_length=300, title="Comando", json_schema_extra={"description": "Só `python`, `node`, `npm`, `npx` ou `make`, sem shell, dentro da pasta do repositório."})
+    autorizacao: str = Field(default="", max_length=200, title="Autorização", json_schema_extra={"description": "Precisa dizer sim, pode ou executar."})
+    timeout: int = Field(default=120, ge=5, le=600, title="Tempo limite (s)")
+
+
+class ReposRemoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo: str = Field(min_length=2, max_length=300, title="Repositório baixado")
+
+
 SkillHandler = Callable[[BaseModel, bool], dict[str, Any]]
 
 
@@ -3305,6 +3352,90 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def _slug_do_repo(bruto: str) -> str:
+        texto = (bruto or "").strip()
+        if "/" in texto or "github.com" in texto:
+            dono, nome, _ = parse_url_repo(texto)
+            return slug_de_repo(dono, nome)
+        return texto
+
+    def repos_baixar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReposBaixarInput)
+        if dry_run:
+            dono, nome, ref = parse_url_repo(data.url)
+            return {
+                "simulacao": True,
+                "slug": slug_de_repo(dono, nome),
+                "endereco": f"https://github.com/{dono}/{nome}",
+                "ref": ref or data.ref or "padrão",
+                "aviso": "Nada foi baixado nem extraído.",
+            }
+        try:
+            return baixar_repo(data.url, autorizacao=data.autorizacao, ref=data.ref or None)
+        except ReposError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def repos_analisar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReposAnalisarInput)
+        try:
+            registro = obter_repositorio(_slug_do_repo(data.repo))
+            return {
+                "slug": registro.get("slug"),
+                "url": registro.get("url"),
+                "baixado_em": registro.get("baixado_em"),
+                "arquivos": registro.get("arquivos"),
+                "bytes": registro.get("bytes"),
+                "linguagens": registro.get("linguagens"),
+                "readme": registro.get("readme"),
+                "dependencias": registro.get("dependencias"),
+                "entradas": registro.get("entradas"),
+                "tem_skill": registro.get("tem_skill"),
+                "skills": registro.get("skills"),
+                "arvore": registro.get("arvore"),
+            }
+        except ReposError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def repos_listar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        itens = [
+            {
+                "slug": item.get("slug"),
+                "url": item.get("url"),
+                "baixado_em": item.get("baixado_em"),
+                "arquivos": item.get("arquivos"),
+                "linguagens": [ling["nome"] for ling in item.get("linguagens") or []][:3],
+                "tem_skill": item.get("tem_skill"),
+            }
+            for item in listar_repositorios()
+        ]
+        return {"total": len(itens), "repos": itens}
+
+    def repos_ler_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReposLerInput)
+        try:
+            return ler_arquivo_repo(_slug_do_repo(data.repo), data.caminho)
+        except ReposError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def repos_executar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReposExecutarInput)
+        try:
+            return executar_no_repo(
+                _slug_do_repo(data.repo),
+                data.comando,
+                autorizacao=data.autorizacao,
+                timeout=data.timeout,
+            )
+        except ReposError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def repos_remover_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReposRemoverInput)
+        removido = remover_repo(_slug_do_repo(data.repo))
+        if not removido:
+            raise SkillError("Repositório não está na pasta local.")
+        return {"removido": True, "slug": _slug_do_repo(data.repo)}
+
     def sistema_assinatura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SistemaAssinaturaInput)
         try:
@@ -3961,6 +4092,12 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("portabilidade.regras", "Catálogo de portabilidade", "Publica os treze alvos com estilo, base e o que cada um carrega, as dez regras de conversão, os limites e o que a camada não faz.", "Portabilidade", EmptyInput, portabilidade_regras_handler, timeout_seconds=5),
         SkillDefinition("estacao.memoria", "Revisar notas e skills", "Checa as notas do agente (tamanho, segredo, fato sem dia, absoluto) e as skills que ele escreveu (gatilho, passos, verificação, gatilho repetido).", "Estação", EstacaoMemoriaInput, estacao_memoria_handler, timeout_seconds=10),
         SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
+        SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),
+        SkillDefinition("repos.listar", "Listar repositórios", "Lista o que já está em `storage/repos` com data, tamanho, linguagens e se tem skill no padrão Agent Skills.", "Repositórios", ReposListarInput, repos_listar_handler, timeout_seconds=10),
+        SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
+        SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
+        SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)

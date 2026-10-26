@@ -2,7 +2,7 @@
 
 O caminho é sempre o mesmo, e nenhum passo chama modelo:
 
-1. **procura** o pedido nas 209 skills do registro, por palavra (nome, categoria,
+1. **procura** o pedido nas 215 skills do registro, por palavra (nome, categoria,
    descrição, campos do formulário);
 2. achando, **preenche os parâmetros** a partir da própria frase — número,
    endereço, caminho, enum, texto colado — e **executa**;
@@ -118,6 +118,8 @@ class Entrada:
     fracos: frozenset[str]
     receita: str | None = None
     local: bool = False
+    # Skill que baixa, grava ou executa não roda sem o "sim" na conversa.
+    confirma: bool = False
 
     def resumo(self) -> dict[str, Any]:
         return {
@@ -159,6 +161,7 @@ def entrada_de_skill(skill: dict[str, Any]) -> Entrada:
         schema=schema,
         fortes=frozenset(fortes),
         fracos=frozenset(fracos),
+        confirma=bool(skill.get("requiresConfirmation") or skill.get("requires_confirmation")),
     )
 
 
@@ -202,12 +205,15 @@ def pontuar(consulta: str, entrada: Entrada) -> tuple[float, list[str], int]:
     fraco só na descrição ou no formulário. A contagem de fortes é o que separa
     "essa skill é sobre isso" de "essa skill menciona a palavra em algum lugar".
     """
-    termos = _termos_de_busca(consulta)
+    # Endereço e caminho não são assunto: `virgiliojr94/book-to-skill` não pode
+    # diluir a nota de uma skill que é justamente sobre baixar repositório.
+    assunto = _RE_ENDERECO.sub(" ", consulta or "")
+    termos = _termos_de_busca(assunto)
     if not termos:
         return 0.0, [], 0
     # O denominador conta só as palavras que o usuário escreveu: sinônimo que a
     # gente acrescenta pode ajudar, nunca penalizar.
-    base = max(1, len(palavras(consulta)))
+    base = max(1, len(palavras(assunto)))
     peso = 0.0
     achados: list[str] = []
     fortes = 0
@@ -221,7 +227,7 @@ def pontuar(consulta: str, entrada: Entrada) -> tuple[float, list[str], int]:
             achados.append(termo)
     nota = peso / (3.0 * base)
     nome = normalizar(entrada.nome)
-    if nome and nome in normalizar(consulta):
+    if nome and nome in normalizar(assunto):
         nota = min(1.0, nota + 0.25)
     return round(min(1.0, nota), 3), achados, fortes
 
@@ -252,11 +258,49 @@ _CAMPOS_CAMINHO = {"path", "caminho", "arquivo", "file", "filename", "pasta", "d
 _CAMPOS_ID = {"planId", "planid", "id", "chamada", "chamadaid", "artifactid", "runid"}
 
 _RE_URL = re.compile(r"https?://[^\s<>\"']+")
+_RE_ENDERECO = re.compile(r"https?://\S+|\b[\w.-]+/[\w.-]+\b")
+# Endereço curto de repositório ("dono/repo") só vale em campo de URL.
+_RE_REPO = re.compile(r"\b([A-Za-z0-9][\w.-]{1,60}/[A-Za-z0-9][\w.-]{1,60})\b")
 _RE_CAMINHO = re.compile(
     r"(?:[A-Za-z]:\\[^\s\"']+|(?:[\w.\-]+/)+[\w.\-]+\.[A-Za-z0-9]{1,6}|[\w.\-]+\.(?:pdf|docx?|xlsx?|pptx?|txt|md|csv|json|png|jpe?g|svg|py|ts|tsx|js|zip|exe))",
     re.IGNORECASE,
 )
 _RE_ARTIGO = re.compile(r"artigo\s+([0-9][0-9.\-]*[a-zA-Z]?)", re.IGNORECASE)
+_RE_COMANDO = re.compile(r"(?:rodar|rode|executar|execute|run)\s+(.+)$", re.IGNORECASE)
+_RE_SLUG = re.compile(r"\b([a-z0-9][\w.-]{1,60}--[\w.-]{1,60})\b")
+
+# Comando com repositório nomeado: o verbo vem antes, o alvo depois ("rodar
+# `python -m pacote --help` no repositório dono--repo"). O extrator genérico não
+# dá conta porque os dois campos são texto livre.
+_RE_REPO_EXEC = re.compile(
+    r"(?:rodar|rode|roda|executar|execute)\s+(?P<cmd>.+?)\s+no\s+reposit[oó]rio\s+(?P<repo>[\w.-]+)",
+    re.IGNORECASE,
+)
+_RE_REPO_LER = re.compile(
+    r"ler\s+(?:o\s+)?(?:arquivo\s+)?(?P<arq>[\w./-]+\.\w{1,6})\s+d[oa]\s+reposit[oó]rio\s+(?P<repo>[\w.-]+)",
+    re.IGNORECASE,
+)
+
+
+def _pedido_direto_de_repositorio(termo: str) -> dict[str, Any] | None:
+    """Pedidos de repositório que só funcionam com regra, não com nota."""
+    achado = _RE_REPO_EXEC.search(termo)
+    if achado:
+        return {
+            "skill_id": "repos.executar",
+            "nome": "Executar no repositório",
+            "parametros": {"repo": achado.group("repo"), "comando": achado.group("cmd").strip(" `'\"")},
+            "confirma": True,
+        }
+    achado = _RE_REPO_LER.search(termo)
+    if achado:
+        return {
+            "skill_id": "repos.ler",
+            "nome": "Ler arquivo do repositório",
+            "parametros": {"repo": achado.group("repo"), "caminho": achado.group("arq")},
+            "confirma": False,
+        }
+    return None
 _RE_MINUTOS = re.compile(r"(\d+)\s*(?:min|minuto)", re.IGNORECASE)
 _RE_NUMEROS = re.compile(r"-?\d+(?:[.,]\d+)?")
 
@@ -377,10 +421,22 @@ def _valor_do_campo(
 
     if chave in {c.lower() for c in _CAMPOS_URL}:
         achado = _RE_URL.search(consulta)
-        return achado.group(0).rstrip(".,)") if achado else None
+        if achado:
+            return achado.group(0).rstrip(".,)")
+        curto = _RE_REPO.search(consulta)
+        return curto.group(1) if curto else None
     if chave in {c.lower() for c in _CAMPOS_CAMINHO}:
         achado = _RE_CAMINHO.search(consulta)
         return achado.group(0) if achado else None
+    if chave in {"repo", "repositorio", "repository", "slug"}:
+        achado = _RE_REPO.search(consulta) or _RE_SLUG.search(normalizar(consulta))
+        return achado.group(1) if achado else None
+    if chave in {"comando", "command", "argv"}:
+        achado = _RE_COMANDO.search(consulta)
+        if not achado:
+            return None
+        valor = re.split(r"\s+no\s+reposit[oó]rio\b", achado.group(1), maxsplit=1, flags=re.IGNORECASE)[0]
+        return valor.strip(" .") or None
     if chave in {c.lower() for c in _CAMPOS_ID}:
         achado = re.search(r"\b([a-z]{2,}[_-][a-z0-9_-]{3,})\b", normalizar(consulta))
         return achado.group(1) if achado else None
@@ -933,10 +989,56 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+def _formatar_repositorio(resultado: dict[str, Any]) -> str | None:
+    """Resumo curto para as skills de repositório; o resto é ruído no chat."""
+    if {"slug", "arquivos", "sugestao"} <= set(resultado):
+        linhas = [
+            f"Baixei “{resultado.get('nome')}” — {resultado['arquivos']} arquivos, "
+            f"{round(int(resultado.get('bytes') or 0) / 1e6, 2)} MB, em storage/repos/{resultado['slug']}."
+        ]
+        linguagens = resultado.get("linguagens") or []
+        if linguagens:
+            linhas.append(
+                "Linguagens: " + ", ".join(f"{item['nome']} ({item['arquivos']})" for item in linguagens[:4])
+            )
+        entradas = [item["comando"] for item in (resultado.get("entradas") or [])]
+        if entradas:
+            linhas.append("Entradas prováveis: " + ", ".join(entradas[:4]))
+        linhas.append(str(resultado["sugestao"]))
+        return "\n\n".join(linhas)[:LIMITE_RESPOSTA]
+
+    if {"comando", "codigo"} <= set(resultado):
+        partes = [f"`{resultado['comando']}` terminou com código {resultado['codigo']}."]
+        if resultado.get("saida"):
+            partes.append(str(resultado["saida"])[:2_000])
+        if resultado.get("erro"):
+            # Programa que sai com 0 e escreve no stderr (uso do argparse, aviso
+            # de licença) não é erro; o rótulo tem que acompanhar o código.
+            rotulo = "Erro:" if resultado.get("codigo") else "Avisos do programa:"
+            partes.append(rotulo + "\n" + str(resultado["erro"])[:1_000])
+        return "\n\n".join(partes)[:LIMITE_RESPOSTA]
+
+    if "repos" in resultado and isinstance(resultado.get("repos"), list):
+        repos = resultado["repos"]
+        if not repos:
+            return "Nenhum repositório baixado ainda."
+        linhas = [f"{len(repos)} repositório(s) em storage/repos:"]
+        for item in repos[:10]:
+            linguagens = ", ".join(item.get("linguagens") or []) or "sem linguagem medida"
+            linhas.append(f"- {item.get('slug')} — {item.get('arquivos')} arquivos — {linguagens}")
+        return "\n".join(linhas)
+
+    return None
+
+
 def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_repositorio(resultado)
+    if especial is not None:
+        return especial
 
     partes: list[str] = []
     usados: set[str] = set()
@@ -1259,6 +1361,8 @@ async def _executar_skill(
     consulta: str,
     *,
     registry: Any,
+    confirmar: bool = False,
+    autorizacao: str = "",
 ) -> dict[str, Any]:
     explicitos = parametros_explicitos(consulta, entrada.schema)
     if entrada.receita:
@@ -1274,14 +1378,37 @@ async def _executar_skill(
         return {"parametros": {receita.campo: texto}, "faltando": [], "resposta": str(resultado.get("resultado") or "")}
     parametros, faltando = extrair_parametros(consulta, entrada.schema)
     parametros.update(explicitos)
+    # O "sim, pode" que liberou a execução também vale como autorização da skill.
+    propriedades = entrada.schema.get("properties") or {}
+    if autorizacao and "autorizacao" in propriedades and not parametros.get("autorizacao"):
+        parametros["autorizacao"] = autorizacao
     faltando = [campo for campo in (entrada.schema.get("required") or []) if campo not in parametros]
     if faltando:
         return {"parametros": parametros, "faltando": faltando, "resposta": None}
+    if entrada.confirma and not confirmar:
+        # Não executa nada: devolve os parâmetros e pede o "sim".
+        return {"parametros": parametros, "faltando": [], "resposta": None, "confirmar": True}
     try:
         resultado = await registry.execute(entrada.skill_id, parametros, False)
     except Exception as exc:  # a skill pode recusar parâmetro; o chat não pode cair
         return {"parametros": parametros, "faltando": [], "resposta": None, "erro": str(exc)}
     return {"parametros": parametros, "faltando": [], "resposta": formatar_resultado(resultado)}
+
+
+def _pedir_confirmacao(base: dict[str, Any], entrada: Entrada, tentativa: dict[str, Any]) -> dict[str, Any]:
+    """Para antes do efeito colateral e mostra exatamente o que vai rodar."""
+    parametros = {
+        chave: valor for chave, valor in (tentativa.get("parametros") or {}).items()
+        if valor not in (None, "", [], {})
+    }
+    detalhe = ", ".join(f"{chave}={valor}" for chave, valor in parametros.items()) or "sem parâmetros"
+    base["acao"] = "confirmar"
+    base["parametros"] = parametros
+    base["resposta"] = (
+        f"A skill “{entrada.nome}” ({entrada.skill_id}) baixa, grava ou executa algo. "
+        f"Vou usar: {detalhe}. Responda “sim, pode” para eu seguir."
+    )
+    return base
 
 
 def _pedido_do_campo(campo: str, entrada: Entrada, exemplo: str) -> str:
@@ -1297,6 +1424,7 @@ async def _resolver(
     autorizacao: str = "",
     criar: bool = True,
     consultar_web: bool = True,
+    confirmar: bool = False,
     buscar: Callable[..., dict[str, Any]] | None = None,
     ler: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -1327,11 +1455,15 @@ async def _resolver(
         disponiveis = indexar(registry.list()) + [entrada_de_local(local) for local in locais]
         escolhida = next((item for item in disponiveis if item.skill_id == alvo), None)
         if escolhida is not None:
-            tentativa = await _executar_skill(escolhida, termo, registry=registry)
+            tentativa = await _executar_skill(
+                escolhida, termo, registry=registry, confirmar=confirmar, autorizacao=autorizacao
+            )
             base["skill"] = escolhida.resumo()
             base["parametros"] = tentativa.get("parametros", {})
             base["via"] = "apelido"
             base["confianca"] = 1.0
+            if tentativa.get("confirmar"):
+                return _pedir_confirmacao(base, escolhida, tentativa)
             if tentativa.get("resposta"):
                 base["acao"] = "executado"
                 base["resposta"] = str(tentativa["resposta"])
@@ -1344,6 +1476,38 @@ async def _resolver(
                     " e ".join(_pedido_do_campo(campo, escolhida, "veja o formulário da skill") for campo in tentativa["faltando"]),
                 )
                 return base
+
+    # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
+    direto = _pedido_direto_de_repositorio(termo)
+    if direto is not None:
+        entrada_direta = Entrada(
+            skill_id=direto["skill_id"],
+            nome=direto["nome"],
+            categoria="Repositórios",
+            descricao="",
+            schema={},
+            fortes=frozenset(),
+            fracos=frozenset(),
+            confirma=bool(direto["confirma"]),
+        )
+        base["skill"] = entrada_direta.resumo()
+        base["parametros"] = dict(direto["parametros"])
+        base["confianca"] = 1.0
+        if direto["confirma"] and not confirmar:
+            return _pedir_confirmacao(base, entrada_direta, {"parametros": direto["parametros"]})
+        parametros = dict(direto["parametros"])
+        if direto["confirma"] and autorizacao:
+            parametros["autorizacao"] = autorizacao
+        try:
+            resultado = await registry.execute(direto["skill_id"], parametros, False)
+        except Exception as exc:  # recusa da própria skill, não queda do chat
+            base["acao"] = "nada"
+            base["resposta"] = f"A skill “{entrada_direta.nome}” recusou o pedido: {exc}"
+            return base
+        base["acao"] = "executado"
+        base["via"] = "skill"
+        base["resposta"] = formatar_resultado(resultado)
+        return base
 
     receita = achar_receita(termo) if criar else None
 
@@ -1374,9 +1538,19 @@ async def _resolver(
     if ranking and ranking[0]["score"] >= LIMIAR_EXECUTAR and ranking[0]["fortes"] > 0:
         principal = ranking[0]
         base["confianca"] = principal["score"]
-        tentativa = await _executar_skill(principal["entrada"], termo, registry=registry)
+        tentativa = await _executar_skill(
+            principal["entrada"], termo, registry=registry, confirmar=confirmar, autorizacao=autorizacao
+        )
         base["parametros"] = tentativa["parametros"]
         base["skill"] = principal["entrada"].resumo()
+        if tentativa.get("confirmar"):
+            return _pedir_confirmacao(base, principal["entrada"], tentativa)
+        if tentativa.get("erro"):
+            base["acao"] = "nada"
+            base["resposta"] = (
+                f"A skill “{principal['entrada'].nome}” recusou o pedido: {tentativa['erro']}"
+            )
+            return base
         if tentativa.get("resposta"):
             base["acao"] = "executado"
             base["via"] = "skill"
@@ -1487,6 +1661,7 @@ async def atender(
     autorizacao: str = "",
     criar: bool = True,
     consultar_web: bool = True,
+    confirmar: bool = False,
     buscar: Callable[..., dict[str, Any]] | None = None,
     ler: Callable[..., dict[str, Any]] | None = None,
     forcar_web: bool = False,
@@ -1522,9 +1697,12 @@ async def atender(
         autorizacao=autorizacao,
         criar=criar,
         consultar_web=consultar_web,
+        confirmar=confirmar,
         buscar=buscar,
         ler=ler,
     )
+    if resultado["acao"] == "confirmar":
+        return resultado
     if resultado["acao"] in {"nada", "sugerir"}:
         registrar_falha(termo, (resultado.get("resposta") or "")[:200], raiz)
     else:
