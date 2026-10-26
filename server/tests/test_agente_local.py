@@ -1149,3 +1149,38 @@ def test_resposta_vem_da_biblioteca_antes_da_web(tmp_path: Path, monkeypatch):
     assert resultado["via"] == "biblioteca"
     assert "Manual de custo" in resultado["resposta"]
     assert duble.execucoes == []
+
+
+SKILL_CUSTOS = {
+    "id": "custos.relatorio",
+    "name": "Relatório de custos",
+    "description": "Monta relatório de custos por centro.",
+    "category": "Financeiro",
+    "inputSchema": {
+        "type": "object",
+        "properties": {"centro": {"type": "string", "title": "Centro"}},
+        "required": ["centro"],
+    },
+}
+
+
+def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
+    from server import biblioteca
+
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    biblioteca.importar_texto(
+        "Manual de custo",
+        "O rateio do custo indireto distribui a despesa entre os produtos e precisa "
+        "de critério estável, documentado e defensável para a margem não mentir. " * 3,
+    )
+    duble = registro(SKILL_CUSTOS, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "como funciona o rateio de custo indireto",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "biblioteca"
+    assert duble.execucoes == []

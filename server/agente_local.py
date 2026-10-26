@@ -1412,6 +1412,13 @@ def _pedir_confirmacao(base: dict[str, Any], entrada: Entrada, tentativa: dict[s
     return base
 
 
+def _detalhe_que_falta(campos: list[str], entrada: Entrada) -> str:
+    """Junta os campos que faltam numa frase que continua depois de uma vírgula."""
+    partes = [_pedido_do_campo(campo, entrada, "veja o formulário da skill") for campo in campos]
+    texto = " e ".join(partes)
+    return (texto[0].lower() + texto[1:]) if texto else texto
+
+
 def _pedido_do_campo(campo: str, entrada: Entrada, exemplo: str) -> str:
     titulo = _titulo_do_campo(campo, entrada.schema)
     return f"Falta o campo “{titulo}”. Exemplo: {exemplo}"
@@ -1563,12 +1570,26 @@ async def _resolver(
             base["faltando"] = tentativa["faltando"]
             base["resposta"] = "Encontrei a skill “{}”, mas {}.".format(
                 principal["entrada"].nome,
-                " e ".join(_pedido_do_campo(campo, principal["entrada"], "veja o formulário da skill") for campo in tentativa["faltando"]),
+                _detalhe_que_falta(tentativa["faltando"], principal["entrada"]),
             )
             return base
         base["avisos"].append(f"A skill {principal['entrada'].skill_id} recusou o pedido: {tentativa.get('erro') or 'sem detalhe'}")
 
-    # 2. Confiança média: não executa nada. Pede o campo que falta quando a
+    # 2. Biblioteca: livro, vídeo ou pesquisa importados nesta máquina. Vem
+    #    antes da faixa média porque cobertura de 50% das palavras é evidência
+    #    mais forte que um casamento lexical fraco com o nome de uma skill.
+    try:
+        achado_biblioteca = biblioteca.responder(termo)
+    except Exception:
+        achado_biblioteca = None
+    if achado_biblioteca is not None:
+        base["acao"] = "biblioteca"
+        base["via"] = "biblioteca"
+        base["confianca"] = float(achado_biblioteca.get("cobertura") or 0.0)
+        base["resposta"] = str(achado_biblioteca["resposta"])
+        return base
+
+    # 3. Confiança média: não executa nada. Pede o campo que falta quando a
     #    skill é a única parecida; caso contrário, mostra as mais próximas.
     if ranking and ranking[0]["score"] >= LIMIAR_SUGERIR and ranking[0]["fortes"] > 0:
         principal = ranking[0]
@@ -1581,7 +1602,7 @@ async def _resolver(
             base["faltando"] = faltando
             base["resposta"] = "Encontrei a skill “{}”, mas {}.".format(
                 principal["entrada"].nome,
-                " e ".join(_pedido_do_campo(campo, principal["entrada"], "veja o formulário da skill") for campo in faltando),
+                _detalhe_que_falta(faltando, principal["entrada"]),
             )
             return base
         base["acao"] = "sugerir"
@@ -1593,7 +1614,7 @@ async def _resolver(
         )
         return base
 
-    # 3. Nenhuma skill: cria a skill local a partir de uma receita e executa.
+    # 4. Nenhuma skill: cria a skill local a partir de uma receita e executa.
     if receita is not None:
         skill, criada = criar_skill(receita, raiz)
         entrada_texto = texto_livre(termo)
@@ -1616,19 +1637,7 @@ async def _resolver(
         base["resposta"] = f"{'Criei' if criada else 'Usei'} a skill local “{skill.nome}” ({skill.id}).\n\n{resultado.get('resultado', '')}"
         return base
 
-    # 3b. Biblioteca: livro, vídeo ou pesquisa importados nesta máquina.
-    try:
-        achado_biblioteca = biblioteca.responder(termo)
-    except Exception:
-        achado_biblioteca = None
-    if achado_biblioteca is not None:
-        base["acao"] = "biblioteca"
-        base["via"] = "biblioteca"
-        base["confianca"] = float(achado_biblioteca.get("cobertura") or 0.0)
-        base["resposta"] = str(achado_biblioteca["resposta"])
-        return base
-
-    # 4. Web, sem modelo: fontes e trecho.
+    # 5. Web, sem modelo: fontes e trecho.
     if consultar_web:
         busca_web = await procurar_na_web(termo, autorizacao=autorizacao, buscar=buscar, ler=ler)
         base["acao"] = busca_web["acao"]

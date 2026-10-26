@@ -162,7 +162,7 @@ copia nada.
 |---|---|
 | Testes da biblioteca | **22** (PDF gerado com reportlab, EPUB e DOCX montados no teste) |
 | Testes de armazenamento | **7** |
-| Testes do agente local | **126** |
-| Suíte da API | **2.106** |
+| Testes do agente local | **127** |
+| Suíte da API | **2.108** |
 | Skills no registro | **223** (8 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
