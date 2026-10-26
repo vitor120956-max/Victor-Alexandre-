@@ -28,3 +28,6 @@ uploads/
 google_drive/
 *.zip
 /tmp-pr/
+
+# Relatório do diagnostico.py (dado da máquina, não do projeto).
+relatorio-lentidao.txt
