@@ -1,4 +1,4 @@
-# Google Drive como espaço de fora (0.46.0)
+# Google Drive como espaço de fora (0.47.0)
 
 O Drive serve para uma coisa: guardar o que é **grande e parado** — livro, PDF,
 vídeo baixado, repositório. Ele não serve para o que o JARVIS regrava a cada
@@ -32,6 +32,7 @@ O JARVIS faz tudo isso sozinho, pelas skills `armazenamento.drive` (só olha) e
 | `como configuro o drive?` · `o drive tá configurado?` | mostra o estado: onde estão os arquivos hoje, o que o `.env` aponta, espaço livre — **sem tocar em nada** |
 | `configura o google drive pra mim` | mostra o que vai copiar e **pede o seu "sim"**; depois copia, confere e grava as duas linhas no `.env` |
 | `tira a biblioteca do drive` | só apaga as linhas do `.env`; **nada é apagado do Drive** |
+| `limita a banda do drive` · `limita o drive em 500` | grava o limite de banda do app do Drive e confere lendo de volta |
 
 Na interface, o pedido cai na tela de confirmação antes de qualquer escrita — é
 o mesmo portão das skills que baixam ou executam alguma coisa. Depois de
@@ -42,6 +43,31 @@ Pelo terminal dá no mesmo: `usar-drive.bat` faz a mesma cópia com progresso na
 tela (é o jeito bom quando são milhares de arquivos).
 
 ---
+
+## 2b. O que o JARVIS faz e o que só você faz
+
+| Ajuste | O JARVIS consegue? | Por quê |
+| --- | --- | --- |
+| apontar `biblioteca`/`repos` para o Drive | **sim** | mexe em pasta e no `.env` |
+| conferir se continua tudo no lugar | **sim** | lê pasta e processo |
+| **limitar a banda** (download/upload) | **sim** | o app do Drive lê `BandwidthRxKBPS`/`BandwidthTxKBPS` de `HKCU\Software\Google\DriveFS`, e isso a Google documenta |
+| marcar a pasta como *disponível off-line* | **não** | é estado interno do app; não há chave nem linha de comando pública |
+| pausar/retomar a sincronização | **não** | idem — só pelo menu do app |
+| mostrar se o Drive está pesando | **sim** | `diagnostico-lento.bat` mede CPU e disco do `googledrivefs` |
+
+Para limitar a banda pelo chat:
+
+```text
+limita a banda do drive            → 1 MB/s de download e 0,5 MB/s de upload
+limita o drive em 500              → 500 KB/s
+reduz a banda do drive para 300 e 150   → 300 KB/s de download, 150 de upload
+devolve a banda toda pro drive     → remove o limite
+```
+
+O valor vale **quando o app do Drive reiniciar** (feche pelo ícone da bandeja e
+abra de novo). O comando grava só em `HKEY_CURRENT_USER`, sem pedir senha de
+administrador. Para desfazer sem o chat: apague os dois valores em
+`HKEY_CURRENT_USER\Software\Google\DriveFS` (ou rode `limita o drive em 0`).
 
 ## 3. Passo a passo
 
@@ -183,6 +209,6 @@ JARVIS_DRIVE=D:\Drive
 - [ ] `armazenamento.status` mostra as duas pastas dentro do Drive;
 - [ ] um livro importado aparece em `JARVIS-DADOS\biblioteca\fontes`;
 - [ ] a pasta `JARVIS-DADOS` está disponível off-line;
-- [ ] a banda do Drive está limitada;
+- [ ] a banda do Drive está limitada (`limita a banda do drive`);
 - [ ] `diagnostico-lento.bat` mostra o Drive abaixo de 10% de CPU;
 - [ ] as pastas antigas só foram apagadas depois do teste acima.

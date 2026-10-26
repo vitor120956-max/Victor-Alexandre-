@@ -414,7 +414,7 @@ def test_api_lista_as_tres_skills_novas(client):
 
 def test_registro_conta_as_duzentas_e_oito_skills(client):
     resposta = client.get("/api/skills")
-    assert len(resposta.json()["skills"]) == 229
+    assert len(resposta.json()["skills"]) == 230
 
 
 @pytest.mark.skipif(not E._sudo(), reason="sudo não instalado nesta máquina")

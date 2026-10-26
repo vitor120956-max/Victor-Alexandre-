@@ -1,4 +1,4 @@
-"""Testes do agente local (0.46.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.47.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "229 skills" in texto
+    assert "230 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.46.0)
+# ------------------------------------------------- memória do agente (0.47.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 229 skills, uma por uma
+# ------------------------------------- cobertura: as 230 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 229 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 230 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.46.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.47.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.46.0)
+# ------------------------------------------------------- Google Drive (0.47.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1539,3 +1539,108 @@ def test_formatar_drive_configurado_e_vazio_ensina_a_importar() -> None:
     )
     assert "ainda não há livro nenhum" in texto
     assert "importar" in texto
+
+
+SKILL_DRIVE_BANDA = {
+    "id": "armazenamento.drive-banda",
+    "name": "Limitar a banda do Drive",
+    "description": "Grava o limite de download e upload do app do Google Drive no registro do Windows.",
+    "category": "Armazenamento",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "download_kbps": {"type": "integer", "title": "Download (KB/s)"},
+            "upload_kbps": {"type": "integer", "title": "Upload (KB/s)"},
+        },
+    },
+}
+
+
+def test_limitar_banda_do_drive_pede_confirmacao(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_BANDA, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("limita a banda do drive", registry=duble, raiz=tmp_path, consultar_web=False)
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["skill"]["id"] == "armazenamento.drive-banda"
+    assert duble.execucoes == []
+
+
+def test_limitar_banda_do_drive_entende_o_numero_da_frase(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_BANDA, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "limita a banda do drive pra 500",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0] == ("armazenamento.drive-banda", {"download_kbps": 500})
+
+
+def test_drive_lento_nao_aciona_o_limite(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_BANDA, raiz=tmp_path)
+    resultado = asyncio.run(atender("o drive ta lento", registry=duble, raiz=tmp_path, consultar_web=False))
+    assert duble.execucoes == [] or duble.execucoes[0][0] != "armazenamento.drive-banda"
+
+
+def test_formatar_banda_planejado_mostra_antes_e_depois() -> None:
+    texto = formatar_resultado(
+        {
+            "banda": True,
+            "planejado": True,
+            "suportado": True,
+            "antes": {"download_kbps": 0, "upload_kbps": 0},
+            "depois": {"download_kbps": 1000, "upload_kbps": 500},
+        }
+    )
+    assert "sem limite" in texto
+    assert "1,0 MB/s (1000 KB/s)" in texto
+    assert "sim, pode" in texto
+
+
+def test_formatar_banda_aplicada_mostra_a_mensagem() -> None:
+    texto = formatar_resultado(
+        {
+            "banda": True,
+            "antes": {"download_kbps": 0, "upload_kbps": 0},
+            "depois": {"download_kbps": 1000, "upload_kbps": 500},
+            "mensagem": "Limite gravado. Vale quando o app reiniciar.",
+        }
+    )
+    assert "Limite aplicado" in texto
+    assert "reiniciar" in texto
+
+
+def test_devolver_a_banda_remove_o_limite(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_BANDA, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "devolve a banda toda pro drive",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0] == ("armazenamento.drive-banda", {"download_kbps": 0, "upload_kbps": 0})
+
+
+def test_tirar_a_biblioteca_nao_vira_limite_de_banda(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_BANDA, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "tira a biblioteca do drive",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0][0] == "armazenamento.drive-copiar"

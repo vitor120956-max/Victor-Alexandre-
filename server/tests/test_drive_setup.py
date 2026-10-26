@@ -1,4 +1,4 @@
-"""Testes do `drive_setup` (0.46.0): o JARVIS configurando o Drive sem susto."""
+"""Testes do `drive_setup` (0.47.0): o JARVIS configurando o Drive sem susto."""
 from __future__ import annotations
 
 import os
@@ -151,3 +151,114 @@ def test_aplicar_ao_vivo_troca_o_caminho_nesta_sessao(drive: Path, monkeypatch: 
         os.environ.clear()
         os.environ.update(antes)
         repos.PASTA_REPOS, repos.INDICE = original
+
+
+# --------------------------------------------------- limite de banda (0.47.0)
+
+class RegistroFalso:
+    """Imita o `winreg` sem tocar em registro nenhum."""
+
+    def __init__(self, valores: dict[str, int] | None = None) -> None:
+        self.valores = dict(valores or {})
+        self.gravados: list[tuple[str, int]] = []
+        self.apagados: list[str] = []
+
+    def ler(self, nome: str) -> int | None:
+        return self.valores.get(nome)
+
+    def gravar(self, nome: str, valor: int) -> None:
+        self.valores[nome] = valor
+        self.gravados.append((nome, valor))
+
+    def apagar(self, nome: str) -> None:
+        self.valores.pop(nome, None)
+        self.apagados.append(nome)
+
+
+def test_banda_sem_registro_nao_quebra() -> None:
+    retrato = drive_setup.banda()
+    assert retrato["suportado"] is False
+    assert "Windows" in retrato["motivo"]
+
+
+def test_aplicar_banda_grava_os_dois_valores() -> None:
+    reg = RegistroFalso()
+    resultado = drive_setup.aplicar_banda(1000, 500, simulado=reg)
+    assert reg.valores == {"BandwidthRxKBPS": 1000, "BandwidthTxKBPS": 500}
+    assert resultado["depois"] == {"download_kbps": 1000, "upload_kbps": 500}
+    assert resultado["antes"] == {"download_kbps": 0, "upload_kbps": 0}
+    assert "HKEY_CURRENT_USER" in resultado["chave"]
+
+
+def test_aplicar_banda_zero_remove_o_limite() -> None:
+    reg = RegistroFalso({"BandwidthRxKBPS": 1000, "BandwidthTxKBPS": 500})
+    resultado = drive_setup.aplicar_banda(0, 0, simulado=reg)
+    assert reg.valores == {}
+    assert resultado["depois"] == {"download_kbps": 0, "upload_kbps": 0}
+    assert "Limite removido" in resultado["mensagem"]
+
+
+def test_aplicar_banda_recusa_valor_absurdo() -> None:
+    reg = RegistroFalso()
+    with pytest.raises(drive_setup.DriveError):
+        drive_setup.aplicar_banda(200_000_000, 500, simulado=reg)
+    with pytest.raises(drive_setup.DriveError):
+        drive_setup.aplicar_banda(-1, 500, simulado=reg)
+    assert reg.gravados == []
+
+
+def test_aplicar_banda_recusa_texto() -> None:
+    reg = RegistroFalso()
+    with pytest.raises(drive_setup.DriveError):
+        drive_setup.aplicar_banda("1000", 500, simulado=reg)  # type: ignore[arg-type]
+
+
+def test_planejar_banda_nao_grava() -> None:
+    reg = RegistroFalso({"BandwidthRxKBPS": 2000})
+    plano = drive_setup.planejar_banda(1000, 500, simulado=reg)
+    assert plano["planejado"] is True
+    assert plano["antes"]["download_kbps"] == 2000
+    assert plano["depois"] == {"download_kbps": 1000, "upload_kbps": 500}
+    assert reg.gravados == []
+
+
+def test_banda_mostra_o_que_ja_estava_gravado() -> None:
+    retrato = drive_setup.banda(RegistroFalso({"BandwidthRxKBPS": 800}))
+    assert retrato["download_kbps"] == 800
+    assert retrato["upload_kbps"] == 0
+    assert retrato["limitado"] is True
+
+
+# ------------------------------------------------------ o Drive ainda está lá?
+
+def test_estado_avisa_quando_a_pasta_do_drive_sumiu(drive: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    sumida = tmp_path / "Google Drive" / "JARVIS-DADOS" / "biblioteca"
+    monkeypatch.setenv(dados.VARIAVEL_BIBLIOTECA, str(sumida))
+    retrato = drive_setup.estado(drive, processos=["chrome.exe"])
+    assert any("não está lá agora" in aviso for aviso in retrato["avisos"])
+
+
+def test_estado_avisa_quando_sobrou_arquivo_na_pasta_antiga(drive: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    drive_setup.aplicar(drive, ao_vivo=False)
+    monkeypatch.setenv(dados.VARIAVEL_BIBLIOTECA, str(drive / "JARVIS-DADOS" / "biblioteca"))
+    retrato = drive_setup.estado(drive)
+    assert any("Sobraram 1 arquivo" in aviso for aviso in retrato["avisos"])
+
+
+def test_estado_sem_problema_nao_inventa_aviso(
+    drive: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import shutil
+
+    # a pasta local antiga é a do JARVIS_DADOS do teste, nunca a do projeto
+    shutil.rmtree(tmp_path / "storage" / "biblioteca", ignore_errors=True)
+    monkeypatch.setenv(dados.VARIAVEL_BIBLIOTECA, str(drive / "JARVIS-DADOS" / "biblioteca"))
+    (drive / "JARVIS-DADOS" / "biblioteca" / "fontes").mkdir(parents=True, exist_ok=True)
+    (drive / "JARVIS-DADOS" / "biblioteca" / "fontes" / "a.json").write_text("{}", encoding="utf-8")
+    retrato = drive_setup.estado(drive)
+    assert retrato["avisos"] == []
+
+
+def test_drive_aberto_reconhece_o_processo() -> None:
+    assert drive_setup.drive_aberto(["chrome.exe", "googledrivefs.exe"]) is True
+    assert drive_setup.drive_aberto(["chrome.exe"]) is False

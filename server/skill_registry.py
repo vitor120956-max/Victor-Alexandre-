@@ -1985,6 +1985,12 @@ class ArmazenamentoDriveCopiarInput(BaseModel):
     modo: Literal["usar", "desfazer"] = Field(default="usar", title="Modo", json_schema_extra={"description": "`usar` leva biblioteca e repositórios; `desfazer` tira as linhas do `.env` (não apaga arquivo)."})
 
 
+class ArmazenamentoDriveBandaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    download_kbps: int = Field(default=1000, ge=0, le=100_000_000, title="Download (KB/s)", json_schema_extra={"description": "0 = sem limite. 1000 KB/s é 1 MB/s."})
+    upload_kbps: int = Field(default=500, ge=0, le=100_000_000, title="Upload (KB/s)", json_schema_extra={"description": "0 = sem limite."})
+
+
 class ReposBaixarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     url: str = Field(min_length=3, max_length=300, title="Repositório", json_schema_extra={"description": "`dono/repo` ou endereço do GitHub. Só público, só `.zip` — não precisa de Git."})
@@ -3564,6 +3570,15 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except drive_setup.DriveError as exc:
             raise SkillError(str(exc)) from exc
 
+    def armazenamento_drive_banda_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ArmazenamentoDriveBandaInput)
+        try:
+            if dry_run:
+                return drive_setup.planejar_banda(data.download_kbps, data.upload_kbps)
+            return drive_setup.aplicar_banda(data.download_kbps, data.upload_kbps)
+        except drive_setup.DriveError as exc:
+            raise SkillError(str(exc)) from exc
+
     def armazenamento_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, ArmazenamentoPlanejarInput)
         destino = Path(data.destino).expanduser()
@@ -4334,6 +4349,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.status", "Onde ficam os dados", "Mostra a raiz em uso, se veio de `JARVIS_DADOS`, o tamanho de cada área e o espaço livre do disco — o retrato antes de mover qualquer coisa.", "Armazenamento", ArmazenamentoStatusInput, armazenamento_status_handler, timeout_seconds=30),
         SkillDefinition("armazenamento.drive", "Drive como espaço de fora", "Mostra onde estão os livros e os repositórios, se já estão no Google Drive, o que o `.env` aponta e quanto espaço há — sem copiar nada.", "Armazenamento", ArmazenamentoDriveInput, armazenamento_drive_handler, timeout_seconds=30),
         SkillDefinition("armazenamento.drive-copiar", "Configurar o Drive", "Copia biblioteca e repositórios para `JARVIS-DADOS` dentro do Drive, confere arquivo por arquivo e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`. Não apaga nada e não leva o histórico do agente. Com `modo=desfazer`, só tira as linhas do `.env`.", "Armazenamento", ArmazenamentoDriveCopiarInput, armazenamento_drive_copiar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition("armazenamento.drive-banda", "Limitar a banda do Drive", "Grava `BandwidthRxKBPS` e `BandwidthTxKBPS` em `HKCU\\Software\\Google\\DriveFS` — o ajuste que o próprio app do Drive lê — e confere lendo de volta. Vale quando o app reiniciar. `0` remove o limite.", "Armazenamento", ArmazenamentoDriveBandaInput, armazenamento_drive_banda_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("armazenamento.planejar", "Plano para mudar de disco", "Compara a pasta atual com o destino e publica os cinco passos exatos, incluindo o `robocopy` e a linha do `.env`. Não copia, não move, não apaga.", "Armazenamento", ArmazenamentoPlanejarInput, armazenamento_planejar_handler, timeout_seconds=15),
         SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),

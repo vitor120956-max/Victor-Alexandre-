@@ -293,6 +293,21 @@ _RE_DRIVE_PERGUNTA = re.compile(
     r"^(?:como|qual|quais|quanto|onde|status|ja)\b|\b(?:status|configurado|funcionando)\b"
 )
 _RE_DRIVE_PARA_DENTRO = re.compile(r"(?:para|pra|pro)\s+(?:o\s+)?(?:google\s+)?drive\b")
+# "limita a banda do drive", "deixa o drive lento", "o drive ta comendo a internet"
+_RE_DRIVE_BANDA = re.compile(
+    r"\b(?:banda|velocidade|internet|upload|download|trafego|mbps|kbps|mb|kb)\b"
+)
+_RE_DRIVE_BANDA_ACAO = re.compile(
+    r"\b(?:limit\w*|reduz\w*|baix\w+|diminu\w*|control\w+|capar|travar)\b"
+)
+# "deixa o drive em 500": o número depois de "em" já diz que é limite (KB/s).
+_RE_DRIVE_BANDA_NUMERO = re.compile(
+    r"\b(?:poe|p[oõ]e|deixa|deixe|coloca)\b.*\b(?:em|pra|para)\s+\d"
+)
+# "devolve a banda toda", "sem limite", "tira o limite do drive"
+_RE_DRIVE_SEM_LIMITE = re.compile(
+    r"\b(?:sem limite|ilimitad\w+|devolv\w+|(?:tira|remove|tirar|remover) o limite)\b"
+)
 
 
 def _schema_da_skill(registry: Any, skill_id: str) -> dict[str, Any]:
@@ -304,6 +319,28 @@ def _schema_da_skill(registry: Any, skill_id: str) -> dict[str, Any]:
                 return schema if isinstance(schema, dict) else {}
     except Exception:  # registro de teste pode não listar
         pass
+    return {}
+
+
+def _banda_do_pedido(texto: str) -> dict[str, int]:
+    """Tira do pedido o limite em KB/s. "500" = 500 KB/s; "2 MB" = 2000 KB/s."""
+    achados = re.findall(r"(\d+(?:[.,]\d+)?)\s*(mb|mega|kb|kilo)?", texto)
+    valores: list[int] = []
+    for numero, unidade in achados:
+        try:
+            valor = float(numero.replace(",", "."))
+        except ValueError:
+            continue
+        if not valor:
+            continue
+        if unidade in ("mb", "mega"):
+            valor *= 1000
+        if 1 <= valor <= 100_000_000:
+            valores.append(int(valor))
+    if len(valores) == 1:
+        return {"download_kbps": valores[0]}
+    if len(valores) >= 2:
+        return {"download_kbps": valores[0], "upload_kbps": valores[1]}
     return {}
 
 
@@ -334,6 +371,20 @@ def _pedido_direto_de_drive(termo: str) -> dict[str, Any] | None:
     # "?" ou palavra de diagnóstico: o usuário quer saber, não quer que mexa.
     if "?" in (termo or "") or _RE_DRIVE_PERGUNTA.search(texto) or "passo a passo" in texto:
         return estado_
+    # "limita a banda do drive": só com verbo, senão "o drive ta lento" vira confusão.
+    sem_limite = bool(_RE_DRIVE_SEM_LIMITE.search(texto))
+    if (
+        sem_limite
+        or (_RE_DRIVE_BANDA.search(texto) and _RE_DRIVE_BANDA_ACAO.search(texto))
+        or _RE_DRIVE_BANDA_NUMERO.search(texto)
+    ):
+        parametros = {"download_kbps": 0, "upload_kbps": 0} if sem_limite else _banda_do_pedido(texto)
+        return {
+            "skill_id": "armazenamento.drive-banda",
+            "nome": "Limitar a banda do Drive",
+            "parametros": parametros,
+            "confirma": True,
+        }
     # "volta a biblioteca pro drive" é ida; "tira do drive" é volta.
     if _RE_DRIVE_DESFAZER.search(texto) and not _RE_DRIVE_PARA_DENTRO.search(texto):
         return {**copiar, "parametros": {"modo": "desfazer"}}
@@ -1219,6 +1270,41 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+def _formatar_banda(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para o limite de banda (antes/depois, em linguagem simples)."""
+    if not resultado.get("banda"):
+        return None
+    antes = resultado.get("antes") or {}
+    depois = resultado.get("depois") or {}
+    suportado = resultado.get("suportado", True)
+
+    def _linha(nome: str, valores: dict[str, Any]) -> str:
+        valor = int(valores.get("download_kbps") or 0) if nome == "download" else int(valores.get("upload_kbps") or 0)
+        return f"{nome}: {'sem limite' if not valor else _br(valor / 1000, 1) + ' MB/s (' + str(valor) + ' KB/s)'}"
+
+    if resultado.get("planejado"):
+        if not suportado:
+            return str(resultado.get("motivo") or "Não dá para ajustar a banda nesta máquina.")
+        return "\n".join(
+            [
+                "Vou gravar no registro do Windows:",
+                f"  • antes  — {_linha('download', antes)} · {_linha('upload', antes)}",
+                f"  • depois — {_linha('download', depois)} · {_linha('upload', depois)}",
+                "Responda “sim, pode” para eu aplicar.",
+            ]
+        )
+    if not suportado:
+        return str(resultado.get("motivo") or "Não dá para ajustar a banda nesta máquina.")
+    linhas = [
+        "Limite aplicado:",
+        f"  • antes  — {_linha('download', antes)} · {_linha('upload', antes)}",
+        f"  • depois — {_linha('download', depois)} · {_linha('upload', depois)}",
+    ]
+    if resultado.get("mensagem"):
+        linhas.append(str(resultado["mensagem"]))
+    return "\n".join(linhas)
+
+
 def _formatar_drive(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para as skills de Drive (estado, planejar, aplicar, desfazer)."""
     if "areas" not in resultado and "vai_acontecer" not in resultado:
@@ -1296,6 +1382,8 @@ def _formatar_drive(resultado: dict[str, Any]) -> str | None:
             f"  • {item.get('nome')}: {situacao} — {item.get('arquivos', 0)} arquivo(s), "
             f"{_br(float(item.get('mb') or 0), 1)} MB"
         )
+    for aviso in resultado.get("avisos") or []:
+        linhas.append(f"⚠ {aviso}")
     env = resultado.get("env") or {}
     if isinstance(env, dict):
         aponta = bool(env.get("biblioteca") or env.get("repos"))
@@ -1376,6 +1464,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_banda(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_drive(resultado)
     if especial is not None:

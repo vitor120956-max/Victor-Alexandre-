@@ -1,4 +1,4 @@
-"""Testes do modo sem Node (0.46.0): servir a interface embutida em `web-dist`.
+"""Testes do modo sem Node (0.47.0): servir a interface embutida em `web-dist`.
 
 O objetivo é permitir usar o JARVIS sem `npm install` — o caso de quem roda de
 um pendrive lento. A API escolhe `dist/` quando existe (build local) e cai para

@@ -16,6 +16,13 @@ Três garantias:
 
 `planejar()` não toca em disco: devolve o passo a passo com os tamanhos reais.
 `aplicar()` é o único que escreve, e só roda com confirmação da interface.
+
+**Limite de banda é exceção e é real**: o app do Drive lê
+`BandwidthRxKBPS`/`BandwidthTxKBPS` de `HKCU\Software\Google\DriveFS` (é o que
+a própria Google documenta). `aplicar_banda()` grava esses dois valores DWORD e
+`banda()` lê de volta — sem admin, sem reiniciar o PC. As outras duas coisas do
+app (disponibilizar pasta off-line e pausar a sincronização) não têm chave nem
+linha de comando pública no Windows; o JARVIS avisa e explica, não finge.
 """
 from __future__ import annotations
 
@@ -44,6 +51,13 @@ ENV_EXEMPLO = dados.PROJETO / ".env.example"
 # minutos num PC fraco. O caminho para biblioteca grande é `mover-dados.py --drive`.
 MAX_ARQUIVOS = 10_000
 MAX_BYTES = 1_500_000_000
+
+
+# Chave que o app do Drive lê ao iniciar (Google Workspace Help, "Advanced
+# Drive for desktop configuration"). Nível de usuário: não precisa de admin.
+CHAVE_DRIVE = r"Software\Google\DriveFS"
+BANDA_PADRAO = (1000, 500)  # KB/s: 1 MB/s de download, 0,5 MB/s de upload
+BANDA_MAXIMA = 100_000_000  # teto que a própria Google aceita
 
 
 class DriveError(ValueError):
@@ -133,8 +147,18 @@ def _mesmo(a: Path, b: Path) -> bool:
         return False
 
 
-def estado(drive: Path | None = None) -> dict[str, Any]:
-    """Retrato sem efeito: o que está onde, o que o `.env` diz, quanto cabe."""
+def estado(
+    drive: Path | None = None,
+    *,
+    processos: list[str] | None = None,
+    simulado_registro: Any = None,
+) -> dict[str, Any]:
+    """Retrato sem efeito: o que está onde, o que o `.env` diz, quanto cabe.
+
+    Também responde a pergunta que importa depois de configurar: **o Drive ainda
+    está no ar?** Se a biblioteca mora em `G:\Meu Drive` e o app do Drive não
+    subiu com o Windows, a pasta some e o JARVIS fica sem os livros.
+    """
     detectado = Path(drive) if drive is not None else dados.detectar_drive()
     texto_env = _ler_env()
     areas: list[dict[str, Any]] = []
@@ -143,6 +167,10 @@ def estado(drive: Path | None = None) -> dict[str, Any]:
         alvo = destino(detectado) / nome if detectado is not None else None
         arquivos, total = _medir(origem)
         copiados, bytes_copiados = _medir(alvo) if alvo is not None else (0, 0)
+        local_padrao = dados.raiz() / nome
+        sobrou_arquivos, sobrou_bytes = (
+            _medir(local_padrao) if not _mesmo(local_padrao, origem) else (0, 0)
+        )
         areas.append(
             {
                 "nome": nome,
@@ -150,10 +178,14 @@ def estado(drive: Path | None = None) -> dict[str, Any]:
                 "variavel": VARIAVEIS[nome],
                 "origem": str(origem),
                 "destino": str(alvo) if alvo is not None else "",
+                "existe": origem.is_dir(),
                 "arquivos": arquivos,
                 "mb": round(total / 1e6, 1),
                 "ja_no_drive": copiados,
                 "mb_no_drive": round(bytes_copiados / 1e6, 1),
+                "no_drive": dados.no_drive(origem),
+                "sobrou_no_pc": sobrou_arquivos,
+                "sobrou_no_pc_mb": round(sobrou_bytes / 1e6, 1),
                 "configurada": str(origem).lower() == str(alvo).lower() if alvo is not None else False,
             }
         )
@@ -179,7 +211,182 @@ def estado(drive: Path | None = None) -> dict[str, Any]:
         "configurado": all(item["configurada"] for item in areas) if detectado is not None else False,
         "total_mb": round(sum(item["mb"] for item in areas), 1),
         "total_arquivos": sum(item["arquivos"] for item in areas),
+        "drive_aberto": drive_aberto(processos),
+        "banda": banda(simulado_registro),
+        "avisos": _avisos(areas),
     }
+
+
+def _avisos(areas: list[dict[str, Any]]) -> list[str]:
+    """Problemas que o usuário precisa ver — em linguagem de quem usa, não de log."""
+    avisos: list[str] = []
+    no_drive = [item for item in areas if item["no_drive"]]
+    for item in no_drive:
+        if not item["existe"]:
+            avisos.append(
+                f"A pasta do Drive de {item['nome']} não está lá agora: abra o app do "
+                "Google Drive (ou confira se a unidade ainda é G:). Enquanto isso, o "
+                "JARVIS não acha os livros."
+            )
+        if item["sobrou_no_pc"]:
+            tamanho = _mb(int(item["sobrou_no_pc_mb"] * 1e6))
+            avisos.append(
+                f"Sobraram {item['sobrou_no_pc']} arquivo(s) ({tamanho}) na pasta "
+                f"antiga de {item['nome']}; eles não aparecem na biblioteca."
+            )
+        if item["existe"] and item["arquivos"] == 0:
+            avisos.append(
+                f"A pasta de {item['nome']} está no Drive, mas ainda vazia: importe um "
+                "livro para ver a sincronização acontecer."
+            )
+    return avisos
+
+
+# ------------------------------------------------------- limite de banda (Windows)
+
+class _RegistroWindows:
+    """Adaptador fino do `winreg` — só usuário atual, nunca HKLM."""
+
+    def __init__(self) -> None:
+        import winreg  # noqa: PLC0415 - só existe no Windows
+
+        self._winreg = winreg
+
+    def ler(self, nome: str) -> int | None:
+        try:
+            with self._winreg.OpenKey(self._winreg.HKEY_CURRENT_USER, CHAVE_DRIVE) as chave:
+                valor, _tipo = self._winreg.QueryValueEx(chave, nome)
+                return int(valor)
+        except (OSError, ValueError):
+            return None
+
+    def gravar(self, nome: str, valor: int) -> None:
+        with self._winreg.CreateKey(self._winreg.HKEY_CURRENT_USER, CHAVE_DRIVE) as chave:
+            self._winreg.SetValueEx(chave, nome, 0, self._winreg.REG_DWORD, int(valor))
+
+    def apagar(self, nome: str) -> None:
+        try:
+            with self._winreg.OpenKey(
+                self._winreg.HKEY_CURRENT_USER, CHAVE_DRIVE, 0, self._winreg.KEY_SET_VALUE
+            ) as chave:
+                self._winreg.DeleteValue(chave, nome)
+        except OSError:
+            pass
+
+
+def _registro(simulado: Any = None) -> Any:
+    if simulado is not None:
+        return simulado
+    if os.name != "nt":
+        raise DriveError(
+            "O limite de banda é ajuste de registro do Windows; esta máquina não tem "
+            "esse registro para mexer."
+        )
+    return _RegistroWindows()
+
+
+def banda(simulado: Any = None) -> dict[str, Any]:
+    """Limite atual do app do Drive, em KB/s. `0` significa sem limite."""
+    try:
+        reg = _registro(simulado)
+    except DriveError as exc:
+        return {"suportado": False, "motivo": str(exc), "download_kbps": 0, "upload_kbps": 0}
+    download = reg.ler("BandwidthRxKBPS")
+    upload = reg.ler("BandwidthTxKBPS")
+    return {
+        "suportado": True,
+        "download_kbps": int(download or 0),
+        "upload_kbps": int(upload or 0),
+        "limitado": bool(download or upload),
+        "padrao": {"download_kbps": BANDA_PADRAO[0], "upload_kbps": BANDA_PADRAO[1]},
+    }
+
+
+def aplicar_banda(
+    download_kbps: int = BANDA_PADRAO[0],
+    upload_kbps: int = BANDA_PADRAO[1],
+    *,
+    simulado: Any = None,
+) -> dict[str, Any]:
+    """Grava o limite em `HKCU\\Software\\Google\\DriveFS`. `0` remove o limite."""
+    antes = banda(simulado)
+    for rotulo, valor in (("download", download_kbps), ("upload", upload_kbps)):
+        if not isinstance(valor, int) or isinstance(valor, bool):
+            raise DriveError(f"O limite de {rotulo} precisa ser número inteiro de KB/s.")
+        if valor < 0 or valor > BANDA_MAXIMA:
+            raise DriveError(
+                f"O limite de {rotulo} precisa ficar entre 0 e {BANDA_MAXIMA} KB/s "
+                "(0 = sem limite)."
+            )
+    reg = _registro(simulado)
+    for nome, valor in (("BandwidthRxKBPS", download_kbps), ("BandwidthTxKBPS", upload_kbps)):
+        if valor:
+            reg.gravar(nome, valor)
+        else:
+            reg.apagar(nome)
+    depois = banda(simulado)
+    return {
+        "banda": True,
+        "antes": {"download_kbps": antes["download_kbps"], "upload_kbps": antes["upload_kbps"]},
+        "depois": {"download_kbps": depois["download_kbps"], "upload_kbps": depois["upload_kbps"]},
+        "chave": f"HKEY_CURRENT_USER\\{CHAVE_DRIVE}",
+        "mensagem": (
+            "Limite gravado. Ele vale quando o app do Google Drive reiniciar — "
+            "feche o Drive pelo ícone da bandeja e abra de novo (ou reinicie o PC)."
+            if (download_kbps or upload_kbps)
+            else "Limite removido: o Drive volta a usar a banda inteira quando reiniciar."
+        ),
+    }
+
+
+def planejar_banda(
+    download_kbps: int = BANDA_PADRAO[0],
+    upload_kbps: int = BANDA_PADRAO[1],
+    *,
+    simulado: Any = None,
+) -> dict[str, Any]:
+    """O que `aplicar_banda` faria, sem gravar nada."""
+    atual = banda(simulado)
+    return {
+        "banda": True,
+        "planejado": True,
+        "antes": {"download_kbps": atual["download_kbps"], "upload_kbps": atual["upload_kbps"]},
+        "depois": {"download_kbps": download_kbps, "upload_kbps": upload_kbps},
+        "chave": f"HKEY_CURRENT_USER\\{CHAVE_DRIVE}",
+        "suportado": atual["suportado"],
+    }
+
+
+def _processos_windows() -> list[str]:
+    """Nomes dos processos em execução (minúsculos). Fora do Windows, vazio."""
+    if os.name != "nt":
+        return []
+    import subprocess  # noqa: PLC0415
+
+    try:
+        saida = subprocess.run(
+            ["tasklist", "/fo", "csv", "/nh"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    nomes: list[str] = []
+    for linha in saida.splitlines():
+        pedaco = linha.split('","')
+        if pedaco:
+            nomes.append(pedaco[0].strip('"').strip().lower())
+    return nomes
+
+
+def drive_aberto(processos: list[str] | None = None) -> bool | None:
+    """O app do Drive está rodando? `None` quando não dá para saber."""
+    lista = _processos_windows() if processos is None else processos
+    if not lista and os.name != "nt":
+        return None
+    return any("googledrive" in nome for nome in lista)
 
 
 # ------------------------------------------------------------------ planejar
