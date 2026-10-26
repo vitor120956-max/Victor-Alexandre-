@@ -41,7 +41,7 @@ from urllib.request import Request, urlopen
 
 from . import sistema as sistema_mod
 
-VERSAO = "0.55.0"
+VERSAO = "0.56.0"
 
 MAX_CABECALHO = 8 * 1024 * 1024
 TIMEOUT_CABECALHO = 12
@@ -796,8 +796,17 @@ def _avaliar(
             "abrem, mas ficam pesados com outras coisas abertas."
         )
 
+    if win is None:
+        nao_verificado.append(
+            "Build do Windows: esta análise está rodando fora do Windows, então não há "
+            "build para comparar — quem decide é o instalador do seu PC."
+        )
+
     if bloqueios:
         veredito = "não roda"
+    elif win is None:
+        # Sem o build do Windows na mão, "roda" seria promessa, não medição.
+        veredito = "não dá para saber"
     elif formato in {"desconhecido", "zip"} and not ressalvas:
         veredito = "não dá para saber"
     elif ressalvas:
@@ -815,6 +824,11 @@ def _avaliar(
         partes.append(f"Deve rodar neste PC ({sistema_txt}), com os pontos abaixo.")
     elif veredito == "não roda":
         partes.append(f"Não roda neste PC ({sistema_txt}).")
+    elif win is None:
+        partes.append(
+            "Não estou no Windows, então não comparo com o build do seu PC; "
+            "o que dá para ler do arquivo está abaixo."
+        )
     else:
         partes.append("O arquivo não declara o suficiente; não vou chutar.")
 

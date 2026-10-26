@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "269 skills" in texto
+    assert "281 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 269 skills, uma por uma
+# ------------------------------------- cobertura: as 281 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 269 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 281 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2296,7 +2296,7 @@ def test_formatar_saida_de_comando() -> None:
     assert "192.168.0.10" in texto
 
 
-# ------------------------------------------- instalador de programa (0.55.0)
+# ------------------------------------------- instalador de programa (0.56.0)
 
 
 def test_pedido_de_onde_guardar_o_instalador() -> None:
@@ -2458,3 +2458,139 @@ def test_listar_habilidades_nao_vira_leva() -> None:
     direto = _pedido_direto_de_habilidade("quais habilidades você importou")
     assert direto is not None
     assert direto["skill_id"] == "habilidades.listar"
+
+
+# ---------------------------------------------------------------------------
+# Agenda, backup e leitura do Git — falas e texto do chat
+# ---------------------------------------------------------------------------
+
+
+def test_fala_marca_compromisso_com_a_data_dita() -> None:
+    from server.agente_local import _pedido_direto_de_agenda
+
+    direto = _pedido_direto_de_agenda("marca audiência amanhã às 14h")
+    assert direto is not None
+    assert direto["skill_id"] == "agenda.marcar"
+    assert direto["parametros"] == {"titulo": "audiência", "quando": "amanhã às 14h"}
+    assert direto["confirma"] is True
+
+
+def test_fala_marca_na_agenda_tira_o_verbo_do_titulo() -> None:
+    from server.agente_local import _pedido_direto_de_agenda
+
+    direto = _pedido_direto_de_agenda("marca na agenda reunião com o cliente quinta às 10h")
+    assert direto is not None
+    assert direto["parametros"]["titulo"] == "reunião com o cliente"
+    assert direto["parametros"]["quando"].startswith("quinta")
+
+
+def test_fala_ver_agenda_escolhe_a_janela() -> None:
+    from server.agente_local import _pedido_direto_de_agenda
+
+    assert _pedido_direto_de_agenda("o que eu tenho para hoje")["parametros"]["dias"] == 1
+    assert _pedido_direto_de_agenda("minha agenda da semana")["parametros"]["dias"] == 7
+    assert _pedido_direto_de_agenda("quais são meus compromissos")["parametros"]["dias"] == 0
+
+
+def test_fala_concluir_compromisso() -> None:
+    from server.agente_local import _pedido_direto_de_agenda
+
+    direto = _pedido_direto_de_agenda("conclui o compromisso audiência")
+    assert direto is not None
+    assert direto["skill_id"] == "agenda.concluir"
+    assert direto["parametros"]["referencia"] == "audiência"
+
+
+def test_fala_sem_data_nao_vira_agenda() -> None:
+    from server.agente_local import _pedido_direto_de_agenda
+
+    assert _pedido_direto_de_agenda("planeja a tarefa de amanhã") is None
+    assert _pedido_direto_de_agenda("abre o programa calculadora") is None
+
+
+def test_fala_backup_guarda_o_caminho_com_espaco() -> None:
+    from server.agente_local import _pedido_direto_de_backup
+
+    direto = _pedido_direto_de_backup("faz backup dos meus dados em G:/Meu Drive/JARVIS-backups")
+    assert direto is not None
+    assert direto["skill_id"] == "backup.criar"
+    assert direto["parametros"]["destino"] == "G:/Meu Drive/JARVIS-backups"
+    assert direto["confirma"] is True
+
+
+def test_fala_backup_listar_e_planejar() -> None:
+    from server.agente_local import _pedido_direto_de_backup
+
+    assert _pedido_direto_de_backup("quais backups eu tenho")["skill_id"] == "backup.listar"
+    assert _pedido_direto_de_backup("quanto vai pesar o backup")["skill_id"] == "backup.planejar"
+
+
+def test_fala_backup_restaurar_exige_arquivo_e_pasta() -> None:
+    from server.agente_local import _pedido_direto_de_backup
+
+    assert _pedido_direto_de_backup("restaura o backup na pasta nova") is None
+    direto = _pedido_direto_de_backup(
+        "restaura o backup jarvis-dados-20261026.zip para D:/restaurado"
+    )
+    assert direto is not None
+    assert direto["parametros"] == {
+        "arquivo": "jarvis-dados-20261026.zip",
+        "destino": "D:/restaurado",
+    }
+
+
+def test_fala_git_roteia_as_quatro_leituras() -> None:
+    from server.agente_local import _pedido_direto_de_git
+
+    assert _pedido_direto_de_git("como está o git")["skill_id"] == "git.status"
+    assert _pedido_direto_de_git("o que mudou no git")["skill_id"] == "git.status"
+    assert _pedido_direto_de_git("últimos commits do git")["skill_id"] == "git.log"
+    assert _pedido_direto_de_git("mostra o diff do git")["skill_id"] == "git.diff"
+    assert _pedido_direto_de_git("qual o remoto do git")["skill_id"] == "git.remoto"
+
+
+def test_fala_github_nao_vira_git() -> None:
+    from server.agente_local import _pedido_direto_de_git
+
+    assert _pedido_direto_de_git("busca repositório no github sobre python") is None
+
+
+def test_formatar_agenda_usa_o_texto_pronto() -> None:
+    texto = formatar_resultado(
+        {
+            "resposta": "2 compromisso(s) na agenda.",
+            "itens": [{"id": "abc", "titulo": "Audiência", "quando": "2026-10-27T14:00:00"}],
+            "texto": "• [abc] Audiência — terça-feira, 27/10/2026 às 14:00",
+            "atrasados": 0,
+        }
+    )
+    assert "2 compromisso" in texto
+    assert "[abc] Audiência" in texto
+
+
+def test_formatar_git_mostra_branch_e_arquivos() -> None:
+    texto = formatar_resultado(
+        {
+            "resposta": "Branch main: 1 arquivo(s) modificado(s).",
+            "branch": "main",
+            "a_frente": 2,
+            "atras": 0,
+            "arquivos": [{"estado": "M", "caminho": "server/app.py"}],
+        }
+    )
+    assert "Branch: main (2 à frente)" in texto
+    assert "server/app.py" in texto
+
+
+def test_formatar_backup_mostra_aviso_do_disco() -> None:
+    texto = formatar_resultado(
+        {
+            "resposta": "7 arquivo(s), 1.2 MB, para D:/backups.",
+            "arquivos": 7,
+            "bytes": 1258291,
+            "destino": "D:/backups",
+            "avisos": ["O destino está no mesmo disco dos dados."],
+        }
+    )
+    assert "7 arquivo(s)" in texto
+    assert "mesmo disco" in texto

@@ -403,3 +403,25 @@ def test_nome_com_extensao_respeita_nome_existente():
     assert ins._nome_com_extensao("main", "application/zip") == "main.zip"
     assert ins._nome_com_extensao("main", "application/x-msdownload") == "main.exe"
     assert ins._nome_com_extensao("main", "application/octet-stream") == "main"
+
+
+def test_analisar_fora_do_windows_nao_promete_que_roda(tmp_path, monkeypatch):
+    monkeypatch.setattr(ins, "_versao_windows", lambda: None)
+    alvo = tmp_path / "setup.exe"
+    alvo.write_bytes(_pe())
+    resultado = ins.analisar(arquivo=str(alvo), conferir_assinatura=False)
+    assert resultado["veredito"] == "não dá para saber"
+    assert any("fora do Windows" in item for item in resultado["nao_verificado"])
+    assert "Não estou no Windows" in resultado["resposta"]
+
+
+def test_analisar_fora_do_windows_ainda_bloqueia_o_que_e_certo(tmp_path, monkeypatch):
+    monkeypatch.setattr(ins, "_versao_windows", lambda: None)
+    dados = bytearray(256)
+    dados[0:2] = b"MZ"
+    struct.pack_into("<I", dados, 0x3C, 0x40)
+    dados[0x40:0x44] = b"NE\x00\x00"
+    alvo = tmp_path / "velho.exe"
+    alvo.write_bytes(bytes(dados))
+    resultado = ins.analisar(arquivo=str(alvo), conferir_assinatura=False)
+    assert resultado["veredito"] == "não roda"

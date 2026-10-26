@@ -26,6 +26,9 @@ from .agency import (
     default_permissions,
     verify_watchdog,
 )
+from . import agenda as agenda_local
+from . import backup as backup_local
+from . import git as git_local
 from .documents import create_document, merge_pdfs, read_document
 from .engineering import create_adr, create_plan, create_spec, design_tests, evaluate_webvitals, release_gate, review_code, threat_model
 from .lean import LeanError, audit_tree, evaluate_ladder, harvest_debt, review_change
@@ -2237,6 +2240,77 @@ class ReposExecutarInput(BaseModel):
 class ReposRemoverInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repo: str = Field(min_length=2, max_length=300, title="Repositório baixado")
+
+
+class AgendaMarcarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    titulo: str = Field(min_length=2, max_length=200, title="Compromisso", json_schema_extra={"description": "Título curto: “audiência de conciliação”, “entregar a petição”."})
+    quando: str = Field(min_length=2, max_length=120, title="Quando", json_schema_extra={"description": "`2026-11-05`, `05/11`, `amanhã`, `depois de amanhã`, `daqui a 3 dias` ou `segunda às 14h`. Sem hora, fica 09:00."})
+    nota: str = Field(default="", max_length=2000, title="Nota", json_schema_extra={"description": "Opcional: o que levar, com quem falar, número do processo."})
+
+
+class AgendaListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dias: int = Field(default=0, ge=0, le=3650, title="Janela em dias", json_schema_extra={"description": "0 lista tudo em aberto; 7 olha só a semana; 30 o mês."})
+    incluir_concluidos: bool = Field(default=False, title="Incluir concluídos")
+
+
+class AgendaConcluirInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    referencia: str = Field(min_length=1, max_length=200, title="Compromisso", json_schema_extra={"description": "O id curto ou parte do título. Título repetido exige o id."})
+
+
+class AgendaRemoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    referencia: str = Field(min_length=1, max_length=200, title="Compromisso", json_schema_extra={"description": "O id curto ou parte do título."})
+
+
+class BackupPlanejarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destino: str = Field(default="", max_length=400, title="Onde guardar", json_schema_extra={"description": "Pasta do backup. Vazio usa `storage/backups`. Pendrive (`E:/JARVIS-backups`) ou Drive (`G:/Meu Drive/JARVIS-backups`) protegem de verdade."})
+    incluir_repos: bool = Field(default=False, title="Incluir repositórios", json_schema_extra={"description": "Os repositórios baixados costumam ser a maior parte. Só ligue quando precisar."})
+
+
+class BackupCriarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destino: str = Field(default="", max_length=400, title="Onde guardar", json_schema_extra={"description": "Pasta do `.zip`. Vazio usa `storage/backups`."})
+    incluir_repos: bool = Field(default=False, title="Incluir repositórios")
+    teto_mb: int = Field(default=2048, ge=1, le=204_800, title="Teto em MB", json_schema_extra={"description": "Acima disso ele recusa em vez de encher o disco."})
+
+
+class BackupListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destino: str = Field(default="", max_length=400, title="Pasta dos backups", json_schema_extra={"description": "Vazio usa `storage/backups`."})
+
+
+class BackupRestaurarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(min_length=3, max_length=400, title="Backup", json_schema_extra={"description": "Nome ou caminho do `.zip`."})
+    destino: str = Field(min_length=1, max_length=400, title="Pasta nova", json_schema_extra={"description": "Onde extrair. Precisa estar vazia — restaurar por cima do que está em uso é como apagar o original."})
+
+
+class GitStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(default="", max_length=400, title="Repositório", json_schema_extra={"description": "Pasta com `.git`. Vazio usa a pasta do JARVIS. Só vale dentro do projeto, da raiz de dados ou de `storage/repos`."})
+
+
+class GitLogInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(default="", max_length=400, title="Repositório")
+    limite: int = Field(default=10, ge=1, le=50, title="Commits")
+
+
+class GitDiffInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(default="", max_length=400, title="Repositório")
+    arquivo: str = Field(default="", max_length=300, title="Arquivo", json_schema_extra={"description": "Vazio mostra tudo o que mudou."})
+    staged: bool = Field(default=False, title="Só o que está preparado")
+    limite: int = Field(default=8000, ge=500, le=20000, title="Teto de caracteres do diff")
+
+
+class GitRemotoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    caminho: str = Field(default="", max_length=400, title="Repositório")
 
 
 SkillHandler = Callable[[BaseModel, bool], dict[str, Any]]
@@ -4627,6 +4701,95 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
     def estacao_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return estacao_catalog()
 
+    def agenda_marcar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgendaMarcarInput)
+        try:
+            return agenda_local.adicionar(titulo=data.titulo, quando=data.quando, nota=data.nota)
+        except agenda_local.AgendaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agenda_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgendaListarInput)
+        resultado = agenda_local.listar(dias=data.dias, incluir_concluidos=data.incluir_concluidos)
+        resultado["texto"] = agenda_local.texto(resultado["itens"])
+        return resultado
+
+    def agenda_concluir_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgendaConcluirInput)
+        try:
+            return agenda_local.concluir(data.referencia)
+        except agenda_local.AgendaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def agenda_remover_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgendaRemoverInput)
+        try:
+            return agenda_local.remover(data.referencia)
+        except agenda_local.AgendaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def backup_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BackupPlanejarInput)
+        try:
+            return backup_local.planejar(destino=data.destino, incluir_repos=data.incluir_repos)
+        except backup_local.BackupError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def backup_criar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BackupCriarInput)
+        if _dry_run:
+            plano = backup_local.planejar(destino=data.destino, incluir_repos=data.incluir_repos)
+            return {**plano, "simulacao": True, "nota": "Simulação: nada foi compactado."}
+        try:
+            return backup_local.criar(
+                destino=data.destino,
+                incluir_repos=data.incluir_repos,
+                max_bytes=data.teto_mb * 1024 * 1024,
+            )
+        except backup_local.BackupError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def backup_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BackupListarInput)
+        return backup_local.listar(destino=data.destino)
+
+    def backup_restaurar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BackupRestaurarInput)
+        if _dry_run:
+            return {"arquivo": data.arquivo, "destino": data.destino, "simulacao": True, "nota": "Simulação: nada foi extraído."}
+        try:
+            return backup_local.restaurar(data.arquivo, destino=data.destino)
+        except backup_local.BackupError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def git_status_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GitStatusInput)
+        try:
+            return git_local.status(data.caminho)
+        except git_local.GitError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def git_log_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GitLogInput)
+        try:
+            return git_local.log(data.caminho, limite=data.limite)
+        except git_local.GitError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def git_diff_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GitDiffInput)
+        try:
+            return git_local.diff(data.caminho, arquivo=data.arquivo, staged=data.staged, limite=data.limite)
+        except git_local.GitError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def git_remoto_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GitRemotoInput)
+        try:
+            return git_local.remoto(data.caminho)
+        except git_local.GitError as exc:
+            raise SkillError(str(exc)) from exc
+
     def navegador_library_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return navegador_catalog()
 
@@ -4953,6 +5116,18 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("agenda.marcar", "Marcar compromisso", "Grava um compromisso com data interpretada sem modelo e devolve por extenso o que entendeu (“terça-feira, 27/10/2026 às 14:00”). Se a data não for reconhecível, recusa em vez de adivinhar. Fica em `agenda.json`, sem conta e sem nuvem.", "Agenda", AgendaMarcarInput, agenda_marcar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("agenda.listar", "Ver a agenda", "Lista os compromissos em ordem de data, marca o que já passou de prazo e diz qual é o próximo. Filtra por janela de dias (`dias=7` para a semana).", "Agenda", AgendaListarInput, agenda_listar_handler, timeout_seconds=10),
+        SkillDefinition("agenda.concluir", "Concluir compromisso", "Marca um compromisso como feito, por id curto ou por parte do título. Sai da lista padrão sem ser apagado.", "Agenda", AgendaConcluirInput, agenda_concluir_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("agenda.remover", "Remover compromisso", "Apaga um compromisso da agenda, por id ou parte do título. Não mexe em mais nada.", "Agenda", AgendaRemoverInput, agenda_remover_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("backup.planejar", "Planejar backup", "Diz o que entraria na cópia (`storage/` sem `.venv`, `node_modules`, `.git` e sem a própria pasta de backups), quanto pesa, o que foi ignorado e se o destino tem espaço. Avisa quando o destino está no mesmo disco dos dados. Não copia nada.", "Backup", BackupPlanejarInput, backup_planejar_handler, timeout_seconds=60),
+        SkillDefinition("backup.criar", "Criar backup", "Compacta os dados num `.zip` com data no nome, grava o SHA-256 ao lado, confere o arquivo logo depois de escrever e recusa acima do teto de tamanho. Backup que não abre não é backup.", "Backup", BackupCriarInput, backup_criar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=1800),
+        SkillDefinition("backup.listar", "Listar backups", "Mostra os `.zip` já criados, com data e tamanho, na pasta escolhida.", "Backup", BackupListarInput, backup_listar_handler, timeout_seconds=10),
+        SkillDefinition("backup.restaurar", "Restaurar backup", "Extrai um backup numa pasta **nova e vazia**, recusando caminho que escape da pasta. Nunca sobrescreve o que está em uso.", "Backup", BackupRestaurarInput, backup_restaurar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition("git.status", "Estado do Git", "Mostra branch, quanto está à frente ou atrás do remoto e o que mudou, com `git status --porcelain`. Só leitura: não faz commit, push, pull nem checkout.", "Git", GitStatusInput, git_status_handler, timeout_seconds=30),
+        SkillDefinition("git.log", "Histórico do Git", "Lista os últimos commits com hash curto, data, autor e assunto. Só leitura.", "Git", GitLogInput, git_log_handler, timeout_seconds=30),
+        SkillDefinition("git.diff", "Diferenças do Git", "Mostra o resumo por arquivo e o patch do que mudou (`diff` ou `--staged`), cortado num teto de texto. Só leitura, sem `--ext-diff` e sem paginador.", "Git", GitDiffInput, git_diff_handler, timeout_seconds=30),
+        SkillDefinition("git.remoto", "Remoto do Git", "Diz de onde o repositório veio e qual é o upstream, sem fazer `fetch` e sem pedir senha (`GIT_TERMINAL_PROMPT=0`).", "Git", GitRemotoInput, git_remoto_handler, timeout_seconds=20),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
     ]
     return SkillRegistry(definitions, files_root)

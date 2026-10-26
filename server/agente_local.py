@@ -2500,6 +2500,72 @@ def _formatar_fonte_da_biblioteca(resultado: dict[str, Any]) -> str | None:
     return f'Fonte “{titulo}” na biblioteca: {detalhe}. Slug: `{resultado["slug"]}`.{sufixo}'
 
 
+def _formatar_agenda(resultado: dict[str, Any]) -> str | None:
+    """Agenda: lista em ordem de data, com o que já passou marcado."""
+    if not ({"itens", "atrasados"} <= set(resultado) or {"quando", "titulo"} <= set(resultado)):
+        return None
+    if resultado.get("texto"):
+        cabeca = resultado.get("resposta") or ""
+        return f"{cabeca}\n\n{resultado['texto']}".strip()
+    if resultado.get("resposta"):
+        return str(resultado["resposta"])
+    return None
+
+
+def _formatar_backup(resultado: dict[str, Any]) -> str | None:
+    """Backup: o que entrou, o que ficou de fora e o aviso do disco."""
+    if not ({"backups"} <= set(resultado) or {"arquivos", "destino"} <= set(resultado)):
+        return None
+    linhas: list[str] = []
+    if resultado.get("resposta"):
+        linhas.append(str(resultado["resposta"]))
+    backups = resultado.get("backups")
+    if isinstance(backups, list) and backups:
+        linhas.append("")
+        for item in backups[:10]:
+            linhas.append(f"• {item.get('arquivo')} — {item.get('mb')} MB, {item.get('quando')}")
+    for aviso in (resultado.get("avisos") or [])[:3]:
+        linhas.append(f"⚠️ {aviso}")
+    maiores = resultado.get("maiores")
+    if isinstance(maiores, list) and maiores:
+        linhas.append("")
+        linhas.append("Maiores: " + ", ".join(f"{item['caminho']} ({item['bytes'] // 1024} KB)" for item in maiores[:5]))
+    return "\n".join(linhas).strip() or None
+
+
+def _formatar_git(resultado: dict[str, Any]) -> str | None:
+    """Git de leitura: branch, commits e o que mudou."""
+    if not ({"branch", "a_frente"} & set(resultado) or {"commits"} <= set(resultado) or {"remotos"} <= set(resultado) or {"patch"} <= set(resultado)):
+        return None
+    linhas: list[str] = []
+    if resultado.get("resposta"):
+        linhas.append(str(resultado["resposta"]))
+    if "branch" in resultado:
+        extras = []
+        if resultado.get("a_frente"):
+            extras.append(f"{resultado['a_frente']} à frente")
+        if resultado.get("atras"):
+            extras.append(f"{resultado['atras']} atrás")
+        linhas.append(f"Branch: {resultado.get('branch') or '(sem nome)'}" + (f" ({', '.join(extras)})" if extras else ""))
+        for item in (resultado.get("arquivos") or [])[:20]:
+            linhas.append(f"• {item.get('estado')} {item.get('caminho')}")
+    if resultado.get("commits") is not None:
+        for item in (resultado.get("commits") or [])[:10]:
+            linhas.append(f"• {item.get('hash')} {item.get('data')} — {item.get('assunto')}")
+    if resultado.get("remotos") is not None:
+        for nome, urls in (resultado.get("remotos") or {}).items():
+            linhas.append(f"• {nome}: {urls.get('fetch') or urls.get('push') or '?'}")
+        if resultado.get("upstream"):
+            linhas.append(f"Upstream: {resultado['upstream']}")
+    if resultado.get("patch") and not resultado.get("vazio"):
+        if resultado.get("resumo"):
+            linhas.append("")
+            linhas.append(str(resultado["resumo"]).strip())
+        if resultado.get("cortado"):
+            linhas.append("(diff cortado no teto; peça o arquivo específico para ver o resto)")
+    return "\n".join(linhas).strip() or None
+
+
 def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
@@ -2510,6 +2576,18 @@ def formatar_resultado(resultado: Any) -> str:
         return especial
 
     especial = _formatar_instalador(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_agenda(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_backup(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_git(resultado)
     if especial is not None:
         return especial
 
@@ -2592,6 +2670,172 @@ def formatar_resultado(resultado: Any) -> str:
         partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
     texto = "\n\n".join(partes)
     return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+# ------------------------------------------------------- agenda, backup e git
+
+_RE_MARCAR_NA_AGENDA = re.compile(
+    r"\b(?:marca|marque|marcar|agenda|agende|agendar|anota|anote|anotar|"
+    r"registra|registre|registrar|lembra|lembre|lembrar)\b",
+    re.I,
+)
+_RE_DATA_NA_FRASE = re.compile(
+    r"\b(?:depois de amanh[ãa]|amanh[ãa]|hoje|daqui a \d{1,3} dias?|"
+    r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|"
+    r"(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)(?:-feira)?)\b"
+    r"(?:\s*(?:,|às|as|pelas|para as)\s*\d{1,2}(?:h\d{0,2}|:\d{2})?)?",
+    re.I,
+)
+_RE_VER_AGENDA = re.compile(
+    r"\b(?:minha agenda|a agenda|meus compromissos|meus prazos|"
+    r"o que eu tenho|tenho algo marcado|tenho marcado|tem na agenda|"
+    r"o que est[áa] marcado|pr[óo]ximos compromissos|agenda de hoje|agenda da semana)\b",
+    re.I,
+)
+_RE_CONCLUIR_AGENDA = re.compile(
+    r"\b(?:conclu[íi]|conclui|concluir|risca|risque|riscar|terminei|j[áa] fiz|marca como feito)\b"
+    r"(?P<resto>[^.!?]{2,120})",
+    re.I,
+)
+_RE_BACKUP = re.compile(r"\b(?:backup|backups|c[óo]pia de seguran[çc]a|salvar meus dados|proteger meus dados)\b", re.I)
+_RE_BACKUP_CRIAR = re.compile(r"\b(?:faz|fa[çc]a|fazer|cria|crie|criar|tira|tirar|gera|gere|gerar|roda|rodar)\b", re.I)
+_RE_BACKUP_VER = re.compile(r"\b(?:quais|onde|lista|listar|mostra|mostrar|tem|existe|ver)\b", re.I)
+_RE_BACKUP_PLANEJAR = re.compile(r"\b(?:planeja|planejar|quanto|o que entra|o que vai|cabe|espa[çc]o)\b", re.I)
+_RE_BACKUP_RESTAURAR = re.compile(r"\b(?:restaura|restaurar|volta|voltar|recupera|recuperar)\b", re.I)
+_RE_CAMINHO_DISCO = re.compile(r"\b([A-Za-z]:[\\/][^;\"',]{2,300})")
+_PALAVRAS_QUE_NAO_SAO_CAMINHO = {"agora", "hoje", "amanhã", "amanha", "já", "ja", "por", "favor", "que", "e", "no", "na"}
+_RE_GIT = re.compile(r"\bgit\b", re.I)
+
+
+def _limpar_titulo(bruto: str) -> str:
+    limpo = re.sub(r"\b(?:na|no)\s+(?:minha\s+)?agenda\b", " ", bruto, flags=re.I)
+    limpo = re.sub(
+        r"^\s*(?:marca|marque|marcar|agenda|agende|agendar|anota|anote|anotar|"
+        r"registra|registre|registrar|lembra|lembre|lembrar|o|a|os|as)\s+",
+        "",
+        limpo,
+        flags=re.I,
+    )
+    limpo = re.sub(r"^(?:o\s+)?(?:compromisso|tarefa|prazo|evento)\s+(?:de\s+)?", "", limpo, flags=re.I)
+    limpo = re.sub(r"\b(?:o|a|os|as|um|uma|que|de|para|pra|dia|no dia|em)\b\s*$", " ", limpo, flags=re.I)
+    limpo = re.sub(r"^[\s,;:.-]+|[\s,;:.-]+$", "", limpo)
+    limpo = re.sub(r"^(?:o|a|os|as|um|uma|que|de|para|pra|dia)\s+", "", limpo, flags=re.I)
+    return re.sub(r"\s{2,}", " ", limpo).strip(" .,;:-")
+
+
+def _pedido_direto_de_agenda(termo: str) -> dict[str, Any] | None:
+    """Agenda pessoal: marcar com data dita, ver o que está marcado e concluir."""
+    texto = (termo or "").strip()
+    if not texto:
+        return None
+
+    achado = _RE_CONCLUIR_AGENDA.search(texto)
+    if achado and re.search(r"\b(?:compromisso|agenda|audi[êe]ncia|reuni[ãa]o|prazo)\b", texto, re.I):
+        referencia = _limpar_titulo(achado.group("resto"))
+        if referencia:
+            return {
+                "skill_id": "agenda.concluir",
+                "nome": "Concluir compromisso",
+                "parametros": {"referencia": referencia[:120]},
+                "confirma": True,
+            }
+
+    if _RE_MARCAR_NA_AGENDA.search(texto):
+        data = _RE_DATA_NA_FRASE.search(texto)
+        if data:
+            titulo = _limpar_titulo(texto[: data.start()])
+            quando = texto[data.start() : data.end()].strip(" ,")
+            if titulo and len(titulo) >= 2:
+                return {
+                    "skill_id": "agenda.marcar",
+                    "nome": "Marcar compromisso",
+                    "parametros": {"titulo": titulo[:200], "quando": quando[:120]},
+                    "confirma": True,
+                }
+
+    if _RE_VER_AGENDA.search(texto):
+        dias = 0
+        if re.search(r"\b(?:hoje|amanh[ãa])\b", texto, re.I):
+            dias = 1
+        elif re.search(r"\bsemana\b", texto, re.I):
+            dias = 7
+        elif re.search(r"\bm[êe]s\b", texto, re.I):
+            dias = 30
+        return {
+            "skill_id": "agenda.listar",
+            "nome": "Ver a agenda",
+            "parametros": {"dias": dias},
+            "confirma": False,
+        }
+    return None
+
+
+def _pedido_direto_de_backup(termo: str) -> dict[str, Any] | None:
+    """Backup: criar, ver, planejar e restaurar."""
+    texto = (termo or "").strip()
+    if not _RE_BACKUP.search(texto):
+        return None
+    caminho = _RE_CAMINHO_DISCO.search(texto)
+    destino = caminho.group(1).strip() if caminho else ""
+    if destino:
+        partes = destino.split()
+        while partes and partes[-1].lower() in _PALAVRAS_QUE_NAO_SAO_CAMINHO:
+            partes.pop()
+        destino = " ".join(partes).strip(" .,;:")
+
+    if _RE_BACKUP_RESTAURAR.search(texto):
+        achado_zip = re.search(r"([^\s,;\"']+\.zip)", texto, re.I)
+        achado_pasta = re.search(r"\b(?:para|em|na pasta|no)\s+([^,;\"']{2,200})", texto, re.I)
+        if achado_zip and achado_pasta:
+            return {
+                "skill_id": "backup.restaurar",
+                "nome": "Restaurar backup",
+                "parametros": {
+                    "arquivo": achado_zip.group(1),
+                    "destino": achado_pasta.group(1).strip(" .,;:"),
+                },
+                "confirma": True,
+            }
+        return None
+    if _RE_BACKUP_PLANEJAR.search(texto):
+        return {
+            "skill_id": "backup.planejar",
+            "nome": "Planejar backup",
+            "parametros": {"destino": destino, "incluir_repos": False},
+            "confirma": False,
+        }
+    if _RE_BACKUP_CRIAR.search(texto):
+        return {
+            "skill_id": "backup.criar",
+            "nome": "Criar backup",
+            "parametros": {"destino": destino, "incluir_repos": False},
+            "confirma": True,
+        }
+    if _RE_BACKUP_VER.search(texto):
+        return {
+            "skill_id": "backup.listar",
+            "nome": "Listar backups",
+            "parametros": {"destino": destino},
+            "confirma": False,
+        }
+    return None
+
+
+def _pedido_direto_de_git(termo: str) -> dict[str, Any] | None:
+    """Git só de leitura: estado, histórico, diferenças e remoto."""
+    texto = (termo or "").strip()
+    if not _RE_GIT.search(texto):
+        return None
+    baixo = texto.lower()
+    if re.search(r"\b(?:remoto|remote|origem|upstream)\b", baixo):
+        return {"skill_id": "git.remoto", "nome": "Remoto do Git", "parametros": {}, "confirma": False}
+    if re.search(r"\b(?:commits?|hist[óo]rico|log)\b", baixo):
+        return {"skill_id": "git.log", "nome": "Histórico do Git", "parametros": {"limite": 10}, "confirma": False}
+    if re.search(r"\b(?:diff|diferen[çc]as?|patch)\b", baixo):
+        return {"skill_id": "git.diff", "nome": "Diferenças do Git", "parametros": {}, "confirma": False}
+    if re.search(r"\b(?:status|estado|como est[áa]|mudou|mudan[çc]as|modificad[oa]s?)\b", baixo):
+        return {"skill_id": "git.status", "nome": "Estado do Git", "parametros": {}, "confirma": False}
+    return None
 
 
 # ------------------------------------------------------------------- web
@@ -3308,6 +3552,14 @@ async def _resolver(
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:
         direto = _pedido_direto_de_instalador(termo)
+
+    # 0b10. Agenda pessoal, backup e leitura do Git.
+    if direto is None:
+        direto = _pedido_direto_de_agenda(termo)
+    if direto is None:
+        direto = _pedido_direto_de_backup(termo)
+    if direto is None:
+        direto = _pedido_direto_de_git(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:
