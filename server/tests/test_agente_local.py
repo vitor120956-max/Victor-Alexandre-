@@ -1,4 +1,4 @@
-"""Testes do agente local (0.42.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.42.1) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -615,7 +615,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.42.0)
+# ------------------------------------------------- memória do agente (0.42.1)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
