@@ -61,6 +61,15 @@ def _baixar(url: str) -> str:
     return dados.decode("utf-8", errors="replace")
 
 
+def baixar_texto(url: str) -> str:
+    """Baixa uma página ou arquivo de texto com as mesmas travas da busca.
+
+    Público porque outras camadas (importar habilidade) precisam do mesmo
+    cuidado: só http(s), sem endereço privado, com teto de tamanho.
+    """
+    return _baixar(_url_publica(url))
+
+
 def _limpar(texto: str) -> str:
     sem_tag = re.sub(r"(?s)<[^>]+>", " ", texto or "")
     trocas = {

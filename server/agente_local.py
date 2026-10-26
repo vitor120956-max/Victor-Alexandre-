@@ -1500,6 +1500,21 @@ def _pedido_direto_de_catalogo(termo: str) -> dict[str, Any] | None:
     if "http" in texto:
         return None
 
+    if re.search(r"\bgithub\b", texto, re.I) and re.search(
+        r"\b(?:t[óo]pico|topic|agent-skills|skills?|habilidades)\b", texto, re.I
+    ):
+        quantos = re.search(r"\b(\d{1,2})\b", texto)
+        tema = re.search(r"\b(?:t[óo]pico|topic)\s+([\w-]{2,40})", texto, re.I)
+        return {
+            "skill_id": "catalogo.topico",
+            "nome": "Catálogo de um tópico do GitHub",
+            "parametros": {
+                "topico": (tema.group(1) if tema else "agent-skills")[:60],
+                "repos": min(15, max(1, int(quantos.group(1)) if quantos else 12)),
+            },
+            "confirma": True,
+        }
+
     achado_importar = re.search(r"\b(?:importa|importar|importe|traz|trazer|puxa|puxar)\b", texto, re.I)
     filtros = _filtros_do_texto(texto)
     if _RE_CATALOGO_CARREGAR.search(texto) and achado_importar is None:
@@ -1580,13 +1595,36 @@ def _pedido_direto_de_correio(termo: str) -> dict[str, Any] | None:
 
 def _formatar_catalogo(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para o catálogo de terceiros."""
-    if resultado.get("por_categoria") and resultado.get("total") and resultado.get("arquivo"):
+    if (
+        resultado.get("por_categoria")
+        and resultado.get("total")
+        and resultado.get("arquivo")
+        and not resultado.get("repos_lidos")
+    ):
         linhas = [f"Catálogo carregado: {resultado['total']} habilidade(s).", f"Arquivo: {resultado['arquivo']}", ""]
         if resultado.get("por_categoria"):
             linhas.append("Por categoria: " + ", ".join(f"{k} ({v})" for k, v in resultado["por_categoria"].items()))
         if resultado.get("por_fornecedor"):
             linhas.append("Por fornecedor: " + ", ".join(f"{k} ({v})" for k, v in resultado["por_fornecedor"].items()))
         linhas += ["", "Agora: `importa as 5 primeiras do catálogo` ou `importa as de design do catálogo`."]
+        return "\n".join(linhas)
+
+    if "repos_lidos" in resultado and resultado.get("adicionadas"):
+        linhas = [
+            f"Li {resultado['repos_lidos']} repositório(s) do tópico “{resultado['topico']}” "
+            f"({resultado['origem']}):",
+            f"{resultado['adicionadas']} skill(s) somada(s) ao catálogo — total agora: {resultado['total']}.",
+        ]
+        if resultado.get("por_categoria"):
+            linhas.append("Por categoria: " + ", ".join(f"{k} ({v})" for k, v in resultado["por_categoria"].items()))
+        if resultado.get("sem_skill"):
+            linhas.append(f"Sem `SKILL.md` (é lista/plugin, não skill): {', '.join(resultado['sem_skill'][:5])}.")
+        if resultado.get("falhas"):
+            linhas.append(f"Falharam {len(resultado['falhas'])} repositório(s): {resultado['falhas'][0]['erro'][:120]}")
+        if resultado.get("aviso"):
+            linhas.append("")
+            linhas.append(resultado["aviso"])
+        linhas += ["", "Agora: `importa as 5 primeiras do catálogo` (até 10 por chamada)."]
         return "\n".join(linhas)
 
     if "mostrando" in resultado and isinstance(resultado.get("itens"), list):
@@ -1684,6 +1722,94 @@ def _formatar_correio(resultado: dict[str, Any]) -> str | None:
     return None
 
 
+_RE_ADAPTAR_HABILIDADE = re.compile(
+    r"\b(?:adapta|adaptar|adapte|transforma|transformar|transforme|converte|converter|converta)\b"
+    r"[^.]*\bhabilidades?\b\s*(?:de fora\s+)?(?P<nome>[\w.-]{2,60}(?:\s[\w.-]{1,40}){0,3})",
+    re.I,
+)
+_RE_FONTES_DE_LIVROS = re.compile(
+    r"\b(?:onde|quais|que)\b[^.]*\b(?:livros?|fontes?|sites?)\b[^.]*"
+    r"\b(?:gr[áa]tis|gratuit[oa]s?|livres?|dom[íi]nio p[úu]blico|de gra[çc]a|completos?)\b"
+    r"|\bfontes de livros\b|\blivros? (?:de gra[çc]a|gratuitos?|livres?|completos?)\b",
+    re.I,
+)
+_RE_PERSONA = re.compile(
+    r"\bpersona\b[^.]*?\b(?:d[oa]s?|de|sobre)\s+(?P<livro>[\wÀ-ÿ'’ .-]{3,80})",
+    re.I,
+)
+_RE_BUSCAR_LIVRO = re.compile(
+    r"\b(?:procura|procurar|procure|ache|achar|busca|buscar|busque|tem|existe)\b[^.]*\blivro\b\s+"
+    r"(?P<consulta>[\wÀ-ÿ'’ .:-]{2,90})",
+    re.I,
+)
+_RE_BAIXAR_LIVRO = re.compile(
+    r"\b(?:baixa|baixar|baixe|puxa|puxar|puxe|importa|importar|importe|traz|trazer)\b[^.]*\blivro\b\s+"
+    r"(?P<livro>[\wÀ-ÿ'’ .:/-]{2,300})",
+    re.I,
+)
+
+
+def _pedido_direto_de_cultura(termo: str) -> dict[str, Any] | None:
+    """Livros livres: fontes, busca, download e persona de escrita."""
+    texto = (termo or "").strip()
+
+    achado = _RE_ADAPTAR_HABILIDADE.search(texto)
+    if achado:
+        nome = re.split(r"\s+para\b", achado.group("nome"), maxsplit=1)[0].strip(" .")
+        if nome and nome.lower() not in {"de fora", "importada", "essa", "a minha"}:
+            return {
+                "skill_id": "habilidades.adaptar",
+                "nome": "Adaptar habilidade para uso próprio",
+                "parametros": {"habilidade": nome[:80]},
+                "confirma": True,
+            }
+
+    achado = _RE_PERSONA.search(texto)
+    if achado:
+        livro = re.split(r"\s+para\b", achado.group("livro"), maxsplit=1)[0].strip(" .")
+        livro = re.sub(r"^(?:[oa]s?\s+)?livros?\s+", "", livro, flags=re.I).strip(" .")
+        if len(livro) >= 3:
+            return {
+                "skill_id": "cultura.persona",
+                "nome": "Persona de escrita a partir de um livro",
+                "parametros": {"livro": livro[:80]},
+                "confirma": True,
+            }
+
+    if _RE_FONTES_DE_LIVROS.search(texto):
+        return {"skill_id": "cultura.fontes", "nome": "Fontes de livros livres", "parametros": {}, "confirma": False}
+
+    achado = _RE_BAIXAR_LIVRO.search(texto)
+    if achado:
+        livro = achado.group("livro").strip(" .")
+        if re.search(r"\d", livro) or "gutenberg" in livro.lower():
+            return {
+                "skill_id": "cultura.baixar",
+                "nome": "Baixar livro do Gutenberg",
+                "parametros": {"livro": livro[:300]},
+                "confirma": True,
+            }
+        # Sem número não dá para baixar: procura primeiro e devolve as opções.
+        return {
+            "skill_id": "cultura.buscar",
+            "nome": "Buscar livro livre",
+            "parametros": {"consulta": livro[:160]},
+            "confirma": False,
+        }
+
+    achado = _RE_BUSCAR_LIVRO.search(texto)
+    if achado:
+        consulta = re.split(r"\s+(?:no|na|em|pelo|pela)\b", achado.group("consulta"), maxsplit=1)[0].strip(" .")
+        if len(consulta) >= 2:
+            return {
+                "skill_id": "cultura.buscar",
+                "nome": "Buscar livro livre",
+                "parametros": {"consulta": consulta[:160]},
+                "confirma": False,
+            }
+    return None
+
+
 def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
     """Habilidades de fora: importar de um link, listar e usar como roteiro."""
     texto = (termo or "").strip()
@@ -1721,6 +1847,53 @@ def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
 
     if _RE_LISTAR_HABILIDADES.search(texto) and "http" not in texto:
         return {"skill_id": "habilidades.listar", "nome": "Habilidades importadas", "parametros": {}, "confirma": False}
+    return None
+
+
+def _formatar_cultura(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para fontes de livro, busca, download e persona."""
+    if resultado.get("skill_local") and resultado.get("resposta"):
+        return str(resultado["resposta"])
+
+    if isinstance(resultado.get("fontes"), list) and resultado.get("total"):
+        linhas = ["Onde achar livro completo e de graça (e legal):", ""]
+        for fonte in resultado["fontes"]:
+            linhas.append(f"• {fonte.get('nome')} — {fonte.get('url')}")
+            linhas.append(f"    {fonte.get('o_que_tem')}")
+            linhas.append(f"    licença: {fonte.get('licenca')} · precisa: {fonte.get('precisa')}")
+        if resultado.get("recomendacao"):
+            linhas += ["", str(resultado["recomendacao"])]
+        return "\n".join(linhas)
+
+    if isinstance(resultado.get("livros"), list) and "consulta" in resultado:
+        livros = resultado["livros"]
+        if not livros:
+            return f"Nenhum livro livre encontrado para “{resultado['consulta']}” em {resultado['fonte']}."
+        linhas = [f"{resultado.get('total')} resultado(s) em {resultado['fonte']} — mostrando {len(livros)}:", ""]
+        for livro in livros:
+            autores = ", ".join(livro.get("autores") or []) or "autor não informado"
+            linhas.append(f"[{livro.get('id')}] {livro.get('titulo')} — {autores}")
+            if livro.get("texto"):
+                linhas.append(f"    texto: {livro['texto']}")
+            elif livro.get("url"):
+                linhas.append(f"    {livro['url']}")
+        linhas += ["", f"Dica: {resultado.get('dica')}"]
+        return "\n".join(linhas)
+
+    if isinstance(resultado.get("regras"), list) and resultado.get("tom"):
+        linhas = [
+            f"Persona “{resultado.get('nome')}” — estilo medido em {resultado.get('palavras')} palavras:",
+            f"Tom: {resultado['tom']}.",
+            "",
+        ]
+        linhas += [f"• {regra}" for regra in resultado["regras"]]
+        linhas += ["", "Limites:", *[f"• {limite}" for limite in resultado.get("limites") or []]]
+        if resultado.get("arquivo"):
+            linhas += ["", f"Guardei em {resultado['arquivo']}."]
+        return "\n".join(linhas)
+
+    if resultado.get("resposta") and resultado.get("livro") and resultado.get("slug"):
+        return str(resultado["resposta"])
     return None
 
 
@@ -2069,6 +2242,10 @@ def formatar_resultado(resultado: Any) -> str:
         return str(resultado)[:LIMITE_RESPOSTA]
 
     especial = _formatar_catalogo(resultado)
+    if especial is not None:
+        return especial
+
+    especial = _formatar_cultura(resultado)
     if especial is not None:
         return especial
 
@@ -2847,6 +3024,10 @@ async def _resolver(
     # 0b6. Catálogo de terceiros: carregar a planilha, filtrar e importar.
     if direto is None:
         direto = _pedido_direto_de_catalogo(termo)
+
+    # 0b7. Livros livres e adaptação de habilidade importada.
+    if direto is None:
+        direto = _pedido_direto_de_cultura(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:

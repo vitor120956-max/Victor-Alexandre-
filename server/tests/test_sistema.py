@@ -1355,8 +1355,8 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.52.0"
-    assert dados["skills"] == 254
+    assert dados["version"] == "0.53.0"
+    assert dados["skills"] == 260
 
 
 def test_api_lista_as_quinze_skills_de_sistema(client):
@@ -1374,7 +1374,7 @@ def test_api_sistema_disco_exige_token(client):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.52.0"
+    assert resposta["result"]["versao"] == "0.53.0"
 
 
 def test_api_baixar_exige_confirmacao(client):

@@ -1,0 +1,151 @@
+{
+ "topico": "agent-skills",
+ "atualizado_em": "2026-10-26",
+ "fonte": "https://github.com/topics/agent-skills",
+ "repositorios": [
+  {
+   "repositorio": "morluto/rea",
+   "descricao": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+   "estrelas": 388616,
+   "url": "https://github.com/morluto/rea"
+  },
+  {
+   "repositorio": "anthropics/skills",
+   "descricao": "Public repository for Agent Skills",
+   "estrelas": 183894,
+   "url": "https://github.com/anthropics/skills"
+  },
+  {
+   "repositorio": "DietrichGebert/ponytail",
+   "descricao": "Makes your AI agent think like the laziest senior dev in the room. The best code is the code you never wrote.",
+   "estrelas": 176666,
+   "url": "https://github.com/DietrichGebert/ponytail"
+  },
+  {
+   "repositorio": "addyosmani/agent-skills",
+   "descricao": "Production-grade engineering skills for AI coding agents.",
+   "estrelas": 110656,
+   "url": "https://github.com/addyosmani/agent-skills"
+  },
+  {
+   "repositorio": "paperclipai/paperclip",
+   "descricao": "The open-source app everyone uses to manage agents at work",
+   "estrelas": 107500,
+   "url": "https://github.com/paperclipai/paperclip"
+  },
+  {
+   "repositorio": "nexu-io/open-design",
+   "descricao": "The 1st Collaborative AI Design Agent Workspace. Local-first and open source. Create motion, prototypes, websites, apps, dashboards, presentations, images, and videos with your team and AI agents. Sha",
+   "estrelas": 104075,
+   "url": "https://github.com/nexu-io/open-design"
+  },
+  {
+   "repositorio": "Leonxlnx/taste-skill",
+   "descricao": "Agent skills that give coding agents taste: art direction, reference images and a browser check instead of generic AI pages",
+   "estrelas": 102757,
+   "url": "https://github.com/Leonxlnx/taste-skill"
+  },
+  {
+   "repositorio": "tt-a1i/archify",
+   "descricao": "Turn any idea, plan, or codebase into a beautiful interactive diagram. An agent skill for Claude Code, Codex, and more.",
+   "estrelas": 89567,
+   "url": "https://github.com/tt-a1i/archify"
+  },
+  {
+   "repositorio": "ComposioHQ/awesome-claude-skills",
+   "descricao": "A curated list of awesome Claude Skills, resources, and tools for customizing Claude AI workflows",
+   "estrelas": 77974,
+   "url": "https://github.com/ComposioHQ/awesome-claude-skills"
+  },
+  {
+   "repositorio": "career-ops-hq/career-ops",
+   "descricao": "Open-source AI job search agent and job finder: scan job boards, score each job 1-5 against your CV before you apply, tailor an ATS-friendly resume and cover letter, get interview prep and a job appli",
+   "estrelas": 77453,
+   "url": "https://github.com/career-ops-hq/career-ops"
+  },
+  {
+   "repositorio": "cathrynlavery/diagram-design",
+   "descricao": "Editorial diagram design for Claude Code, Codex, GitHub Copilot, Cursor, Factory Droid, Qoder, and Pi. 45 diagram types. Self-contained HTML + SVG. No shadows. No Mermaid slop.",
+   "estrelas": 61236,
+   "url": "https://github.com/cathrynlavery/diagram-design"
+  },
+  {
+   "repositorio": "blader/humanizer",
+   "descricao": "Agent skill that removes signs of AI-generated writing from text",
+   "estrelas": 60846,
+   "url": "https://github.com/blader/humanizer"
+  },
+  {
+   "repositorio": "coreyhaines31/marketingskills",
+   "descricao": "Marketing skills for Claude Code and AI agents. CRO, copywriting, SEO, analytics, and growth engineering.",
+   "estrelas": 56611,
+   "url": "https://github.com/coreyhaines31/marketingskills"
+  },
+  {
+   "repositorio": "hesreallyhim/awesome-claude-code",
+   "descricao": "A hand-picked collection of the finest of resources for the most awesome of agents, Claude Code, the undisputed champion of coding companions, from the unstoppable team at Anthropic PBC (no affiliatio",
+   "estrelas": 56581,
+   "url": "https://github.com/hesreallyhim/awesome-claude-code"
+  },
+  {
+   "repositorio": "K-Dense-AI/scientific-agent-skills",
+   "descricao": "Turn any AI agent into an AI Scientist. The #1 Agent Skills library for science, used by 250,000+ scientists worldwide. 177 ready-to-use validated skills plus 100+ scientific databases covering biolog",
+   "estrelas": 54704,
+   "url": "https://github.com/K-Dense-AI/scientific-agent-skills"
+  },
+  {
+   "repositorio": "VoltAgent/awesome-openclaw-skills",
+   "descricao": "The awesome collection of OpenClaw skills. 5,400+ skills filtered and categorized from the official OpenClaw Skills Registry.🦞",
+   "estrelas": 53354,
+   "url": "https://github.com/VoltAgent/awesome-openclaw-skills"
+  },
+  {
+   "repositorio": "CherryHQ/cherry-studio",
+   "descricao": "AI productivity studio with smart chat, autonomous agents, and 300+ assistants. Unified access to frontier LLMs",
+   "estrelas": 52995,
+   "url": "https://github.com/CherryHQ/cherry-studio"
+  },
+  {
+   "repositorio": "sickn33/agentic-awesome-skills",
+   "descricao": "AAS Core is the local, agent-first control plane for complete catalog discovery, agent-owned selection, stack validation, and planning, backed by 2,750+ agentic skills. Includes CLI, local MCP, catalo",
+   "estrelas": 48518,
+   "url": "https://github.com/sickn33/agentic-awesome-skills"
+  },
+  {
+   "repositorio": "alibaba/open-code-review",
+   "descricao": "Secure, fast, efficient, battle-tested at Alibaba's scale. Hybrid architecture code review tool: deterministic pipelines + LLM Agent, precise line-level comments, built-in multi-language ruleset (NPE,",
+   "estrelas": 48326,
+   "url": "https://github.com/alibaba/open-code-review"
+  },
+  {
+   "repositorio": "reactive-resume/reactive-resume",
+   "descricao": "A one-of-a-kind resume builder that keeps your privacy in mind. Completely secure, customizable, portable, open-source and free forever. Try it out today!",
+   "estrelas": 44887,
+   "url": "https://github.com/reactive-resume/reactive-resume"
+  },
+  {
+   "repositorio": "wshobson/agents",
+   "descricao": "Multi-harness agentic plugin marketplace for Claude Code, Codex, Cursor, OpenCode, GitHub Copilot, Google Antigravity, and Pi",
+   "estrelas": 41744,
+   "url": "https://github.com/wshobson/agents"
+  },
+  {
+   "repositorio": "github/awesome-copilot",
+   "descricao": "Community-contributed instructions, agents, skills, and configurations to help you make the most of GitHub Copilot.",
+   "estrelas": 40431,
+   "url": "https://github.com/github/awesome-copilot"
+  },
+  {
+   "repositorio": "VoltAgent/awesome-agent-skills",
+   "descricao": "A curated collection of 1000+ agent skills from official dev teams and the community, compatible with Claude Code, Codex, Gemini CLI, Cursor, and more.",
+   "estrelas": 36382,
+   "url": "https://github.com/VoltAgent/awesome-agent-skills"
+  },
+  {
+   "repositorio": "virgiliojr94/book-to-skill",
+   "descricao": "Turn any technical book PDF into a Claude Code skill — ready to study, reference, and use while you work.",
+   "estrelas": 36149,
+   "url": "https://github.com/virgiliojr94/book-to-skill"
+  }
+ ]
+}

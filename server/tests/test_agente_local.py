@@ -1,4 +1,4 @@
-"""Testes do agente local (0.52.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.53.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "254 skills" in texto
+    assert "260 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.52.0)
+# ------------------------------------------------- memória do agente (0.53.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 254 skills, uma por uma
+# ------------------------------------- cobertura: as 260 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 254 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 260 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.52.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.53.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.52.0)
+# ------------------------------------------------------- Google Drive (0.53.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1722,7 +1722,7 @@ def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
     assert base["resposta"].count("sim, pode") == 1
 
 
-# --------------------------------------------- mouse e teclado (0.52.0)
+# --------------------------------------------- mouse e teclado (0.53.0)
 
 SKILL_MESA_CLICAR = {
     "id": "mesa.clicar",
@@ -1836,7 +1836,7 @@ def test_pesquisa_sem_rede_nao_pede_token(tmp_path: Path) -> None:
     assert texto.count("JARVIS_HOST_REDE") == 1
 
 
-# ------------------------------------------ habilidades de fora (0.52.0)
+# ------------------------------------------ habilidades de fora (0.53.0)
 
 
 def test_importar_habilidade_do_link_pede_confirmacao(tmp_path: Path) -> None:
@@ -1909,7 +1909,7 @@ def test_formatar_guia_com_tarefa() -> None:
     assert "roteiro em texto" in texto
 
 
-# ----------------------------------------------- correio e lote (0.52.0)
+# ----------------------------------------------- correio e lote (0.53.0)
 
 
 def test_pedido_de_triagem_vai_para_o_correio(tmp_path: Path) -> None:
@@ -2003,7 +2003,7 @@ def test_escrever_email_nao_vira_digitacao() -> None:
     assert _pedido_direto_de_mesa("escreve oi")["skill_id"] == "mesa.digitar"
 
 
-# ------------------------------------------ catálogo e busca do Gmail (0.52.0)
+# ------------------------------------------ catálogo e busca do Gmail (0.53.0)
 
 
 def test_pedido_para_carregar_o_catalogo() -> None:
@@ -2107,3 +2107,117 @@ def test_formatar_busca_do_gmail() -> None:
     assert "Faturas e boletos" in texto
     assert "mail.google.com" in texto
     assert "já logado" in texto
+
+
+# --------------------------------------------- livros e adaptação (0.53.0)
+
+
+def test_pedido_de_fontes_de_livros() -> None:
+    from server.agente_local import _pedido_direto_de_cultura
+
+    assert _pedido_direto_de_cultura("onde acho livros completos de graça")["skill_id"] == "cultura.fontes"
+    assert _pedido_direto_de_cultura("quais sites tem livros gratuitos")["skill_id"] == "cultura.fontes"
+
+
+def test_pedido_de_busca_e_download_de_livro() -> None:
+    from server.agente_local import _pedido_direto_de_cultura
+
+    busca = _pedido_direto_de_cultura("procura o livro Dom Casmurro")
+    assert busca["skill_id"] == "cultura.buscar"
+    assert busca["parametros"]["consulta"] == "Dom Casmurro"
+
+    baixar = _pedido_direto_de_cultura("baixa o livro 59863")
+    assert baixar["skill_id"] == "cultura.baixar"
+    assert baixar["parametros"]["livro"] == "59863"
+
+    por_nome = _pedido_direto_de_cultura("baixa o livro Dom Casmurro")
+    assert por_nome["skill_id"] == "cultura.buscar"
+
+
+def test_pedido_de_persona_tira_a_palavra_livro() -> None:
+    from server.agente_local import _pedido_direto_de_cultura
+
+    pedido = _pedido_direto_de_cultura("faz uma persona do livro Dom Casmurro")
+    assert pedido["skill_id"] == "cultura.persona"
+    assert pedido["parametros"]["livro"] == "Dom Casmurro"
+
+
+def test_pedido_de_adaptar_habilidade() -> None:
+    from server.agente_local import _pedido_direto_de_cultura
+
+    pedido = _pedido_direto_de_cultura("adapta a habilidade frontend-design para mim")
+    assert pedido["skill_id"] == "habilidades.adaptar"
+    assert pedido["parametros"]["habilidade"] == "frontend-design"
+
+
+def test_pedido_do_topico_do_github() -> None:
+    from server.agente_local import _pedido_direto_de_catalogo
+
+    pedido = _pedido_direto_de_catalogo("pega as skills do tópico agent-skills do github")
+    assert pedido["skill_id"] == "catalogo.topico"
+    assert pedido["parametros"]["topico"] == "agent-skills"
+    assert pedido["confirma"] is True
+
+
+def test_formatar_fontes_de_livro() -> None:
+    texto = formatar_resultado(
+        {
+            "total": 1,
+            "fontes": [
+                {
+                    "nome": "Project Gutenberg",
+                    "url": "https://www.gutenberg.org",
+                    "o_que_tem": "79 mil livros",
+                    "licenca": "domínio público",
+                    "precisa": "nada",
+                }
+            ],
+            "recomendacao": "Comece pelo Gutenberg.",
+        }
+    )
+    assert "Project Gutenberg" in texto
+    assert "domínio público" in texto
+
+
+def test_formatar_busca_de_livro() -> None:
+    texto = formatar_resultado(
+        {
+            "fonte": "gutenberg",
+            "consulta": "machado",
+            "total": 1,
+            "livros": [{"id": 59863, "titulo": "Dom Casmurro", "autores": ["Machado de Assis"], "texto": "https://x/59863.txt"}],
+            "dica": "Baixe com cultura.baixar.",
+        }
+    )
+    assert "[59863] Dom Casmurro — Machado de Assis" in texto
+    assert "Baixe com cultura.baixar" in texto
+
+
+def test_formatar_persona() -> None:
+    texto = formatar_resultado(
+        {
+            "nome": "Dom Casmurro",
+            "tom": "equilibrado",
+            "palavras": 1000,
+            "regras": ["Frase média de 12 palavras."],
+            "limites": ["Isto descreve estilo medido, não o autor."],
+        }
+    )
+    assert "estilo medido" in texto
+    assert "Frase média" in texto
+
+
+def test_formatar_catalogo_do_topico() -> None:
+    texto = formatar_resultado(
+        {
+            "topico": "agent-skills",
+            "origem": "https://github.com/topics/agent-skills",
+            "repos_lidos": 12,
+            "adicionadas": 40,
+            "total": 140,
+            "por_categoria": {"dev-programming": 30},
+            "sem_skill": ["algum/repo"],
+        }
+    )
+    assert "tópico “agent-skills”" in texto
+    assert "total agora: 140" in texto

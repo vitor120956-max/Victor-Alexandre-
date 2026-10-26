@@ -1,4 +1,4 @@
-"""Testes do `mover-dados.py --drive` (0.52.0): só livros e repos vão para o Drive."""
+"""Testes do `mover-dados.py --drive` (0.53.0): só livros e repos vão para o Drive."""
 from __future__ import annotations
 
 import importlib.util

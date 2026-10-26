@@ -28,6 +28,7 @@ from typing import Any, Callable
 from . import dados, github, habilidades
 
 ARQUIVO = "catalogo.json"
+SEMENTES = Path(__file__).with_name("agent_skills_topico.json")
 MAX_LINHAS = 2_000
 MAX_IMPORTAR = 10
 Baixar = Callable[[str], str]
@@ -110,30 +111,57 @@ def interpretar_csv(texto: str) -> list[dict[str, Any]]:
     return itens
 
 
-def carregar(origem: Path | str, raiz: Path | None = None) -> dict[str, Any]:
-    """Lê a planilha, normaliza e guarda — devolve o resumo do que entrou."""
-    itens = interpretar_csv(_ler_texto(origem))
+def _chave(item: dict[str, Any]) -> tuple[str, str]:
+    repo = _dono_repo(str(item.get("repo_url") or "")).lower()
+    return (repo or str(item.get("url") or "").strip().lower(), str(item.get("skill") or "").lower())
+
+
+def _sem_repetir(itens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mesma skill no mesmo repositório aparece uma vez só; a primeira vence."""
+    vistos: set[tuple[str, str]] = set()
+    saida: list[dict[str, Any]] = []
+    for item in itens:
+        chave = _chave(item)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        saida.append(item)
+    return saida
+
+
+def _contar(itens: list[dict[str, Any]], campo: str, vazio: str = "sem categoria") -> dict[str, int]:
+    contagem: dict[str, int] = {}
+    for item in itens:
+        nome = str(item.get(campo) or vazio)
+        contagem[nome] = contagem.get(nome, 0) + 1
+    return dict(sorted(contagem.items(), key=lambda par: -par[1])[:15])
+
+
+def _gravar(raiz: Path | None, itens: list[dict[str, Any]], *, campo: str = "carregado_em") -> Path:
     pasta = Path(raiz) if raiz else dados.raiz()
     pasta.mkdir(parents=True, exist_ok=True)
-    (pasta / ARQUIVO).write_text(
+    destino = pasta / ARQUIVO
+    destino.write_text(
         json.dumps(
-            {"carregado_em": datetime.now(timezone.utc).isoformat(), "total": len(itens), "itens": itens},
+            {campo: datetime.now(timezone.utc).isoformat(), "total": len(itens), "itens": itens},
             ensure_ascii=False,
             indent=2,
         )
         + "\n",
         encoding="utf-8",
     )
-    por_categoria: dict[str, int] = {}
-    por_fornecedor: dict[str, int] = {}
-    for item in itens:
-        por_categoria[item["category"] or "sem categoria"] = por_categoria.get(item["category"] or "sem categoria", 0) + 1
-        por_fornecedor[item["vendor"] or "sem fornecedor"] = por_fornecedor.get(item["vendor"] or "sem fornecedor", 0) + 1
+    return destino
+
+
+def carregar(origem: Path | str, raiz: Path | None = None) -> dict[str, Any]:
+    """Lê a planilha, normaliza e guarda — devolve o resumo do que entrou."""
+    itens = interpretar_csv(_ler_texto(origem))
+    destino = _gravar(raiz, itens)
     return {
         "total": len(itens),
-        "arquivo": str(pasta / ARQUIVO),
-        "por_categoria": dict(sorted(por_categoria.items(), key=lambda par: -par[1])[:15]),
-        "por_fornecedor": dict(sorted(por_fornecedor.items(), key=lambda par: -par[1])[:15]),
+        "arquivo": str(destino),
+        "por_categoria": _contar(itens, "category"),
+        "por_fornecedor": _contar(itens, "vendor", "sem fornecedor"),
         "primeiras": itens[:5],
     }
 
@@ -297,4 +325,139 @@ def importar(
         "total_no_catalogo": escolhidos["total"],
         "restantes": max(0, escolhidos["total"] - len(escolhidos["itens"])),
         "limite_por_chamada": MAX_IMPORTAR,
+    }
+
+
+# ----------------------------------------------------------------- o tópico
+
+TOPICO_PADRAO = "agent-skills"
+MAX_REPOS_TOPICO = 15
+
+_PALAVRAS_CATEGORIA = (
+    ("design-media", ("design", "image", "video", "brand", "art", "visual", "ui", "ux", "frontend")),
+    ("dev-programming", ("code", "coding", "developer", "engineering", "test", "debug", "refactor", "api", "git")),
+    ("ai-agent", ("agent", "llm", "prompt", "ai", "skill")),
+    ("business", ("market", "sales", "seo", "product", "pm", "growth", "finance", "business")),
+    ("office-knowledge", ("doc", "slide", "sheet", "excel", "word", "notion", "office", "pdf", "writing")),
+    ("science", ("science", "research", "data", "paper", "statistic")),
+    ("it-ops", ("ops", "security", "cloud", "deploy", "infra", "docker", "k8s")),
+)
+
+
+def _categoria_do_repo(descricao: str) -> str:
+    """Palpite honesto de categoria a partir da descrição do repositório."""
+    baixo = (descricao or "").lower()
+    for categoria, palavras in _PALAVRAS_CATEGORIA:
+        if any(palavra in baixo for palavra in palavras):
+            return categoria
+    return "outros"
+
+
+def _sementes(topico: str) -> list[dict[str, Any]]:
+    """Lista de repositórios guardada na última leitura (funciona sem rede)."""
+    try:
+        bruto = json.loads(SEMENTES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    itens = bruto.get("repositorios") if isinstance(bruto, dict) else bruto
+    return [item for item in (itens or []) if isinstance(item, dict) and item.get("repositorio")]
+
+
+def topico(
+    nome: str = TOPICO_PADRAO,
+    *,
+    repos: int = 12,
+    raiz: Path | None = None,
+    mesclar: bool = True,
+    consultar: Callable[..., list[dict[str, Any]]] | None = None,
+    arvore: Callable[..., list[str]] | None = None,
+) -> dict[str, Any]:
+    """Monta o catálogo a partir de um tópico do GitHub (ex.: `agent-skills`).
+
+    Um pedido de busca (lista de repositórios por estrelas) + **um** pedido de
+    árvore por repositório. Com 12 repositórios isso são 13 pedidos dos 60 por
+    hora que o GitHub público permite — por isso o teto.
+    """
+    tema = (nome or TOPICO_PADRAO).strip().lstrip("#") or TOPICO_PADRAO
+    quantos = max(1, min(int(repos), MAX_REPOS_TOPICO))
+    buscar_repos = consultar or github.buscar
+    listar_arvore = arvore or github.arvore
+    aviso = ""
+    try:
+        achados = buscar_repos(f"topic:{tema}", limite=quantos)
+    except github.GithubError as exc:
+        achados = _sementes(tema)[:quantos]
+        aviso = f"O GitHub não respondeu ({exc}). Usei a lista guardada em 26/10/2026."
+        if not achados:
+            raise CatalogoError(aviso) from exc
+
+    linhas: list[dict[str, Any]] = []
+    sem_skill: list[str] = []
+    falhas: list[dict[str, str]] = []
+    for achado in achados:
+        repo = str(achado.get("repositorio") or "").strip()
+        if "/" not in repo:
+            continue
+        dono = repo.split("/")[0]
+        descricao = str(achado.get("descricao") or "")[:200]
+        try:
+            caminhos = [
+                caminho
+                for caminho in listar_arvore(repo, sufixo="SKILL.md", limite=200)
+                if str(caminho).lower().endswith("skill.md")
+            ]
+        except github.GithubError as exc:
+            falhas.append({"repo": repo, "erro": str(exc)[:160]})
+            continue
+        if not caminhos:
+            sem_skill.append(repo)
+            continue
+        categoria = _categoria_do_repo(descricao)
+        for caminho in caminhos:
+            pasta = caminho.rsplit("/", 1)[0] if "/" in caminho else ""
+            skill = pasta.rsplit("/", 1)[-1] if pasta else repo.split("/")[-1]
+            linhas.append(
+                {
+                    "rank": 0,
+                    "skill": skill.lower(),
+                    "vendor": dono,
+                    "repo_url": f"https://github.com/{repo}",
+                    "url": f"https://github.com/{repo}/blob/HEAD/{caminho}",
+                    "install": "",
+                    "category": categoria,
+                    "description": descricao or caminho,
+                    "plataforma": f"github:topic:{tema}",
+                }
+            )
+
+    if not linhas:
+        raise CatalogoError(
+            f"Nenhuma skill encontrada no tópico “{tema}”. Tente outro tópico ou menos repositórios."
+        )
+    for indice, linha in enumerate(linhas, start=1):
+        linha["rank"] = indice
+
+    existentes: list[dict[str, Any]] = []
+    if mesclar:
+        try:
+            existentes = ler(raiz)
+        except CatalogoError:
+            existentes = []
+    todos = _sem_repetir(existentes + linhas)
+    destino = _gravar(raiz, todos, campo="atualizado_em")
+    return {
+        "topico": tema,
+        "origem": f"https://github.com/topics/{tema}",
+        "repos_lidos": len(achados),
+        "repos_com_skill": len(achados) - len(sem_skill) - len(falhas),
+        "adicionadas": len(linhas),
+        "total": len(todos),
+        "por_categoria": _contar(todos, "category"),
+        "por_fornecedor": _contar(todos, "vendor"),
+        "sem_skill": sem_skill[:10],
+        "falhas": falhas[:10],
+        "mesclado": mesclar,
+        "aviso": aviso,
+        "arquivo": str(destino),
+        "limite_por_chamada": MAX_REPOS_TOPICO,
     }

@@ -1,4 +1,4 @@
-"""Testes de `server/pesquisa.py` (0.52.0) — busca, leitura e resposta com fonte.
+"""Testes de `server/pesquisa.py` (0.53.0) — busca, leitura e resposta com fonte.
 
 A rede não é usada aqui: `buscar` e `ler` são injetados, e o provedor é um
 dublê. Isso permite cobrir o fluxo inteiro sem depender do DuckDuckGo.
@@ -209,7 +209,7 @@ def test_rota_recusa_sem_rede_ligada(tmp_path, monkeypatch):
 
 
 def test_rota_busca_nao_exige_token(cliente, monkeypatch):
-    """Pesquisar é leitura: token errado não bloqueia mais (0.52.0)."""
+    """Pesquisar é leitura: token errado não bloqueia mais (0.53.0)."""
     from server import busca_web
 
     monkeypatch.setattr(

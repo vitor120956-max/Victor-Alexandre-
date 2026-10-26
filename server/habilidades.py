@@ -496,3 +496,98 @@ def guia(ref: str, *, raiz: Path | None = None, limite: int = LIMITE_GUIA) -> di
         "texto": texto[:limite],
         "cortado": len(texto) > limite,
     }
+
+
+# ------------------------------------------------------------- adaptar
+
+_RE_PASSO_NUMERADO = re.compile(r"^\s{0,4}(\d{1,2})[.)]\s+(.+)$")
+_RE_PASSO_MARCADO = re.compile(r"^\s{0,4}[-*+]\s+(.+)$")
+_RE_SECAO = re.compile(r"^\s{0,3}#{1,4}\s+(.*)$")
+_SECOES_DE_PASSO = (
+    "como usar", "como fazer", "how to", "how to use", "passos", "steps", "workflow",
+    "process", "processo", "instructions", "instruções", "uso", "usage", "quando usar",
+    "when to use", "checklist", "procedimento",
+)
+
+
+def passos_de(texto: str, limite: int = 12) -> list[str]:
+    """Passos numerados/marcados do texto — prioriza as seções de “como usar”."""
+    linhas = (texto or "").replace("\r\n", "\n").split("\n")
+    secoes: list[tuple[str, list[str]]] = [("", [])]
+    for linha in linhas:
+        achado = _RE_SECAO.match(linha)
+        if achado:
+            secoes.append((achado.group(1).strip(), []))
+            continue
+        secoes[-1][1].append(linha)
+
+    def colher(bloco: list[str]) -> list[str]:
+        saida: list[str] = []
+        for linha in bloco:
+            achado = _RE_PASSO_NUMERADO.match(linha) or _RE_PASSO_MARCADO.match(linha)
+            if not achado:
+                continue
+            passo = re.sub(r"[*_`]", "", achado.group(achado.lastindex or 1)).strip()
+            if len(passo) >= 8 and passo not in saida:
+                saida.append(passo[:220])
+        return saida
+
+    escolhidas = [
+        colher(bloco)
+        for titulo, bloco in secoes
+        if any(marca in titulo.lower() for marca in _SECOES_DE_PASSO)
+    ]
+    passos = [passo for bloco in escolhidas for passo in bloco]
+    if not passos:
+        passos = colher(linhas)
+    if not passos:
+        passos = [
+            titulo[:220]
+            for titulo, _ in secoes
+            if titulo
+            and len(titulo) >= 8
+            and not any(m in titulo.lower() for m in ("introdu", "sobre", "índice", "index"))
+        ]
+    return passos[:limite]
+
+
+def adaptar(
+    ref: str,
+    *,
+    raiz: Path | None = None,
+    pasta_agente: Path | None = None,
+    nome: str = "",
+) -> dict[str, Any]:
+    """Transforma a habilidade importada em skill local de procedimento."""
+    from .agente_local import criar_skill_de_passos
+
+    achado = guia(ref, raiz=raiz, limite=MAX_TEXTO)
+    passos = list(achado.get("passos") or []) or passos_de(achado.get("texto") or "")
+    if len(passos) < 2:
+        raise HabilidadeError(
+            "Essa habilidade não tem passo a passo aproveitável — dá para ler, mas não para virar rotina."
+        )
+    # `raiz` da agente local é a raiz de dados: `criar_skill_de_passos` já
+    # acrescenta `agente-local/` por dentro.
+    destino = Path(pasta_agente) if pasta_agente else dados.raiz()
+    skill, criada = criar_skill_de_passos(
+        destino,
+        nome or achado.get("nome") or achado["slug"],
+        passos,
+        descricao=str(achado.get("descricao") or "")[:300],
+        fonte=str(achado.get("url") or ""),
+    )
+    return {
+        "slug": achado["slug"],
+        "nome": skill.nome,
+        "skill_local": skill.id,
+        "passos": len(passos),
+        "criada": criada,
+        "resposta": (
+            f"Adaptei “{achado.get('nome')}” para uma skill daqui: `{skill.id}`"
+            + (" (nova)." if criada else " (já existia, mantive).")
+            + f"\n\nAgora ela responde no chat pelo nome: “{skill.nome}”. "
+            + f"São {len(passos)} passos, copiados de {achado.get('url') or 'a fonte original'}. "
+            + "Continuam sendo passos para seguir — não é código executando sozinho."
+        ),
+    }

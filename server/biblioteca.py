@@ -397,6 +397,32 @@ def obter(slug: str) -> dict[str, Any]:
     raise BibliotecaError("Fonte não encontrada na biblioteca.")
 
 
+def achar(ref: str) -> dict[str, Any] | None:
+    """Fonte pelo slug, pelo título ou por um pedaço do título."""
+    alvo = (ref or "").strip()
+    if not alvo:
+        return None
+    itens = listar()
+    normalizado = normalizar(alvo)
+    for fonte in itens:
+        if fonte.get("slug") == alvo:
+            return fonte
+    for fonte in itens:
+        if normalizar(str(fonte.get("slug") or "")) == normalizado:
+            return fonte
+    for fonte in itens:
+        if normalizado and normalizado in normalizar(str(fonte.get("titulo") or "")):
+            return fonte
+    return None
+
+
+def texto_completo(slug: str, limite: int = 600_000) -> str:
+    """Todo o texto guardado de uma fonte, seção por seção."""
+    partes = _carregar_partes(slug)
+    texto = "\n\n".join(str(parte.get("texto") or "") for parte in partes)
+    return texto[:limite]
+
+
 def _arquivo_da_fonte(slug: str) -> Path:
     return _pasta() / "fontes" / f"{slug}.json"
 

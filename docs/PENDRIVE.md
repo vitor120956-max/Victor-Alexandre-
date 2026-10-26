@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.52.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.53.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -635,7 +635,7 @@ npm run build:embutido
 
 - **Não recarrega ao editar.** Mudou código React? Precisa de `npm run build:embutido` — que exige Node.
 - **Sem testes web.** `npx vitest` continua exigindo `npm install`.
-- **Mesmas 254 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
+- **Mesmas 260 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
 
 ---
 
@@ -691,7 +691,7 @@ Não existe chave grátis da OpenAI — site que oferece isso está revendendo c
 
 O passo a passo de cada um, com o que digitar em cada campo e o aviso de privacidade (o plano gratuito do Google usa suas conversas para treinar; o do Groq não), está em [`CONFIGURAR-IA.md`](CONFIGURAR-IA.md) §0.
 
-**Chave não é obrigatória.** Sem chave nenhuma, as 254 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
+**Chave não é obrigatória.** Sem chave nenhuma, as 260 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
 
 Com a chave em mãos, o teste rápido é:
 
@@ -727,7 +727,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.52.0"` e `"skills": 254`.
+Esperado: `"version": "0.53.0"` e `"skills": 260`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação.
 
@@ -847,7 +847,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.52.0` e `254`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.53.0` e `260`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

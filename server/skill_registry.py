@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import catalogo, correio, drive_setup, github, habilidades, mesa
+from . import catalogo, correio, cultura, drive_setup, github, habilidades, mesa
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2041,6 +2041,39 @@ class HabilidadesImportarVariasInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     links: str = Field(min_length=10, max_length=8_000, title="Links", json_schema_extra={"format": "textarea", "description": "Um link por linha (ou separados por espaço). Até 20 por chamada."})
     limite: int = Field(default=10, ge=1, le=20, title="Quantos importar")
+
+
+class CatalogoTopicoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topico: str = Field(default="agent-skills", min_length=2, max_length=60, title="Tópico do GitHub", json_schema_extra={"description": "Como `agent-skills`. Vira `github.com/topics/<tópico>`."})
+    repos: int = Field(default=12, ge=1, le=15, title="Repositórios", json_schema_extra={"description": "Quantos repositórios ler. Cada um gasta um pedido dos 60 por hora do GitHub."})
+    mesclar: bool = Field(default=True, title="Somar ao catálogo atual", json_schema_extra={"description": "Desligue para substituir o índice pelo que veio do tópico."})
+
+
+class HabilidadeAdaptarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    habilidade: str = Field(min_length=2, max_length=120, title="Habilidade", json_schema_extra={"description": "Nome ou slug do que já foi importado."})
+
+
+class CulturaBuscarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consulta: str = Field(min_length=2, max_length=160, title="Título ou autor")
+    fonte: Literal["gutenberg", "openlibrary"] = Field(default="gutenberg", title="Fonte")
+    idioma: str = Field(default="", max_length=8, title="Idioma", json_schema_extra={"description": "Código de duas letras: `pt`, `en`, `fr`. Vazio busca em todos."})
+    limite: int = Field(default=5, ge=1, le=10, title="Quantos livros")
+
+
+class CulturaBaixarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    livro: str = Field(min_length=1, max_length=300, title="Livro", json_schema_extra={"description": "O número do Gutenberg (ex.: 59863) ou o endereço da obra."})
+    titulo: str = Field(default="", max_length=120, title="Título na biblioteca")
+
+
+class CulturaPersonaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    livro: str = Field(min_length=2, max_length=120, title="Livro", json_schema_extra={"description": "Título ou slug do que já está na biblioteca."})
+    nome: str = Field(default="", max_length=80, title="Nome da persona")
+    salvar: bool = Field(default=True, title="Guardar o cartão")
 
 
 class CatalogoCarregarInput(BaseModel):
@@ -3825,6 +3858,44 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             f"Não achei a planilha “{bruto}”. Deixe o CSV em {raiz_storage / nome} (ou em Downloads)."
         )
 
+    def catalogo_topico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CatalogoTopicoInput)
+        try:
+            return catalogo.topico(data.topico, repos=data.repos, mesclar=data.mesclar)
+        except catalogo.CatalogoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def habilidades_adaptar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, HabilidadeAdaptarInput)
+        try:
+            return habilidades.adaptar(data.habilidade, pasta_agente=dados_locais.raiz())
+        except habilidades.HabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def cultura_fontes_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return cultura.fontes()
+
+    def cultura_buscar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CulturaBuscarInput)
+        try:
+            return cultura.buscar(data.consulta, fonte=data.fonte, idioma=data.idioma, limite=data.limite)
+        except cultura.CulturaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def cultura_baixar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CulturaBaixarInput)
+        try:
+            return cultura.baixar(data.livro, titulo=data.titulo)
+        except cultura.CulturaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def cultura_persona_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CulturaPersonaInput)
+        try:
+            return cultura.persona(data.livro, nome=data.nome, salvar=data.salvar)
+        except cultura.CulturaError as exc:
+            raise SkillError(str(exc)) from exc
+
     def catalogo_carregar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CatalogoCarregarInput)
         try:
@@ -4732,6 +4803,12 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
         SkillDefinition("habilidades.importar-varias", "Importar várias habilidades", "Recebe uma lista de links (uma por linha) e importa até 20 de uma vez; um link que falha não derruba os outros e volta com o motivo. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarVariasInput, habilidades_importar_varias_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("catalogo.topico", "Catálogo de um tópico do GitHub", "Lê os repositórios de um tópico do GitHub (ex.: `agent-skills`), encontra os `SKILL.md` de cada um e soma tudo ao catálogo local. Uma leva de 12 repositórios gasta 13 dos 60 pedidos por hora do GitHub público.", "Catálogo", CatalogoTopicoInput, catalogo_topico_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("habilidades.adaptar", "Adaptar habilidade para uso próprio", "Transforma o guia importado em skill local de procedimento (`local.proc-…`), com passos numerados, que passa a responder no chat pelo nome. Continua sendo uma lista de passos, não código executando sozinho.", "Habilidades", HabilidadeAdaptarInput, habilidades_adaptar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("cultura.fontes", "Fontes de livros livres", "Mostra onde baixar livro completo e gratuito — Gutenberg, Standard Ebooks, Open Library, Wikisource, Domínio Público, LibriVox e DOAB — com o que cada um tem, a licença e o que precisa (quase sempre nada).", "Cultura", EmptyInput, cultura_fontes_handler, timeout_seconds=10),
+        SkillDefinition("cultura.buscar", "Buscar livro livre", "Procura livro por título ou autor no Project Gutenberg (via Gutendex) ou na Open Library, sem chave, e devolve o endereço do texto completo quando ele existe.", "Cultura", CulturaBuscarInput, cultura_buscar_handler, timeout_seconds=30),
+        SkillDefinition("cultura.baixar", "Baixar livro do Gutenberg", "Puxa o `.txt` de uma obra em domínio público, tira o cabeçalho legal do Gutenberg e guarda na biblioteca local — de onde `biblioteca.buscar` e `biblioteca.resumir` já leem.", "Cultura", CulturaBaixarInput, cultura_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=120),
+        SkillDefinition("cultura.persona", "Persona de escrita a partir de um livro", "Mede o estilo de um livro da biblioteca — tamanho de frase, diálogo, pontuação, vocabulário — e monta um cartão de escrita com regras e limites. Não imita o autor nem inventa citação.", "Cultura", CulturaPersonaInput, cultura_persona_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=45),
         SkillDefinition("catalogo.carregar", "Carregar catálogo de skills", "Lê a planilha CSV de habilidades de terceiros (`skill`, `repo_url`, `vendor`, `category`), tira duplicata e guarda em `storage/catalogo.json` com resumo por categoria e fornecedor. Só grava o índice — não baixa habilidade nenhuma.", "Catálogo", CatalogoCarregarInput, catalogo_carregar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("catalogo.listar", "Listar catálogo", "Filtra o catálogo carregado por fornecedor, categoria, palavra ou faixa de rank. Só lê o índice local.", "Catálogo", CatalogoListarInput, catalogo_listar_handler, timeout_seconds=15),
         SkillDefinition("catalogo.importar", "Importar do catálogo", "Escolhe linhas do catálogo e traz o `SKILL.md` de cada uma, achando o caminho pela árvore do repositório. Até 10 por chamada (limite do GitHub sem token: 60 pedidos/hora); o que falhar volta com o motivo.", "Catálogo", CatalogoImportarInput, catalogo_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),

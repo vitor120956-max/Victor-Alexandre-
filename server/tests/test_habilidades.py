@@ -259,3 +259,65 @@ def test_importar_varias_conta_falhas_e_restantes(tmp_path: Path):
 def test_importar_varias_sem_link_recusa(tmp_path: Path):
     with pytest.raises(habilidades.HabilidadeError):
         habilidades.importar_varias("nenhum link aqui", raiz=tmp_path)
+
+
+# -------------------------------------------------- passos e adaptação (0.53.0)
+
+GUIA_MD = """---
+name: frontend-design
+description: Guia de direção de arte.
+---
+
+# Frontend Design
+
+## When to use
+Quando a tela precisa de ponto de vista.
+
+## How to use
+1. Escolha uma direção ousada e vá até o fim.
+2. Use uma escala tipográfica com contraste.
+3. Confira o contraste antes de escolher cor.
+
+## Limits
+É orientação, não código.
+"""
+
+
+def test_passos_de_le_secao_de_como_usar():
+    passos = habilidades.passos_de(GUIA_MD)
+    assert passos[0].startswith("Escolha uma direção")
+    assert len(passos) == 3
+
+
+def test_passos_de_cai_para_marcadores_soltos():
+    texto = "# Guia\n\n- Primeiro passo bem descrito.\n- Segundo passo também descrito.\n"
+    assert len(habilidades.passos_de(texto)) == 2
+
+
+def test_passos_de_usa_subtitulos_quando_nao_ha_lista():
+    texto = "# Guia\n\n## Preparar o ambiente\n\nTexto.\n\n## Rodar os testes\n\nTexto.\n"
+    assert habilidades.passos_de(texto) == ["Preparar o ambiente", "Rodar os testes"]
+
+
+def test_adaptar_vira_skill_local(tmp_path: Path):
+    store = tmp_path / "store"
+    store.mkdir()
+    habilidades.importar("https://github.com/a/b/blob/main/skills/frontend-design/SKILL.md", raiz=store, baixar=lambda url: GUIA_MD)
+    agente = tmp_path
+    ficha = habilidades.adaptar("frontend-design", raiz=store, pasta_agente=agente)
+    assert ficha["skill_local"] == "local.proc-frontend-design"
+    assert ficha["passos"] == 3
+    assert ficha["criada"] is True
+    assert (agente / "agente-local" / "skills.json").exists()
+
+    de_novo = habilidades.adaptar("frontend-design", raiz=store, pasta_agente=agente)
+    assert de_novo["criada"] is False
+
+
+def test_adaptar_recusa_guia_sem_passos(tmp_path: Path):
+    store = tmp_path / "store"
+    store.mkdir()
+    texto = "---\nname: prosa\n---\n\n" + ("Palavra solta em prosa sem lista alguma. " * 30)
+    habilidades.importar("https://github.com/a/b/blob/main/skills/prosa/SKILL.md", raiz=store, baixar=lambda url: texto)
+    with pytest.raises(habilidades.HabilidadeError):
+        habilidades.adaptar("prosa", raiz=store, pasta_agente=tmp_path)

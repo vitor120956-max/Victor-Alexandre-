@@ -161,3 +161,82 @@ def test_falha_de_linha_de_plataforma_traz_o_comando(monkeypatch, tmp_path: Path
     resultado = catalogo.importar(tmp_path, quantos=1, baixar=lambda url: "# X\n\nY\n")
     falha = resultado["falhas"][0]
     assert falha["install"] == "openclaw skills install @x/nano-banana-pro"
+
+
+# ------------------------------------------------- tópico do GitHub (0.53.0)
+
+REPOS = [
+    {"repositorio": "anthropics/skills", "descricao": "Public repository for Agent Skills", "estrelas": 10},
+    {"repositorio": "vazio/repo", "descricao": "design sem skill", "estrelas": 5},
+]
+ARVORES = {
+    "anthropics/skills": ["skills/frontend-design/SKILL.md", "README.md"],
+    "vazio/repo": ["README.md"],
+}
+
+
+def _topico(tmp_path: Path, **extra):
+    return catalogo.topico(
+        "agent-skills",
+        raiz=tmp_path,
+        repos=2,
+        consultar=lambda consulta, limite=0: REPOS,
+        arvore=lambda repo, **k: ARVORES.get(repo, []),
+        **extra,
+    )
+
+
+def test_topico_le_repos_e_acha_as_skills(tmp_path: Path):
+    resumo = _topico(tmp_path)
+    assert resumo["total"] == 1
+    assert resumo["repos_com_skill"] == 1
+    assert resumo["sem_skill"] == ["vazio/repo"]
+    assert resumo["por_categoria"] == {"ai-agent": 1}
+    linha = catalogo.ler(tmp_path)[0]
+    assert linha["skill"] == "frontend-design"
+    assert linha["vendor"] == "anthropics"
+    assert linha["url"].endswith("/skills/frontend-design/SKILL.md")
+
+
+def test_topico_soma_ao_catalogo_existente(tmp_path: Path):
+    planilha = tmp_path / "skills.csv"
+    planilha.write_text(
+        "rank,skill,repo_url,category\n9,tdd,https://github.com/mattpocock/skills,dev-programming\n",
+        encoding="utf-8",
+    )
+    catalogo.carregar(planilha, raiz=tmp_path)
+    resumo = _topico(tmp_path)
+    assert resumo["total"] == 2
+    assert [item["skill"] for item in catalogo.ler(tmp_path)] == ["tdd", "frontend-design"]
+
+
+def test_topico_nao_repete_na_segunda_leitura(tmp_path: Path):
+    _topico(tmp_path)
+    resumo = _topico(tmp_path)
+    assert resumo["total"] == 1
+    assert resumo["adicionadas"] == 1
+
+
+def test_topico_usa_a_lista_guardada_quando_o_github_falha(tmp_path: Path):
+    def falha(*_a, **_k):
+        raise catalogo.github.GithubError("limite de 60 por hora")
+
+    resumo = catalogo.topico(
+        "agent-skills",
+        raiz=tmp_path,
+        repos=3,
+        consultar=falha,
+        arvore=lambda repo, **k: [f"skills/{repo.split('/')[-1]}/SKILL.md"],
+    )
+    assert "lista guardada" in resumo["aviso"]
+    assert resumo["total"] >= 1
+
+
+def test_topico_sem_rede_e_sem_lista_recusa(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(catalogo, "_sementes", lambda tema: [])
+
+    def falha(*_a, **_k):
+        raise catalogo.github.GithubError("sem rede")
+
+    with pytest.raises(catalogo.CatalogoError):
+        catalogo.topico(raiz=tmp_path, consultar=falha, arvore=lambda *a, **k: [])
