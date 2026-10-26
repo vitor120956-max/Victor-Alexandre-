@@ -100,3 +100,20 @@ def test_area_vazia_so_aponta_a_variavel(mover, tmp_path: Path) -> None:
     assert codigo == 0
     texto = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "JARVIS_REPOS=" in texto
+
+
+def test_bat_do_drive_usa_crlf_e_chama_o_script() -> None:
+    bruto = (RAIZ / "usar-drive.bat").read_bytes()
+    assert b"\r\n" in bruto
+    assert bruto.count(b"\n") == bruto.count(b"\r\n"), "arquivo .bat com LF solto quebra no Windows"
+    texto = bruto.decode("utf-8")
+    assert "mover-dados.py --drive %*" in texto
+    assert '".venv\\Scripts\\python.exe"' in texto
+    assert "chcp 65001" in texto
+
+
+def test_docs_do_drive_existem_e_citam_as_variaveis() -> None:
+    texto = (RAIZ / "docs" / "GOOGLE-DRIVE.md").read_text(encoding="utf-8")
+    assert "JARVIS_BIBLIOTECA" in texto
+    assert "JARVIS_REPOS" in texto
+    assert "historico.json" in texto
