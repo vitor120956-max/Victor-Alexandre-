@@ -11,8 +11,8 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 225 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
-| 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 20 receitas e executa na hora | API Python ligada |
+| 1 | **Skill existente** | procura nas 227 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, lê a primeira página e devolve fontes + trecho | rede (`JARVIS_HOST_REDE=1`) e token de host |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
 
@@ -84,7 +84,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 225 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 227 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
@@ -114,13 +114,14 @@ deve ser baixado só porque você colou o link — isso exige o pedido explícit
 | Nada serve e a web está ligada | fontes numeradas + trecho lido, com aviso de que não criou skill |
 | Nada serve e a web está desligada | explica o motivo e sugere “ajuda” |
 
-## As 20 receitas
+## As 26 receitas
 
 | Texto | Números | Utilidades |
 |---|---|---|
 | contar palavras, caracteres, linhas | somar, média, maior e menor | ordenar, remover repetidos, contar repetições |
-| extrair links, e-mails, números | porcentagem | maiúsculas, minúsculas, slug, inverter |
-| converter unidades (km, kg, litros, °C) | diferença entre datas | hash SHA-256 |
+| extrair links, e-mails, números, telefones, datas | porcentagem, regra de três, juros simples | maiúsculas, minúsculas, slug, inverter |
+| converter unidades (km, kg, litros, °C) | diferença entre datas, somar dias a uma data | hash SHA-256, validar CPF |
+| | IMC (peso e altura) | |
 
 Cada receita é uma função pura. Skill criada aqui é um **registro** dessa receita
 com nome próprio — não é código novo.
@@ -128,15 +129,18 @@ com nome próprio — não é código novo.
 ## Os limites, ditos sem rodeio
 
 - **Não escreve código novo.** Para criar uma skill fora do catálogo de receitas
-  seria preciso um modelo. O agente diz isso e devolve o resultado da web.
+  seria preciso um modelo. O que ele faz no lugar: copia o **passo a passo** que
+  leu da página e guarda como skill de procedimento — texto para você seguir,
+  não código para rodar.
 - **A busca é por palavra, não por significado.** “planilha” encontra “xlsx”
   por sinônimo cadastrado; “aquela coisa de somar” não encontra nada.
 - **Termo fraco não executa.** A skill só roda se o pedido casar com o nome, o
   id ou a categoria — descrição sozinha só serve para sugerir.
 - **A web precisa de rede e token.** Sem eles, o degrau 3 é pulado e o agente
   avisa.
-- **Nada é gravado em disco além da lista de skills locais.** O texto lido da
-  web existe só durante a resposta.
+- **Os passos ficam pendentes até você decidir.** O texto lido da web é guardado
+  em `storage/agente-local/pendente.json` (um pedido por vez) para poder virar
+  skill; se você não pedir, ele é substituído no próximo pedido.
 
 ## Onde ficam os arquivos
 
@@ -158,8 +162,30 @@ com nome próprio — não é código novo.
 .venv/bin/python -m pytest server/tests/test_agente_local.py -q
 ```
 
-130 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
+144 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
 são funções injetadas.
+
+## Aprender com a página
+
+Quando nenhuma skill nem receita serve e a web responde, o agente **não joga o
+resultado fora**. Se o texto lido tem lista numerada, ele recorta os passos
+(`1. … 2. …`) e pergunta:
+
+```text
+A página traz um passo a passo:
+1. Baixe o arquivo do site oficial do emissor
+2. Abra o gerenciador de certificados do Windows
+3. Importe o arquivo e confirme a senha
+
+Se quiser que eu guarde isso como skill, diga: criar skill com esses passos
+```
+
+Diga a frase e nasce uma **skill local de procedimento** — `local.proc-<nome>`,
+com os passos e o link da fonte. Depois disso, pedir pelo nome devolve o passo a
+passo na hora, sem rede e sem modelo. O que ela **não** faz: executar os passos
+sozinha. Procedimento de fora é texto para você seguir, não código para rodar.
+
+---
 
 ## Confirmação de efeito
 

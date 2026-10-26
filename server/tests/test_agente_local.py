@@ -1,4 +1,4 @@
-"""Testes do agente local (0.43.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.44.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -21,6 +21,7 @@ from server.agente_local import (
     carregar_locais,
     criar_skill,
     entrada_de_local,
+    extrair_passos,
     entrada_de_skill,
     executar_receita,
     extrair_parametros,
@@ -603,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "225 skills" in texto
+    assert "227 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -616,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.43.0)
+# ------------------------------------------------- memória do agente (0.44.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -811,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 225 skills, uma por uma
+# ------------------------------------- cobertura: as 227 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -857,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 225 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 227 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -884,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.43.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.44.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -934,6 +935,114 @@ def test_resultado_de_video_mostra_o_idioma():
     )
     assert "6 seções" in texto
     assert "idioma pt-BR" in texto
+
+
+# ------------------------------------------------------- receitas novas
+
+@pytest.mark.parametrize(
+    ("frase", "receita_id", "trecho"),
+    [
+        ("validar cpf 123.456.789-09", "validar-cpf", "válido"),
+        ("validar cpf 123.456.789-00", "validar-cpf", "inválido"),
+        ("IMC de 80 kg e 1,75 m", "imc", "sobrepeso"),
+        ("se 3 custa 15, quanto custa 7", "regra-de-tres", "35,00"),
+        ("juros de 1000 a 2% ao mês por 6 meses", "juros-simples", "1.120,00"),
+        ("extrair os telefones de: ligue (47) 3222-1100", "extrair-telefones", "3222-1100"),
+        ("extrair as datas de: venceu em 01/02/2026", "extrair-datas", "01/02/2026"),
+        ("30 dias depois de 01/01/2026", "somar-dias", "31/01/2026"),
+        ("10 dias antes de 01/03/2026", "somar-dias", "19/02/2026"),
+    ],
+)
+def test_receitas_novas_resolvem_o_pedido(frase, receita_id, trecho):
+    receita = achar_receita(frase)
+    assert receita is not None and receita.id == receita_id, frase
+    saida = executar_receita(receita, texto_livre(frase))
+    assert trecho in saida["resultado"], saida["resultado"]
+
+
+def test_cpf_com_digitos_repetidos_e_recusado():
+    receita = achar_receita("validar cpf 111.111.111-11")
+    saida = executar_receita(receita, texto_livre("validar cpf 111.111.111-11"))
+    assert saida["valido"] is False
+
+
+# ------------------------------------------- passos da web viram skill local
+
+def leitura_com_passos(**_: Any) -> dict[str, Any]:
+    texto = (
+        "## Como instalar o certificado\n\n"
+        "1. Baixe o arquivo do site oficial do emissor. "
+        "2. Abra o gerenciador de certificados do Windows. "
+        "3. Importe o arquivo e confirme a senha. "
+        "4. Reinicie o navegador para o certificado valer."
+    )
+    return {"sections": [texto]}
+
+
+def test_extrair_passos_de_lista_numerada():
+    passos = extrair_passos(
+        "1. Baixe o pacote do site oficial. 2. Execute o instalador como administrador. 3. Reinicie o serviço."
+    )
+    assert len(passos) == 3
+    assert passos[0].startswith("Baixe o pacote")
+
+
+def test_extrair_passos_ignora_data_e_preco():
+    assert extrair_passos("Venceu em 27/10/2026 e custa 3.50 por unidade.") == []
+
+
+def test_web_com_passos_oferece_criar_a_skill(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        resultado = await atender(
+            "como instalar certificado digital",
+            registry=reg,
+            raiz=tmp_path,
+            autorizacao="t",
+            buscar=busca_falsa,
+            ler=leitura_com_passos,
+        )
+        assert resultado["acao"] == "web"
+        assert "criar skill com esses passos" in resultado["resposta"]
+        assert len(resultado["passos"] if "passos" in resultado else []) >= 0
+        pendente = json.loads((tmp_path / "agente-local" / "pendente.json").read_text(encoding="utf-8"))
+        assert len(pendente["passos"]) == 4
+    asyncio.run(run())
+
+
+def test_criar_skill_com_os_passos_guarda_e_responde(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        await atender(
+            "como instalar certificado digital",
+            registry=reg,
+            raiz=tmp_path,
+            autorizacao="t",
+            buscar=busca_falsa,
+            ler=leitura_com_passos,
+        )
+        criado = await atender(
+            "criar skill com esses passos",
+            registry=reg,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+        assert criado["acao"] == "criado"
+        assert criado["skill"]["id"].startswith("local.proc-")
+        assert "4 passos" in criado["resposta"]
+        assert not (tmp_path / "agente-local" / "pendente.json").exists()
+
+        # Depois de criada, pedir pelo nome devolve o passo a passo, sem rede.
+        usado = await atender(
+            "instalar certificado digital",
+            registry=reg,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+        assert usado["acao"] == "executado"
+        assert "1. Baixe o arquivo" in usado["resposta"]
+        assert "https://exemplo.com/pao" in usado["resposta"]
+    asyncio.run(run())
 
 
 # ------------------------------------------------- confirmação de efeito

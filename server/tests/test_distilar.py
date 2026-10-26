@@ -619,4 +619,4 @@ def test_api_persona_sem_chave_recusa(tmp_path):
 
 
 def test_api_registro_conta_209(client):
-    assert len(client.get("/api/skills").json()["skills"]) == 225
+    assert len(client.get("/api/skills").json()["skills"]) == 227

@@ -45,6 +45,8 @@ MAX_PARTES = 4_000
 TAMANHO_SECAO = 1_400
 TAMANHO_MINIMO = 180
 LIMITE_TRECHO = 1_200
+LIMITE_CONTEXTO = 2_600
+MAX_EXPORTAR = 2_000_000
 
 FORMATOS = {
     ".pdf": "livro",
@@ -563,6 +565,16 @@ def _bm25(consulta: list[str], documentos: list[dict[str, Any]], k1: float = 1.5
     return notas
 
 
+def _vizinhas(partes: list[dict[str, Any]], alvo: dict[str, Any]) -> dict[str, Any]:
+    """Título da seção anterior e da seguinte, para situar o trecho no livro."""
+    for indice, parte in enumerate(partes):
+        if parte.get("ordem") == alvo.get("ordem"):
+            antes = partes[indice - 1].get("titulo") if indice > 0 else None
+            depois = partes[indice + 1].get("titulo") if indice + 1 < len(partes) else None
+            return {"antes": antes, "depois": depois}
+    return {"antes": None, "depois": None}
+
+
 def buscar(consulta: str, limite: int = 5) -> list[dict[str, Any]]:
     """Seções mais parecidas com o pedido, com cobertura e referência."""
     termos = palavras(consulta)
@@ -571,6 +583,9 @@ def buscar(consulta: str, limite: int = 5) -> list[dict[str, Any]]:
     itens = _partes_com_fonte()
     if not itens:
         return []
+    por_fonte: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for fonte_, parte_ in itens:
+        por_fonte[str(fonte_.get("slug"))].append(parte_)
     documentos = [
         {"tokens": parte.get("tokens") or {}, "tokens_lista": list((parte.get("tokens") or {}).keys())}
         for _, parte in itens
@@ -598,6 +613,8 @@ def buscar(consulta: str, limite: int = 5) -> list[dict[str, Any]]:
                 "cobertura": round(cobertura, 3),
                 "termos": presentes[:8],
                 "trecho": _recorte(parte.get("texto") or "", presentes),
+                "contexto": _recorte(parte.get("texto") or "", presentes, limite=LIMITE_CONTEXTO),
+                "vizinhas": _vizinhas(por_fonte.get(str(fonte.get("slug")), []), parte),
             }
         )
     achados.sort(key=lambda item: (item["cobertura"], item["score"]), reverse=True)
@@ -791,6 +808,82 @@ def digest(slug: str) -> dict[str, Any]:
         "markdown": "\n".join(linhas),
         "termos": [{"termo": termo, "ocorrencias": quantos} for termo, quantos in termos],
         "secoes": len(partes),
+    }
+
+
+def _primeira_linha(texto: str, limite: int = 140) -> str:
+    for frase in frases(texto):
+        limpa = " ".join(frase.split())
+        if len(limpa) >= 20:
+            return limpa[:limite] + ("…" if len(limpa) > limite else "")
+    return " ".join(texto.split())[:limite]
+
+
+def sumario(slug: str, limite: int = 80) -> dict[str, Any]:
+    """Índice da fonte: cada seção com página, tamanho, começo e termos."""
+    fonte = obter(slug)
+    partes = _carregar_partes(slug)
+    if not partes:
+        raise BibliotecaError("Fonte sem seções gravadas.")
+    capitulos: list[dict[str, Any]] = []
+    for parte in partes[:limite]:
+        texto = (parte.get("texto") or "").strip()
+        capitulos.append(
+            {
+                "ordem": parte.get("ordem"),
+                "titulo": parte.get("titulo"),
+                "pagina": parte.get("pagina"),
+                "caracteres": len(texto),
+                "comeca_com": _primeira_linha(texto),
+                "termos": [termo for termo, _ in Counter(todas_as_palavras(texto)).most_common(5)],
+            }
+        )
+    paginas = [parte.get("pagina") for parte in partes if isinstance(parte.get("pagina"), int)]
+    return {
+        "slug": slug,
+        "titulo": fonte.get("titulo"),
+        "tipo": fonte.get("tipo"),
+        "secoes": len(partes),
+        "mostradas": len(capitulos),
+        "pagina_inicial": min(paginas) if paginas else None,
+        "pagina_final": max(paginas) if paginas else None,
+        "capitulos": capitulos,
+    }
+
+
+def exportar(slug: str, *, incluir_texto: bool = True) -> dict[str, Any]:
+    """Grava a fonte como `.md` (ficha + texto) em `storage/biblioteca/exportadas`."""
+    ficha = digest(slug)
+    fonte = obter(slug)
+    partes = _carregar_partes(slug)
+    linhas = [ficha["markdown"]]
+    truncado = False
+    if incluir_texto:
+        linhas += ["", "---", "", f"# Texto completo — {fonte.get('titulo')}", ""]
+        total = 0
+        for parte in partes:
+            marca = f"## {parte.get('ordem')}. {parte.get('titulo')}"
+            if parte.get("pagina"):
+                marca += f" (p. {parte['pagina']})"
+            bloco = [marca, "", (parte.get("texto") or "").strip(), ""]
+            total += len("\n".join(bloco))
+            if total > MAX_EXPORTAR:
+                truncado = True
+                linhas += ["", "> Texto cortado no limite de 2 MB; a ficha acima está completa."]
+                break
+            linhas += bloco
+    pasta = _pasta() / "exportadas"
+    pasta.mkdir(parents=True, exist_ok=True)
+    alvo = pasta / f"{slug}.md"
+    conteudo = "\n".join(linhas).strip() + "\n"
+    alvo.write_text(conteudo, encoding="utf-8")
+    return {
+        "slug": slug,
+        "titulo": fonte.get("titulo"),
+        "arquivo": str(alvo),
+        "bytes": len(conteudo.encode("utf-8")),
+        "inclui_texto": incluir_texto,
+        "truncado": truncado,
     }
 
 

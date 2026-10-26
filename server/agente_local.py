@@ -2,7 +2,7 @@
 
 O caminho é sempre o mesmo, e nenhum passo chama modelo:
 
-1. **procura** o pedido nas 225 skills do registro, por palavra (nome, categoria,
+1. **procura** o pedido nas 227 skills do registro, por palavra (nome, categoria,
    descrição, campos do formulário);
 2. achando, **preenche os parâmetros** a partir da própria frase — número,
    endereço, caminho, enum, texto colado — e **executa**;
@@ -23,7 +23,7 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal
 
@@ -576,6 +576,13 @@ RECEITAS: tuple[Receita, ...] = (
     Receita("converter-unidades", "Converter unidades", "Converte km/milhas, kg/libras, litros/galões, °C/°F, metros/pés.", ("converter", "conversao", "unidades", "km", "milhas", "kg", "libras", "celsius", "fahrenheit", "litros", "galoes"), "texto", "converter 10 km em milhas"),
     Receita("diferenca-datas", "Diferença entre datas", "Conta os dias entre duas datas.", ("dias", "datas", "entre", "diferenca", "idade"), "texto", "quantos dias entre 01/01/2026 e 25/10/2026"),
     Receita("hash-sha256", "Hash SHA-256", "Calcula o SHA-256 de um texto.", ("hash", "sha256", "resumo", "criptografico"), "texto", "hash sha256 de: <texto>", minimo=1),
+    Receita("validar-cpf", "Validar CPF", "Confere os dois dígitos verificadores do CPF, sem consultar nenhum sistema.", ("cpf", "validar", "valide", "digito", "verificador"), "texto", "validar cpf 123.456.789-09", minimo=1),
+    Receita("imc", "Calcular IMC", "Calcula o índice de massa corporal e diz a faixa.", ("imc", "massa", "corporal", "indice"), "texto", "IMC de 80 kg e 1,75 m", minimo=1),
+    Receita("regra-de-tres", "Regra de três", "Resolve proporção direta: se A vale B, quanto vale C.", ("regra", "tres", "proporcao", "proporcional"), "texto", "se 3 custa 15, quanto custa 7", minimo=2),
+    Receita("juros-simples", "Juros simples", "Calcula juros simples sobre um capital, com taxa ao mês.", ("juros", "simples", "taxa", "meses", "mes"), "texto", "juros de 1000 a 2% ao mês por 6 meses", minimo=2),
+    Receita("extrair-telefones", "Extrair telefones", "Lista os telefones brasileiros que aparecem no texto.", ("telefone", "telefones", "celular", "whatsapp", "fone"), "texto", "extrair os telefones de: <texto>", minimo=1),
+    Receita("extrair-datas", "Extrair datas", "Lista as datas dd/mm/aaaa que aparecem no texto.", ("datas", "data", "extrair", "encontradas"), "texto", "extrair as datas de: <texto>", minimo=2),
+    Receita("somar-dias", "Somar dias a uma data", "Diz que dia cai X dias depois (ou antes) de uma data.", ("dias", "depois", "antes", "somar", "cai"), "texto", "30 dias depois de 01/01/2026", minimo=2),
 )
 
 _RECEITAS_POR_ID = {receita.id: receita for receita in RECEITAS}
@@ -586,6 +593,7 @@ _RECEITAS_POR_ID = {receita.id: receita for receita in RECEITAS}
 _PADROES_DIRETOS: tuple[tuple[str, str], ...] = (
     (r"\d+(?:[.,]\d+)?\s*%\s*(?:de|do|da)\s*\d", "porcentagem"),
     (r"\b\d+\s*(?:km|milhas?|kg|libras?|litros?|galoes?|celsius|fahrenheit)\b.*\b(?:em|para|pra)\b", "converter-unidades"),
+    (r"\bse\s+\d+(?:[.,]\d+)?\b.*\bquanto\b", "regra-de-tres"),
 )
 
 
@@ -802,6 +810,141 @@ def _hash_sha256(texto: str) -> dict[str, Any]:
     return {"resultado": resumo, "sha256": resumo}
 
 
+def _br(valor: float, casas: int = 2) -> str:
+    """Número no jeito brasileiro: vírgula decimal, ponto de milhar."""
+    texto = f"{valor:,.{casas}f}"
+    return texto.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _validar_cpf(texto: str) -> dict[str, Any]:
+    """Confere os dois dígitos verificadores do CPF — sem consultar nada."""
+    digitos = re.sub(r"\D", "", texto)
+    if len(digitos) != 11:
+        return {"resultado": "Diga o CPF com 11 dígitos, como 123.456.789-09.", "valido": False}
+    if len(set(digitos)) == 1:
+        return {"resultado": f"CPF {digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]} inválido: todos os dígitos são iguais.", "valido": False}
+
+    def digito(parcial: str) -> int:
+        peso = len(parcial) + 1
+        soma = sum(int(numero) * (peso - indice) for indice, numero in enumerate(parcial))
+        resto = (soma * 10) % 11
+        return 0 if resto == 10 else resto
+
+    calculado = f"{digito(digitos[:9])}{digito(digitos[:10])}"
+    valido = digitos[-2:] == calculado
+    bonito = f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
+    if valido:
+        return {"resultado": f"CPF {bonito} é válido (dígitos verificadores {calculado}).", "valido": True}
+    return {
+        "resultado": f"CPF {bonito} é inválido: o correto seria terminar em {calculado}.",
+        "valido": False,
+        "esperado": calculado,
+    }
+
+
+def _imc(texto: str) -> dict[str, Any]:
+    """Índice de massa corporal a partir de peso (kg) e altura (m)."""
+    valores = _numeros(texto)
+    altura = next((valor for valor in valores if 0.5 <= valor < 3), None)
+    peso = next((valor for valor in valores if valor >= 20), None)
+    if altura is None or peso is None:
+        return {"resultado": "Diga assim: IMC de 80 kg e 1,75 m."}
+    indice = peso / (altura ** 2)
+    if indice < 18.5:
+        faixa = "abaixo do peso"
+    elif indice < 25:
+        faixa = "peso normal"
+    elif indice < 30:
+        faixa = "sobrepeso"
+    else:
+        faixa = "obesidade"
+    return {
+        "resultado": f"IMC {_br(indice, 1)} — {faixa} (peso {_br(peso, 1)} kg, altura {_br(altura, 2)} m).",
+        "imc": round(indice, 1),
+        "faixa": faixa,
+    }
+
+
+def _regra_de_tres(texto: str) -> dict[str, Any]:
+    """Se A vale B, quanto vale C — proporção direta."""
+    valores = _numeros(texto)
+    if len(valores) < 3:
+        return {"resultado": "Diga assim: se 3 custa 15, quanto custa 7."}
+    a, b, c = valores[:3]
+    if a == 0:
+        return {"resultado": "O primeiro valor não pode ser zero."}
+    resultado = b * c / a
+    return {
+        "resultado": f"Se {_br(a, 0)} vale {_br(b, 0)}, então {_br(c, 0)} vale {_br(resultado)}.",
+        "resultado_numerico": round(resultado, 4),
+    }
+
+
+def _juros_simples(texto: str) -> dict[str, Any]:
+    """Juros simples: capital, taxa ao mês em % e número de meses."""
+    valores = _numeros(texto)
+    if len(valores) < 3:
+        return {"resultado": "Diga assim: juros de 1000 a 2% ao mês por 6 meses."}
+    capital, taxa, meses = valores[0], valores[1], valores[2]
+    juros = capital * (taxa / 100) * meses
+    return {
+        "resultado": (
+            f"Juros de {_br(juros)} e total de {_br(capital + juros)} "
+            f"(capital {_br(capital)}, {_br(taxa, 0)}% ao mês por {_br(meses, 0)} meses)."
+        ),
+        "juros": round(juros, 2),
+        "total": round(capital + juros, 2),
+    }
+
+
+def _extrair_telefones(texto: str) -> dict[str, Any]:
+    achados = re.findall(r"(?:\+55\s*)?\(?\d{2}\)?\s*9?\d{4}[-.\s]?\d{4}\b", texto or "")
+    telefones: list[str] = []
+    for bruto in achados:
+        digitos = re.sub(r"\D", "", bruto)
+        if 10 <= len(digitos) <= 13:
+            limpo = bruto.strip()
+            if limpo not in telefones:
+                telefones.append(limpo)
+    if not telefones:
+        return {"resultado": "Não achei telefone no texto.", "telefones": []}
+    return {"resultado": "\n".join(telefones), "telefones": telefones}
+
+
+def _extrair_datas(texto: str) -> dict[str, Any]:
+    achados = re.findall(r"\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b", texto or "")
+    datas: list[str] = []
+    for bruto in achados:
+        if bruto not in datas:
+            datas.append(bruto)
+    if not datas:
+        return {"resultado": "Não achei data no texto.", "datas": []}
+    return {"resultado": "\n".join(datas), "datas": datas}
+
+
+def _somar_dias(texto: str) -> dict[str, Any]:
+    """Que dia cai X dias depois (ou antes) de uma data."""
+    achado_data = re.search(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})\b", texto or "")
+    achado_dias = re.search(r"(\d+)\s*dias?", texto or "")
+    if not achado_data or not achado_dias:
+        return {"resultado": "Diga assim: 30 dias depois de 01/01/2026."}
+    dia, mes, ano = int(achado_data.group(1)), int(achado_data.group(2)), int(achado_data.group(3))
+    if ano < 100:
+        ano += 2000
+    quantidade = int(achado_dias.group(1))
+    antes = bool(re.search(r"\bantes\b", texto or "", flags=re.IGNORECASE))
+    try:
+        base = date(ano, mes, dia)
+    except ValueError:
+        return {"resultado": "Essa data não existe no calendário."}
+    alvo = base - timedelta(days=quantidade) if antes else base + timedelta(days=quantidade)
+    sentido = "antes" if antes else "depois"
+    return {
+        "resultado": f"{quantidade} dias {sentido} de {base.strftime('%d/%m/%Y')} cai em {alvo.strftime('%d/%m/%Y')}.",
+        "data": alvo.isoformat(),
+    }
+
+
 _OPERACOES: dict[str, Callable[[str], dict[str, Any]]] = {
     "contar-palavras": _contar_palavras,
     "contar-caracteres": _contar_caracteres,
@@ -823,6 +966,13 @@ _OPERACOES: dict[str, Callable[[str], dict[str, Any]]] = {
     "converter-unidades": _converter_unidades,
     "diferenca-datas": _diferenca_datas,
     "hash-sha256": _hash_sha256,
+    "validar-cpf": _validar_cpf,
+    "imc": _imc,
+    "regra-de-tres": _regra_de_tres,
+    "juros-simples": _juros_simples,
+    "extrair-telefones": _extrair_telefones,
+    "extrair-datas": _extrair_datas,
+    "somar-dias": _somar_dias,
 }
 
 
@@ -847,9 +997,13 @@ class SkillLocal:
     receita: str
     campo: str
     criado_em: str
+    passos: tuple[str, ...] = ()
+    fonte: str = ""
 
     def publica(self) -> dict[str, Any]:
-        return asdict(self)
+        dados = asdict(self)
+        dados["passos"] = list(self.passos)
+        return dados
 
 
 def _pasta_locais(raiz: Path) -> Path:
@@ -869,16 +1023,19 @@ def carregar_locais(raiz: Path) -> list[SkillLocal]:
     for item in itens or []:
         if not isinstance(item, dict) or not item.get("id") or not item.get("receita"):
             continue
-        if item["receita"] not in _RECEITAS_POR_ID:
+        receita = str(item["receita"])
+        if receita not in _RECEITAS_POR_ID and receita != "procedimento":
             continue
         locais.append(
             SkillLocal(
                 id=str(item["id"]),
                 nome=str(item.get("nome") or item["receita"]),
                 descricao=str(item.get("descricao") or ""),
-                receita=str(item["receita"]),
+                receita=receita,
                 campo=str(item.get("campo") or "texto"),
                 criado_em=str(item.get("criado_em") or ""),
+                passos=tuple(str(passo) for passo in (item.get("passos") or []) if str(passo).strip()),
+                fonte=str(item.get("fonte") or ""),
             )
         )
     return locais
@@ -920,6 +1077,19 @@ def remover_local(skill_id: str, raiz: Path) -> bool:
 
 def entrada_de_local(local: SkillLocal) -> Entrada:
     receita = _RECEITAS_POR_ID.get(local.receita)
+    if local.receita == "procedimento":
+        fortes = set(palavras(local.nome)) | set(palavras(local.id.replace(".", " ").replace("-", " ")))
+        fracos = set(palavras(local.descricao)) | set(palavras(" ".join(local.passos)))
+        return Entrada(
+            skill_id=local.id,
+            nome=local.nome,
+            categoria="Skill local",
+            descricao=local.descricao,
+            schema={"properties": {}, "required": []},
+            fortes=frozenset(fortes),
+            fracos=frozenset(fracos),
+            local=True,
+        )
     fortes = set(palavras(local.nome)) | set(palavras(local.id.replace(".", " ").replace("-", " ")))
     fracos = set(palavras(local.descricao)) | (set(palavras(receita.exemplo)) if receita else set())
     return Entrada(
@@ -1136,6 +1306,7 @@ async def procurar_na_web(
 
     fontes = resultado.get("fontes") or []
     trecho = (resultado.get("trecho") or "").strip()
+    passos = extrair_passos(trecho)
     linhas = ["Não tenho skill nem receita para isso. Procurei na web e isto é o que existe:"]
     for indice, fonte in enumerate(fontes, start=1):
         marca = " (lida)" if fonte.get("lida") else ""
@@ -1146,13 +1317,135 @@ async def procurar_na_web(
         linhas.append(trecho[:LIMITE_TRECHO_WEB])
     if not fontes:
         linhas.append("A busca não devolveu nenhum link.")
+    if len(passos) >= 2:
+        linhas.append("")
+        linhas.append("A página traz um passo a passo:")
+        linhas += [f"{indice}. {passo}" for indice, passo in enumerate(passos, start=1)]
+        linhas.append("")
+        linhas.append("Se quiser que eu guarde isso como skill, diga: criar skill com esses passos")
     return {
         "acao": "web",
         "resposta": "\n".join(linhas),
         "fontes": fontes,
+        "passos": passos,
         "avisos": list(resultado.get("avisos") or []),
     }
 
+
+
+_RE_PASSO = re.compile(
+    r"(?:^|(?<=[.;:\n]))[ \t]*(?:passo\s*)?(\d{1,2})\s*[.)\-–:]\s*(?=[A-Za-zÀ-ÿ])",
+    re.IGNORECASE | re.MULTILINE,
+)
+_RE_CRIAR_PASSOS = re.compile(
+    r"\b(?:criar|salvar|guardar|transformar|aprove|aprovar|vira)\b.*\b(?:skill|passos?|procedimento)\b",
+    re.IGNORECASE,
+)
+
+
+def extrair_passos(texto: str, limite: int = 8) -> list[str]:
+    """Lista numerada que aparece no texto lido da web — sem inventar nada.
+
+    Só aceita o que está escrito: ``1. ... 2. ...`` ou ``Passo 1: ...``.
+    Número solto no meio da frase (data, preço) não vira passo.
+    """
+    bruto = (texto or "").replace("\r", "\n")
+    marcas = list(_RE_PASSO.finditer(bruto))
+    passos: list[str] = []
+    for indice, marca in enumerate(marcas):
+        inicio = marca.end()
+        fim = marcas[indice + 1].start() if indice + 1 < len(marcas) else len(bruto)
+        trecho = " ".join(bruto[inicio:fim].split()).strip(" .;,-")
+        if 15 <= len(trecho) <= 300:
+            passos.append(trecho)
+    return passos[:limite]
+
+
+def _titulo_de(termo: str) -> str:
+    limpo = re.sub(r"^(?:como\s+(?:eu\s+)?(?:faço|faco|fazer)|como|o que é|o que e)\s+", "", (termo or "").strip(), flags=re.IGNORECASE)
+    limpo = " ".join(limpo.split())[:60].strip(" ?.!")
+    return limpo[:1].upper() + limpo[1:] if limpo else "Procedimento"
+
+
+def criar_skill_de_passos(
+    raiz: Path,
+    nome: str,
+    passos: list[str] | tuple[str, ...],
+    *,
+    descricao: str = "",
+    fonte: str = "",
+) -> tuple[SkillLocal, bool]:
+    """Guarda o passo a passo lido da web como skill local de procedimento."""
+    limpos = [str(passo).strip() for passo in passos if str(passo).strip()][:12]
+    if len(limpos) < 2:
+        raise AgenteError("Preciso de pelo menos dois passos para criar a skill.")
+    locais = carregar_locais(raiz)
+    base = re.sub(r"[^a-z0-9]+", "-", normalizar(nome)).strip("-")[:40] or "procedimento"
+    skill_id = f"local.proc-{base}"
+    for local in locais:
+        if local.id == skill_id:
+            return local, False
+    skill = SkillLocal(
+        id=skill_id,
+        nome=nome.strip()[:80] or "Procedimento",
+        descricao=(descricao or f"Passo a passo lido de {fonte or 'uma página'}.")[:300],
+        receita="procedimento",
+        campo="",
+        criado_em=datetime.now(timezone.utc).isoformat(),
+        passos=tuple(limpos),
+        fonte=fonte,
+    )
+    salvar_locais(raiz, [*locais, skill])
+    return skill, True
+
+
+def guardar_pendente(raiz: Path, dados: dict[str, Any]) -> None:
+    arquivo = Path(raiz) / ARQUIVO_PENDENTE
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(json.dumps(dados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def ler_pendente(raiz: Path) -> dict[str, Any] | None:
+    try:
+        bruto = json.loads((Path(raiz) / ARQUIVO_PENDENTE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return bruto if isinstance(bruto, dict) and bruto.get("passos") else None
+
+
+def limpar_pendente(raiz: Path) -> None:
+    (Path(raiz) / ARQUIVO_PENDENTE).unlink(missing_ok=True)
+
+
+def _resposta_de_local(entrada: Entrada, locais: list[SkillLocal]) -> str | None:
+    """Skill de procedimento: devolve o passo a passo gravado, com a fonte."""
+    if not entrada.local:
+        return None
+    local = next((item for item in locais if item.id == entrada.skill_id), None)
+    if local is None or local.receita != "procedimento" or not local.passos:
+        return None
+    linhas = [f"Passo a passo — skill local “{local.nome}” ({local.id}):", ""]
+    linhas += [f"{indice}. {passo}" for indice, passo in enumerate(local.passos, start=1)]
+    if local.fonte:
+        linhas += ["", f"Fonte: {local.fonte}"]
+    linhas += ["", "Passos copiados da página; confira a fonte antes de seguir."]
+    return "\n".join(linhas)
+
+
+async def _rodar_entrada(
+    entrada: Entrada,
+    termo: str,
+    *,
+    registry: Any,
+    locais: list[SkillLocal],
+    confirmar: bool = False,
+    autorizacao: str = "",
+) -> dict[str, Any]:
+    """Executa a entrada: procedimento local responde direto; o resto vai à skill."""
+    texto = _resposta_de_local(entrada, locais)
+    if texto is not None:
+        return {"parametros": {}, "faltando": [], "resposta": texto}
+    return await _executar_skill(entrada, termo, registry=registry, confirmar=confirmar, autorizacao=autorizacao)
 
 
 # ------------------------------------------------ memória do agente (arquivos)
@@ -1161,6 +1454,7 @@ ARQUIVO_APELIDOS = Path("agente-local") / "apelidos.json"
 ARQUIVO_FILA = Path("agente-local") / "fila.json"
 ARQUIVO_RESPOSTAS = Path("agente-local") / "respostas.json"
 ARQUIVO_HISTORICO = Path("agente-local") / "historico.json"
+ARQUIVO_PENDENTE = Path("agente-local") / "pendente.json"
 LIMITE_HISTORICO = 200
 LIMITE_FILA = 200
 
@@ -1478,6 +1772,41 @@ async def _resolver(
         base["fontes"] = [fonte for fonte in guardada.get("fontes") or [] if isinstance(fonte, dict)]
         return base
 
+    # 0a. Passo a passo lido da web virando skill local.
+    if _RE_CRIAR_PASSOS.search(termo):
+        pendente = ler_pendente(raiz)
+        if pendente is not None:
+            try:
+                skill, criada = criar_skill_de_passos(
+                    raiz,
+                    str(pendente.get("titulo") or _titulo_de(termo)),
+                    pendente["passos"],
+                    descricao=str(pendente.get("descricao") or ""),
+                    fonte=str(pendente.get("fonte") or ""),
+                )
+            except AgenteError as exc:
+                base["acao"] = "faltando"
+                base["resposta"] = str(exc)
+                return base
+            limpar_pendente(raiz)
+            base["acao"] = "criado"
+            base["via"] = "procedimento"
+            base["skill"] = {
+                "id": skill.id,
+                "nome": skill.nome,
+                "categoria": "Skill local",
+                "descricao": skill.descricao,
+                "local": True,
+            }
+            base["confianca"] = 1.0
+            base["parametros"] = {"passos": len(skill.passos)}
+            base["resposta"] = (
+                f"{'Criei' if criada else 'Já existia'} a skill local “{skill.nome}” ({skill.id}) "
+                f"com {len(skill.passos)} passos lidos da página.\n"
+                f"Da próxima vez, peça por “{skill.nome}” que eu devolvo o passo a passo."
+            )
+            return base
+
     # 0b. Apelido ensinado: "quando eu pedir assim, use esta skill".
     ensinado = apelido_de(termo, raiz)
     if ensinado is not None:
@@ -1485,8 +1814,13 @@ async def _resolver(
         disponiveis = indexar(registry.list()) + [entrada_de_local(local) for local in locais]
         escolhida = next((item for item in disponiveis if item.skill_id == alvo), None)
         if escolhida is not None:
-            tentativa = await _executar_skill(
-                escolhida, termo, registry=registry, confirmar=confirmar, autorizacao=autorizacao
+            tentativa = await _rodar_entrada(
+                escolhida,
+                termo,
+                registry=registry,
+                locais=locais,
+                confirmar=confirmar,
+                autorizacao=autorizacao,
             )
             base["skill"] = escolhida.resumo()
             base["parametros"] = tentativa.get("parametros", {})
@@ -1546,7 +1880,9 @@ async def _resolver(
     if receita is not None:
         existente = next((local for local in locais if local.receita == receita.id), None)
         if existente is not None:
-            tentativa = await _executar_skill(entrada_de_local(existente), termo, registry=registry)
+            tentativa = await _rodar_entrada(
+                entrada_de_local(existente), termo, registry=registry, locais=locais
+            )
             if tentativa.get("resposta"):
                 base["acao"] = "executado"
                 base["confianca"] = 1.0
@@ -1568,8 +1904,13 @@ async def _resolver(
     if ranking and ranking[0]["score"] >= LIMIAR_EXECUTAR and ranking[0]["fortes"] > 0:
         principal = ranking[0]
         base["confianca"] = principal["score"]
-        tentativa = await _executar_skill(
-            principal["entrada"], termo, registry=registry, confirmar=confirmar, autorizacao=autorizacao
+        tentativa = await _rodar_entrada(
+            principal["entrada"],
+            termo,
+            registry=registry,
+            locais=locais,
+            confirmar=confirmar,
+            autorizacao=autorizacao,
         )
         base["parametros"] = tentativa["parametros"]
         base["skill"] = principal["entrada"].resumo()
@@ -1667,6 +2008,18 @@ async def _resolver(
         base["resposta"] = busca_web["resposta"]
         base["fontes"] = busca_web["fontes"]
         base["avisos"].extend(busca_web["avisos"])
+        passos = busca_web.get("passos") or []
+        if busca_web["acao"] == "web" and len(passos) >= 2:
+            guardar_pendente(
+                raiz,
+                {
+                    "titulo": _titulo_de(termo),
+                    "descricao": f"Passo a passo lido de {busca_web['fontes'][0]['url'] if busca_web['fontes'] else 'uma página'}.",
+                    "passos": passos,
+                    "fonte": busca_web["fontes"][0]["url"] if busca_web["fontes"] else "",
+                    "criado_em": datetime.now(timezone.utc).isoformat(),
+                },
+            )
         if busca_web["acao"] == "web":
             base["avisos"].append(
                 "Não criei skill para isso: escrever código novo exigiria um modelo. "

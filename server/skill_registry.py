@@ -1923,6 +1923,17 @@ class BibliotecaVideoInput(BaseModel):
     titulo: str = Field(default="", max_length=160, title="Título", json_schema_extra={"description": "Vazio usa o título do próprio vídeo."})
 
 
+class BibliotecaSumarioInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fonte: str = Field(min_length=2, max_length=120, title="Fonte (slug)", json_schema_extra={"description": "Índice da fonte: cada seção com página, tamanho, começo e termos."})
+
+
+class BibliotecaExportarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fonte: str = Field(min_length=2, max_length=120, title="Fonte (slug)")
+    incluir_texto: bool = Field(default=True, title="Incluir texto completo", json_schema_extra={"description": "Desligado, sai só a ficha. Ligado, sai a ficha + texto em `.md`."})
+
+
 class BibliotecaOcrInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3448,6 +3459,20 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except bib.BibliotecaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def biblioteca_sumario_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaSumarioInput)
+        try:
+            return bib.sumario(data.fonte)
+        except bib.BibliotecaError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def biblioteca_exportar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, BibliotecaExportarInput)
+        try:
+            return bib.exportar(data.fonte, incluir_texto=data.incluir_texto)
+        except bib.BibliotecaError as exc:
+            raise SkillError(str(exc)) from exc
+
     def biblioteca_ocr_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         situacao = ocr_local.status()
         return {
@@ -4258,6 +4283,8 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("estacao.regras", "Catálogo da estação", "Mostra ferramentas e permissões, decisões, estados, regras de evasão e orçamentos usados pelas skills — sem VM, navegador ou rede.", "Estação", EmptyInput, estacao_library_handler, timeout_seconds=5),
         SkillDefinition("biblioteca.importar", "Importar para a biblioteca", "Lê um PDF, EPUB, DOCX, TXT, MD, RST, legenda VTT/SRT ou imagem (foto, print, PNG, JPG, TIF) e grava em seções pesquisáveis em `storage/biblioteca`, com página e título. PDF escaneado ou digitalizado passa pelo OCR quando não sai texto. Não move o original, não usa modelo e não resume.", "Biblioteca", BibliotecaImportarInput, biblioteca_importar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("biblioteca.video", "Legenda de vídeo do YouTube", "Baixa a legenda já publicada de um vídeo do YouTube (inclusive a automática), escolhe pt-BR, pt, en ou es e importa o texto como fonte do tipo vídeo. Não transcreve áudio: vídeo sem legenda é recusado com essa explicação.", "Biblioteca", BibliotecaVideoInput, biblioteca_video_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),
+        SkillDefinition("biblioteca.sumario", "Índice da fonte", "Mostra o índice de uma fonte já importada: cada seção com ordem, página, tamanho, a primeira frase e os cinco termos mais frequentes. É o mapa do livro, sem resumo inventado.", "Biblioteca", BibliotecaSumarioInput, biblioteca_sumario_handler, timeout_seconds=30),
+        SkillDefinition("biblioteca.exportar", "Exportar a fonte em .md", "Grava a fonte em `storage/biblioteca/exportadas/<slug>.md` com a ficha (sumário, termos, números, citações) e, opcionalmente, o texto completo com marcação de seção e página. Serve para levar embora ou abrir no Obsidian.", "Biblioteca", BibliotecaExportarInput, biblioteca_exportar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),
         SkillDefinition("biblioteca.ocr", "Estado do OCR", "Diz se existe motor de OCR instalado (Tesseract, `winocr` ou RapidOCR), com os idiomas e o comando de instalação. Sem motor, a importação de imagem e de PDF escaneado é recusada com esta explicação.", "Biblioteca", BibliotecaOcrInput, biblioteca_ocr_handler, timeout_seconds=20),
         SkillDefinition("biblioteca.listar", "Listar a biblioteca", "Mostra as fontes importadas com tipo, seções, tamanho e data.", "Biblioteca", BibliotecaListarInput, biblioteca_listar_handler, timeout_seconds=15),
         SkillDefinition("biblioteca.buscar", "Buscar na biblioteca", "Procura por assunto nas seções de todas as fontes com BM25 e devolve trecho real, seção, página e cobertura do pedido.", "Biblioteca", BibliotecaBuscarInput, biblioteca_buscar_handler, timeout_seconds=30),

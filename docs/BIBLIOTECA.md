@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.43.0
+# Biblioteca e armazenamento — 0.44.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -40,6 +40,8 @@ biblioteca.digest     fonte=contabilidade-4f2a1c gravar=true
 biblioteca.remover    fonte=contabilidade-4f2a1c
 biblioteca.video      url=https://youtu.be/dQw4w9WgXcQ
 biblioteca.ocr
+biblioteca.sumario    fonte=contabilidade-4f2a1c
+biblioteca.exportar   fonte=contabilidade-4f2a1c
 ```
 
 ---
@@ -48,7 +50,9 @@ biblioteca.ocr
 
 1. **busca** — BM25 sobre as seções de todas as fontes;
 2. **cobertura** — quantas palavras do seu pedido realmente aparecem no trecho;
-3. **corte** — o pedaço do texto em volta do termo, não o começo seco da seção;
+3. **corte** — o pedaço do texto em volta do termo, não o começo seco da seção
+   (1.200 caracteres no `trecho`, 2.600 no `contexto`, com os títulos da seção
+   anterior e da seguinte em `vizinhas`);
 4. **referência** — título da fonte, seção e página.
 
 Só responde se a cobertura for **≥ 50%** e houver pelo menos dois termos do
@@ -100,7 +104,21 @@ palavras estão na mesma seção, em mais de uma fonte.
 
 ---
 
-## 5. Ficha (`SKILL.md`)
+## 5. Índice e exportação
+
+`biblioteca.sumario fonte=<slug>` devolve o mapa do livro: cada seção com ordem,
+página, tamanho, a primeira frase e os cinco termos mais frequentes dela. Nada é
+resumido — é o índice real, lido do texto.
+
+`biblioteca.exportar fonte=<slug>` grava `storage/biblioteca/exportadas/<slug>.md`
+com a ficha (sumário, termos, números, citações) e o texto completo, cada seção
+marcada com `## ordem. título (p. X)`. Serve para abrir no Obsidian, levar para
+outro PC ou revisar sem a interface. O `.md` é cortado em 2 MB; a ficha nunca é
+cortada.
+
+---
+
+## 6. Ficha (`SKILL.md`)
 
 `biblioteca.digest` monta um `SKILL.md` determinístico:
 
@@ -116,7 +134,7 @@ tipo que o `book-to-skill` gera, só que por regra e sem modelo.
 
 ---
 
-## 6. Onde ficam os dados
+## 7. Onde ficam os dados
 
 Por padrão, em `<projeto>/storage`. Para usar outro disco:
 
@@ -147,14 +165,15 @@ copia nada.
 
 ---
 
-## 7. Limites, sem enfeite
+## 8. Limites, sem enfeite
 
 | Limite | Valor |
 |---|---|
 | Tamanho por arquivo | 60 MB |
 | Caracteres por fonte | 4.000.000 |
 | Seções por fonte | 4.000 |
-| Trecho devolvido | 1.200 caracteres |
+| Trecho devolvido | 1.200 caracteres (contexto: 2.600) |
+| Exportação | `.md` com ficha + texto, teto de 2 MB |
 | Formatos | PDF, EPUB, DOCX, TXT, MD, RST, VTT, SRT, PNG, JPG, WEBP, BMP, TIF |
 | Páginas por OCR | 40 por arquivo |
 | Resolução do OCR | 200 dpi |
@@ -168,7 +187,7 @@ copia nada.
 
 ---
 
-## 8. OCR: papel, foto e PDF escaneado
+## 9. OCR: papel, foto e PDF escaneado
 
 Três motores, tentados nesta ordem — o primeiro que existir atende:
 
@@ -202,7 +221,7 @@ palavra errada, traduzir. Texto reconhecido errado entra errado — a ficha
 
 ---
 
-## 9. Legenda do YouTube, sozinha
+## 10. Legenda do YouTube, sozinha
 
 `biblioteca.video url=<endereço>` faz o caminho inteiro — e, como qualquer coisa
 que sai para a internet aqui, exige a rede liberada na subida
@@ -227,17 +246,17 @@ Limites, sem enfeite:
 
 ---
 
-## 10. Medido
+## 11. Medido
 
 | Verificação | Resultado |
 |---|---|
-| Testes da biblioteca | **22** (PDF gerado com reportlab, EPUB e DOCX montados no teste) |
+| Testes da biblioteca | **27** (PDF gerado com reportlab, EPUB e DOCX montados no teste) |
 | Testes do OCR | **13** (motor falso por monkeypatch: o sandbox não tem Tesseract) |
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
-| Testes do agente local | **130** |
-| Suíte da API | **2.143** |
-| Skills no registro | **225** (10 novas: biblioteca.* e armazenamento.*) |
+| Testes do agente local | **144** |
+| Suíte da API | **2.162** |
+| Skills no registro | **227** (12 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
 **O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina

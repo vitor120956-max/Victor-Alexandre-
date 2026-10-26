@@ -1,4 +1,4 @@
-"""Testes da biblioteca (0.43.0): aprender com livro, vídeo e pesquisa.
+"""Testes da biblioteca (0.44.0): aprender com livro, vídeo e pesquisa.
 
 Sem rede e sem modelo: os arquivos são montados na hora (PDF com reportlab,
 EPUB e DOCX com as bibliotecas já instaladas) e a busca é BM25 puro.
@@ -250,3 +250,74 @@ def test_partes_corrompidas_nao_derrubam_busca(pasta: Path) -> None:
     fonte = importar_texto("Manual", TEXTO_HTML)
     biblioteca._arquivo_da_fonte(fonte["slug"]).write_text("{lixo", encoding="utf-8")
     assert buscar("rateio") == []
+
+
+# -------------------------------------------------------- sumário e exportar
+
+def test_sumario_lista_as_secoes_com_pagina_e_termos(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    fonte = importar_texto(
+        "Manual de custo",
+        "# Capítulo 1 — Rateio\n\nO rateio distribui o custo indireto entre os produtos fabricados. "
+        "O critério precisa ser defensável e documentado pela contabilidade.\n\n"
+        "# Capítulo 2 — Margem\n\nA margem de contribuição é a receita menos o custo variável de cada produto.",
+    )
+    indice = biblioteca.sumario(fonte["slug"])
+    assert indice["secoes"] >= 2
+    titulos = [capitulo["titulo"] for capitulo in indice["capitulos"]]
+    assert any("Rateio" in titulo for titulo in titulos)
+    primeiro = indice["capitulos"][0]
+    assert primeiro["comeca_com"]
+    assert primeiro["termos"]
+
+
+def test_sumario_de_fonte_inexistente_recusa(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    with pytest.raises(BibliotecaError):
+        biblioteca.sumario("nao-existe")
+
+
+def test_exportar_grava_markdown_com_ficha_e_texto(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    fonte = importar_texto(
+        "Nota de rateio",
+        "O rateio distribui o custo indireto entre os produtos fabricados conforme o critério "
+        "escolhido pela contabilidade da empresa, e o total rateado fecha com o total da conta "
+        "de custos do período. O critério precisa ser defensável, estável e documentado, porque "
+        "mudar de critério muda o custo de cada produto e o preço de venda.",
+    )
+    resultado = biblioteca.exportar(fonte["slug"])
+    arquivo = Path(resultado["arquivo"])
+    assert arquivo.is_file()
+    texto = arquivo.read_text(encoding="utf-8")
+    assert "## Sumário" in texto
+    assert "Texto completo" in texto
+    assert "rateio" in texto.lower()
+    assert resultado["bytes"] > 0
+    assert resultado["truncado"] is False
+
+
+def test_exportar_sem_texto_sai_so_a_ficha(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    fonte = importar_texto(
+        "Nota curta",
+        "A margem de contribuição é a receita menos o custo variável de cada produto vendido pela "
+        "empresa, e serve para cobrir o custo fixo e formar o lucro do período contábil. Quanto maior "
+        "a margem, mais rápido o negócio cobre a estrutura que não depende do volume vendido.",
+    )
+    resultado = biblioteca.exportar(fonte["slug"], incluir_texto=False)
+    texto = Path(resultado["arquivo"]).read_text(encoding="utf-8")
+    assert "Texto completo" not in texto
+    assert "## Sumário" in texto
+
+
+def test_busca_traz_contexto_maior_e_vizinhas(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    importar_texto(
+        "Livro de custos",
+        "# Capítulo 1 — Rateio\n\n" + ("O rateio distribui o custo indireto entre os produtos. " * 40) + "\n\n"
+        "# Capítulo 2 — Margem\n\nA margem de contribuição é a receita menos o custo variável de cada produto.",
+    )
+    achado = biblioteca.buscar("rateio", limite=1)[0]
+    assert len(achado["contexto"]) >= len(achado["trecho"])
+    assert achado["vizinhas"]["depois"] in {None, "Capítulo 2 — Margem"}
