@@ -11,7 +11,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 230 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 231 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, lê a primeira página e devolve fontes + trecho | rede (`JARVIS_HOST_REDE=1`) e token de host |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -46,6 +46,8 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `tira a biblioteca do drive` · `desfaz o drive` | `armazenamento.drive-copiar` com `modo=desfazer` | **sim** |
 | `como configuro o drive?` · `o drive tá configurado?` | `armazenamento.drive` (só lê) | não |
 | `limita a banda do drive` · `limita o drive em 500` · `devolve a banda toda` | `armazenamento.drive-banda` | **sim** |
+| `pausa a sincronização` · `fecha o drive` | `armazenamento.drive-app` (fechar) | **sim** |
+| `abre o drive` · `volta a sincronizar` | `armazenamento.drive-app` (abrir) | não |
 | `rodar "python -m pacote --help" no repositório dono--repo` | `repos.executar` | **sim** |
 | `ler README.md do repositório dono--repo` | `repos.ler` | não |
 
@@ -101,7 +103,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 230 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 231 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
@@ -179,7 +181,7 @@ com nome próprio — não é código novo.
 .venv/bin/python -m pytest server/tests/test_agente_local.py -q
 ```
 
-164 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
+170 testes, nenhum toca a rede: o registro é um dublê e a busca/leitura da web
 são funções injetadas.
 
 ## Aprender com a página

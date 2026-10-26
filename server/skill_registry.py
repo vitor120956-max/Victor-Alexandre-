@@ -1991,6 +1991,11 @@ class ArmazenamentoDriveBandaInput(BaseModel):
     upload_kbps: int = Field(default=500, ge=0, le=100_000_000, title="Upload (KB/s)", json_schema_extra={"description": "0 = sem limite."})
 
 
+class ArmazenamentoDriveAppInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acao: Literal["fechar", "abrir", "estado"] = Field(default="estado", title="Ação", json_schema_extra={"description": "`fechar` para a sincronização (derruba a unidade G:); `abrir` volta; `estado` só olha."})
+
+
 class ReposBaixarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     url: str = Field(min_length=3, max_length=300, title="Repositório", json_schema_extra={"description": "`dono/repo` ou endereço do GitHub. Só público, só `.zip` — não precisa de Git."})
@@ -3579,6 +3584,23 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except drive_setup.DriveError as exc:
             raise SkillError(str(exc)) from exc
 
+    def armazenamento_drive_app_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ArmazenamentoDriveAppInput)
+        try:
+            if data.acao == "estado":
+                return {
+                    "app": "drive",
+                    "acao": "estado",
+                    "aberto": drive_setup.drive_aberto(),
+                    "executavel": str(drive_setup.achar_executavel() or ""),
+                    "mensagem": "",
+                }
+            if data.acao == "abrir":
+                return drive_setup.abrir()
+            return drive_setup.fechar(confirmar=not dry_run)
+        except drive_setup.DriveError as exc:
+            raise SkillError(str(exc)) from exc
+
     def armazenamento_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, ArmazenamentoPlanejarInput)
         destino = Path(data.destino).expanduser()
@@ -4350,6 +4372,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.drive", "Drive como espaço de fora", "Mostra onde estão os livros e os repositórios, se já estão no Google Drive, o que o `.env` aponta e quanto espaço há — sem copiar nada.", "Armazenamento", ArmazenamentoDriveInput, armazenamento_drive_handler, timeout_seconds=30),
         SkillDefinition("armazenamento.drive-copiar", "Configurar o Drive", "Copia biblioteca e repositórios para `JARVIS-DADOS` dentro do Drive, confere arquivo por arquivo e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`. Não apaga nada e não leva o histórico do agente. Com `modo=desfazer`, só tira as linhas do `.env`.", "Armazenamento", ArmazenamentoDriveCopiarInput, armazenamento_drive_copiar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
         SkillDefinition("armazenamento.drive-banda", "Limitar a banda do Drive", "Grava `BandwidthRxKBPS` e `BandwidthTxKBPS` em `HKCU\\Software\\Google\\DriveFS` — o ajuste que o próprio app do Drive lê — e confere lendo de volta. Vale quando o app reiniciar. `0` remove o limite.", "Armazenamento", ArmazenamentoDriveBandaInput, armazenamento_drive_banda_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("armazenamento.drive-app", "Abrir ou fechar o Drive", "Fecha o app do Google Drive (para a sincronização, mas derruba a unidade `G:`) ou abre de novo. No Windows o app não aceita pausa por linha de comando — fechar é o único caminho sem clique. `estado` só informa se ele está rodando.", "Armazenamento", ArmazenamentoDriveAppInput, armazenamento_drive_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("armazenamento.planejar", "Plano para mudar de disco", "Compara a pasta atual com o destino e publica os cinco passos exatos, incluindo o `robocopy` e a linha do `.env`. Não copia, não move, não apaga.", "Armazenamento", ArmazenamentoPlanejarInput, armazenamento_planejar_handler, timeout_seconds=15),
         SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),

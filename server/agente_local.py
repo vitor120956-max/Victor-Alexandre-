@@ -302,7 +302,14 @@ _RE_DRIVE_BANDA_ACAO = re.compile(
 )
 # "deixa o drive em 500": o número depois de "em" já diz que é limite (KB/s).
 _RE_DRIVE_BANDA_NUMERO = re.compile(
-    r"\b(?:poe|p[oõ]e|deixa|deixe|coloca)\b.*\b(?:em|pra|para)\s+\d"
+    r"\b(?:poe|p[oõ]e|deixa|deixe|coloca|limita|limite|reduz\w*|baix\w*|diminu\w*)\b"
+    r".*\b(?:em|pra|para|a)\s+\d"
+)
+_RE_DRIVE_FECHAR = re.compile(
+    r"\b(?:fecha|fechar|fech\w+|desliga\w*|para|parar|pausa\w*)\b"
+)
+_RE_DRIVE_ABRIR = re.compile(
+    r"\b(?:abre|abrir|liga|ligar|relig\w+|retoma\w*|volta a sincronizar)\b"
 )
 # "devolve a banda toda", "sem limite", "tira o limite do drive"
 _RE_DRIVE_SEM_LIMITE = re.compile(
@@ -344,15 +351,26 @@ def _banda_do_pedido(texto: str) -> dict[str, int]:
     return {}
 
 
+AVISO_FECHAR_DRIVE = (
+    "Fechar o app para a sincronização, mas também derruba a unidade `G:` — e a "
+    "biblioteca do JARVIS mora nela. Enquanto estiver fechado, não acho livro nenhum. "
+    "Para só parar de transferir e continuar lendo, use o menu do app "
+    "(Pausar sincronização), que mantém a unidade."
+)
+
+
 def _pedido_direto_de_drive(termo: str) -> dict[str, Any] | None:
     """Pedidos de Google Drive: regra explícita, porque "drive" aparece em tudo.
 
-    Só casa quando a frase fala de **drive** e tem verbo de configuração ou
-    palavra de diagnóstico. "Abre o drive" e "pausa o drive" continuam indo para
-    a busca normal.
+    Só casa quando a frase fala de **drive** (ou de sincronização) e tem verbo
+    de configuração ou palavra de diagnóstico. "Como abro o drive" continua indo
+    para a busca normal.
     """
     texto = normalizar(termo)
-    if "drive" not in palavras(texto):
+    tem_drive = "drive" in palavras(texto)
+    # "pausa a sincronização" sem dizer "drive" também é claro no contexto do JARVIS.
+    tem_sync = "sincroniza" in texto
+    if not (tem_drive or tem_sync):
         return None
 
     estado_ = {
@@ -371,6 +389,42 @@ def _pedido_direto_de_drive(termo: str) -> dict[str, Any] | None:
     # "?" ou palavra de diagnóstico: o usuário quer saber, não quer que mexa.
     if "?" in (termo or "") or _RE_DRIVE_PERGUNTA.search(texto) or "passo a passo" in texto:
         return estado_
+    # Sem a palavra "drive", só abrir/fechar a sincronização faz sentido —
+    # "sincroniza meus contatos" não pode virar cópia da biblioteca.
+    if not tem_drive:
+        if _RE_DRIVE_FECHAR.search(texto):
+            return {
+                "skill_id": "armazenamento.drive-app",
+                "nome": "Abrir ou fechar o Drive",
+                "parametros": {"acao": "fechar"},
+                "confirma": True,
+                "aviso": AVISO_FECHAR_DRIVE,
+            }
+        if _RE_DRIVE_ABRIR.search(texto):
+            return {
+                "skill_id": "armazenamento.drive-app",
+                "nome": "Abrir ou fechar o Drive",
+                "parametros": {"acao": "abrir"},
+                "confirma": False,
+            }
+        return None
+    # "fecha o drive" / "pausa a sincronização": parar a sincronização de verdade.
+    if _RE_DRIVE_FECHAR.search(texto) and not _RE_DRIVE_SEM_LIMITE.search(texto):
+        return {
+            "skill_id": "armazenamento.drive-app",
+            "nome": "Abrir ou fechar o Drive",
+            "parametros": {"acao": "fechar"},
+            "confirma": True,
+            "aviso": AVISO_FECHAR_DRIVE,
+        }
+    if _RE_DRIVE_ABRIR.search(texto):
+        return {
+            "skill_id": "armazenamento.drive-app",
+            "nome": "Abrir ou fechar o Drive",
+            "parametros": {"acao": "abrir"},
+            "confirma": False,
+        }
+
     # "limita a banda do drive": só com verbo, senão "o drive ta lento" vira confusão.
     sem_limite = bool(_RE_DRIVE_SEM_LIMITE.search(texto))
     if (
@@ -1270,6 +1324,42 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+def _formatar_app_do_drive(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para fechar/abrir o app do Drive."""
+    if resultado.get("app") != "drive":
+        return None
+    acao = str(resultado.get("acao") or "")
+    linhas: list[str] = []
+
+    if acao == "estado":
+        aberto = resultado.get("aberto")
+        if aberto is None:
+            return "Não consigo ver os processos nesta máquina."
+        linhas.append("O app do Google Drive está aberto." if aberto else "O app do Google Drive está fechado.")
+        if resultado.get("executavel"):
+            linhas.append(f"Executável: {resultado['executavel']}")
+        elif not aberto:
+            linhas.append("Não achei o executável para abrir sozinho — abra pelo menu Iniciar.")
+        return "\n".join(linhas)
+
+    if resultado.get("ja_estava"):
+        linhas.append(str(resultado.get("mensagem") or "Já estava assim."))
+    elif acao == "fechar":
+        if resultado.get("vai_fechar"):
+            linhas.append("Vou fechar o app do Google Drive.")
+        else:
+            linhas.append(str(resultado.get("mensagem") or "Fechei o app do Google Drive."))
+    else:
+        linhas.append(str(resultado.get("mensagem") or "Abrindo o app do Google Drive."))
+
+    aviso = resultado.get("aviso")
+    if aviso:
+        linhas.append(f"⚠ {aviso}")
+    if acao == "fechar" and (resultado.get("vai_fechar") or not resultado.get("fechado")):
+        linhas.append('Responda "sim, pode" para eu fechar.')
+    return "\n".join(linhas)
+
+
 def _formatar_banda(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para o limite de banda (antes/depois, em linguagem simples)."""
     if not resultado.get("banda"):
@@ -1464,6 +1554,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_app_do_drive(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_banda(resultado)
     if especial is not None:
@@ -1960,7 +2054,12 @@ async def _executar_skill(
     return {"parametros": parametros, "faltando": [], "resposta": formatar_resultado(resultado)}
 
 
-def _pedir_confirmacao(base: dict[str, Any], entrada: Entrada, tentativa: dict[str, Any]) -> dict[str, Any]:
+def _pedir_confirmacao(
+    base: dict[str, Any],
+    entrada: Entrada,
+    tentativa: dict[str, Any],
+    aviso: str = "",
+) -> dict[str, Any]:
     """Para antes do efeito colateral e mostra exatamente o que vai rodar."""
     parametros = {
         chave: valor for chave, valor in (tentativa.get("parametros") or {}).items()
@@ -1973,6 +2072,8 @@ def _pedir_confirmacao(base: dict[str, Any], entrada: Entrada, tentativa: dict[s
         f"A skill “{entrada.nome}” ({entrada.skill_id}) baixa, grava ou executa algo. "
         f"Vou usar: {detalhe}. Responda “sim, pode” para eu seguir."
     )
+    if aviso:
+        base["resposta"] += f"\n\n⚠ {aviso}"
     return base
 
 
@@ -2114,7 +2215,12 @@ async def _resolver(
         base["parametros"] = dict(direto["parametros"])
         base["confianca"] = 1.0
         if direto["confirma"] and not confirmar:
-            return _pedir_confirmacao(base, entrada_direta, {"parametros": direto["parametros"]})
+            return _pedir_confirmacao(
+                base,
+                entrada_direta,
+                {"parametros": direto["parametros"]},
+                aviso=str(direto.get("aviso") or ""),
+            )
         parametros = dict(direto["parametros"])
         if direto["confirma"] and autorizacao and "autorizacao" in (schema_direto.get("properties") or {}):
             parametros["autorizacao"] = autorizacao

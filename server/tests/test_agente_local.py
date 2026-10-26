@@ -1,4 +1,4 @@
-"""Testes do agente local (0.47.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.48.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "230 skills" in texto
+    assert "231 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.47.0)
+# ------------------------------------------------- memória do agente (0.48.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 230 skills, uma por uma
+# ------------------------------------- cobertura: as 231 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 230 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 231 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.47.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.48.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.47.0)
+# ------------------------------------------------------- Google Drive (0.48.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1644,3 +1644,79 @@ def test_tirar_a_biblioteca_nao_vira_limite_de_banda(tmp_path: Path) -> None:
     )
     assert resultado["acao"] == "executado"
     assert duble.execucoes[0][0] == "armazenamento.drive-copiar"
+
+
+SKILL_DRIVE_APP = {
+    "id": "armazenamento.drive-app",
+    "name": "Abrir ou fechar o Drive",
+    "description": "Fecha o app do Google Drive ou abre de novo.",
+    "category": "Armazenamento",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {"acao": {"type": "string", "title": "Ação", "enum": ["fechar", "abrir", "estado"]}},
+    },
+}
+
+
+def test_fechar_o_drive_pede_confirmacao(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_APP, raiz=tmp_path)
+    resultado = asyncio.run(atender("fecha o drive", registry=duble, raiz=tmp_path, consultar_web=False))
+    assert resultado["acao"] == "confirmar"
+    assert duble.execucoes == []
+
+
+def test_pausar_a_sincronizacao_vira_fechar(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_APP, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "pausa a sincronização",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0] == ("armazenamento.drive-app", {"acao": "fechar"})
+
+
+def test_abrir_o_drive_executa_direto(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_APP, raiz=tmp_path)
+    resultado = asyncio.run(atender("abre o drive", registry=duble, raiz=tmp_path, consultar_web=False))
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0] == ("armazenamento.drive-app", {"acao": "abrir"})
+
+
+def test_formatar_fechar_mostra_o_aviso_antes_de_pedir_o_sim() -> None:
+    texto = formatar_resultado(
+        {
+            "app": "drive",
+            "acao": "fechar",
+            "vai_fechar": True,
+            "aviso": "Fecha a sincronização, mas derruba a unidade `G:`.",
+        }
+    )
+    assert "Vou fechar" in texto
+    assert "derruba a unidade" in texto
+    assert "sim, pode" in texto
+
+
+def test_formatar_estado_do_app_nao_despeja_dicionario() -> None:
+    texto = formatar_resultado(
+        {"app": "drive", "acao": "estado", "aberto": True, "executavel": "C:/Program Files/x/GoogleDriveFS.exe"}
+    )
+    assert texto.startswith("O app do Google Drive está aberto.")
+    assert "Executável:" in texto
+
+
+def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
+    """O aviso da unidade G: tem de aparecer ANTES do "sim", não depois."""
+    base = {"acao": "", "parametros": {}, "resposta": ""}
+    entrada = entrada_de_skill(SKILL_DRIVE_APP)
+    from server.agente_local import _pedir_confirmacao
+
+    _pedir_confirmacao(base, entrada, {"parametros": {"acao": "fechar"}}, aviso="derruba a unidade G:")
+    assert "derruba a unidade G:" in base["resposta"]
+    assert base["resposta"].count("sim, pode") == 1

@@ -389,6 +389,146 @@ def drive_aberto(processos: list[str] | None = None) -> bool | None:
     return any("googledrive" in nome for nome in lista)
 
 
+# ------------------------------------------------- abrir e fechar o app do Drive
+#
+# No Windows o app **não** aceita `--pause_syncing` (esse parâmetro é do macOS).
+# O que dá para fazer sem clicar em janela é fechar o processo e abrir de novo.
+# O efeito colateral é grande e precisa aparecer na tela antes: fechado o app, a
+# unidade `G:` some e a biblioteca fica inalcançável até reabrir. Por isso
+# `fechar()` exige `confirmar=True` e devolve o aviso junto.
+
+PROCESSO_DRIVE = "GoogleDriveFS.exe"
+_PASTAS_DRIVE = (
+    Path(r"C:\Program Files\Google\Drive File Stream"),
+    Path(r"C:\Program Files (x86)\Google\Drive File Stream"),
+)
+
+
+def _versao(texto: str) -> tuple:
+    partes = []
+    for pedaco in texto.replace("-", ".").split("."):
+        partes.append(int(pedaco) if pedaco.isdigit() else 0)
+    return tuple(partes)
+
+
+def achar_executavel(raizes: list[Path] | None = None) -> Path | None:
+    """Onde está o `GoogleDriveFS.exe`, se estiver no lugar de sempre.
+
+    O Drive atualiza trocando a pasta da versão (`...\Drive File Stream\110.0.3.0`),
+    então a busca pega a pasta mais nova em vez de decorar um caminho.
+    """
+    candidatas = list(raizes) if raizes is not None else list(_PASTAS_DRIVE)
+    achados: list[Path] = []
+    for raiz in candidatas:
+        if not raiz.is_dir():
+            continue
+        for subpasta in raiz.iterdir():
+            exe = subpasta / PROCESSO_DRIVE
+            if subpasta.is_dir() and exe.is_file():
+                achados.append(exe)
+    if not achados:
+        return None
+    achados.sort(key=lambda item: _versao(item.parent.name), reverse=True)
+    return achados[0]
+
+
+def _rodar(comando: list[str], escondido: bool = False) -> tuple[int, str]:
+    """Roda um comando já montado aqui dentro — nunca veio de texto livre."""
+    import subprocess  # noqa: PLC0415
+
+    opcoes: dict[str, Any] = {"capture_output": True, "text": True, "timeout": 30, "check": False}
+    if escondido:
+        opcoes["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+        opcoes.pop("capture_output", None)
+        opcoes.pop("text", None)
+    try:
+        feito = subprocess.run(comando, **opcoes)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 1, str(exc)
+    saida = ""
+    if not escondido:
+        saida = ((feito.stdout or "") + (feito.stderr or "")).strip()
+    return feito.returncode, saida
+
+
+def fechar(
+    *,
+    processos: list[str] | None = None,
+    correr: Any = None,
+    confirmar: bool = False,
+) -> dict[str, Any]:
+    """Fecha o app do Drive. Sem `confirmar`, só devolve o aviso do que acontece."""
+    rodar = correr or _rodar
+    if os.name != "nt":
+        raise DriveError("Fechar o app do Google Drive é ação de Windows; aqui não há app para fechar.")
+    aberto = drive_aberto(processos)
+    aviso = (
+        "Fechar o Google Drive para a sincronização, mas também derruba a unidade "
+        "`G:` — e a biblioteca do JARVIS mora nela. Enquanto estiver fechado, o "
+        "JARVIS não acha livro nenhum. Para só parar de transferir e continuar "
+        "lendo, use o menu do app (Pausar sincronização), que mantém a unidade."
+    )
+    if not aberto:
+        return {
+            "app": "drive",
+            "acao": "fechar",
+            "ja_estava": True,
+            "fechado": True,
+            "mensagem": "O app do Google Drive já estava fechado.",
+            "aviso": aviso,
+        }
+    if not confirmar:
+        return {"app": "drive", "acao": "fechar", "vai_fechar": True, "aviso": aviso, "confirma": True}
+
+    codigo, saida = rodar(["taskkill", "/IM", PROCESSO_DRIVE, "/F"])
+    restantes = drive_aberto(processos) if processos is not None else drive_aberto()
+    return {
+        "app": "drive",
+        "acao": "fechar",
+        "fechado": restantes is False,
+        "codigo": codigo,
+        "saida": saida[:300],
+        "mensagem": (
+            "Fechei o app do Google Drive: a sincronização parou e a unidade `G:` saiu."
+            if restantes is False
+            else "Pedi para fechar, mas o app ainda aparece rodando. Confira na bandeja."
+        ),
+        "aviso": aviso,
+    }
+
+
+def abrir(*, correr: Any = None, raizes: list[Path] | None = None) -> dict[str, Any]:
+    """Abre o app do Drive de novo (e a unidade `G:` volta com ele)."""
+    rodar = correr or _rodar
+    if os.name != "nt":
+        raise DriveError("Abrir o app do Google Drive é ação de Windows.")
+    if drive_aberto() is True:
+        return {"app": "drive", "acao": "abrir", "ja_estava": True, "aberto": True,
+                "mensagem": "O app do Google Drive já estava aberto."}
+    exe = achar_executavel(raizes)
+    if exe is None:
+        raise DriveError(
+            "Não achei o `GoogleDriveFS.exe`. Abra o Google Drive pelo menu Iniciar — "
+            "o JARVIS só consegue abrir sozinho quando o app está na pasta padrão."
+        )
+    codigo, saida = rodar([str(exe)], escondido=True)
+    return {
+        "app": "drive",
+        "acao": "abrir",
+        "aberto": codigo == 0,
+        "executavel": str(exe),
+        "codigo": codigo,
+        "saida": saida[:300],
+        "mensagem": (
+            "Abrindo o Google Drive. A unidade `G:` volta em alguns segundos."
+            if codigo == 0
+            else "Não consegui abrir o app; abra pelo menu Iniciar."
+        ),
+    }
+
+
 # ------------------------------------------------------------------ planejar
 
 def planejar(drive: Path | None = None, modo: str = "usar") -> dict[str, Any]:

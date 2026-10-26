@@ -1,4 +1,4 @@
-# Google Drive como espaço de fora (0.47.0)
+# Google Drive como espaço de fora (0.48.0)
 
 O Drive serve para uma coisa: guardar o que é **grande e parado** — livro, PDF,
 vídeo baixado, repositório. Ele não serve para o que o JARVIS regrava a cada
@@ -33,6 +33,7 @@ O JARVIS faz tudo isso sozinho, pelas skills `armazenamento.drive` (só olha) e
 | `configura o google drive pra mim` | mostra o que vai copiar e **pede o seu "sim"**; depois copia, confere e grava as duas linhas no `.env` |
 | `tira a biblioteca do drive` | só apaga as linhas do `.env`; **nada é apagado do Drive** |
 | `limita a banda do drive` · `limita o drive em 500` | grava o limite de banda do app do Drive e confere lendo de volta |
+| `pausa a sincronização` · `fecha o drive` · `abre o drive` | fecha ou reabre o app do Drive (fechar derruba a unidade `G:`) |
 
 Na interface, o pedido cai na tela de confirmação antes de qualquer escrita — é
 o mesmo portão das skills que baixam ou executam alguma coisa. Depois de
@@ -51,8 +52,10 @@ tela (é o jeito bom quando são milhares de arquivos).
 | apontar `biblioteca`/`repos` para o Drive | **sim** | mexe em pasta e no `.env` |
 | conferir se continua tudo no lugar | **sim** | lê pasta e processo |
 | **limitar a banda** (download/upload) | **sim** | o app do Drive lê `BandwidthRxKBPS`/`BandwidthTxKBPS` de `HKCU\Software\Google\DriveFS`, e isso a Google documenta |
+| **fechar o app** (parar a sincronização de vez) | **sim** | `taskkill` no `GoogleDriveFS.exe`: some a sincronização **e a unidade `G:`** |
+| **abrir o app** de novo | **sim** | acha o `GoogleDriveFS.exe` na pasta mais nova e executa |
+| *Pausar sincronização* pelo menu (mantém a unidade) | **não** | não existe flag de linha de comando no Windows; é só pelo menu |
 | marcar a pasta como *disponível off-line* | **não** | é estado interno do app; não há chave nem linha de comando pública |
-| pausar/retomar a sincronização | **não** | idem — só pelo menu do app |
 | mostrar se o Drive está pesando | **sim** | `diagnostico-lento.bat` mede CPU e disco do `googledrivefs` |
 
 Para limitar a banda pelo chat:
@@ -68,6 +71,31 @@ O valor vale **quando o app do Drive reiniciar** (feche pelo ícone da bandeja e
 abra de novo). O comando grava só em `HKEY_CURRENT_USER`, sem pedir senha de
 administrador. Para desfazer sem o chat: apague os dois valores em
 `HKEY_CURRENT_USER\Software\Google\DriveFS` (ou rode `limita o drive em 0`).
+
+### Fechar e abrir o app
+
+```text
+pausa a sincronização        → fecha o app (a unidade G: sai junto)
+fecha o drive                → o mesmo
+abre o drive                 → abre de novo; a G: volta em alguns segundos
+volta a sincronizar o drive  → o mesmo
+```
+
+**Fechar não é pausar.** O menu *Pausar sincronização* mantém a unidade `G:`
+montada e só para as transferências; fechar o processo derruba a unidade — e
+como a biblioteca mora nela, o JARVIS fica sem livro nenhum até reabrir. O chat
+avisa disso **antes** de pedir o "sim". Enquanto estiver fechado, os arquivos
+novos continuam no PC e sobem quando você reabrir.
+
+Pelo mesmo motivo, o jeito melhor de trabalhar pesado no PC é:
+
+1. `pausa a sincronização` (fecha o app) — PC livre, sem Drive nenhum;
+2. trabalhe;
+3. `abre o drive` — ele sobe e envia o que ficou pendente.
+
+O `taskkill /F` **não apaga** o cache de upload: o que estava na fila fica no
+disco e sobe no próximo início. O que a Google avisa que não se deve fazer é
+*apagar* a pasta de cache com upload pendente.
 
 ## 3. Passo a passo
 

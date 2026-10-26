@@ -1,4 +1,4 @@
-"""Testes do `drive_setup` (0.47.0): o JARVIS configurando o Drive sem susto."""
+"""Testes do `drive_setup` (0.48.0): o JARVIS configurando o Drive sem susto."""
 from __future__ import annotations
 
 import os
@@ -153,7 +153,7 @@ def test_aplicar_ao_vivo_troca_o_caminho_nesta_sessao(drive: Path, monkeypatch: 
         repos.PASTA_REPOS, repos.INDICE = original
 
 
-# --------------------------------------------------- limite de banda (0.47.0)
+# --------------------------------------------------- limite de banda (0.48.0)
 
 class RegistroFalso:
     """Imita o `winreg` sem tocar em registro nenhum."""
@@ -262,3 +262,99 @@ def test_estado_sem_problema_nao_inventa_aviso(
 def test_drive_aberto_reconhece_o_processo() -> None:
     assert drive_setup.drive_aberto(["chrome.exe", "googledrivefs.exe"]) is True
     assert drive_setup.drive_aberto(["chrome.exe"]) is False
+
+
+# ------------------------------------- abrir/fechar o app (0.48.0) no Windows
+
+def test_fechar_exige_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "posix")
+    with pytest.raises(drive_setup.DriveError):
+        drive_setup.fechar(confirmar=True)
+
+
+def test_fechar_sem_confirmar_so_avisa(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    chamadas: list[list[str]] = []
+    resultado = drive_setup.fechar(
+        processos=["googledrivefs.exe"], correr=lambda cmd, **_: chamadas.append(cmd) or (0, ""), confirmar=False
+    )
+    assert resultado["vai_fechar"] is True
+    assert "G:" in resultado["aviso"]
+    assert chamadas == []
+
+
+def test_fechar_mata_so_o_processo_do_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    chamadas: list[list[str]] = []
+    lista = ["googledrivefs.exe"]
+
+    def correr(cmd, **_):
+        chamadas.append(cmd)
+        lista.clear()  # simula o processo morrendo
+        return 0, ""
+
+    resultado = drive_setup.fechar(processos=lista, correr=correr, confirmar=True)
+    assert chamadas and chamadas[0][0] == "taskkill"
+    assert "GoogleDriveFS.exe" in chamadas[0]
+    assert "/F" in chamadas[0]
+    assert resultado["fechado"] is True
+
+
+def test_fechar_quando_ja_esta_fechado_nao_roda_nada(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    chamadas: list[list[str]] = []
+    resultado = drive_setup.fechar(
+        processos=["chrome.exe"], correr=lambda cmd, **_: chamadas.append(cmd) or (0, ""), confirmar=True
+    )
+    assert resultado["ja_estava"] is True
+    assert chamadas == []
+
+
+def test_achar_executavel_pega_a_versao_mais_nova(tmp_path: Path) -> None:
+    for versao in ("110.0.3.0", "109.0.2.0", "111.0.1.0"):
+        pasta = tmp_path / versao
+        pasta.mkdir()
+        (pasta / "GoogleDriveFS.exe").write_text("x", encoding="utf-8")
+    achado = drive_setup.achar_executavel([tmp_path])
+    assert achado is not None
+    assert achado.parent.name == "111.0.1.0"
+
+
+def test_achar_executavel_sem_pasta_devolve_none(tmp_path: Path) -> None:
+    assert drive_setup.achar_executavel([tmp_path / "nao-existe"]) is None
+
+
+def test_abrir_usa_o_executavel_encontrado(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    monkeypatch.setattr(drive_setup, "drive_aberto", lambda *_: False)
+    pasta = tmp_path / "112.0.0.0"
+    pasta.mkdir()
+    exe = pasta / "GoogleDriveFS.exe"
+    exe.write_text("x", encoding="utf-8")
+    chamadas: list[tuple[list[str], bool]] = []
+
+    def correr(cmd, escondido=False):
+        chamadas.append((cmd, escondido))
+        return 0, ""
+
+    resultado = drive_setup.abrir(correr=correr, raizes=[tmp_path])
+    assert chamadas == [([str(exe)], True)]
+    assert resultado["aberto"] is True
+    assert "G:" in resultado["mensagem"]
+
+
+def test_abrir_sem_executavel_explica(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    monkeypatch.setattr(drive_setup, "drive_aberto", lambda *_: False)
+    with pytest.raises(drive_setup.DriveError) as erro:
+        drive_setup.abrir(correr=lambda *a, **k: (0, ""), raizes=[tmp_path])
+    assert "menu Iniciar" in str(erro.value)
+
+
+def test_abrir_quando_ja_aberto_nao_roda_nada(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drive_setup.os, "name", "nt")
+    monkeypatch.setattr(drive_setup, "drive_aberto", lambda *_: True)
+    chamadas: list[Any] = []
+    resultado = drive_setup.abrir(correr=lambda *a, **k: chamadas.append(a), raizes=[])
+    assert resultado["ja_estava"] is True
+    assert chamadas == []
