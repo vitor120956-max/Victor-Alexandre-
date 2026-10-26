@@ -1474,3 +1474,36 @@ def test_formatar_drive_configurado_nao_manda_configurar_de_novo() -> None:
     )
     assert "tira a biblioteca do drive" in texto
     assert "diga \"configura o Google Drive pra mim\"" not in texto
+
+
+def test_confirmacao_nao_injeta_autorizacao_em_skill_que_nao_tem_o_campo(tmp_path: Path) -> None:
+    """O chat manda "sim, pode" como autorização; a skill do Drive não tem esse campo."""
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "configura o google drive pra mim",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes == [("armazenamento.drive-copiar", {"modo": "usar"})]
+
+
+def test_confirmacao_mantem_autorizacao_em_skill_que_declara_o_campo(tmp_path: Path) -> None:
+    duble = registro(SKILL_BAIXAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender(
+            "baixar o repositório virgiliojr94/book-to-skill",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+            confirmar=True,
+            autorizacao="sim, pode",
+        )
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0][1]["autorizacao"] == "sim, pode"

@@ -295,6 +295,18 @@ _RE_DRIVE_PERGUNTA = re.compile(
 _RE_DRIVE_PARA_DENTRO = re.compile(r"(?:para|pra|pro)\s+(?:o\s+)?(?:google\s+)?drive\b")
 
 
+def _schema_da_skill(registry: Any, skill_id: str) -> dict[str, Any]:
+    """Formulário publicado pela skill, ou vazio quando o registro não tem."""
+    try:
+        for item in registry.list():
+            if isinstance(item, dict) and item.get("id") == skill_id:
+                schema = item.get("inputSchema") or {}
+                return schema if isinstance(schema, dict) else {}
+    except Exception:  # registro de teste pode não listar
+        pass
+    return {}
+
+
 def _pedido_direto_de_drive(termo: str) -> dict[str, Any] | None:
     """Pedidos de Google Drive: regra explícita, porque "drive" aparece em tudo.
 
@@ -1979,12 +1991,16 @@ async def _resolver(
     if direto is None:
         direto = _pedido_direto_de_repositorio(termo)
     if direto is not None:
+        # O formulário real da skill importa: só injeta `autorizacao` em quem
+        # declara esse campo. Sem isso, a confirmação do chat quebrava skills
+        # com `extra="forbid"` (a do Drive é uma delas).
+        schema_direto = _schema_da_skill(registry, direto["skill_id"])
         entrada_direta = Entrada(
             skill_id=direto["skill_id"],
             nome=direto["nome"],
             categoria=direto.get("categoria", "Repositórios"),
             descricao="",
-            schema={},
+            schema=schema_direto,
             fortes=frozenset(),
             fracos=frozenset(),
             confirma=bool(direto["confirma"]),
@@ -1995,7 +2011,7 @@ async def _resolver(
         if direto["confirma"] and not confirmar:
             return _pedir_confirmacao(base, entrada_direta, {"parametros": direto["parametros"]})
         parametros = dict(direto["parametros"])
-        if direto["confirma"] and autorizacao:
+        if direto["confirma"] and autorizacao and "autorizacao" in (schema_direto.get("properties") or {}):
             parametros["autorizacao"] = autorizacao
         try:
             resultado = await registry.execute(direto["skill_id"], parametros, False)
