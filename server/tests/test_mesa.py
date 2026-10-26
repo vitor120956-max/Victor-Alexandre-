@@ -1,4 +1,4 @@
-"""Testes da mesa (0.49.0): mouse e teclado com dublê — nada toca na tela real."""
+"""Testes da mesa (0.50.0): mouse e teclado com dublê — nada toca na tela real."""
 from __future__ import annotations
 
 from typing import Any

@@ -1,4 +1,4 @@
-"""Testes da legenda de vídeo (0.49.0): link, escolha de idioma e importação.
+"""Testes da legenda de vídeo (0.50.0): link, escolha de idioma e importação.
 
 Sem rede: o HTML do YouTube é montado no teste e injetado por `buscar=`.
 """

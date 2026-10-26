@@ -472,6 +472,8 @@ export const helpText = [
   '• Enxuto — “revisar mudança: <diff>”, “auditar código app”, “dívida de atalhos em app” ou “abrir lean”. Análise estática, sem executar nada.',
   '• Agentes — “abrir agentes” ou “governo de agentes”. Revisa equipe, quadro, orçamento, parada de trabalho e permissões declaradas, sem executar agentes.',
   '• Estúdio — “abrir estúdio”, “design system” ou “revisar contraste”. Confere contrato de design, contraste WCAG, crítica em cinco dimensões e clichês no HTML, sem compilar nem publicar.',
+  '• Habilidades de fora — “importa a habilidade https://github.com/dono/repo/blob/main/SKILL.md” puxa o texto e guarda; “quais habilidades você importou” lista; “usa a habilidade <nome> para <pedido>” devolve o roteiro. Guarda texto, não instala nada, não pede token.',
+  '• GitHub — “ficha do repositório vercel-labs/agent-skills”, “lista os arquivos”, “lê o SKILL.md” ou “busca repositório de agent skills”. API pública, sem token, 60 pedidos por hora.',
   '• Correção — “não é essa, é a skill legal.article” ensina a correlação; “procure na web sobre isso” busca e guarda a resposta; “esqueça <pedido>” apaga as duas.',
   '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',

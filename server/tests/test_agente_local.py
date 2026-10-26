@@ -1,4 +1,4 @@
-"""Testes do agente local (0.49.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.50.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "237 skills" in texto
+    assert "245 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.49.0)
+# ------------------------------------------------- memória do agente (0.50.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 237 skills, uma por uma
+# ------------------------------------- cobertura: as 245 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 237 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 245 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.49.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.50.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1349,7 +1349,7 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     assert duble.execucoes == []
 
 
-# ------------------------------------------------------- Google Drive (0.49.0)
+# ------------------------------------------------------- Google Drive (0.50.0)
 
 SKILL_DRIVE_ESTADO = {
     "id": "armazenamento.drive",
@@ -1722,7 +1722,7 @@ def test_confirmacao_de_fechar_o_drive_ja_mostra_o_aviso() -> None:
     assert base["resposta"].count("sim, pode") == 1
 
 
-# --------------------------------------------- mouse e teclado (0.49.0)
+# --------------------------------------------- mouse e teclado (0.50.0)
 
 SKILL_MESA_CLICAR = {
     "id": "mesa.clicar",
@@ -1834,3 +1834,76 @@ def test_pesquisa_sem_rede_nao_pede_token(tmp_path: Path) -> None:
     assert "Tentei buscar “python” em YouTube" in texto
     assert "token" not in texto.lower()
     assert texto.count("JARVIS_HOST_REDE") == 1
+
+
+# ------------------------------------------ habilidades de fora (0.50.0)
+
+
+def test_importar_habilidade_do_link_pede_confirmacao(tmp_path: Path) -> None:
+    duble = registro(
+        {
+            "id": "habilidades.importar",
+            "name": "Importar habilidade de fora",
+            "description": "Puxa um SKILL.md.",
+            "category": "Habilidades",
+            "inputSchema": {"type": "object", "properties": {"url": {"type": "string", "title": "Link"}}},
+        },
+        raiz=tmp_path,
+    )
+    resultado = asyncio.run(
+        atender(
+            "importa a habilidade https://github.com/a/b/blob/main/SKILL.md",
+            registry=duble,
+            raiz=tmp_path,
+            consultar_web=False,
+        )
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["parametros"] == {"url": "https://github.com/a/b/blob/main/SKILL.md"}
+
+
+def test_quais_habilidades_e_leitura(tmp_path: Path) -> None:
+    duble = registro(
+        {
+            "id": "habilidades.listar",
+            "name": "Habilidades importadas",
+            "description": "Lista.",
+            "category": "Habilidades",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        raiz=tmp_path,
+    )
+    resultado = asyncio.run(
+        atender("quais habilidades você importou", registry=duble, raiz=tmp_path, consultar_web=False)
+    )
+    assert resultado["acao"] == "executado"
+
+
+def test_formatar_habilidade_importada() -> None:
+    texto = formatar_resultado(
+        {"slug": "frontend-design", "nome": "frontend-design", "url": "https://x/SKILL.md", "tamanho": 120, "novo": True, "tentativas": []}
+    )
+    assert "Habilidade importada" in texto and "frontend-design" in texto
+    assert "usa a habilidade frontend-design" in texto
+
+
+def test_formatar_lista_vazia_ensina_o_comando() -> None:
+    texto = formatar_resultado({"total": 0, "habilidades": []})
+    assert "importa a habilidade" in texto
+
+
+def test_formatar_guia_com_tarefa() -> None:
+    texto = formatar_resultado(
+        {
+            "slug": "grill-me",
+            "nome": "Grill me",
+            "url": "https://x/SKILL.md",
+            "texto": "1. Pergunte o objetivo\n2. Cobre o plano",
+            "tarefa": "revisar o plano",
+            "cortado": False,
+            "lembrete": "Isto é um roteiro em texto.",
+        }
+    )
+    assert "Para: revisar o plano" in texto
+    assert "Pergunte o objetivo" in texto
+    assert "roteiro em texto" in texto

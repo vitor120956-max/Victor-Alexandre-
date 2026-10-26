@@ -276,7 +276,7 @@ from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extrac
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
-from . import drive_setup, mesa
+from . import drive_setup, github, habilidades, mesa
 from . import ocr as ocr_local
 from .repos import (
     ReposError,
@@ -2031,6 +2031,49 @@ class MesaFocarInput(BaseModel):
     janela: str = Field(min_length=2, max_length=120, title="Janela", json_schema_extra={"description": "Um pedaço do título, como `bloco de notas`."})
 
 
+class HabilidadesImportarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=10, max_length=400, title="Link da habilidade", json_schema_extra={"description": "Link do `SKILL.md` no GitHub, do botão “Raw” ou de uma página de catálogo (skills.sh, clawhub)."})
+    nome: str = Field(default="", max_length=80, title="Apelido", json_schema_extra={"description": "Opcional: força o nome quando o arquivo não tem front matter."})
+
+
+class HabilidadesAplicarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    habilidade: str = Field(min_length=2, max_length=80, title="Habilidade", json_schema_extra={"description": "Nome ou slug do que já foi importado."})
+    tarefa: str = Field(default="", max_length=400, title="Para quê", json_schema_extra={"description": "A sua pergunta ou pedido; ela volta junto com o roteiro."})
+    limite: int = Field(default=9_000, ge=500, le=60_000, title="Caracteres", json_schema_extra={"description": "Teto do texto devolvido."})
+
+
+class HabilidadesRemoverInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    habilidade: str = Field(min_length=2, max_length=80, title="Habilidade")
+
+
+class GithubRepoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repositorio: str = Field(min_length=3, max_length=250, title="Repositório", json_schema_extra={"description": "`dono/repositorio` ou o endereço do GitHub."})
+
+
+class GithubArquivosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repositorio: str = Field(min_length=3, max_length=250, title="Repositório")
+    caminho: str = Field(default="", max_length=300, title="Pasta", json_schema_extra={"description": "Vazio lista a raiz."})
+    ref: str = Field(default="", max_length=100, title="Branch/tag", json_schema_extra={"description": "Vazio usa a branch padrão."})
+
+
+class GithubArquivoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repositorio: str = Field(min_length=3, max_length=250, title="Repositório")
+    caminho: str = Field(min_length=1, max_length=300, title="Arquivo", json_schema_extra={"description": "Como `SKILL.md` ou `skills/x/SKILL.md`."})
+    ref: str = Field(default="", max_length=100, title="Branch/tag")
+
+
+class GithubBuscarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consulta: str = Field(min_length=2, max_length=120, title="Consulta")
+    limite: int = Field(default=5, ge=1, le=10, title="Resultados")
+
+
 class ReposBaixarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     url: str = Field(min_length=3, max_length=300, title="Repositório", json_schema_extra={"description": "`dono/repo` ou endereço do GitHub. Só público, só `.zip` — não precisa de Git."})
@@ -2185,6 +2228,11 @@ def _safe_path(root: Path, relative: str, *, allow_root: bool = False) -> Path:
         return workspace_path(root, relative, allow_root=allow_root)
     except ValueError as exc:
         raise SkillError(str(exc)) from exc
+
+
+def _raiz_habilidades() -> Path:
+    """O mesmo arquivo que o chat usa: `storage/habilidades.json` (ou `JARVIS_DADOS`)."""
+    return dados_locais.raiz()
 
 
 def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRegistry":
@@ -3661,6 +3709,67 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
 
         return executar
 
+    def habilidades_importar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, HabilidadesImportarInput)
+        try:
+            return habilidades.importar(data.url, nome=data.nome)
+        except habilidades.HabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def habilidades_listar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        itens = habilidades.listar()
+        return {"total": len(itens), "habilidades": itens, "arquivo": str(_raiz_habilidades())}
+
+    def habilidades_aplicar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, HabilidadesAplicarInput)
+        try:
+            achado = habilidades.guia(data.habilidade, limite=data.limite)
+        except habilidades.HabilidadeError as exc:
+            raise SkillError(str(exc)) from exc
+        achado["tarefa"] = data.tarefa
+        achado["lembrete"] = (
+            "Isto é um roteiro em texto, não código rodando: as regras valem para você (ou para o "
+            "modelo, se houver um configurado) escrever e conferir. Nada foi instalado."
+        )
+        return achado
+
+    def habilidades_remover_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, HabilidadesRemoverInput)
+        removida = habilidades.remover(data.habilidade)
+        if not removida:
+            raise SkillError(f"Não tenho a habilidade “{data.habilidade}”.")
+        return {"removida": True, "habilidade": data.habilidade}
+
+    def github_repo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GithubRepoInput)
+        try:
+            return github.repo(data.repositorio)
+        except github.GithubError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def github_arquivos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GithubArquivosInput)
+        try:
+            itens = github.arquivos(data.repositorio, data.caminho, ref=data.ref)
+        except github.GithubError as exc:
+            raise SkillError(str(exc)) from exc
+        return {"repositorio": data.repositorio, "caminho": data.caminho, "total": len(itens), "itens": itens}
+
+    def github_arquivo_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GithubArquivoInput)
+        try:
+            return github.arquivo(data.repositorio, data.caminho, ref=data.ref)
+        except github.GithubError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def github_buscar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GithubBuscarInput)
+        try:
+            achados = github.buscar(data.consulta, limite=data.limite)
+        except github.GithubError as exc:
+            raise SkillError(str(exc)) from exc
+        return {"consulta": data.consulta, "total": len(achados), "repositorios": achados}
+
     def armazenamento_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, ArmazenamentoPlanejarInput)
         destino = Path(data.destino).expanduser()
@@ -4439,6 +4548,14 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("mesa.digitar", "Digitar", "Digita num campo em foco, com acento (Unicode). Não aperta Enter sozinho.", "Mesa", MesaDigitarInput, mesa_handler("digitar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("mesa.teclar", "Apertar tecla", "Aperta uma tecla ou atalho: `enter`, `tab`, `esc`, `ctrl+c`, `ctrl+v`, `alt+f4`.", "Mesa", MesaTeclarInput, mesa_handler("teclar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("mesa.focar", "Focar janela", "Traz para a frente a primeira janela cujo título contenha o trecho informado.", "Mesa", MesaFocarInput, mesa_handler("focar"), side_effects=True, requires_confirmation=True, timeout_seconds=20),
+        SkillDefinition("habilidades.importar", "Importar habilidade de fora", "Puxa o `SKILL.md` de um link (GitHub, botão “Raw” ou página de catálogo) e guarda em `storage/habilidades.json` como roteiro consultável. Guarda texto — não instala, não executa, não pede token.", "Habilidades", HabilidadesImportarInput, habilidades_importar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90),
+        SkillDefinition("habilidades.listar", "Habilidades importadas", "Lista as habilidades já guardadas, com nome, descrição, origem e tamanho. Só lê o arquivo local.", "Habilidades", EmptyInput, habilidades_listar_handler, timeout_seconds=10),
+        SkillDefinition("habilidades.aplicar", "Usar habilidade importada", "Devolve o roteiro da habilidade junto com a sua pergunta, para ser seguido passo a passo. Sem modelo configurado, é texto de apoio — não é código executado.", "Habilidades", HabilidadesAplicarInput, habilidades_aplicar_handler, timeout_seconds=15),
+        SkillDefinition("habilidades.remover", "Esquecer habilidade", "Tira a habilidade de `storage/habilidades.json`. Nada fora desse arquivo é tocado.", "Habilidades", HabilidadesRemoverInput, habilidades_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("github.repo", "Ficha de repositório", "Lê a API pública do GitHub e descreve o repositório: estrelas, linguagem, licença, branch padrão e tópicos. Sem token, até 60 pedidos por hora.", "GitHub", GithubRepoInput, github_repo_handler, timeout_seconds=30),
+        SkillDefinition("github.arquivos", "Listar arquivos do GitHub", "Lista uma pasta de um repositório público pela API do GitHub, sem clonar. Diz o tipo (pasta/arquivo), o tamanho e o caminho.", "GitHub", GithubArquivosInput, github_arquivos_handler, timeout_seconds=30),
+        SkillDefinition("github.arquivo", "Ler arquivo do GitHub", "Baixa o texto de um arquivo de repositório público pela API do GitHub, decodificando o base64. É o caminho para pegar o `SKILL.md` de um repositório e importar como habilidade.", "GitHub", GithubArquivoInput, github_arquivo_handler, timeout_seconds=30),
+        SkillDefinition("github.buscar", "Buscar repositório no GitHub", "Procura repositório público por palavra, ordenado por estrelas, e devolve nome, descrição e link. Sem token.", "GitHub", GithubBuscarInput, github_buscar_handler, timeout_seconds=30),
         SkillDefinition("armazenamento.planejar", "Plano para mudar de disco", "Compara a pasta atual com o destino e publica os cinco passos exatos, incluindo o `robocopy` e a linha do `.env`. Não copia, não move, não apaga.", "Armazenamento", ArmazenamentoPlanejarInput, armazenamento_planejar_handler, timeout_seconds=15),
         SkillDefinition("repos.baixar", "Baixar repositório", "Baixa um repositório público do GitHub como `.zip` para `storage/repos`, sem Git instalado, com teto de tamanho, recusa de link simbólico e de caminho que escape da pasta; depois descreve linguagem, dependência e entrada.", "Repositórios", ReposBaixarInput, repos_baixar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("repos.analisar", "Analisar repositório", "Lê o repositório já baixado e devolve README, linguagens, dependências, entradas prováveis (`python -m`, `npm run`, `make`), árvore e se ele traz `SKILL.md`. Não instala nem executa.", "Repositórios", ReposAnalisarInput, repos_analisar_handler, timeout_seconds=30),

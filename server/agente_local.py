@@ -1412,6 +1412,100 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+_RE_IMPORTAR_HABILIDADE = re.compile(
+    r"\b(?:importa|importar|importe|puxa|puxar|puxe|adiciona|adicionar|adicione|traz|trazer|"
+    r"aprende|aprender|baixa|baixar)\b.*?\bhabilidades?\b.*?(?P<url>https?://\S+)",
+    re.I,
+)
+_RE_LISTAR_HABILIDADES = re.compile(
+    r"\b(?:quais|qual|lista|listar|liste|mostra|mostrar|mostre|minhas)\b.*?\bhabilidades?\b"
+    r"|\bhabilidades? (?:importadas?|de fora|que (?:você )?(?:importou|guardou))\b",
+    re.I,
+)
+_RE_APLICAR_HABILIDADE = re.compile(
+    r"\b(?:usa|usar|use|aplica|aplicar|aplique|segue|seguir|siga)\b.*?\bhabilidade\s+"
+    r"(?P<nome>[\w.-]{2,60}(?:\s[\w.-]{1,40}){0,4}?)(?:\s+para\s+(?P<tarefa>.+))?$",
+    re.I,
+)
+
+
+def _pedido_direto_de_habilidade(termo: str) -> dict[str, Any] | None:
+    """Habilidades de fora: importar de um link, listar e usar como roteiro."""
+    texto = (termo or "").strip()
+
+    achado = _RE_IMPORTAR_HABILIDADE.search(texto)
+    if achado:
+        url = achado.group("url").rstrip(").,;")
+        if url.startswith("http"):
+            return {
+                "skill_id": "habilidades.importar",
+                "nome": "Importar habilidade de fora",
+                "parametros": {"url": url},
+                "confirma": True,
+            }
+
+    achado = _RE_APLICAR_HABILIDADE.search(texto)
+    if achado:
+        nome = achado.group("nome").strip(" .")
+        if nome and nome.lower() not in {"de fora", "importada", "nova", "essa"}:
+            parametros = {"habilidade": nome[:80]}
+            tarefa = (achado.group("tarefa") or "").strip(" ?.!")
+            if tarefa:
+                parametros["tarefa"] = tarefa[:400]
+            return {"skill_id": "habilidades.aplicar", "nome": "Usar habilidade importada", "parametros": parametros, "confirma": False}
+
+    if _RE_LISTAR_HABILIDADES.search(texto) and "http" not in texto:
+        return {"skill_id": "habilidades.listar", "nome": "Habilidades importadas", "parametros": {}, "confirma": False}
+    return None
+
+
+def _formatar_habilidade(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para as habilidades importadas."""
+    if "habilidades" in resultado and isinstance(resultado.get("habilidades"), list):
+        itens = resultado["habilidades"]
+        if not itens:
+            return (
+                "Nenhuma habilidade de fora guardada ainda. Mande o link assim: "
+                "`importa a habilidade https://github.com/dono/repo/blob/main/SKILL.md`."
+            )
+        linhas = [f"Habilidades guardadas ({len(itens)}):", ""]
+        for item in itens[:30]:
+            linhas.append(f"• {item.get('nome')} (`{item.get('slug')}`) — {item.get('descricao') or 'sem descrição'}")
+            if item.get("url"):
+                linhas.append(f"  {item['url']}")
+        linhas.append("")
+        linhas.append("Use com: `usa a habilidade <nome> para <seu pedido>`.")
+        return "\n".join(linhas)
+
+    if resultado.get("texto") and resultado.get("slug") and resultado.get("lembrete"):
+        cabeca = [f"Habilidade “{resultado.get('nome')}” (`{resultado['slug']}`)"]
+        if resultado.get("url"):
+            cabeca.append(f"Fonte: {resultado['url']}")
+        if resultado.get("tarefa"):
+            cabeca.append(f"Para: {resultado['tarefa']}")
+        if resultado.get("cortado"):
+            cabeca.append("(texto cortado no limite — peça com `limite` maior para ver tudo)")
+        corpo = [cabeca[0], *cabeca[1:], "", str(resultado["texto"]).strip(), "", str(resultado["lembrete"])]
+        return "\n".join(corpo)
+
+    if resultado.get("slug") and resultado.get("novo") is not None and "tentativas" in resultado:
+        estado = "importada" if resultado["novo"] else "atualizada"
+        linhas = [
+            f"Habilidade {estado}: “{resultado.get('nome')}” (`{resultado['slug']}`).",
+            f"Fonte: {resultado.get('url')}",
+        ]
+        if resultado.get("descricao"):
+            linhas.append(f"Resumo: {resultado['descricao']}")
+        linhas.append(f"Tamanho: {resultado.get('tamanho')} caractere(s). Ficou guardada em storage/habilidades.json.")
+        linhas.append("Use com: " f"`usa a habilidade {resultado['slug']} para <seu pedido>`.")
+        return "\n".join(linhas)
+
+    if resultado.get("removida") and resultado.get("habilidade"):
+        return f"Habilidade “{resultado['habilidade']}” removida do arquivo local."
+
+    return None
+
+
 def _formatar_mesa(resultado: dict[str, Any]) -> str | None:
     """Texto do chat para mouse, teclado e janelas."""
     acao = str(resultado.get("acao") or "")
@@ -1689,6 +1783,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_habilidade(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_mesa(resultado)
     if especial is not None:
@@ -2445,6 +2543,10 @@ async def _resolver(
     # 0b3. Mouse e teclado: coordenada e verbo são sinal forte.
     if direto is None:
         direto = _pedido_direto_de_mesa(termo)
+
+    # 0b4. Habilidades de fora: link colado, lista ou uso como roteiro.
+    if direto is None:
+        direto = _pedido_direto_de_habilidade(termo)
 
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
     if direto is None:

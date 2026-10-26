@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.49.0
+# Biblioteca e armazenamento — 0.50.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -255,10 +255,11 @@ Limites, sem enfeite:
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **88** (34 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 17 em `test_dados.py`, 27 em `test_agente_local.py`) |
-| Testes do agente local | **178** (8 novos: clique com confirmação, fonte pelo pedido e aviso sem token) |
+| Testes do agente local | **183** (13 novos: mesa, fonte pelo pedido e habilidades importadas) |
+| Testes das habilidades de fora | **34** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.288** |
-| Skills no registro | **237** (18 novas: biblioteca.*, armazenamento.* e mesa.*) |
+| Suíte da API | **2.327** |
+| Skills no registro | **245** (26 novas: biblioteca.*, armazenamento.*, mesa.*, habilidades.* e github.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
 **O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina

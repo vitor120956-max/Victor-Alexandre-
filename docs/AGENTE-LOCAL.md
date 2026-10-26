@@ -19,7 +19,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 237 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 245 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -65,6 +65,9 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `aperta enter` · `aperta ctrl v` · `aperta page down` | `mesa.teclar` | **sim** |
 | `foca a janela do bloco de notas` | `mesa.focar` | **sim** |
 | `onde esta o mouse` · `status da mesa` | `mesa.status` (só lê) | não |
+| `importa a habilidade <link do SKILL.md>` | `habilidades.importar` | **sim** |
+| `quais habilidades você importou` | `habilidades.listar` (só lê) | não |
+| `usa a habilidade <nome> para <pedido>` | `habilidades.aplicar` (devolve o roteiro) | não |
 
 Pergunta com `?` nunca dispara a skill de cópia: no máximo ela mostra o estado.
 `abre o drive` e `pausa o drive` continuam indo para a busca normal.
@@ -118,7 +121,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 237 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 245 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
