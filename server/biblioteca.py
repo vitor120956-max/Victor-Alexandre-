@@ -7,8 +7,8 @@ e responde citando fonte, seção e página — sem resumir com modelo, sem inve
 
 O caminho é sempre o mesmo:
 
-1. **importar** — PDF, DOCX, EPUB, TXT/MD/RST e legenda (VTT/SRT) viram seções
-   com título, texto e página;
+1. **importar** — PDF, DOCX, EPUB, TXT/MD/RST, imagem e legenda (VTT/SRT) viram
+   seções com título, texto e página; PDF escaneado e foto passam pelo OCR;
 2. **buscar** — BM25 sobre as seções de todas as fontes, com cobertura calculada
    (quantas palavras do pedido realmente apareceram);
 3. **correlacionar** — termos que aparecem em duas ou mais fontes, e pares que
@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import zipfile
@@ -491,7 +492,15 @@ def importar_video(
     buscar: Any = None,
     titulo: str = "",
 ) -> dict[str, Any]:
-    """Baixa a legenda do YouTube e importa como fonte do tipo "video"."""
+    """Baixa a legenda do YouTube e importa como fonte do tipo "video".
+
+    Só funciona com a rede liberada (`JARVIS_HOST_REDE=1`), igual às skills de
+    sistema: nada aqui sai para a internet por acidente.
+    """
+    if os.environ.get("JARVIS_HOST_REDE", "0") != "1":
+        raise BibliotecaError(
+            "Rede desligada. Suba a API com JARVIS_HOST_REDE=1 para baixar a legenda do YouTube."
+        )
     try:
         baixada = video.legenda(url, buscar=buscar)
     except video.VideoError as exc:

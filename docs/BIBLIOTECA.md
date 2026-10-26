@@ -204,7 +204,9 @@ palavra errada, traduzir. Texto reconhecido errado entra errado — a ficha
 
 ## 9. Legenda do YouTube, sozinha
 
-`biblioteca.video url=<endereço>` faz o caminho inteiro: abre a página do vídeo,
+`biblioteca.video url=<endereço>` faz o caminho inteiro — e, como qualquer coisa
+que sai para a internet aqui, exige a rede liberada na subida
+(`JARVIS_HOST_REDE=1`), a mesma trava das skills de sistema: abre a página do vídeo,
 lê as faixas de legenda, escolhe **pt-BR**, **pt**, **en** ou **es** nessa ordem
 (aceita a automática), baixa o `json3` e importa o texto como fonte do tipo
 `video`, guardando o link como origem.
@@ -218,6 +220,7 @@ biblioteca.video url=https://www.youtube.com/watch?v=dQw4w9WgXcQ
 Limites, sem enfeite:
 
 - **não transcreve áudio** — vídeo sem legenda publicada não entra;
+- **rede desligada recusa antes de tentar** — a mensagem diz qual variável ligar;
 - a página do YouTube muda; se as faixas não vierem, o erro diz que não vieram;
 - vídeo pedindo consentimento de cookie pode exigir abrir uma vez no navegador;
 - legenda automática tem erro de reconhecimento de fala — e ele fica no texto.
@@ -230,9 +233,15 @@ Limites, sem enfeite:
 |---|---|
 | Testes da biblioteca | **22** (PDF gerado com reportlab, EPUB e DOCX montados no teste) |
 | Testes do OCR | **13** (motor falso por monkeypatch: o sandbox não tem Tesseract) |
-| Testes da legenda | **18** (HTML do YouTube montado no teste, sem rede) |
+| Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do agente local | **127** |
-| Suíte da API | **2.139** |
+| Suíte da API | **2.140** |
 | Skills no registro | **225** (10 novas: biblioteca.* e armazenamento.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
+
+**O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina
+onde este projeto é testado (Linux, sem o executável), então os testes de OCR
+usam um motor falso e cobrem detecção, rasterização, limite de páginas e
+mensagem de erro. O reconhecimento em si só é exercitado na sua instalação —
+`biblioteca.ocr` diz na hora se o motor está lá.

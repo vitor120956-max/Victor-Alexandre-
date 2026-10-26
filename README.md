@@ -29,7 +29,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 | `baixar o repositório virgiliojr94/book-to-skill` | baixa o `.zip` do GitHub **sem Git**, descreve linguagem, dependências e entradas, e pede o “sim” antes de qualquer execução |
 | `importar Downloads/contabilidade.pdf` · `como funciona o rateio de custo` | biblioteca: lê livro, EPUB, DOCX, TXT, imagem e legenda de vídeo, e responde com trecho real + seção + página |
 | `importar Downloads/contrato-escaneado.pdf` · `importar Downloads/foto-da-pagina.jpg` | OCR: tira o texto da página digitalizada ou da foto e guarda na biblioteca |
-| `baixar a legenda de https://youtu.be/dQw4w9WgXcQ` | pega sozinho a legenda publicada do YouTube (inclusive a automática) e importa como fonte |
+| `baixar a legenda de https://youtu.be/dQw4w9WgXcQ` | pega sozinho a legenda publicada do YouTube (inclusive a automática) e importa como fonte — precisa de `JARVIS_HOST_REDE=1` |
 
 **O que precisa de chave:** qualquer pergunta aberta — “quem foi Machado de Assis”, “explique a diferença entre X e Y”. Sem chave, o JARVIS responde que a IA externa não foi configurada e lembra que os comandos locais continuam valendo.
 

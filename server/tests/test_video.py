@@ -147,6 +147,7 @@ def test_legenda_vazia_e_erro():
 
 def test_biblioteca_importa_video_como_fonte(tmp_path, monkeypatch):
     monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    monkeypatch.setenv("JARVIS_HOST_REDE", "1")
     pagina = _html([_faixa("pt-BR", "https://www.youtube.com/api/timedtext?v=x&lang=pt-BR")])
     fonte = biblioteca.importar_video(
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -162,6 +163,15 @@ def test_biblioteca_importa_video_como_fonte(tmp_path, monkeypatch):
 
 def test_biblioteca_recusa_video_sem_legenda(tmp_path, monkeypatch):
     monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    monkeypatch.setenv("JARVIS_HOST_REDE", "1")
     with pytest.raises(biblioteca.BibliotecaError) as erro:
         biblioteca.importar_video("dQw4w9WgXcQ", buscar=_buscador(_html([]), {}))
     assert "legenda" in str(erro.value).lower()
+
+
+def test_biblioteca_recusa_legenda_com_a_rede_desligada(tmp_path, monkeypatch):
+    monkeypatch.setattr(biblioteca.dados, "raiz", lambda: tmp_path)
+    monkeypatch.delenv("JARVIS_HOST_REDE", raising=False)
+    with pytest.raises(biblioteca.BibliotecaError) as erro:
+        biblioteca.importar_video("dQw4w9WgXcQ")
+    assert "JARVIS_HOST_REDE=1" in str(erro.value)
