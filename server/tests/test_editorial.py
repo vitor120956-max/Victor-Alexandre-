@@ -570,8 +570,8 @@ def test_delivery_rejects_bad_input() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.45.0"
-    assert health["skills"] == 227
+    assert health["version"] == "0.46.0"
+    assert health["skills"] == 229
 
 
 def test_api_runs_every_editorial_skill(client: TestClient) -> None:

@@ -1,4 +1,4 @@
-# Google Drive como espaço de fora (0.45.0)
+# Google Drive como espaço de fora (0.46.0)
 
 O Drive serve para uma coisa: guardar o que é **grande e parado** — livro, PDF,
 vídeo baixado, repositório. Ele não serve para o que o JARVIS regrava a cada
@@ -22,7 +22,28 @@ sincronização subir um arquivo. É exatamente o que já aconteceu com os `.cas
 
 ---
 
-## 2. Passo a passo
+## 2. Jeito mais rápido: peça para o JARVIS
+
+O JARVIS faz tudo isso sozinho, pelas skills `armazenamento.drive` (só olha) e
+`armazenamento.drive-copiar` (copia e grava). No chat:
+
+| Você diz | Ele faz |
+| --- | --- |
+| `como configuro o drive?` · `o drive tá configurado?` | mostra o estado: onde estão os arquivos hoje, o que o `.env` aponta, espaço livre — **sem tocar em nada** |
+| `configura o google drive pra mim` | mostra o que vai copiar e **pede o seu "sim"**; depois copia, confere e grava as duas linhas no `.env` |
+| `tira a biblioteca do drive` | só apaga as linhas do `.env`; **nada é apagado do Drive** |
+
+Na interface, o pedido cai na tela de confirmação antes de qualquer escrita — é
+o mesmo portão das skills que baixam ou executam alguma coisa. Depois de
+confirmar, ele responde com quantos arquivos copiou, para onde, e lembra de
+reiniciar.
+
+Pelo terminal dá no mesmo: `usar-drive.bat` faz a mesma cópia com progresso na
+tela (é o jeito bom quando são milhares de arquivos).
+
+---
+
+## 3. Passo a passo
 
 ### Passo 1 — conferir o Drive
 
@@ -105,7 +126,7 @@ abaixo de ~10% de CPU e o disco abaixo de 2 MB/s, está no ponto.
 
 ---
 
-## 3. As variáveis, para quem quiser fazer na mão
+## 4. As variáveis, para quem quiser fazer na mão
 
 No `.env` (sempre CRLF, sempre sem espaço em volta do `=`):
 
@@ -125,7 +146,7 @@ JARVIS_DRIVE=D:\Drive
 
 ---
 
-## 4. Como desfazer
+## 5. Como desfazer
 
 1. Feche o JARVIS.
 2. Apague as três linhas acima do `.env` (ou deixe vazias).
@@ -136,7 +157,7 @@ JARVIS_DRIVE=D:\Drive
 
 ---
 
-## 5. O que este desenho **não** resolve
+## 6. O que este desenho **não** resolve
 
 - **Não deixa o sincronizador gratuito.** Enquanto o Drive estiver ligado, ele
   consome algo de CPU e disco. Reduzir, sim; zerar, só fechando o app.
@@ -154,7 +175,7 @@ JARVIS_DRIVE=D:\Drive
 
 ---
 
-## 6. Checklist
+## 7. Checklist
 
 - [ ] o app do Google Drive está instalado e com sessão iniciada;
 - [ ] `usar-drive.bat` rodou sem erro de conferência;

@@ -1,4 +1,4 @@
-"""Testes da raiz de dados (0.45.0): o projeto no pendrive, os dados no disco grande."""
+"""Testes da raiz de dados (0.46.0): o projeto no pendrive, os dados no disco grande."""
 from __future__ import annotations
 
 from pathlib import Path

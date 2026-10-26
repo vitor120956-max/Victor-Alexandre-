@@ -24,7 +24,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.45.0"
+VERSAO = "0.46.0"
 
 PROJETO = Path(__file__).resolve().parents[1]
 MODOS = ("lite", "full", "ultra")

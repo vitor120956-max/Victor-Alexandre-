@@ -1,4 +1,4 @@
-"""Testes do agente local (0.45.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.46.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "227 skills" in texto
+    assert "229 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.45.0)
+# ------------------------------------------------- memória do agente (0.46.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 227 skills, uma por uma
+# ------------------------------------- cobertura: as 229 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 227 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 229 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.45.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.46.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)
@@ -1347,3 +1347,109 @@ def test_biblioteca_vence_skill_de_confianca_media(tmp_path: Path, monkeypatch):
     )
     assert resultado["acao"] == "biblioteca"
     assert duble.execucoes == []
+
+
+# ------------------------------------------------------- Google Drive (0.46.0)
+
+SKILL_DRIVE_ESTADO = {
+    "id": "armazenamento.drive",
+    "name": "Drive como espaço de fora",
+    "description": "Mostra onde estão os livros e os repositórios, se já estão no Google Drive.",
+    "category": "Armazenamento",
+    "inputSchema": {"type": "object", "properties": {"drive": {"type": "string", "title": "Pasta do Drive"}}},
+}
+
+SKILL_DRIVE_COPIAR = {
+    "id": "armazenamento.drive-copiar",
+    "name": "Configurar o Drive",
+    "description": "Copia biblioteca e repositórios para o Google Drive e grava as variáveis no .env.",
+    "category": "Armazenamento",
+    "requiresConfirmation": True,
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "drive": {"type": "string", "title": "Pasta do Drive"},
+            "modo": {"type": "string", "title": "Modo", "enum": ["usar", "desfazer"]},
+        },
+    },
+}
+
+
+def test_configurar_o_drive_pede_confirmacao(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("configura o google drive pra mim", registry=duble, raiz=tmp_path, consultar_web=False)
+    )
+    assert resultado["acao"] == "confirmar"
+    assert resultado["skill"]["id"] == "armazenamento.drive-copiar"
+    assert duble.execucoes == []
+
+
+def test_configurar_o_drive_executa_depois_do_sim(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("configura o google drive pra mim", registry=duble, raiz=tmp_path, consultar_web=False, confirmar=True)
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes == [("armazenamento.drive-copiar", {"modo": "usar"})]
+
+
+def test_pergunta_sobre_o_drive_nao_copia_nada(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("como configuro o drive?", registry=duble, raiz=tmp_path, consultar_web=False)
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0][0] == "armazenamento.drive"
+
+
+def test_tirar_do_drive_usa_o_modo_desfazer(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(
+        atender("tira a biblioteca do drive", registry=duble, raiz=tmp_path, consultar_web=False, confirmar=True)
+    )
+    assert resultado["acao"] == "executado"
+    assert duble.execucoes[0] == ("armazenamento.drive-copiar", {"modo": "desfazer"})
+
+
+def test_abrir_o_drive_nao_cai_na_regra_de_configurar(tmp_path: Path) -> None:
+    duble = registro(SKILL_DRIVE_ESTADO, SKILL_DRIVE_COPIAR, raiz=tmp_path)
+    resultado = asyncio.run(atender("abre o drive", registry=duble, raiz=tmp_path, consultar_web=False))
+    assert resultado.get("skill") is None or resultado["skill"]["id"] != "armazenamento.drive-copiar"
+
+
+def test_formatar_drive_estado_mostra_caminhos() -> None:
+    texto = formatar_resultado(
+        {
+            "detectado": True,
+            "drive": "G:/Meu Drive",
+            "destino": "G:/Meu Drive/JARVIS-DADOS",
+            "espaco_livre_gb": 12.5,
+            "env": {"biblioteca": "", "repos": ""},
+            "areas": [
+                {"nome": "biblioteca", "arquivos": 6, "mb": 0.1, "configurada": False, "ja_no_drive": 0},
+                {"nome": "repos", "arquivos": 148, "mb": 2.1, "configurada": True, "ja_no_drive": 148},
+            ],
+        }
+    )
+    assert "G:/Meu Drive" in texto
+    assert "repos: já está no Drive" in texto
+    assert "não aponta para o Drive" in texto
+
+
+def test_formatar_drive_copia_resume_o_que_foi_feito() -> None:
+    texto = formatar_resultado(
+        {
+            "modo": "usar",
+            "mensagem": "ok",
+            "copiados": 154,
+            "mb_copiados": 2.2,
+            "destino": "G:/Meu Drive/JARVIS-DADOS",
+            "env": "C:/JARVIS/.env",
+            "areas": [{"nome": "biblioteca", "situacao": "copiada", "conferido": "6 arquivos / 0,1 MB"}],
+            "aviso": "Reinicie o JARVIS.",
+        }
+    )
+    assert "154 arquivo" in texto
+    assert ".env atualizado" in texto
+    assert "Nada foi apagado do PC" in texto

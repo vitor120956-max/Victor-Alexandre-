@@ -283,6 +283,53 @@ _RE_REPO_LER = re.compile(
 )
 
 
+_RE_DRIVE_ACAO = re.compile(
+    r"\b(?:configur\w*|apont\w*|usar|usa|lev\w+|pass\w+|mand\w+|mov\w+|coloc\w+|"
+    r"jog\w+|salv\w+|guard\w+|sincroniz\w+|ativ\w+|volt\w+)\b"
+)
+_RE_DRIVE_DESFAZER = re.compile(r"\b(?:desfaz\w*|tir\w+|remov\w*)\b|\bvolt\w+\b")
+# Pergunta disfarçada de ordem: sem isso, "o drive ta configurado?" copiaria pastas.
+_RE_DRIVE_PERGUNTA = re.compile(
+    r"^(?:como|qual|quais|quanto|onde|status|ja)\b|\b(?:status|configurado|funcionando)\b"
+)
+_RE_DRIVE_PARA_DENTRO = re.compile(r"(?:para|pra|pro)\s+(?:o\s+)?(?:google\s+)?drive\b")
+
+
+def _pedido_direto_de_drive(termo: str) -> dict[str, Any] | None:
+    """Pedidos de Google Drive: regra explícita, porque "drive" aparece em tudo.
+
+    Só casa quando a frase fala de **drive** e tem verbo de configuração ou
+    palavra de diagnóstico. "Abre o drive" e "pausa o drive" continuam indo para
+    a busca normal.
+    """
+    texto = normalizar(termo)
+    if "drive" not in palavras(texto):
+        return None
+
+    estado_ = {
+        "skill_id": "armazenamento.drive",
+        "nome": "Drive como espaço de fora",
+        "parametros": {},
+        "confirma": False,
+    }
+    copiar = {
+        "skill_id": "armazenamento.drive-copiar",
+        "nome": "Configurar o Drive",
+        "parametros": {"modo": "usar"},
+        "confirma": True,
+    }
+
+    # "?" ou palavra de diagnóstico: o usuário quer saber, não quer que mexa.
+    if "?" in (termo or "") or _RE_DRIVE_PERGUNTA.search(texto) or "passo a passo" in texto:
+        return estado_
+    # "volta a biblioteca pro drive" é ida; "tira do drive" é volta.
+    if _RE_DRIVE_DESFAZER.search(texto) and not _RE_DRIVE_PARA_DENTRO.search(texto):
+        return {**copiar, "parametros": {"modo": "desfazer"}}
+    if _RE_DRIVE_ACAO.search(texto):
+        return copiar
+    return None
+
+
 def _pedido_direto_de_repositorio(termo: str) -> dict[str, Any] | None:
     """Pedidos de repositório que só funcionam com regra, não com nota."""
     achado = _RE_REPO_EXEC.search(termo)
@@ -1160,6 +1207,78 @@ def _valor_legivel(valor: Any) -> str:
     return str(valor)
 
 
+def _formatar_drive(resultado: dict[str, Any]) -> str | None:
+    """Texto do chat para as skills de Drive (estado, planejar, aplicar, desfazer)."""
+    if "areas" not in resultado and "vai_acontecer" not in resultado:
+        return None
+    if "passos" in resultado and "areas" not in resultado:
+        return None
+
+    linhas: list[str] = []
+    modo = str(resultado.get("modo") or "")
+    if modo == "usar" and "mensagem" in resultado:
+        copiados = resultado.get("copiados", 0)
+        linhas.append(
+            f"Pronto: {copiados} arquivo(s), {_br(float(resultado.get('mb_copiados') or 0), 1)} MB "
+            f"para {resultado.get('destino', '')}."
+        )
+        for item in resultado.get("areas") or []:
+            if not isinstance(item, dict):
+                continue
+            linhas.append(
+                f"  • {item.get('nome')}: {item.get('situacao', 'ok')}"
+                + (f" — {item['conferido']}" if item.get("conferido") else "")
+            )
+        if resultado.get("env"):
+            linhas.append(f".env atualizado: {resultado['env']}")
+        if resultado.get("aviso"):
+            linhas.append(str(resultado["aviso"]))
+        linhas.append("Nada foi apagado do PC.")
+        return "\n".join(linhas)
+
+    if modo == "desfazer":
+        linhas.append(str(resultado.get("mensagem") or "Desfiz a configuração do Drive."))
+        if resultado.get("aviso"):
+            linhas.append(str(resultado["aviso"]))
+        return "\n".join(linhas)
+
+    if "vai_acontecer" in resultado:
+        linhas.append("Para desfazer:")
+        linhas.extend(f"  • {item}" for item in resultado["vai_acontecer"])
+        if resultado.get("precisa_reiniciar"):
+            linhas.append("Reinicie o JARVIS depois.")
+        return "\n".join(linhas)
+
+    # estado
+    if resultado.get("detectado"):
+        linhas.append(f"Drive: {resultado.get('drive', '')}")
+        linhas.append(f"Destino: {resultado.get('destino', '')}")
+        livre = resultado.get("espaco_livre_gb")
+        if isinstance(livre, (int, float)) and livre:
+            linhas.append(f"Livre no Drive: {_br(float(livre), 1)} GB")
+    else:
+        linhas.append("Não achei a pasta do Google Drive nesta máquina.")
+    for item in resultado.get("areas") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("configurada"):
+            situacao = "já está no Drive"
+        elif item.get("ja_no_drive"):
+            situacao = f"no Drive ({item['ja_no_drive']} arquivos), mas o .env não aponta para lá"
+        else:
+            situacao = "no PC"
+        linhas.append(
+            f"  • {item.get('nome')}: {situacao} — {item.get('arquivos', 0)} arquivo(s), "
+            f"{_br(float(item.get('mb') or 0), 1)} MB"
+        )
+    env = resultado.get("env") or {}
+    if isinstance(env, dict):
+        aponta = bool(env.get("biblioteca") or env.get("repos"))
+        linhas.append(f".env: {'aponta para o Drive' if aponta else 'não aponta para o Drive'}")
+    linhas.append('Para levar de verdade, diga "configura o Google Drive pra mim".')
+    return "\n".join(linhas)
+
+
 def _formatar_repositorio(resultado: dict[str, Any]) -> str | None:
     """Resumo curto para as skills de repositório; o resto é ruído no chat."""
     if {"slug", "arquivos", "sugestao"} <= set(resultado):
@@ -1224,6 +1343,10 @@ def formatar_resultado(resultado: Any) -> str:
     """Transforma o retorno de uma skill em texto legível no chat."""
     if not isinstance(resultado, dict):
         return str(resultado)[:LIMITE_RESPOSTA]
+
+    especial = _formatar_drive(resultado)
+    if especial is not None:
+        return especial
 
     especial = _formatar_repositorio(resultado)
     if especial is not None:
@@ -1841,13 +1964,17 @@ async def _resolver(
                 )
                 return base
 
+    # 0b2. Google Drive: regra antes do ranking (a palavra "drive" dilui tudo).
+    direto = _pedido_direto_de_drive(termo)
+
     # 0c. Repositório citado com comando ou arquivo: regra, não adivinhação.
-    direto = _pedido_direto_de_repositorio(termo)
+    if direto is None:
+        direto = _pedido_direto_de_repositorio(termo)
     if direto is not None:
         entrada_direta = Entrada(
             skill_id=direto["skill_id"],
             nome=direto["nome"],
-            categoria="Repositórios",
+            categoria=direto.get("categoria", "Repositórios"),
             descricao="",
             schema={},
             fortes=frozenset(),
