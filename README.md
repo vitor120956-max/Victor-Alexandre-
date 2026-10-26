@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.44.0.**
+**Versão atual: 0.45.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -36,6 +36,8 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 **Biblioteca, sem modelo:** o JARVIS importa PDF, EPUB, DOCX, TXT/MD, imagem (`png`, `jpg`, `tif`) e legenda de vídeo (VTT/SRT), corta em seções com página e título, e procura por assunto com BM25. **PDF escaneado e foto de página passam pelo OCR** (Tesseract, `winocr` ou RapidOCR — `biblioteca.ocr` diz o que está instalado), e **`biblioteca.video url=…` baixa sozinho a legenda do YouTube**, inclusive a automática, em pt-BR, pt, en ou es. Vídeo sem legenda publicada ele recusa e explica que não transcreve áudio. A resposta é o trecho real com a referência ao lado — nada de resumo inventado — e só sai quando cobre ao menos metade das palavras do pedido; abaixo disso ele cala e vai para a web. Ainda dá para pedir `biblioteca.correlacoes`, que mostra termos presentes em duas ou mais fontes, e `biblioteca.digest`, que monta um `SKILL.md` com sumário, termos, números e citações. Em [`docs/BIBLIOTECA.md`](docs/BIBLIOTECA.md).
 
 **Dados fora do pendrive:** `mover-dados.py --destino C:\JARVIS-DADOS` copia a pasta de dados (biblioteca, repositórios, documentos), **confere arquivo por arquivo**, grava `JARVIS_DADOS` no `.env` e manda reiniciar — sem apagar nada. `armazenamento.status` mostra o tamanho de cada área e o espaço livre.
+
+**Google Drive como espaço de fora:** `usar-drive.bat` (duplo clique) leva **só** `biblioteca/` e `repos/` para uma pasta do Drive e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`. O estado do agente (histórico, fila, skills criadas) fica no PC: é regravado a cada resposta e, no Drive, cada gravação viraria uma sincronização. Passo a passo completo, incluindo como pausar, limitar banda e não travar o PC de 4 GB: **[docs/GOOGLE-DRIVE.md](docs/GOOGLE-DRIVE.md)**.
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 

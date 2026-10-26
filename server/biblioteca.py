@@ -73,7 +73,8 @@ class BibliotecaError(ValueError):
 
 
 def _pasta() -> Path:
-    return dados.raiz() / "biblioteca"
+    """Raiz da biblioteca: pode ser uma pasta do Drive (`JARVIS_BIBLIOTECA`)."""
+    return dados.biblioteca()
 
 
 def _indice_arquivo() -> Path:
@@ -340,9 +341,36 @@ def _tokens_de(texto: str) -> dict[str, int]:
 
 # -------------------------------------------------------------------- índice
 
+# Índice e seções são lidos em toda busca. O cache por data de modificação
+# evita reler o JSON do disco (ou do Drive) quando nada mudou.
+_CACHE_JSON: dict[str, tuple[float, Any]] = {}
+
+
+def _ler_json_com_cache(caminho: Path) -> Any:
+    try:
+        marca = caminho.stat().st_mtime
+    except OSError:
+        _CACHE_JSON.pop(str(caminho), None)
+        raise
+    chave = str(caminho)
+    guardado = _CACHE_JSON.get(chave)
+    if guardado is not None and guardado[0] == marca:
+        return guardado[1]
+    valor = json.loads(caminho.read_text(encoding="utf-8"))
+    _CACHE_JSON[chave] = (marca, valor)
+    return valor
+
+
+def _esquecer_cache(caminho: Path | None = None) -> None:
+    if caminho is None:
+        _CACHE_JSON.clear()
+    else:
+        _CACHE_JSON.pop(str(caminho), None)
+
+
 def _ler_indice() -> list[dict[str, Any]]:
     try:
-        dados_ = json.loads(_indice_arquivo().read_text(encoding="utf-8"))
+        dados_ = _ler_json_com_cache(_indice_arquivo())
     except (OSError, json.JSONDecodeError):
         return []
     return [item for item in dados_ if isinstance(item, dict)] if isinstance(dados_, list) else []
@@ -354,6 +382,7 @@ def _gravar_indice(fontes: Iterable[dict[str, Any]]) -> None:
     temporario = alvo.with_suffix(".tmp")
     temporario.write_text(json.dumps(list(fontes), ensure_ascii=False, indent=2), encoding="utf-8")
     temporario.replace(alvo)
+    _esquecer_cache(alvo)
 
 
 def listar() -> list[dict[str, Any]]:
@@ -375,7 +404,7 @@ def _arquivo_da_fonte(slug: str) -> Path:
 def _carregar_partes(slug: str) -> list[dict[str, Any]]:
     caminho = _arquivo_da_fonte(slug)
     try:
-        dados_ = json.loads(caminho.read_text(encoding="utf-8"))
+        dados_ = _ler_json_com_cache(caminho)
     except (OSError, json.JSONDecodeError) as exc:
         raise BibliotecaError("Arquivo da fonte corrompido; importe de novo.") from exc
     return [item for item in dados_.get("partes", []) if isinstance(item, dict)]
@@ -391,6 +420,7 @@ def _gravar_fonte(slug: str, fonte: dict[str, Any], partes: list[dict[str, Any]]
         encoding="utf-8",
     )
     temporario.replace(alvo)
+    _esquecer_cache(alvo)
 
 
 # ------------------------------------------------------------------ importar
@@ -520,7 +550,9 @@ def remover(slug: str) -> bool:
     fontes = _ler_indice()
     if not any(item.get("slug") == slug for item in fontes):
         return False
-    _arquivo_da_fonte(slug).unlink(missing_ok=True)
+    arquivo = _arquivo_da_fonte(slug)
+    arquivo.unlink(missing_ok=True)
+    _esquecer_cache(arquivo)
     _gravar_indice([item for item in fontes if item.get("slug") != slug])
     return True
 

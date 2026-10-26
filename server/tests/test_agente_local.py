@@ -1,4 +1,4 @@
-"""Testes do agente local (0.44.0) — skills sem modelo nenhum.
+"""Testes do agente local (0.45.0) — skills sem modelo nenhum.
 
 Nada aqui chama rede, provedor de IA ou subprocesso: o registro é um dublê, a
 busca e a leitura da web são funções injetadas e as receitas são puras.
@@ -617,7 +617,7 @@ def test_readme_aponta_para_a_doc_do_agente():
     assert "Agente local, sem modelo" in texto
 
 
-# ------------------------------------------------- memória do agente (0.44.0)
+# ------------------------------------------------- memória do agente (0.45.0)
 
 from server.agente_local import (  # noqa: E402
     apelido_de,
@@ -885,7 +885,7 @@ def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
 
 
 def test_pedidos_de_ocr_e_video_acham_as_skills_novas(tmp_path: Path):
-    """As duas frentes da 0.44.0 entram pela busca por frase, como as outras."""
+    """As duas frentes da 0.45.0 entram pela busca por frase, como as outras."""
     from server.skill_registry import build_registry
 
     reg = build_registry(tmp_path)

@@ -1,4 +1,4 @@
-"""Testes do OCR (0.44.0): motor, imagem e PDF escaneado.
+"""Testes do OCR (0.45.0): motor, imagem e PDF escaneado.
 
 O sandbox não tem Tesseract instalado, então o motor é **falso** e injetado por
 monkeypatch. O que fica testado de verdade: detecção, mensagem de instalação,

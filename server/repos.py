@@ -39,9 +39,12 @@ from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from . import dados
+
 PROJETO = Path(__file__).resolve().parent.parent
-STORAGE = PROJETO / "storage"
-PASTA_REPOS = STORAGE / "repos"
+STORAGE = dados.raiz()
+# Os repositórios podem morar numa pasta do Drive (`JARVIS_REPOS`).
+PASTA_REPOS = dados.repositorios()
 INDICE = PASTA_REPOS / "indice.json"
 
 MAX_ZIP = 64 * 1024 * 1024

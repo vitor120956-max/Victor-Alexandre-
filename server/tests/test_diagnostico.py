@@ -1,4 +1,4 @@
-"""Testes do `diagnostico.py` (0.44.0) — lentidão medida, não adivinhada.
+"""Testes do `diagnostico.py` (0.45.0) — lentidão medida, não adivinhada.
 
 O script roda no PC do usuário e não pode falhar por falta de permissão: aqui os
 parsers são exercitados com a saída real do Windows (tasklist e wmic) e o

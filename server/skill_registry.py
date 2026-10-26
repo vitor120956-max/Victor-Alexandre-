@@ -3513,11 +3513,18 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         relatorio = dados_locais.relatorio()
         usado = relatorio["bytes_total"]
         livre = relatorio["disco_livre"]
+        no_drive = [item["nome"] for item in relatorio["areas"] if item.get("no_drive")]
         return {
             "raiz": relatorio["raiz"],
             "padrao": relatorio["padrao"],
             "variavel": relatorio["variavel"],
             "configurada": relatorio["configurada"],
+            "biblioteca": relatorio["biblioteca"],
+            "repositorios": relatorio["repositorios"],
+            "biblioteca_variavel": relatorio["biblioteca_variavel"],
+            "repos_variavel": relatorio["repos_variavel"],
+            "drive_detectado": relatorio["drive_detectado"],
+            "no_drive": no_drive,
             "areas": [item for item in relatorio["areas"] if item["existe"]],
             "total_mb": round(usado / 1e6, 1),
             "livre_gb": round(livre / 1e9, 1),
