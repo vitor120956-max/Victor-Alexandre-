@@ -163,6 +163,30 @@ export interface BackendHealth {
   confiarLocal?: boolean;
 }
 
+export interface RemocaoSugerida {
+  pacote: string;
+  nota: string;
+}
+
+export interface Lembrete {
+  id: string;
+  titulo: string;
+  quando: string;
+  tipo: 'atrasado' | 'chegando';
+  minutos: number;
+  texto: string;
+  nota: string;
+}
+
+export interface LembretesAgenda {
+  ok: boolean;
+  total: number;
+  lembretes: Lembrete[];
+  texto: string;
+  antecedencia: number;
+  agora: string;
+}
+
 export interface PlanoPendente {
   confirmacao: string;
   acao: string;
@@ -171,6 +195,7 @@ export interface PlanoPendente {
   tipo: string;
   comando: string;
   sha256: string;
+  remocao?: RemocaoSugerida;
   expira_em: number;
 }
 
@@ -222,6 +247,10 @@ export async function getBackendHealth(): Promise<BackendHealth> {
 export async function listPythonSkills(): Promise<PythonSkill[]> {
   const response = await apiFetch<{ ok: boolean; skills: PythonSkill[] }>('/api/skills');
   return response.skills;
+}
+
+export async function listarLembretes(antecedencia = 30): Promise<LembretesAgenda> {
+  return apiFetch<LembretesAgenda>(`/api/agenda/lembretes?antecedencia=${encodeURIComponent(String(antecedencia))}`);
 }
 
 export async function listarPlanosPendentes(): Promise<PlanosPendentes> {

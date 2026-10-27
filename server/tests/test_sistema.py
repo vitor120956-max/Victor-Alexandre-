@@ -1355,13 +1355,13 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.58.0"
-    assert dados["skills"] == 281
+    assert dados["version"] == "0.59.0"
+    assert dados["skills"] == 283
 
 
-def test_api_lista_as_quinze_skills_de_sistema(client):
+def test_api_lista_as_dezesseis_skills_de_sistema(client):
     ids = [item["id"] for item in client.get("/api/skills").json()["skills"]]
-    assert len([item for item in ids if item.startswith("sistema.")]) == 15
+    assert len([item for item in ids if item.startswith("sistema.")]) == 16
 
 
 def test_api_sistema_disco_exige_token(client):
@@ -1374,7 +1374,7 @@ def test_api_sistema_disco_exige_token(client):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.58.0"
+    assert resposta["result"]["versao"] == "0.59.0"
 
 
 def test_api_baixar_exige_confirmacao(client):
@@ -1406,3 +1406,99 @@ def test_api_skill_inexistente(client):
 def test_api_parametro_extra_recusado(client):
     corpo = client.post("/api/skills/sistema.regras/execute", json={"parameters": {"x": 1}, "dryRun": True}).json()
     assert corpo["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Registro do que ele instalou e sugestão de remoção (0.59.0)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "tipo,nome,pacote",
+    [
+        ("deb", "app_2.0_amd64.deb", "dpkg:app"),
+        ("deb", "meu-programa.deb", "dpkg:meu-programa"),
+        ("rpm", "nano-7.2-1.fc38.x86_64.rpm", "rpm:nano"),
+        ("rpm", "meu-programa-1.2.3-1.x86_64.rpm", "rpm:meu-programa"),
+        ("msi", "setup.msi", ""),
+        ("msix", "pacote.msix", ""),
+        ("exe", "instalador.exe", ""),
+        ("appimage", "app.AppImage", ""),
+    ],
+)
+def test_remocao_sugerida(tipo, nome, pacote):
+    sugestao = S.remocao_sugerida(tipo, nome)
+    assert sugestao["pacote"] == pacote
+    if not pacote:
+        assert sugestao["nota"]
+
+
+def test_remocao_sugerida_explica_o_que_nao_da_para_saber():
+    assert "GUID" in S.remocao_sugerida("msi", "a.msi")["nota"]
+    assert "fabricante" in S.remocao_sugerida("exe", "a.exe")["nota"].lower()
+
+
+def test_instalados_sem_registro(tmp_path, monkeypatch):
+    monkeypatch.setattr(S, "AUDITORIA", tmp_path / "host-audit.jsonl")
+    dados = S.instalados()
+    assert dados["total"] == 0
+    assert "nunca" in dados["resposta"] or "ainda" in dados["resposta"]
+
+
+def test_instalados_le_so_o_que_terminou_com_codigo_zero(tmp_path, monkeypatch):
+    registro = tmp_path / "host-audit.jsonl"
+    linhas = [
+        {"ts": "2026-10-26T10:00:00+00:00", "acao": "instalar", "alvo": "app_2.0_amd64.deb", "comando": "dpkg -i app.deb", "codigo": 0},
+        {"ts": "2026-10-26T10:05:00+00:00", "acao": "instalar", "alvo": "quebrado.deb", "comando": "dpkg -i quebrado.deb", "codigo": 1},
+        {"ts": "2026-10-26T10:10:00+00:00", "acao": "baixar", "alvo": "arquivo.zip", "codigo": 0},
+        {"ts": "2026-10-26T10:15:00+00:00", "acao": "desinstalar", "alvo": "velho.deb", "comando": "dpkg -r velho", "codigo": 0},
+        "linha quebrada",
+    ]
+    registro.write_text("\n".join(json.dumps(linha) if isinstance(linha, dict) else linha for linha in linhas), encoding="utf-8")
+    monkeypatch.setattr(S, "AUDITORIA", registro)
+    dados = S.instalados()
+    assert dados["total"] == 2
+    assert [item["alvo"] for item in dados["itens"]] == ["velho.deb", "app_2.0_amd64.deb"]
+    assert dados["itens"][1]["remocao"]["pacote"] == "dpkg:app"
+    assert dados["itens"][0]["remocao"]["pacote"] == ""
+
+
+def test_instalados_respeita_o_limite(tmp_path, monkeypatch):
+    registro = tmp_path / "host-audit.jsonl"
+    conteudo = "\n".join(
+        json.dumps({"ts": f"2026-10-26T10:0{n}:00+00:00", "acao": "instalar", "alvo": f"p{n}.deb", "codigo": 0})
+        for n in range(5)
+    )
+    registro.write_text(conteudo, encoding="utf-8")
+    monkeypatch.setattr(S, "AUDITORIA", registro)
+    assert S.instalados(limite=2)["total"] == 2
+
+
+def test_planos_pendentes_trazem_a_remocao_sugerida(monkeypatch):
+    monkeypatch.setattr(S, "_CONFIRMACAO", {})
+    monkeypatch.setattr(
+        S,
+        "_CONFIRMACAO",
+        {
+            "abcd1234": {
+                "expira": 9_999_999_999,
+                "acao": "instalar",
+                "tipo": "deb",
+                "rotulo": "app_2.0_amd64.deb",
+                "comando": ["dpkg", "-i", "app.deb"],
+            }
+        },
+    )
+    plano = S.planos_pendentes()[0]
+    assert plano["remocao"]["pacote"] == "dpkg:app"
+
+
+def test_plano_de_desinstalar_nao_sugere_remocao(monkeypatch):
+    monkeypatch.setattr(S, "_CONFIRMACAO", {})
+    monkeypatch.setattr(
+        S,
+        "_CONFIRMACAO",
+        {"abcd1234": {"expira": 9_999_999_999, "acao": "desinstalar", "tipo": "deb", "rotulo": "app"}},
+    )
+    plano = S.planos_pendentes()[0]
+    assert plano["remocao"]["pacote"] == ""

@@ -174,6 +174,7 @@ from .sistema import (
     executar as executar_sistema,
     importar as importar_sistema,
     instalar as instalar_sistema,
+    instalados as sistema_instalados,
     pastas as pastas_sistema,
     rede as rede_sistema,
 )
@@ -2247,12 +2248,19 @@ class AgendaMarcarInput(BaseModel):
     titulo: str = Field(min_length=2, max_length=200, title="Compromisso", json_schema_extra={"description": "Título curto: “audiência de conciliação”, “entregar a petição”."})
     quando: str = Field(min_length=2, max_length=120, title="Quando", json_schema_extra={"description": "`2026-11-05`, `05/11`, `amanhã`, `depois de amanhã`, `daqui a 3 dias` ou `segunda às 14h`. Sem hora, fica 09:00."})
     nota: str = Field(default="", max_length=2000, title="Nota", json_schema_extra={"description": "Opcional: o que levar, com quem falar, número do processo."})
+    avisar_antes: int = Field(default=30, ge=0, le=43200, title="Avisar quantos minutos antes", json_schema_extra={"description": "30 por padrão. `0` desliga o aviso automático deste compromisso."})
 
 
 class AgendaListarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dias: int = Field(default=0, ge=0, le=3650, title="Janela em dias", json_schema_extra={"description": "0 lista tudo em aberto; 7 olha só a semana; 30 o mês."})
     incluir_concluidos: bool = Field(default=False, title="Incluir concluídos")
+
+
+class AgendaLembretesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    antecedencia: int = Field(default=30, ge=0, le=43200, title="Janela em minutos", json_schema_extra={"description": "O que chega dentro desse tempo entra na lista. Cada compromisso pode ter a própria janela."})
+    incluir_atrasados: bool = Field(default=True, title="Incluir o que já passou")
 
 
 class AgendaConcluirInput(BaseModel):
@@ -2287,6 +2295,11 @@ class BackupRestaurarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     arquivo: str = Field(min_length=3, max_length=400, title="Backup", json_schema_extra={"description": "Nome ou caminho do `.zip`."})
     destino: str = Field(min_length=1, max_length=400, title="Pasta nova", json_schema_extra={"description": "Onde extrair. Precisa estar vazia — restaurar por cima do que está em uso é como apagar o original."})
+
+
+class SistemaInstaladosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limite: int = Field(default=20, ge=1, le=200, title="Quantos mostrar", json_schema_extra={"description": "Lê `storage/host-audit.jsonl` de trás para frente e só considera execução com código 0."})
 
 
 class GitStatusInput(BaseModel):
@@ -4704,9 +4717,35 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
     def agenda_marcar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, AgendaMarcarInput)
         try:
-            return agenda_local.adicionar(titulo=data.titulo, quando=data.quando, nota=data.nota)
+            return agenda_local.adicionar(
+                titulo=data.titulo,
+                quando=data.quando,
+                nota=data.nota,
+                avisar_antes=data.avisar_antes,
+            )
         except agenda_local.AgendaError as exc:
             raise SkillError(str(exc)) from exc
+
+    def agenda_lembretes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgendaLembretesInput)
+        try:
+            lembretes = agenda_local.devidos(
+                antecedencia=data.antecedencia,
+                incluir_atrasados=data.incluir_atrasados,
+            )
+        except agenda_local.AgendaError as exc:
+            raise SkillError(str(exc)) from exc
+        return {
+            "total": len(lembretes),
+            "lembretes": lembretes,
+            "texto": agenda_local.texto_lembretes(lembretes),
+            "antecedencia": data.antecedencia,
+            "resposta": (
+                f"{len(lembretes)} lembrete(s) agora."
+                if lembretes
+                else "Nada vencendo agora."
+            ),
+        }
 
     def agenda_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, AgendaListarInput)
@@ -4761,6 +4800,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             return backup_local.restaurar(data.arquivo, destino=data.destino)
         except backup_local.BackupError as exc:
             raise SkillError(str(exc)) from exc
+
+    def sistema_instalados_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaInstaladosInput)
+        return sistema_instalados(data.limite)
 
     def git_status_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, GitStatusInput)
@@ -5117,6 +5160,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("agenda.marcar", "Marcar compromisso", "Grava um compromisso com data interpretada sem modelo e devolve por extenso o que entendeu (“terça-feira, 27/10/2026 às 14:00”). Se a data não for reconhecível, recusa em vez de adivinhar. Fica em `agenda.json`, sem conta e sem nuvem.", "Agenda", AgendaMarcarInput, agenda_marcar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("agenda.lembretes", "O que está vencendo", "Lista o que já passou e o que chega dentro da janela pedida (30 min por padrão), usando o aviso que cada compromisso declarou. Só lê — quem mostra na tela é a interface, enquanto ela estiver aberta.", "Agenda", AgendaLembretesInput, agenda_lembretes_handler, timeout_seconds=10),
         SkillDefinition("agenda.listar", "Ver a agenda", "Lista os compromissos em ordem de data, marca o que já passou de prazo e diz qual é o próximo. Filtra por janela de dias (`dias=7` para a semana).", "Agenda", AgendaListarInput, agenda_listar_handler, timeout_seconds=10),
         SkillDefinition("agenda.concluir", "Concluir compromisso", "Marca um compromisso como feito, por id curto ou por parte do título. Sai da lista padrão sem ser apagado.", "Agenda", AgendaConcluirInput, agenda_concluir_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
         SkillDefinition("agenda.remover", "Remover compromisso", "Apaga um compromisso da agenda, por id ou parte do título. Não mexe em mais nada.", "Agenda", AgendaRemoverInput, agenda_remover_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
@@ -5124,6 +5168,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("backup.criar", "Criar backup", "Compacta os dados num `.zip` com data no nome, grava o SHA-256 ao lado, confere o arquivo logo depois de escrever e recusa acima do teto de tamanho. Backup que não abre não é backup.", "Backup", BackupCriarInput, backup_criar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=1800),
         SkillDefinition("backup.listar", "Listar backups", "Mostra os `.zip` já criados, com data e tamanho, na pasta escolhida.", "Backup", BackupListarInput, backup_listar_handler, timeout_seconds=10),
         SkillDefinition("backup.restaurar", "Restaurar backup", "Extrai um backup numa pasta **nova e vazia**, recusando caminho que escape da pasta. Nunca sobrescreve o que está em uso.", "Backup", BackupRestaurarInput, backup_restaurar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition("sistema.instalados", "O que ele já instalou", "Lê o próprio registro de auditoria (`storage/host-audit.jsonl`) e lista as instalações e remoções que terminaram com código 0, com o comando exato e a sugestão de remoção quando existe. Só lê o arquivo; não executa nada.", "Sistema", SistemaInstaladosInput, sistema_instalados_handler, timeout_seconds=15),
         SkillDefinition("git.status", "Estado do Git", "Mostra branch, quanto está à frente ou atrás do remoto e o que mudou, com `git status --porcelain`. Só leitura: não faz commit, push, pull nem checkout.", "Git", GitStatusInput, git_status_handler, timeout_seconds=30),
         SkillDefinition("git.log", "Histórico do Git", "Lista os últimos commits com hash curto, data, autor e assunto. Só leitura.", "Git", GitLogInput, git_log_handler, timeout_seconds=30),
         SkillDefinition("git.diff", "Diferenças do Git", "Mostra o resumo por arquivo e o patch do que mudou (`diff` ou `--staged`), cortado num teto de texto. Só leitura, sem `--ext-diff` e sem paginador.", "Git", GitDiffInput, git_diff_handler, timeout_seconds=30),

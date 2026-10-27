@@ -10,7 +10,7 @@ Isso muda o contrato do projeto. Até a 0.29.0, toda resposta marcava `executed:
 
 | # | Trava | Padrão | Como ligar |
 |---|---|---|---|
-| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.58.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
+| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.59.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
 | 2 | **Rede** | desligada | `JARVIS_HOST_REDE=1` ao subir a API |
 | 3 | **Instalação** | desligada | `JARVIS_HOST_INSTALAR=1` (implica rede) |
 
@@ -26,7 +26,7 @@ O token é impresso assim, com só oito caracteres visíveis:
 JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, instalar=ligado)
 ```
 
-## Modo dono: instalar sem digitar o token (0.58.0)
+## Modo dono: instalar sem digitar o token (0.59.0)
 
 O token de host não é chave de ninguém: é uma string que o próprio JARVIS sorteia
 e guarda em `storage/host-token.txt`. Mas copiar e colar aquilo a cada instalação
@@ -63,10 +63,42 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.58.0", "skills": 281, "confiarLocal": true }
+GET /api/health  →  { "version": "0.59.0", "skills": 283, "confiarLocal": true }
 ```
 
-## O botão “Executar este plano” (0.58.0)
+## “O que ele já instalou” e a remoção sugerida (0.59.0)
+
+Toda execução bem-sucedida já ficava em `storage/host-audit.jsonl`, mas ninguém
+lia de volta. Agora:
+
+- **`sistema.instalados`** (só leitura) lista as instalações e remoções que
+  terminaram com **código 0**, com data, alvo, tipo e o comando exato. O que
+  falhou continua no registro como tentativa, mas não entra na lista;
+- cada plano de instalação pendente traz **`remocao`**, com a sugestão de
+  remoção quando ela é dedutível do próprio arquivo:
+
+| Tipo | Sugestão | O que a nota avisa |
+|---|---|---|
+| `.deb` | `dpkg:nome` | confira o nome do pacote |
+| `.rpm` | `rpm:nome` | confira o nome do pacote |
+| `.msi` / `.msix` | — | Windows exige o GUID do produto |
+| `.exe` | — | cada fabricante define o próprio desinstalador |
+| `.AppImage` | — | não se instala: apagar o arquivo é a remoção |
+
+No painel de planos da página **Skills**, um plano de instalação ganha o botão
+**Desinstalar (dpkg:nome)**, que monta o plano de remoção — e esse plano, por sua
+vez, aparece na mesma lista com **Executar remoção**. São dois passos de propósito:
+montar não é executar.
+
+```json
+GET /api/host/planos
+{"planos": [{
+  "confirmacao": "665422bd", "acao": "instalar", "rotulo": "app_2.0_amd64.deb",
+  "remocao": {"pacote": "dpkg:app", "nota": "Confira o nome do pacote antes de confirmar."}
+}]}
+```
+
+## O botão “Executar este plano” (0.59.0)
 
 Antes, o plano de instalação saía com um código de uso único e o passo seguinte
 era chamar `sistema.executar` por conta própria. Agora a tela faz isso:

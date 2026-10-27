@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente } from '../lib/agenteResposta';
 import { formatPythonChatResult } from '../lib/skillResults';
@@ -119,6 +119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [backendOnline, setBackendOnline] = useState(false);
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
   const [modoDono, setModoDono] = useState(false);
+  const lembretesMostrados = useRef<Set<string>>(new Set());
   const [pythonSkills, setPythonSkills] = useState<PythonSkill[]>([]);
   const [aiStatus, setAIStatus] = useState<AIStatus>(initialAIStatus);
   const [processing, setProcessing] = useState<'ai' | 'python' | null>(null);
@@ -202,6 +203,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const timer = window.setInterval(() => void refreshBackend(), 60000);
     return () => window.clearInterval(timer);
   }, [refreshBackend]);
+
+  // Lembretes da agenda: consulta sem gravar nada. O que já foi mostrado fica
+  // na memória desta aba (chave id|quando|tipo), então o mesmo compromisso não
+  // avisa duas vezes — e reiniciar a API não duplica o aviso.
+  useEffect(() => {
+    if (!backendOnline) return;
+    let cancelado = false;
+    const conferir = async () => {
+      try {
+        const resposta = await listarLembretes(30);
+        if (cancelado || !resposta.ok) return;
+        for (const lembrete of resposta.lembretes) {
+          const chave = `${lembrete.id}|${lembrete.quando}|${lembrete.tipo}`;
+          if (lembretesMostrados.current.has(chave)) continue;
+          lembretesMostrados.current.add(chave);
+          const quando = lembrete.tipo === 'atrasado'
+            ? `atrasado há ${lembrete.minutos} min`
+            : lembrete.minutos <= 0 ? 'agora' : `em ${lembrete.minutos} min`;
+          pushToast(
+            lembrete.tipo === 'atrasado' ? 'Compromisso atrasado' : 'Compromisso chegando',
+            `${lembrete.titulo} — ${lembrete.texto} (${quando})`,
+            lembrete.tipo === 'atrasado' ? 'warning' : 'success',
+          );
+          appendJarvisMessage(
+            `Lembrete: ${lembrete.titulo} — ${lembrete.texto} (${quando}).`,
+            'python',
+          );
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try {
+              new Notification('JARVIS — agenda', { body: `${lembrete.titulo} — ${quando}` });
+            } catch {
+              // navegador sem permissão para notificação do sistema: o toast já avisou
+            }
+          }
+        }
+      } catch {
+        // API fora do ar: silêncio; o próximo ciclo tenta de novo
+      }
+    };
+    void conferir();
+    const timer = window.setInterval(() => void conferir(), 45000);
+    return () => {
+      cancelado = true;
+      window.clearInterval(timer);
+    };
+  }, [appendJarvisMessage, backendOnline, pushToast]);
 
   const executeSkill = useCallback(async (
     skillId: string,

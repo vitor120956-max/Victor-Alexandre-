@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web
 from .review import common, finalize, finding
 
-VERSAO = "0.58.0"
+VERSAO = "0.59.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -202,6 +202,100 @@ def confiar_local() -> bool:
     return os.environ.get(AMBIENTE_CONFIAR_LOCAL, "0").strip() == "1"
 
 
+def remocao_sugerida(tipo: str, rotulo: str) -> dict[str, str]:
+    """Qual comando de remoção corresponde ao que foi instalado — ou nada.
+
+    A sugestão é honesta sobre o que não dá para saber: para `.msi` o Windows
+    exige o GUID do produto, que não está no nome do arquivo; para `.exe` cada
+    fabricante inventa o seu. Nesses casos devolve vazio e diz o motivo.
+    """
+    nome = Path(rotulo).name
+    baixo = nome.lower()
+    if tipo == "deb":
+        base = re.sub(r"\.deb$", "", nome, flags=re.I)
+        base = base.split("_")[0]  # nome_1.2.3_amd64.deb
+        return {"pacote": f"dpkg:{base}", "nota": "Confira o nome do pacote antes de confirmar."}
+    if tipo == "rpm":
+        base = re.sub(r"\.rpm$", "", nome, flags=re.I)
+        base = re.sub(r"\.(x86_64|i686|i386|noarch|aarch64|arm64)$", "", base, flags=re.I)
+        base = re.sub(r"-[0-9][^-]*(-[^-]*)?$", "", base) or base
+        return {"pacote": f"rpm:{base}", "nota": "Confira o nome do pacote antes de confirmar."}
+    if tipo in {"msi", "msix"}:
+        return {
+            "pacote": "",
+            "nota": "Windows exige o GUID do produto (`msiexec /x {GUID}`), que não está no nome do arquivo.",
+        }
+    if tipo == "exe":
+        return {
+            "pacote": "",
+            "nota": "Desinstalador de `.exe` é definido pelo fabricante; procure “Desinstalar programas” no Windows.",
+        }
+    if tipo == "appimage":
+        return {"pacote": "", "nota": "AppImage não se instala: apagar o arquivo é a remoção."}
+    return {"pacote": "", "nota": ""}
+
+
+def instalados(*, limite: int = 20) -> dict[str, Any]:
+    """O que ele já executou nesta máquina, lido do próprio registro de auditoria.
+
+    Só entram execuções com código 0 — o resto está lá como tentativa, mas não
+    como instalação. O registro é `storage/host-audit.jsonl`.
+    """
+    quantos = max(1, min(int(limite), 200))
+    if not AUDITORIA.exists():
+        return {
+            "total": 0,
+            "itens": [],
+            "arquivo": str(AUDITORIA),
+            "resposta": "Ele ainda não executou nenhuma instalação nesta máquina.",
+        }
+    linhas: list[dict[str, Any]] = []
+    try:
+        with open(AUDITORIA, encoding="utf-8") as aberto:
+            for linha in aberto:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    evento = json.loads(linha)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(evento, dict):
+                    continue
+                if evento.get("acao") not in {"instalar", "desinstalar"}:
+                    continue
+                if evento.get("codigo") != 0:
+                    continue
+                linhas.append(evento)
+    except OSError:
+        return {"total": 0, "itens": [], "arquivo": str(AUDITORIA), "resposta": "Não consegui ler o registro."}
+    itens: list[dict[str, Any]] = []
+    for evento in reversed(linhas[-quantos:]):
+        rotulo = str(evento.get("alvo", ""))
+        tipo = TIPOS.get(Path(rotulo).suffix.lower(), "")
+        remocao = remocao_sugerida(tipo, rotulo) if evento.get("acao") == "instalar" else {"pacote": "", "nota": ""}
+        itens.append(
+            {
+                "quando": evento.get("ts", ""),
+                "acao": evento.get("acao"),
+                "alvo": rotulo,
+                "tipo": tipo,
+                "comando": evento.get("comando", ""),
+                "remocao": remocao,
+            }
+        )
+    return {
+        "total": len(itens),
+        "itens": itens,
+        "arquivo": str(AUDITORIA),
+        "resposta": (
+            f"{len(itens)} execução(ões) concluída(s) no registro."
+            if itens
+            else "Nada concluído no registro ainda."
+        ),
+    }
+
+
 def planos_pendentes() -> list[dict[str, Any]]:
     """Planos de instalação gerados e ainda dentro dos 10 minutos."""
     agora = time.time()
@@ -219,6 +313,11 @@ def planos_pendentes() -> list[dict[str, Any]]:
                 "tipo": registro.get("tipo", ""),
                 "comando": " ".join(registro.get("comando") or []),
                 "sha256": registro.get("sha256", ""),
+                "remocao": (
+                    remocao_sugerida(registro.get("tipo", ""), registro.get("rotulo", ""))
+                    if registro.get("acao", "instalar") == "instalar"
+                    else {"pacote": "", "nota": ""}
+                ),
                 "expira_em": max(0, int(registro.get("expira", 0) - agora)),
             }
         )

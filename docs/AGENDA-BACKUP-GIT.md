@@ -9,7 +9,7 @@ de modelo nenhum:
 3. **Git de leitura** — ver branch, commits e o que mudou, sem tocar no
    repositório.
 
-As doze skills novas (0.58.0) estão descritas abaixo. Nenhuma delas chama provedor
+As doze skills novas (0.59.0) estão descritas abaixo. Nenhuma delas chama provedor
 de IA, nenhuma instala nada e nenhuma precisa de chave.
 
 ---
@@ -53,10 +53,35 @@ O que ele recusa:
 - título repetido na hora de concluir/remover: pede o **id curto** em vez de
   escolher por você.
 
+### Lembretes: o aviso chega enquanto a janela está aberta (0.59.0)
+
+Cada compromisso guarda por quantos minutos antes avisar (`avisar_antes`, 30 por
+padrão; `0` desliga). A skill `agenda.lembretes` responde “o que precisa de
+atenção agora” — o que já passou e o que entra na janela:
+
+```text
+o que está vencendo agora
+→ 2 lembrete(s) agora.
+  • Prazo — segunda-feira, 26/10/2026 às 10:20 (atrasado há 6h40)
+  • Audiência — terça-feira, 27/10/2026 às 14:00 (em 25 min)
+```
+
+E a tela consulta sozinha, a cada 45 segundos, `GET /api/agenda/lembretes`.
+Quando aparece algo novo, ela mostra o aviso, escreve no chat e — se você já
+tiver dado permissão de notificação ao navegador — dispara a notificação do
+sistema. O que já foi mostrado fica na memória da aba (chave `id|quando|tipo`),
+então o mesmo compromisso não avisa duas vezes e reiniciar a API não duplica.
+
+**O limite, dito sem enfeite:** o JARVIS não tem serviço em segundo plano. Se a
+janela estiver fechada, ninguém avisa. Para aviso com o JARVIS fechado seria
+preciso um serviço do Windows rodando — não é o que existe aqui.
+
 ### No chat
 
 ```text
 marca audiência amanhã às 14h            → agenda.marcar (pede confirmação)
+marca audiência amanhã às 14h, avisa 2h antes  → agenda.marcar (avisar_antes=120)
+o que está vencendo agora                → agenda.lembretes (só lê)
 marca na agenda reunião quinta às 10h    → agenda.marcar
 o que eu tenho para hoje                 → agenda.listar (dias=1)
 minha agenda da semana                   → agenda.listar (dias=7)
@@ -191,10 +216,10 @@ paginador e com teto de 20 segundos por comando.
 
 | Verificação | Resultado |
 |---|---|
-| Testes da agenda | **14** (`test_agenda.py`: datas relativas, ISO, numérica, dia da semana, recusa, atraso, janela) |
+| Testes da agenda | **32** (`test_agenda.py`: datas relativas, ISO, numérica, dia da semana, recusa, atraso, janela) |
 | Testes do backup | **9** (`test_backup.py`: zip real, manifesto, hash, teto, restauração, zip-slip, pasta ocupada) |
 | Testes do Git | **10** (`test_git.py`: repositório de verdade criado no teste, status, log, diff, remoto, recusa) |
-| Skills novas | **12** (4 de agenda, 4 de backup, 4 de Git) |
+| Skills novas | **13** (5 de agenda, incluindo `agenda.lembretes`, 4 de backup, 4 de Git) |
 | Suíte total | **2.563** testes |
 
 O Git é testado com um repositório criado na hora, dentro de `tmp_path` — nenhum

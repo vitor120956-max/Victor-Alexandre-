@@ -35,6 +35,7 @@ from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
+from . import agenda as agenda_local
 from . import sistema as sistema_mod
 from .sistema import SistemaError, token_host as sistema_token_host
 from .skill_registry import SkillError, SkillRegistry, build_registry
@@ -266,7 +267,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.58.0",
+        version="0.59.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -308,6 +309,36 @@ def create_app(
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    @application.get("/api/agenda/lembretes")
+    def agenda_lembretes(
+        antecedencia: int = Query(default=30, ge=0, le=43_200),
+        incluir_atrasados: bool = True,
+    ) -> dict[str, Any]:
+        """O que precisa de atenção agora — só leitura, sem marcar nada.
+
+        A tela consulta de tempos em tempos e decide o que já mostrou, pela
+        chave `id|quando|tipo`. Assim duas abas abertas não sujam o arquivo, e
+        reiniciar a API não cria aviso repetido.
+        """
+        try:
+            lembretes = agenda_local.devidos(
+                antecedencia=antecedencia,
+                incluir_atrasados=incluir_atrasados,
+            )
+        except agenda_local.AgendaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "AGENDA_RECUSADA", "message": str(exc)}},
+            )
+        return {
+            "ok": True,
+            "total": len(lembretes),
+            "lembretes": lembretes,
+            "texto": agenda_local.texto_lembretes(lembretes),
+            "antecedencia": antecedencia,
+            "agora": datetime.now().isoformat(timespec="seconds"),
+        }
+
     @application.get("/api/host/planos")
     def host_planos(request: Request) -> dict[str, Any]:
         """Planos de instalação/desinstalação prontos e ainda válidos.
@@ -334,7 +365,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.58.0",
+            "version": "0.59.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "confiarLocal": sistema_mod.confiar_local(),

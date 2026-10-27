@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Blocks, Brain, Calculator, Check, Clock3, Code2, FileText, Fingerprint, Globe2, ListTodo, Play, RefreshCw, Scale, ShieldAlert, Sparkles, Terminal, Workflow, Wrench } from 'lucide-react';
+import { ArrowRight, Blocks, Brain, Calculator, Check, Clock3, Code2, FileText, Fingerprint, Globe2, ListTodo, Play, RefreshCw, Scale, ShieldAlert, Sparkles, Terminal, Undo2, Workflow, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../components/Modal';
 import { PythonSkillRunner } from '../components/PythonSkillRunner';
@@ -24,6 +24,7 @@ export function SkillsPage() {
   const [confirmouPlano, setConfirmouPlano] = useState(false);
   const [executando, setExecutando] = useState(false);
   const [resultadoPlano, setResultadoPlano] = useState<string>('');
+  const [criandoRemocao, setCriandoRemocao] = useState('');
 
   const carregarPlanos = useCallback(async () => {
     if (!backendOnline) {
@@ -50,6 +51,27 @@ export function SkillsPage() {
     setPlanoEscolhido(plano);
     setConfirmouPlano(false);
     setResultadoPlano('');
+  };
+
+  const criarPlanoDeRemocao = async (plano: PlanoPendente) => {
+    const pacote = plano.remocao?.pacote?.trim();
+    if (!pacote) return;
+    setCriandoRemocao(pacote);
+    try {
+      const parametros: Record<string, unknown> = { pacote };
+      if (!modoDono && hostToken) parametros.autorizacao = hostToken;
+      const resposta = await executeSkill('sistema.desinstalar', parametros, { confirmed: true });
+      if (resposta.ok) {
+        pushToast('Plano de remoção pronto', `${pacote} — confira o comando antes de executar`);
+        await carregarPlanos();
+      } else {
+        pushToast('Não deu para montar a remoção', resposta.error?.message, 'warning');
+      }
+    } catch (error) {
+      pushToast('Falha ao montar a remoção', error instanceof Error ? error.message : undefined, 'warning');
+    } finally {
+      setCriandoRemocao('');
+    }
   };
 
   const executarPlanoEscolhido = async () => {
@@ -107,16 +129,32 @@ export function SkillsPage() {
           <div className="planos-cabeca">
             <Terminal size={16} />
             <strong>{planos.length === 1 ? 'Um plano pronto' : `${planos.length} planos prontos`}</strong>
-            <span>gerado por <code>sistema.instalar</code>, válido por poucos minutos</span>
+            <span>gerado por <code>sistema.instalar</code> ou <code>sistema.desinstalar</code>, válido por poucos minutos</span>
           </div>
           {planos.map((plano) => (
             <div className="plano-linha" key={plano.confirmacao}>
               <div>
                 <strong>{plano.rotulo || plano.arquivo || plano.confirmacao}</strong>
-                <small>{plano.acao} · {plano.tipo || 'pacote'} · expira em {Math.max(0, Math.round(plano.expira_em / 60))} min</small>
+                <small>
+                  {plano.acao === 'desinstalar' ? 'remover' : 'instalar'} · {plano.tipo || 'pacote'} · expira em {Math.max(0, Math.round(plano.expira_em / 60))} min
+                </small>
+                {plano.acao === 'instalar' && plano.remocao?.pacote && (
+                  <button
+                    type="button"
+                    className="plano-desinstalar"
+                    onClick={() => void criarPlanoDeRemocao(plano)}
+                    disabled={Boolean(criandoRemocao)}
+                  >
+                    <Undo2 size={12} />
+                    {criandoRemocao === plano.remocao.pacote ? 'Montando remoção…' : `Desinstalar (${plano.remocao.pacote})`}
+                  </button>
+                )}
+                {plano.acao === 'instalar' && plano.remocao && !plano.remocao.pacote && plano.remocao.nota && (
+                  <em className="plano-sem-remocao">{plano.remocao.nota}</em>
+                )}
               </div>
               <button className="button button-primary" onClick={() => abrirPlano(plano)} disabled={!instalarLigado}>
-                <Play size={14} /> Executar este plano
+                <Play size={14} /> {plano.acao === 'desinstalar' ? 'Executar remoção' : 'Executar instalação'}
               </button>
             </div>
           ))}
@@ -165,7 +203,7 @@ export function SkillsPage() {
       <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.name ?? ''} eyebrow={selected?.category.toUpperCase()}>
         {selected && <div className="skill-detail"><div className="skill-detail-status"><span className={selected.active ? 'skill-status active' : 'skill-status'}>{selected.active ? <><Check size={13} /> INSTALADA E ATIVA</> : 'CONEXÃO PENDENTE'}</span><span>{selected.local ? 'LOCAL' : 'EXTERNA'}</span></div><p>{selected.detail}</p>{selected.commands.length > 0 && <div className="skill-command-list"><span>EXEMPLOS DE COMANDO</span>{selected.commands.map((command) => <button key={command} onClick={() => { sendMessage(command); setSelected(null); navigate('/conversa'); }}>“{command}” <Play size={13} /></button>)}</div>}<div className="modal-actions"><button className="button button-ghost" onClick={() => setSelected(null)}>Fechar</button>{selected.active && selected.commands.length > 0 && <button className="button button-primary" onClick={() => testSkill(selected)}>Testar skill <ArrowRight size={16} /></button>}</div></div>}
       </Modal>
-      <Modal open={Boolean(planoEscolhido)} onClose={() => setPlanoEscolhido(null)} title="Executar plano" eyebrow="SISTEMA · EFEITO REAL NA MÁQUINA">
+      <Modal open={Boolean(planoEscolhido)} onClose={() => setPlanoEscolhido(null)} title={planoEscolhido?.acao === 'desinstalar' ? 'Executar remoção' : 'Executar instalação'} eyebrow="SISTEMA · EFEITO REAL NA MÁQUINA">
         {planoEscolhido && (
           <div className="plano-execucao">
             <div className="plano-detalhes-box">

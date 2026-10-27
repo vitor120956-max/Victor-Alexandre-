@@ -19,7 +19,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 281 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 283 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -94,6 +94,8 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `marca audiência amanhã às 14h` | `agenda.marcar` (data por extenso na resposta) | **sim** |
 | `o que eu tenho para hoje` · `minha agenda da semana` | `agenda.listar` (janela de 1 ou 7 dias) | não |
 | `conclui o compromisso audiência` | `agenda.concluir` (por id ou título) | **sim** |
+| `o que está vencendo agora` | `agenda.lembretes` (o que passou e o que chega em 30 min) | não |
+| (automático) aviso da agenda | `GET /api/agenda/lembretes` a cada 45 s na tela | não (só lê) |
 | `faz backup dos meus dados em E:/JARVIS-backups` | `backup.criar` (zip + sha256 + aviso de disco) | **sim** |
 | `quanto vai pesar o backup` · `quais backups eu tenho` | `backup.planejar` / `backup.listar` | não |
 | `como está o git` · `últimos commits do git` | `git.status` / `git.log` (só leitura) | não |
@@ -152,7 +154,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 281 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 283 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 
