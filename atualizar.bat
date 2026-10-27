@@ -4,16 +4,18 @@ cd /d "%~dp0"
 echo.
 echo   JARVIS - atualizar para a ultima versao
 echo.
-echo   So faz o que e seguro: se houver arquivo seu alterado, ele para
-echo   antes de tocar em qualquer coisa e mostra o que fazer.
-echo.
 
-set RAMO=arena/f26cfa7a-victor-alexandre
+if exist ".git\" goto comgit
+goto semgit
 
+REM ===========================================================================
+REM  Com Git: atualiza pelo repositorio, sem tocar em arquivo seu
+REM ===========================================================================
+:comgit
 where git >nul 2>nul
 if errorlevel 1 goto semgit
-if not exist ".git\" goto semgit
 
+set RAMO=arena/f26cfa7a-victor-alexandre
 set SUJO=
 for /f "delims=" %%i in ('git status --porcelain 2^>nul') do set SUJO=1
 if defined SUJO goto sujo
@@ -47,26 +49,54 @@ echo.
 echo   O que entrou:
 git log --oneline %ANTES%..%DEPOIS%
 echo.
-
 git diff --name-only %ANTES% %DEPOIS% | findstr /i "requirements" >nul
-if not errorlevel 1 goto depender
+if not errorlevel 1 echo   ATENCAO: as dependencias Python mudaram - veja o fim desta tela.
+goto terminou
 
+REM ===========================================================================
+REM  Sem Git (instalado pelo zip): baixa o zip e copia por cima, preservando
+REM  .env, storage, .venv e node_modules
+REM ===========================================================================
+:semgit
+echo   Esta pasta nao e um repositorio Git (instalacao pelo zip).
+echo   Vou baixar a versao atual do GitHub e copiar por cima.
+echo.
+echo   Ficam intocados: .env, storage, .venv e node_modules.
+echo.
+set JARVIS_DESTINO=%CD%
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $ProgressPreference='SilentlyContinue'; $z=$env:TEMP+'\jarvis-novo.zip'; $d=$env:TEMP+'\jarvis-novo'; Invoke-WebRequest -Uri 'https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre' -OutFile $z; if(Test-Path $d){Remove-Item $d -Recurse -Force}; Expand-Archive -LiteralPath $z -DestinationPath $d -Force; $r=(Get-ChildItem -LiteralPath $d -Directory | Select-Object -First 1).FullName; robocopy $r $env:JARVIS_DESTINO /E /XF .env /XD .venv storage node_modules .git /NFL /NDL /NJH /NJS; if($LASTEXITCODE -ge 8){exit 1}else{exit 0}"
+if errorlevel 1 goto zipfalhou
+echo.
+echo   Copia concluida.
+goto checar_dist
+
+:checar_dist
+if not exist "dist\index.html" goto checar_req
+echo.
+echo   ATENCAO: existe uma pasta dist\ de um build antigo. A API prefere
+echo   dist\ a web-dist\, entao a tela continuaria velha. Apague ou renomeie:
+echo     rmdir /s /q dist
+echo.
+
+:checar_req
+echo.
+echo   Se esta for a primeira vez que voce atualiza depois de varias versoes,
+echo   as dependencias Python podem ter mudado. Se a API reclamar de modulo,
+echo   rode:
+echo     .venv\Scripts\python -m pip install -r requirements.txt
+goto terminou
+
+:terminou
+echo.
 echo   A versao aparece em http://127.0.0.1:8000/api/health
 echo.
 echo   Pronto. Agora:
 echo     1^) feche a janela da API (Ctrl+C) se ela estiver aberta
 echo     2^) rode:  .venv\Scripts\python iniciar.py
-echo     3^) confira em http://127.0.0.1:8000/api/health
+echo     3^) abra http://127.0.0.1:8000/api/health e confira version e skills
 echo.
 echo   Se aparecer alguma variavel nova em .env.example, copie a linha
 echo   para o seu .env - o arquivo de exemplo nunca sobrescreve o seu.
-echo.
-pause
-exit /b 0
-
-:depender
-echo   ATENCAO: as dependencias Python mudaram nesta versao. Rode:
-echo     .venv\Scripts\python -m pip install -r requirements.txt
 echo.
 pause
 exit /b 0
@@ -108,14 +138,12 @@ echo.
 pause
 exit /b 1
 
-:semgit
+:zipfalhou
 echo.
-echo   Esta pasta nao e um repositorio Git (ou o Git nao esta instalado).
-echo.
-echo   Opcao 1 - instale o Git: https://git-scm.com/download/win
-echo   Opcao 2 - baixe o zip da versao atual:
+echo   O download ou a copia falhou. Se a mensagem citar TLS ou conexao,
+echo   tente de novo; se persistir, baixe o zip no navegador:
 echo     https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre
-echo   Ao descompactar, NAO apague .env, storage\ nem .venv\.
+echo   e descompacte por cima desta pasta, mantendo .env, storage e .venv.
 echo.
 pause
 exit /b 1
