@@ -597,3 +597,13 @@ def test_agente_nao_tira_token_da_frase():
 
     explicitos = agente_local.parametros_explicitos("autorizacao=sim pode", schema)
     assert "autorizacao" not in explicitos
+
+
+def test_atualizar_bat_avisa_para_fechar_a_api_antes():
+    raiz = Path(__file__).resolve().parents[2]
+    texto = (raiz / "atualizar.bat").read_text(encoding="utf-8", errors="replace")
+    # o aviso tem de vir ANTES do robocopy, senao copia com arquivo em uso
+    aviso = texto.index("feche a janela da API")
+    copia = texto.index("robocopy")
+    assert aviso < copia
+    assert "Ctrl+C" not in texto

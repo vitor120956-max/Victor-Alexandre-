@@ -639,9 +639,11 @@ instalada e faz a coisa certa:
 - **se não houver `.git`** (instalação pelo zip) — baixa o zip oficial e copia por
   cima, **preservando `.env`, `storage\`, `.venv\` e `node_modules\`**.
 
-Nos dois casos ele avisa se existe uma pasta `dist\` de build antigo (a API
-prefere `dist\` a `web-dist\`, então uma tela velha continuaria aparecendo) e
-lembra de reiniciar a API.
+Feche a janela da API **antes** de rodar: arquivo aberto pela API pode não ser
+copiado. Nos dois casos ele avisa se existe uma pasta `dist\` de build antigo (a
+API prefere `dist\` a `web-dist\`, então uma tela velha continuaria aparecendo) e
+lembra de reiniciar a API — e, se ela ainda pedir token, de rodar
+`ligar-celular.bat` uma vez para ligar o modo dono.
 
 **Primeira vez, se você ainda não tem o `atualizar.bat`:** baixe
 <https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre>,

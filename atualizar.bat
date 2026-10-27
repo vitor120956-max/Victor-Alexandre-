@@ -4,6 +4,11 @@ cd /d "%~dp0"
 echo.
 echo   JARVIS - atualizar para a ultima versao
 echo.
+echo   Antes de continuar: feche a janela da API (o X dela). Arquivo
+echo   aberto pela API pode nao ser copiado.
+echo.
+pause
+echo.
 
 if exist ".git\" goto comgit
 goto semgit
@@ -91,9 +96,11 @@ echo.
 echo   A versao aparece em http://127.0.0.1:8000/api/health
 echo.
 echo   Pronto. Agora:
-echo     1^) feche a janela da API (Ctrl+C) se ela estiver aberta
-echo     2^) rode:  .venv\Scripts\python iniciar.py
-echo     3^) abra http://127.0.0.1:8000/api/health e confira version e skills
+echo     1^) feche a janela da API no X (nao digite nada no terminal dela)
+echo     2^) se a interface ainda pedir token, rode ligar-celular.bat uma vez:
+echo        ele liga o modo dono e o token deixa de ser pedido nesta maquina
+echo     3^) rode:  .venv\Scripts\python iniciar.py
+echo     4^) abra http://127.0.0.1:8000/api/health e confira version e skills
 echo.
 echo   Se aparecer alguma variavel nova em .env.example, copie a linha
 echo   para o seu .env - o arquivo de exemplo nunca sobrescreve o seu.
