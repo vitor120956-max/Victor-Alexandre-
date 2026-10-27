@@ -1,9 +1,13 @@
 # Celular velho como PC/Linux — o caso do Galaxy J7 Prime
 
 Este documento responde a uma pergunta concreta: **dá para transformar um Galaxy
-J7 Prime em um PC com Linux?** A resposta curta é *sim, com um porém caro e um
-porém barato*: o modelo é um dos melhores candidatos possíveis, mas o aparelho em
-questão está com a tela morta — e sem tela não existe caminho por software.
+J7 Prime em um PC com Linux?** A resposta curta é **sim**, e quem tem a tela
+quebrada não está fora do jogo: o `scrcpy` transforma o celular em uma janela do
+Windows — a tela física deixa de ser necessária. A condição que decide tudo é se
+a *Depuração USB* já esteve ligada (§3).
+
+O modelo é um dos melhores candidatos possíveis para Linux: port no Nura,
+LineageOS e /e/OS.
 
 Nada aqui é executado pelo JARVIS. Ele não tem `adb` nem `fastboot`; todo comando
 no celular é feito por você, na mão. O que ele faz é o que está na última seção.
@@ -48,8 +52,10 @@ E o J7 Prime **não tem saída de vídeo por cabo**: nada de MHL ou HDMI. Não h
 própria tela. Mouse por OTG também não resolve: o touch pode até responder, mas
 sem imagem não há o que clicar.
 
-> **Conclusão:** com a tela morta o projeto está travado. O caminho mais barato
-> é trocar o módulo.
+> **Conclusão parcial:** pela via normal (toque na tela) o projeto está travado.
+> Mas existe **uma** saída pelo PC — o `scrcpy` — e ela depende de uma coisa só:
+> se a *Depuração USB* já esteve ligada neste aparelho. Está no §3, antes de você
+> gastar dinheiro com a peça.
 
 ### Diagnóstico antes de comprar a peça (5 minutos, custo zero)
 
@@ -68,7 +74,115 @@ Se 1, 2 e 3 falharem, pode ser placa, não tela — aí a peça não resolve.
 
 ---
 
-## 3. A peça
+## 3. Acesso pelo PC com a tela morta: `scrcpy`
+
+**É assim que os vídeos funcionam.** O painel pode estar morto — a GPU continua
+desenhando no *framebuffer*. O `scrcpy` lê esse framebuffer pelo `adb`, mostra a
+tela do celular numa janela do Windows e devolve mouse e teclado como toque. Com
+isso o J7 Prime deixa de precisar da tela **para sempre**: fica ligado ao PC (ou
+com um adaptador de rede) e você o opera inteiro pela janela.
+
+O que decide entre "5 minutos" e "impossível" é uma pergunta:
+
+### 3.1 Primeiro, o teste de 2 minutos (custo zero)
+
+No PC, baixe **Android Platform-Tools** e **scrcpy** (o `scrcpy` já traz o `adb`
+na versão do Windows, mas o platform-tools separado facilita). Conecte o celular
+e rode:
+
+```bat
+adb devices
+```
+
+Três respostas possíveis — e cada uma é um caminho diferente:
+
+| Saída | O que significa | O que fazer |
+|---|---|---|
+| `ABCD1234    device` | Depuração USB **ligada** e este PC já é confiável | **Ganhou.** `scrcpy` e pronto |
+| `ABCD1234    unauthorized` | Depuração ligada, mas falta autorizar este PC | §3.2 (autorizar às cegas) |
+| nada (`List of devices attached` vazio) | Depuração **desligada**, ou o celular não boota | §3.2 ou §3.3 |
+
+### 3.2 Autorizar e navegar sem ver nada (`scrcpy --otg`)
+
+O `scrcpy --otg` **não usa ADB**: ele faz o PC se passar por teclado e mouse USB.
+Serve justamente para operar um celular com a tela morta.
+
+```bat
+scrcpy --otg
+```
+
+O que se digita vai para o celular às cegas. A sequência clássica para aceitar o
+popup de autorização, usada pela comunidade:
+
+1. `scrcpy --otg`, digitar o **PIN** da tela de bloqueio e `Enter`;
+2. fechar a janela e rodar `scrcpy` normal para o popup "Permitir depuração USB?"
+   aparecer no celular;
+3. `scrcpy --otg` de novo: **`Tab`, `Enter`, `Tab`, `Tab`, `Enter`** (em alguns
+   aparelhos o `Enter` é `Espaço`);
+4. com a autorização aceita, rodar `scrcpy` e a tela aparece no PC.
+
+Depois de autorizado, dá para deixar de digitar o PIN às cegas:
+
+```bat
+adb shell locksettings clear --old 1234
+```
+
+Para o aparelho não voltar a pedir autorização: em Opções do desenvolvedor,
+ligue **"Desativar tempo limite de autorização do adb"** (o padrão expira em 7
+dias). Se a tela for definitivamente morta, isso é obrigatório.
+
+**O auxílio que ninguém lembra: TalkBack.** Segure **Volume + e Volume −** por
+3 s para ligar o leitor de tela e navegue com um teclado USB por OTG — ele fala
+em voz alta onde o foco está, o que permite "ver" o menu sem ver. É lento, mas é
+o que transforma navegação às cegas em algo possível.
+
+**Ressalvas honestas do `--otg`:** no Windows ele é o modo mais chato (às vezes
+pede driver `libusb`/WinUSB); no Linux e no macOS funciona direto. A tela de
+bloqueio aparece **preta** no espelhamento (proteção `FLAG_SECURE`), então a
+primeira autorização tem que ser às cegas mesmo.
+
+### 3.3 Se a depuração nunca esteve ligada
+
+Aí as opções caem para:
+
+1. **Tela de teste numa assistência.** A maioria das bancadas tem um display de
+   teste: em 5 minutos você liga **Depuração USB**, **Desativar tempo limite**,
+   **Desbloqueio OEM** e "sempre permitir este computador". Custa menos que a
+   peça e resolve para sempre — o aparelho volta para a gaveta e você o usa pelo
+   `scrcpy`.
+2. **Comprar o módulo** (§4) e fazer o mesmo em casa.
+3. **Navegação às cegas pelo `--otg` + TalkBack** — funciona em tese, mas chegar
+   em *Configurações → Sobre → Número da compilação 7× → Opções do desenvolvedor*
+   sem ver nada é muito sofrimento e não é garantido.
+
+### 3.4 O caminho do recovery (só se o OEM já estiver desbloqueado)
+
+O modo **Download** do Samsung é operável às cegas: **Volume − + Home + Power**
+até aparecer, depois **Volume +** para confirmar. O Odin no PC enxerga o aparelho
+por COM e existe TWRP para `on7xelte` (3.3.0, 3.6.0, 3.7.0 em fóruns). O TWRP
+abre **ADB sem pedir autorização**, e dele dá para:
+
+```bat
+adb pull /sdcard C:\resgate\                 :: fotos, WhatsApp, documentos
+adb shell "echo <sua-chave-publica> >> /data/misc/adb/adb_keys"   :: autoriza o PC no Android
+```
+
+**Mas:** o Odin **recusa** o flash sem o **Desbloqueio OEM** ligado antes — o erro
+clássico é *"BLOCKED BY FRP LOCK"*. E o Desbloqueio OEM só se liga em
+*Opções do desenvolvedor*, que fica atrás da tela. Ou seja: esse caminho só serve
+se o aparelho já foi desbloqueado no passado. Além disso, flashar binário
+customizado **aciona o Knox para sempre**.
+
+### 3.5 Por que não existe o truque do dock
+
+Em celulares USB-C que suportam saída de vídeo, dá para plugar um dock com HDMI,
+monitor e mouse e usar o aparelho como se fosse um PC. **O J7 Prime não faz
+isso**: é micro-USB, não tem MHL nem DisplayPort alternativo. Nele, o vídeo só sai
+por `scrcpy` (que depende do ADB) ou por uma tela física.
+
+---
+
+## 4. A peça
 
 | Opção | Faixa de preço (Brasil, 2026) | Observação |
 |---|---|---|
@@ -87,7 +201,7 @@ risco real de incêndio.
 
 ---
 
-## 4. Caminho A — Linux **dentro** do Android (recomendado)
+## 5. Caminho A — Linux **dentro** do Android (recomendado)
 
 Sem root, sem desbloquear nada, sem risco de perder o aparelho. Você instala o
 Termux e ganha um Debian com `apt`.
@@ -136,7 +250,7 @@ Android 12+ o "matador de processos fantasma" pode derrubar o shell.
 
 ---
 
-## 5. Caminho B — Linux **no lugar** do Android (Nura)
+## 6. Caminho B — Linux **no lugar** do Android (Nura)
 
 O projeto que se chamava **postmarketOS** virou **Nura** em 27/09/2026
 (`nura.eco`; `postmarketos.org` redireciona).
@@ -167,7 +281,7 @@ Se um dia chegar lá, a ordem é: firmware estoque → TWRP/Boot → image do Nu
 
 ---
 
-## 6. Caminho C — só reviver o Android
+## 7. Caminho C — só reviver o Android
 
 Se o objetivo é "ter um celular usável de novo" e não "ter Linux", o melhor custo-
 benefício é ROM Android leve:
@@ -181,7 +295,7 @@ o Termux do caminho A roda melhor do que rodaria no Android 8 de fábrica.
 
 ---
 
-## 7. O celular como tela/terminal do PC (funciona hoje, sem instalar nada)
+## 8. O celular como tela/terminal do PC (funciona hoje, sem instalar nada)
 
 Independente da tela do celular, o contrário também vale: o PC expõe o JARVIS na
 rede e o celular abre no navegador.
@@ -200,7 +314,7 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 
 ---
 
-## 8. O que o JARVIS faz e não faz aqui
+## 9. O que o JARVIS faz e não faz aqui
 
 **Faz** (e você pode pedir pelo chat):
 
@@ -211,20 +325,23 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 | "confere o hash desse APK" | `sistema.assinatura` |
 | "esse .msi roda nesta máquina?" | `instalador.analisar` |
 | "abre o Gerenciador de Dispositivos" | `pc.abrir-programa` |
+| "baixa o scrcpy para usar o celular sem tela" | `sistema.baixar` (quarentena + SHA-256) |
 
-**Não faz:** não tem `adb`, não tem `fastboot`, não instala nada no celular e
+**Não faz:** não tem `adb` nem `fastboot` embutidos — ele baixa o `scrcpy` e o
+platform-tools para a quarentena e confere o hash, mas quem roda `adb devices` e
+`scrcpy` é você. Não instala nada no celular e
 `sistema.executar` só aceita `msiexec`, `dpkg`, `rpm`, `npm` e Python. Ele não
 flasha, não desbloqueia bootloader e não "entra" no aparelho por USB.
 
 ---
 
-## 9. Resumo em uma tabela
+## 10. Resumo em uma tabela
 
 | Pergunta | Resposta |
 |---|---|
 | O J7 Prime serve? | Sim: `on7xelte` tem port no Nura (testing), LineageOS e /e/OS |
-| Com a tela morta, dá? | **Não.** Nem adb, nem recovery, nem flash |
-| Quanto custa destravar? | R$ 70–160 (compatível) ou R$ 220–240 (original) |
+| Com a tela morta, dá? | **Depende de uma coisa:** se a Depuração USB já estava ligada, `scrcpy` resolve (§3). Se nunca esteve, só com tela de teste ou peça |
+| Quanto custa destravar? | R$ 0 (se o ADB já estava ligado) · ~R$ 50 numa bancada com tela de teste · R$ 70–160 o módulo |
 | Melhor caminho depois da tela? | Termux + proot-distro (risco zero) |
 | Vale o Nura? | Só como experimento: sem câmera e sem VoLTE confiável |
 | Vale como PC? | Como **terminal** do PC, sim. Como PC autônomo, não |
@@ -232,7 +349,7 @@ flasha, não desbloqueia bootloader e não "entra" no aparelho por USB.
 
 ---
 
-## 10. Fontes
+## 11. Fontes
 
 - Nura / postmarketOS — device `on7xelte` em testing:
   <https://gitlab.com/postmarketOS/pmaports/-/merge_requests/4220>
@@ -245,3 +362,11 @@ flasha, não desbloqueia bootloader e não "entra" no aparelho por USB.
 - /e/OS não oficial para `on7xelte`:
   <https://community.e.foundation/t/unofficial-build-samsung-galaxy-j7-prime-j7-on-nxt-on7xelte-for-e-os-s-4-x/84419>
 - Peças (preços de referência): Mercado Livre, Brascell, d7 Eletrônicos.
+- scrcpy — controle do Android pelo PC (inclui `--otg`):
+  <https://github.com/Genymobile/scrcpy>
+- Guia de tela morta com `scrcpy --otg` e autorização às cegas (issue oficial):
+  <https://github.com/Genymobile/scrcpy/issues/4914>
+- TalkBack para navegar sem ver:
+  <https://support.google.com/accessibility/android/answer/6283677>
+- TWRP para `on7xelte` (e o aviso de *BLOCKED BY FRP LOCK* sem Desbloqueio OEM):
+  <https://xdaforums.com/t/recovery-on7xelte-twrp-3-3-0-for-galaxy-j7-prime.3716355/>

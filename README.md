@@ -601,10 +601,12 @@ A pergunta "dá para transformar um celular velho em um PC com Linux?" tem
 resposta técnica e resposta prática, e elas não coincidem. Em
 [`docs/CELULAR-LINUX.md`](docs/CELULAR-LINUX.md) está o estudo de caso do **Galaxy
 J7 Prime** (`on7xelte`): o aparelho **é** um bom candidato — tem port no Nura
-(ex-postmarketOS) em testing, LineageOS 18.1 e /e/OS —, mas **com a tela morta
-nada disso é alcançável**, porque sem imagem não se liga a depuração USB, não se
-aceita o popup do `adb` e não se navega no recovery. O documento traz o
-diagnóstico de placa antes de comprar a peça (R$ 70–160 o módulo compatível), o
+(ex-postmarketOS) em testing, LineageOS 18.1 e /e/OS —, e **a tela morta não é o
+fim**: o `scrcpy` espelha e controla o aparelho numa janela do Windows, porque a
+GPU continua desenhando mesmo com o painel quebrado. A condição que decide tudo é
+se a *Depuração USB* já esteve ligada; se nunca esteve, há o `scrcpy --otg`
+(teclado e mouse sem ADB) e, no limite, uma tela de teste de bancada. O documento
+traz o diagnóstico de placa antes de comprar a peça (R$ 70–160 o módulo), o
 caminho sem risco (Termux + proot-distro, com `apt` e SSH), o caminho nativo
 (Nura) com seus limites e riscos, e o que o JARVIS faz e não faz aqui — ele não
 tem `adb` nem `fastboot` e não instala nada no celular.
