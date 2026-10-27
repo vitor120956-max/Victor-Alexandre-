@@ -479,3 +479,79 @@ def test_configurador_le_arquivo_com_bom(tmp_path):
     assert texto.startswith("JARVIS_HOST_REDE=0")
     _, antes, _ = modulo.ajustar(texto)
     assert antes["JARVIS_HOST_REDE"] == "JARVIS_HOST_REDE=0"
+
+
+# --- layout real dos zips (scrcpy vem com a versão no nome) ------------------
+
+def test_acha_scrcpy_em_pasta_com_versao_no_nome(raiz):
+    """O zip oficial extrai em `scrcpy-win64-v3.3.1/`; a busca tem de achar."""
+    versionada = raiz / "ferramentas" / "scrcpy-win64-v3.3.1"
+    versionada.mkdir(parents=True)
+    (versionada / "scrcpy.exe").write_bytes(b"x")
+    encontrado = C._achar(C.SCRCPY_NOMES)
+    assert encontrado is not None
+    assert encontrado.name == "scrcpy.exe"
+    assert C.ferramentas()["scrcpy"] != ""
+
+
+def test_achar_prefere_o_caminho_canonico(raiz):
+    canonica = raiz / "ferramentas" / "scrcpy"
+    canonica.mkdir(parents=True)
+    (canonica / "scrcpy.exe").write_bytes(b"x")
+    versao = raiz / "ferramentas" / "scrcpy-win64-v9"
+    versao.mkdir()
+    (versao / "scrcpy.exe").write_bytes(b"x")
+    assert C._achar(C.SCRCPY_NOMES).parent.name == "scrcpy"
+
+
+def test_normalizar_renomeia_a_pasta_para_o_nome_canonico(raiz):
+    versionada = raiz / "ferramentas" / "scrcpy-win64-v3.3.1"
+    versionada.mkdir(parents=True)
+    (versionada / "scrcpy.exe").write_bytes(b"x")
+    (versionada / "aviso.txt").write_text("junto", encoding="utf-8")
+    pasta = C.normalizar("scrcpy", C.SCRCPY_NOMES)
+    assert pasta == raiz / "ferramentas" / "scrcpy"
+    assert (pasta / "scrcpy.exe").is_file()
+    assert (pasta / "aviso.txt").is_file()
+    assert not versionada.exists()
+
+
+def test_normalizar_nao_mexe_quando_ja_esta_certo(raiz):
+    canonica = raiz / "ferramentas" / "platform-tools"
+    canonica.mkdir(parents=True)
+    (canonica / "adb.exe").write_bytes(b"x")
+    assert C.normalizar("platform-tools", C.ADB_NOMES) == canonica
+    assert (canonica / "adb.exe").is_file()
+
+
+def test_preparar_deixa_o_layout_que_as_skills_enxergam(ligado):
+    """Depois do preparo, `ferramentas()` tem de dizer completo."""
+    def fabricar(destino: Path, pasta: str, nome_exe: str) -> Path:
+        caminho = destino / f"{pasta}.zip"
+        destino.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(caminho, "w") as pacote:
+            pacote.writestr(f"{pasta}/{nome_exe}", "x")
+        return caminho
+
+    quarentena = ligado / "quarentena"
+    quarentena.mkdir()
+
+    def baixar(url, autorizacao=""):
+        if "google" in url:
+            caminho = fabricar(quarentena, "platform-tools", "adb.exe")
+        else:
+            caminho = fabricar(quarentena, "scrcpy-win64-v3.3.1", "scrcpy.exe")
+        return {"arquivo": str(caminho), "sha256": "abc", "bytes": 10}
+
+    resultado = C.preparar(baixar=baixar, resolver_scrcpy=lambda: {"url": "https://g/scrcpy.zip"})
+    assert resultado["ferramentas"]["completo"] is True, resultado["ferramentas"]
+    assert resultado["ferramentas"]["adb"].endswith("adb.exe")
+    assert resultado["ferramentas"]["scrcpy"].endswith("scrcpy.exe")
+    assert "Nada foi executado" in resultado["resposta"]
+
+
+def test_configurador_liga_o_modo_dono():
+    modulo = _carregar_configurador()
+    texto, _, depois = modulo.ajustar("")
+    assert "JARVIS_HOST_CONFIAR_LOCAL=1" in texto
+    assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"

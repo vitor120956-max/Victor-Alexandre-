@@ -91,7 +91,12 @@ def pasta_ferramentas() -> Path:
 
 
 def _achar(nomes: tuple[str, ...]) -> Path | None:
-    """Procura o executável no PATH e na pasta de ferramentas do projeto."""
+    """Procura o executável no PATH e na pasta de ferramentas do projeto.
+
+    A busca fixa cobre o layout canônico (`ferramentas/adb/adb.exe`), mas o zip do
+    scrcpy extrai numa pasta com a versão no nome (`scrcpy-win64-v3.3.1/`). Por
+    isso existe o passo recursivo: sem ele, ter baixado direito não bastava.
+    """
     for nome in nomes:
         achado = shutil.which(nome)
         if achado:
@@ -101,6 +106,16 @@ def _achar(nomes: tuple[str, ...]) -> Path | None:
             candidato = raiz / nome
             if candidato.is_file():
                 return candidato
+    base = pasta_ferramentas()
+    if not base.is_dir():
+        return None
+    for nome in nomes:
+        encontrados = sorted(
+            (caminho for caminho in base.rglob(nome) if caminho.is_file()),
+            key=lambda caminho: (len(caminho.parts), str(caminho)),
+        )
+        if encontrados:
+            return encontrados[0]
     return None
 
 
@@ -582,6 +597,32 @@ def _extrair(zip_path: Path, destino: Path) -> int:
     return total
 
 
+def normalizar(nome: str, executaveis: tuple[str, ...]) -> Path | None:
+    """Renomeia a pasta extraída para `ferramentas/<nome>` quando o zip usa outro nome.
+
+    O zip oficial do scrcpy vem como `scrcpy-win64-v3.3.1/` e o do platform-tools
+    como `platform-tools/`. O primeiro caso precisa de ajuste para o caminho ficar
+    previsível e o `scrcpy.exe` ser achado sem busca recursiva.
+    """
+    base = pasta_ferramentas()
+    destino = base / nome
+    achado = _achar(executaveis)
+    if achado is None:
+        return None
+    if achado.parent.name == nome:
+        return destino
+
+    # procura a pasta que contém o executável e move para o nome canônico
+    origem = achado.parent
+    if destino.exists():
+        return destino
+    try:
+        origem.rename(destino)
+    except OSError:
+        return achado.parent
+    return destino
+
+
 def url_do_scrcpy(*, abrir: Callable[[str], Any] | None = None) -> dict[str, Any]:
     """Resolve o endereço do zip do scrcpy para Windows na última release."""
     if abrir is None:
@@ -636,6 +677,7 @@ def preparar(
         if not caminho.is_file():
             raise CelularError(f"O download de {nome} não deixou arquivo utilizável.")
         extraido = _extrair(caminho, destino)
+        pasta = normalizar(nome, ADB_NOMES if nome == "platform-tools" else SCRCPY_NOMES)
         resultado["baixados"].append(
             {
                 "ferramenta": nome,
@@ -644,6 +686,7 @@ def preparar(
                 "sha256": baixado.get("sha256", ""),
                 "bytes": baixado.get("bytes", 0),
                 "extraido": extraido,
+                "pasta": str(pasta) if pasta else "",
             }
         )
     final = ferramentas()

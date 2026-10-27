@@ -2296,7 +2296,7 @@ def test_formatar_saida_de_comando() -> None:
     assert "192.168.0.10" in texto
 
 
-# ------------------------------------------- instalador de programa (0.60.2)
+# ------------------------------------------- instalador de programa (0.60.3)
 
 
 def test_pedido_de_onde_guardar_o_instalador() -> None:

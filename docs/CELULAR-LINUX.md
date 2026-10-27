@@ -351,9 +351,19 @@ ou, pelo Python:
 ```
 
 O script acha o `.env` (ou cria a partir do `.env.example`), **substitui** a linha
-de `JARVIS_HOST_REDE` e `JARVIS_HOST_CELULAR` se ela já existir — sem duplicar
-chave —, grava em UTF-8 sem BOM com CRLF, renomeia um `.env.txt` perdido e mostra
-o antes e o depois. Nenhuma outra variável é tocada.
+de `JARVIS_HOST_REDE`, `JARVIS_HOST_CELULAR` e `JARVIS_HOST_CONFIAR_LOCAL` se ela
+já existir — sem duplicar chave —, grava em UTF-8 sem BOM com CRLF, renomeia um
+`.env.txt` perdido e mostra o antes e o depois. Nenhuma outra variável é tocada.
+
+A terceira, `JARVIS_HOST_CONFIAR_LOCAL=1`, é o **modo dono**: na própria máquina o
+token é preenchido pelo servidor e você não digita nada; de outra máquina da rede
+ele continua sendo pedido. É o que evita o campo de token aparecer para baixar o
+`adb` e o `scrcpy`. Para desligar, troque `=1` por `=0` e reinicie.
+
+Depois do `celular.preparar`, as ferramentas ficam em `storage\ferramentas\`:
+`platform-tools\adb.exe` e `scrcpy\scrcpy.exe`. O zip oficial do scrcpy extrai
+numa pasta com a versão no nome (`scrcpy-win64-v3.3.1\`), então o JARVIS renomeia
+para `scrcpy\` — se você baixar na mão, saiba que esse é o layout esperado.
 
 Depois, `Ctrl+C` na API, suba de novo e confira a primeira linha do terminal:
 

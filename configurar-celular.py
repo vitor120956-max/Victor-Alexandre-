@@ -29,10 +29,21 @@ RAIZ = Path(__file__).resolve().parent
 ARQUIVO = RAIZ / ".env"
 EXEMPLO = RAIZ / ".env.example"
 
-# o que liga a camada do celular
+# o que liga a camada do celular; a terceira é o modo dono, que evita digitar o
+# token na própria máquina (o pedido explícito do dono do projeto em 0.57.0)
 AJUSTES = {
     "JARVIS_HOST_REDE": "1",
     "JARVIS_HOST_CELULAR": "1",
+    "JARVIS_HOST_CONFIAR_LOCAL": "1",
+}
+
+EXPLICACOES = {
+    "JARVIS_HOST_REDE": "libera a rede: baixar adb e scrcpy",
+    "JARVIS_HOST_CELULAR": "liga as cinco skills celular.*",
+    "JARVIS_HOST_CONFIAR_LOCAL": (
+        "modo dono: nesta máquina você não digita o token "
+        "(de outra máquina, continua pedindo)"
+    ),
 }
 
 
@@ -117,11 +128,16 @@ def main() -> int:
         print()
 
     for chave in AJUSTES:
-        print(f"  antes:   {antes.get(chave, '(não existia)')}")
-        print(f"  agora:   {depois[chave]}")
+        print(f"  {chave}")
+        print(f"     antes:  {antes.get(chave, '(não existia)')}")
+        print(f"     agora:  {depois[chave]}")
+        print(f"     para:   {EXPLICACOES.get(chave, '')}")
         print()
 
     print("  Outras variaveis do arquivo nao foram tocadas.")
+    print()
+    print("  O modo dono vale so para a propria maquina (127.0.0.1). Para desligar,")
+    print("  troque JARVIS_HOST_CONFIAR_LOCAL=1 por =0 no .env e reinicie.")
     print()
     print("  Agora faca:")
     print("    1) na janela da API: Ctrl+C")

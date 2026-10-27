@@ -760,7 +760,7 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .legal-reader-modal .modal-header h2 { font-size: 17px; line-height: 1.35; }
 .legal-spinner { animation: orb-spin 1s linear infinite; }
 
-/* --- plano de instalação pronto para executar (0.60.2) ------------------- */
+/* --- plano de instalação pronto para executar (0.60.3) ------------------- */
 .plano-card { margin-top: 16px; padding: 14px; border: 1px solid rgba(var(--accent-rgb), .22); border-radius: 10px; background: rgba(var(--accent-rgb), .04); }
 .plano-card-heading { display: flex; align-items: center; gap: 7px; color: var(--accent); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 .plano-card p { margin: 8px 0 10px; color: var(--muted); font-size: 11px; line-height: 1.6; }

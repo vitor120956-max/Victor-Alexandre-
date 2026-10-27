@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.60.2.**
+**Versão atual: 0.60.3.**
 
 ## O que ele faz sem chave de IA
 
@@ -611,8 +611,10 @@ caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
 (Nura) com seus limites e riscos.
 
 **Ligar em um clique:** duplo clique em **`ligar-celular.bat`**. Ele ajusta
-`JARVIS_HOST_REDE=1` e `JARVIS_HOST_CELULAR=1` no `.env` — trocando a linha se ela
-já existir, sem duplicar chave, em UTF-8 sem BOM e com CRLF. Se o `.env` não
+`JARVIS_HOST_REDE=1`, `JARVIS_HOST_CELULAR=1` e `JARVIS_HOST_CONFIAR_LOCAL=1` no
+`.env` — este último é o **modo dono**, que evita digitar o token na própria
+máquina (numa outra máquina ele continua sendo pedido). Troca a linha se ela já
+existir, sem duplicar chave, em UTF-8 sem BOM e com CRLF. Se o `.env` não
 existir, cria a partir do `.env.example`; se achar um `.env.txt` perdido (o Bloco
 de Notas adora salvar assim), renomeia. Depois é só reiniciar a API e conferir
 `rede=ligada ... celular=ligado` na primeira linha do banner.
@@ -657,7 +659,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.60.2", "skills": 288}`.
+`{"version": "0.60.3", "skills": 288}`.
 
 ## Verificações
 
