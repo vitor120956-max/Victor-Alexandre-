@@ -314,7 +314,54 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 
 ---
 
-## 9. O que o JARVIS faz e não faz aqui
+## 9. As skills `celular.*` (0.60.0)
+
+A partir da 0.60.0 o JARVIS tem o próprio caminho para isso. Cinco skills, e a
+regra é a de sempre: leitura sem confirmação, execução com confirmação, e tudo
+atrás de `JARVIS_HOST_CELULAR=1`.
+
+| Skill | O que faz | Confirmação |
+|---|---|---|
+| `celular.status` | Diz se `adb` e `scrcpy` estão instalados, onde, e se a permissão está ligada. Só olha o disco. | não |
+| `celular.plano` | Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive “nunca foi ligada”. | não (só lê) |
+| `celular.preparar` | Baixa platform-tools (Google) e scrcpy (GitHub) para `ferramentas/`, com SHA-256 e extração à prova de zip-slip. | **sim** |
+| `celular.espelhar` | Abre o `scrcpy`: a tela do celular vira janela do Windows. Opcionalmente grava `.mp4`. | **sim** |
+| `celular.puxar` | `adb pull` de DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp e Telegram para `storage/celular/<data>`. | **sim** |
+
+O que o `celular.puxar` **não** faz: não lê `/data`, não copia base de aplicativo,
+não apaga nada no aparelho e não aceita destino fora da raiz de dados.
+
+### O que nenhum programa resolve
+
+Ligar a Depuração USB e tocar em **“Permitir depuração USB?”** exige uma pessoa na
+frente da tela. É consentimento local com assinatura RSA por computador — o
+Android foi desenhado para que nenhum programa no PC contorne isso. Ferramenta que
+promete “habilitar ADB em aparelho bloqueado” está vendendo outra coisa (ou nada).
+
+O que existe de verdade é o desvio: **`scrcpy --otg`**, em que o PC se passa por
+teclado e mouse USB. Isso não liga a depuração, mas permite navegar às cegas até
+ligá-la — com TalkBack falando o foco, se preciso. O `celular.plano` entrega a
+sequência pronta para cada situação.
+
+### Exemplo de resposta do `celular.plano`
+
+```text
+Depuração ligada, PC não autorizado.
+
+1. Entender o que falta
+    adb devices  →  unauthorized
+    ...
+2. Autorizar às cegas com teclado USB
+    scrcpy --otg
+    digitar o PIN da tela de bloqueio e Enter
+    scrcpy            (o popup “Permitir depuração USB?” aparece no celular)
+    scrcpy --otg      (foco no popup: Tab, Enter, Tab, Tab, Enter)
+...
+O que nenhum programa faz: tocar em “Permitir depuração USB?”. Esse
+consentimento é do Android, na tela. Todo o resto acima é automatizável.
+```
+
+## 10. O que o JARVIS faz e não faz aqui
 
 **Faz** (e você pode pedir pelo chat):
 
@@ -325,17 +372,21 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 | "confere o hash desse APK" | `sistema.assinatura` |
 | "esse .msi roda nesta máquina?" | `instalador.analisar` |
 | "abre o Gerenciador de Dispositivos" | `pc.abrir-programa` |
-| "baixa o scrcpy para usar o celular sem tela" | `sistema.baixar` (quarentena + SHA-256) |
+| "meu celular não tem tela, dá para usar?" | `celular.plano` |
+| "baixa o adb e o scrcpy" | `celular.preparar` |
+| "espelha o celular aqui" | `celular.espelhar` |
+| "puxa as fotos do celular" | `celular.puxar` |
 
-**Não faz:** não tem `adb` nem `fastboot` embutidos — ele baixa o `scrcpy` e o
-platform-tools para a quarentena e confere o hash, mas quem roda `adb devices` e
-`scrcpy` é você. Não instala nada no celular e
+**Não faz:** não liga a Depuração USB, não toca em “Permitir depuração USB?” e não
+flasha nada. Não tem `fastboot` e não instala nada no celular. O `adb` que ele usa
+é só de leitura de mídia (`devices`, `pull`) e de espelhamento (`scrcpy`) — não há
+campo para comando livre. E
 `sistema.executar` só aceita `msiexec`, `dpkg`, `rpm`, `npm` e Python. Ele não
 flasha, não desbloqueia bootloader e não "entra" no aparelho por USB.
 
 ---
 
-## 10. Resumo em uma tabela
+## 11. Resumo em uma tabela
 
 | Pergunta | Resposta |
 |---|---|
@@ -349,7 +400,7 @@ flasha, não desbloqueia bootloader e não "entra" no aparelho por USB.
 
 ---
 
-## 11. Fontes
+## 12. Fontes
 
 - Nura / postmarketOS — device `on7xelte` em testing:
   <https://gitlab.com/postmarketOS/pmaports/-/merge_requests/4220>

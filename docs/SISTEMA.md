@@ -10,7 +10,7 @@ Isso muda o contrato do projeto. Até a 0.29.0, toda resposta marcava `executed:
 
 | # | Trava | Padrão | Como ligar |
 |---|---|---|---|
-| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.59.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
+| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.57.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
 | 2 | **Rede** | desligada | `JARVIS_HOST_REDE=1` ao subir a API |
 | 3 | **Instalação** | desligada | `JARVIS_HOST_INSTALAR=1` (implica rede) |
 
@@ -26,7 +26,7 @@ O token é impresso assim, com só oito caracteres visíveis:
 JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, instalar=ligado)
 ```
 
-## Modo dono: instalar sem digitar o token (0.59.0)
+## Modo dono: instalar sem digitar o token (0.57.0)
 
 O token de host não é chave de ninguém: é uma string que o próprio JARVIS sorteia
 e guarda em `storage/host-token.txt`. Mas copiar e colar aquilo a cada instalação
@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.59.0", "skills": 283, "confiarLocal": true }
+GET /api/health  →  { "version": "0.60.0", "skills": 288, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)
@@ -98,7 +98,7 @@ GET /api/host/planos
 }]}
 ```
 
-## O botão “Executar este plano” (0.59.0)
+## O botão “Executar este plano” (0.58.0)
 
 Antes, o plano de instalação saía com um código de uso único e o passo seguinte
 era chamar `sistema.executar` por conta própria. Agora a tela faz isso:

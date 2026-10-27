@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.59.0.**
+**Versão atual: 0.60.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,7 +44,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 283, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 288, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Correio sem entrar na conta:** exporte sua caixa (Takeout ou “Baixar mensagem” do Gmail) e ponha em `storage/correio`: `filtra meus e-mails por importância` classifica por regra determinística — **intimação/processo** (100), **fatura/boleto** (85, +10 se vence em até 7 dias), **governo** (75), **segurança** (70), **pessoal** (45), **newsletter** (5) — e ordena; `analisa meus e-mails enviados` mede o seu estilo (saudação, fecho, assinatura, tamanho, listas); `escreve um e-mail para a Ana sobre o relatório: enviar planilha; pedir retorno` monta o rascunho nesse estilo. **Não marca como lido e não envia.** Para o JARVIS ler a caixa *por programa* seria preciso OAuth; mas, com você já logado no navegador do seu PC, ele abre o Gmail pela tela (`mesa.*`, com a sua autorização) e `abre o gmail com as faturas` devolve a busca já filtrada para a sua sessão — sem chave e sem nada sair da máquina. Em [`docs/CORREIO.md`](docs/CORREIO.md).
 
@@ -546,7 +546,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **283 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **288 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -607,9 +607,17 @@ GPU continua desenhando mesmo com o painel quebrado. A condição que decide tud
 se a *Depuração USB* já esteve ligada; se nunca esteve, há o `scrcpy --otg`
 (teclado e mouse sem ADB) e, no limite, uma tela de teste de bancada. O documento
 traz o diagnóstico de placa antes de comprar a peça (R$ 70–160 o módulo), o
-caminho sem risco (Termux + proot-distro, com `apt` e SSH), o caminho nativo
-(Nura) com seus limites e riscos, e o que o JARVIS faz e não faz aqui — ele não
-tem `adb` nem `fastboot` e não instala nada no celular.
+caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
+(Nura) com seus limites e riscos.
+
+Na **0.60.0** isso virou cinco skills: `celular.status` (onde está o adb, onde
+está o scrcpy), `celular.plano` (o caminho exato para o estado medido, inclusive
+quando a depuração nunca foi ligada), `celular.preparar` (baixa as duas
+ferramentas com SHA-256), `celular.espelhar` (a tela do celular numa janela do
+Windows) e `celular.puxar` (fotos e documentos por `adb pull`). Tudo atrás de
+`JARVIS_HOST_CELULAR=1`, com confirmação. O que ele **não** faz, e nenhum programa
+faz: tocar em “Permitir depuração USB?” — esse consentimento é do Android, na
+tela.
 
 ## Verificações
 
@@ -697,7 +705,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 283 skills
+├── skill_registry.py        # allowlist, Pydantic e 288 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

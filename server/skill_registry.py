@@ -282,6 +282,7 @@ from . import biblioteca as bib
 from . import dados as dados_locais
 from . import (
     catalogo,
+    celular,
     correio,
     cultura,
     drive_setup,
@@ -2070,6 +2071,30 @@ class PcArquivoInput(BaseModel):
 class PcComandoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     nome: Literal["ip", "ip-tudo", "sistema", "processos", "usuarios", "versao", "disco", "data", "boot"] = Field(title="Comando", json_schema_extra={"description": "Comando de leitura da lista fechada — não é linha digitada."})
+
+
+class CelularPlanoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    estado: Literal["auto", "autorizado", "nao-autorizado", "vazio", "recovery", "offline"] = Field(default="auto", title="Estado do aparelho", json_schema_extra={"description": "`auto` mede com `adb devices` (exige JARVIS_HOST_CELULAR=1). Os demais forçam o cenário."})
+
+
+class CelularPuxarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pastas: str = Field(default="", max_length=200, title="Pastas do celular", json_schema_extra={"description": "Separadas por vírgula: DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram. Vazio copia as cinco principais."})
+    destino: str = Field(default="", max_length=300, title="Pasta no PC", json_schema_extra={"description": "Dentro da raiz de dados do JARVIS. Vazio usa storage/celular/<data-hora>."})
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class CelularEspelharInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    gravar: bool = Field(default=False, title="Gravar a sessão", json_schema_extra={"description": "Salva um .mp4 da tela do celular na raiz de dados."})
+    desligar_painel: bool = Field(default=True, title="Desligar o painel do celular", json_schema_extra={"description": "Economiza bateria e evita vsync de painel quebrado."})
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class CelularPrepararInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
 class InstaladorAnalisarInput(BaseModel):
@@ -4059,6 +4084,67 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except pc.PcError as exc:
             raise SkillError(str(exc)) from exc
 
+    def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        info = celular.ferramentas()
+        return {
+            **info,
+            "resposta": (
+                "adb: " + (info["adb"] or "não encontrado")
+                + " · scrcpy: " + (info["scrcpy"] or "não encontrado")
+                + ". " + info["nota"]
+            ),
+        }
+
+    def celular_plano_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularPlanoInput)
+        try:
+            return celular.plano(data.estado)
+        except celular.CelularError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def celular_espelhar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularEspelharInput)
+        if dry_run:
+            return {
+                "abriria": "scrcpy",
+                "gravaria": data.gravar,
+                "nota": "Simulação: nenhuma janela foi aberta e nenhum comando rodou.",
+            }
+        try:
+            return celular.espelhar(gravar=data.gravar, desligar_painel=data.desligar_painel)
+        except celular.CelularError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def celular_puxar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularPuxarInput)
+        pastas = [parte.strip() for parte in (data.pastas or "").split(",") if parte.strip()]
+        if dry_run:
+            try:
+                escolhidas = celular.pastas_para_puxar(pastas)
+            except celular.CelularError as exc:
+                raise SkillError(str(exc)) from exc
+            return {
+                "copiaria": escolhidas,
+                "destino": data.destino or "storage/celular/<data-hora>",
+                "nota": "Simulação: nada foi copiado do aparelho.",
+            }
+        try:
+            return celular.puxar(pastas, data.destino)
+        except celular.CelularError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def celular_preparar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularPrepararInput)
+        if dry_run:
+            return {
+                "baixaria": ["platform-tools (Google)", "scrcpy (GitHub)"],
+                "nota": "Simulação: nada foi baixado nem extraído.",
+            }
+        try:
+            return celular.preparar(autorizacao=data.autorizacao)
+        except (celular.CelularError, Exception) as exc:  # rede/extracao: mensagem do módulo
+            raise SkillError(str(exc)) from exc
+
     def catalogo_topico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CatalogoTopicoInput)
         try:
@@ -5132,6 +5218,11 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("pc.abrir-programa", "Abrir programa no PC", "Abre um programa da lista fechada, sem argumento e sem caminho livre. Exige `JARVIS_HOST_PC=1` e confirmação; no Linux/macOS a skill recusa e explica.", "PC", PcProgramaInput, pc_abrir_programa_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.abrir-arquivo", "Abrir arquivo no PC", "Abre um documento com o programa padrão do Windows, só dentro de storage/, Downloads, Documentos, Desktop ou OneDrive, e só de formato de leitura — `.exe`, `.bat`, `.ps1` e `.lnk` são recusados.", "PC", PcArquivoInput, pc_abrir_arquivo_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.comando", "Comando pronto do PC", "Roda um comando de leitura da lista fechada (ipconfig, systeminfo, tasklist, ver, query user, disco, data, boot) e devolve a saída. O comando é escolhido por nome — não existe linha livre para injetar nada.", "PC", PcComandoInput, pc_comando_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("celular.status", "Ferramentas do celular", "Diz se `adb` e `scrcpy` estão instalados e onde, e se a permissão `JARVIS_HOST_CELULAR` está ligada. Só olha o disco — não executa nada e não fala com o aparelho.", "Celular", EmptyInput, celular_status_handler, timeout_seconds=10),
+        SkillDefinition("celular.plano", "Plano para destravar o celular sem tela", "Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive quando a Depuração USB nunca foi ligada. Traz os comandos, a sequência de teclas do `scrcpy --otg`, o TalkBack, a tela de teste e o limite do flash sem Desbloqueio OEM.", "Celular", CelularPlanoInput, celular_plano_handler, timeout_seconds=40),
+        SkillDefinition("celular.espelhar", "Ver o celular na tela do PC", "Abre o `scrcpy`: a tela do celular vira uma janela do Windows, com mouse e teclado do PC — funciona mesmo com o painel quebrado, desde que a depuração já esteja autorizada. Exige `JARVIS_HOST_CELULAR=1` e confirmação.", "Celular", CelularEspelharInput, celular_espelhar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("celular.puxar", "Resgatar fotos e documentos do celular", "Copia por `adb pull` as pastas de mídia permitidas (DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram) para dentro da raiz de dados. Não lê `/data`, não copia chave de aplicativo e não apaga nada no aparelho.", "Celular", CelularPuxarInput, celular_puxar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition("celular.preparar", "Baixar adb e scrcpy", "Baixa o platform-tools do Google e o scrcpy do GitHub para `ferramentas/`, confere o SHA-256 de cada arquivo e extrai recusando caminho que escape da pasta. Não executa nada depois de extrair.", "Celular", CelularPrepararInput, celular_preparar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=600),
         SkillDefinition("catalogo.topico", "Catálogo de um tópico do GitHub", "Lê os repositórios de um tópico do GitHub (ex.: `agent-skills`), encontra os `SKILL.md` de cada um e soma tudo ao catálogo local. Uma leva de 12 repositórios gasta 13 dos 60 pedidos por hora do GitHub público.", "Catálogo", CatalogoTopicoInput, catalogo_topico_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("habilidades.adaptar", "Adaptar habilidade para uso próprio", "Transforma o guia importado em skill local de procedimento (`local.proc-…`), com passos numerados, que passa a responder no chat pelo nome. Continua sendo uma lista de passos, não código executando sozinho.", "Habilidades", HabilidadeAdaptarInput, habilidades_adaptar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("cultura.fontes", "Fontes de livros livres", "Mostra onde baixar livro completo e gratuito — Gutenberg, Standard Ebooks, Open Library, Wikisource, Domínio Público, LibriVox e DOAB — com o que cada um tem, a licença e o que precisa (quase sempre nada).", "Cultura", EmptyInput, cultura_fontes_handler, timeout_seconds=10),
