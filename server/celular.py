@@ -40,7 +40,7 @@ from urllib.request import Request, urlopen
 from . import dados
 
 AMBIENTE = "JARVIS_HOST_CELULAR"
-TIMEOUT = 25
+TIMEOUT = 45
 MAX_SAIDA = 4_000
 MAX_ZIP = 400 * 1024 * 1024
 
@@ -140,6 +140,11 @@ def ferramentas() -> dict[str, Any]:
 
 
 def _rodar(argumentos: list[str], timeout: int = TIMEOUT) -> tuple[int, str, str]:
+    # No Windows, sem isto cada chamada do adb abre e fecha uma janela preta por
+    # cima da interface. CREATE_NO_WINDOW só existe lá.
+    extra: dict[str, Any] = {}
+    if os.name == "nt":
+        extra["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         concluido = subprocess.run(
             argumentos,
@@ -148,11 +153,16 @@ def _rodar(argumentos: list[str], timeout: int = TIMEOUT) -> tuple[int, str, str
             text=True,
             timeout=timeout,
             errors="replace",
+            **extra,
         )
     except FileNotFoundError as exc:
         raise CelularError(f"O executável “{argumentos[0]}” não está instalado.") from exc
     except subprocess.TimeoutExpired as exc:
-        raise CelularError(f"“{' '.join(argumentos)}” passou de {timeout}s e foi interrompido.") from exc
+        raise CelularError(
+            f"“{' '.join(argumentos)}” passou de {timeout}s e foi interrompido. "
+            "Na primeira vez o adb sobe um serviço próprio e o antivírus costuma "
+            "escaneá-lo; tente de novo. Se repetir, libere o adb no antivírus."
+        ) from exc
     except OSError as exc:
         raise CelularError(f"O sistema recusou rodar “{argumentos[0]}”: {exc}") from exc
     return concluido.returncode, concluido.stdout or "", concluido.stderr or ""
@@ -186,6 +196,77 @@ def parsear_dispositivos(saida: str) -> list[dict[str, str]]:
     return aparelhos
 
 
+_SONDA_WINDOWS = (
+    "$d = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
+    "Where-Object { $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|Composite' }; "
+    "if ($d) { $d | ForEach-Object { \"$($_.Status)|$($_.Class)|$($_.FriendlyName)\" } }"
+)
+
+
+def _limpar_sonda(linhas: list[str]) -> list[dict[str, str]]:
+    achados: list[dict[str, str]] = []
+    for linha in linhas:
+        partes = (linha or "").strip().split("|", 2)
+        if len(partes) != 3 or not partes[2].strip():
+            continue
+        achados.append({"status": partes[0].strip(), "classe": partes[1].strip(), "nome": partes[2].strip()})
+    vistos: set[str] = set()
+    unicos: list[dict[str, str]] = []
+    for item in achados:
+        chave = item["nome"].lower()
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        unicos.append(item)
+    return unicos[:8]
+
+
+def windows_ve(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
+    """O que o **Windows** vê na USB, sem passar pelo adb. Só leitura.
+
+    É a pergunta que decide o próximo passo quando o `adb devices` volta vazio:
+    - Windows vê o aparelho e ele está OK  → cabo e porta estão bons; falta a
+      Depuração USB (com a tela morta, o problema é o consentimento);
+    - Windows vê com problema (driver)      → instalar o Samsung USB Driver;
+    - Windows não vê nada                   → cabo, porta ou aparelho desligado.
+
+    Sem isso, a pessoa fica sem saber se compra cabo, driver ou tela de teste.
+    """
+    if os.name != "nt" or sys.platform != "win32":
+        return {"consulta": False, "motivo": "A sonda de USB só existe no Windows.", "dispositivos": []}
+    executar = rodar or _rodar
+    try:
+        codigo, saida, erro = executar(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _SONDA_WINDOWS]
+        )
+    except CelularError:
+        return {"consulta": False, "motivo": "Não consegui consultar o Windows.", "dispositivos": []}
+    if codigo != 0 and not saida.strip():
+        return {
+            "consulta": False,
+            "motivo": _cortar(erro or "O PowerShell não respondeu."),
+            "dispositivos": [],
+        }
+    achados = _limpar_sonda(saida.splitlines())
+    com_problema = [item for item in achados if item["status"] and item["status"].upper() != "OK"]
+    return {
+        "consulta": True,
+        "dispositivos": achados,
+        "visivel": bool(achados),
+        "com_problema": bool(com_problema),
+        "resumo": _resumo_da_sonda(achados, com_problema),
+    }
+
+
+def _resumo_da_sonda(achados: list[dict[str, str]], com_problema: list[dict[str, str]]) -> str:
+    if not achados:
+        return "O Windows não vê nenhum aparelho na USB."
+    nomes = ", ".join(item["nome"][:48] for item in achados[:3])
+    if com_problema:
+        return f"O Windows vê {len(achados)} item(ns) com problema de driver ({nomes})."
+    return f"O Windows vê o aparelho ({nomes})."
+
+
 def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
     """Mede o que o `adb` vê. Só leitura: nenhum comando muda o aparelho."""
     info = ferramentas()
@@ -205,6 +286,10 @@ def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) 
         }
     executar = rodar or _rodar
     codigo, saida, erro = executar([info["adb"], "devices", "-l"])
+    if codigo != 0 and "server version" in f"{saida}{erro}".lower():
+        # Um adb de outra ferramenta já está na porta 5037. Derruba e sobe o nosso.
+        executar([info["adb"], "kill-server"])
+        codigo, saida, erro = executar([info["adb"], "devices", "-l"])
     aparelhos = parsear_dispositivos(saida)
     if codigo != 0 and not aparelhos:
         return {
@@ -214,7 +299,7 @@ def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) 
             "motivo": _cortar(erro or saida) or f"O adb terminou com código {codigo}.",
             "aparelhos": [],
         }
-    return {
+    resultado = {
         "ferramentas": info,
         "executado": True,
         "codigo": codigo,
@@ -222,6 +307,10 @@ def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) 
         "saida": _cortar(saida),
         "situacao": situacao_de(aparelhos),
     }
+    if not aparelhos:
+        # Sem aparelho no adb a pergunta seguinte é sempre a mesma: o Windows vê?
+        resultado["windows"] = windows_ve(rodar=executar)
+    return resultado
 
 
 def situacao_de(aparelhos: list[dict[str, str]]) -> str:
@@ -279,7 +368,9 @@ def _plano_desligado() -> list[dict[str, Any]]:
     ]
 
 
-def _plano_vazio() -> list[dict[str, Any]]:
+def _plano_vazio(windows: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    if windows and windows.get("consulta"):
+        return _plano_vazio_com_sonda(windows)
     return [
         _passo(
             "1. Testar com o cabo",
@@ -325,6 +416,55 @@ def _plano_vazio() -> list[dict[str, Any]]:
             "7× sem imagem é lento e não é garantido em MIUI/One UI antigas.",
         ),
     ]
+
+
+def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
+    """O mesmo plano, mas começando pelo que o Windows já respondeu."""
+    nomes = "; ".join(item["nome"][:60] for item in windows.get("dispositivos", [])[:3])
+    if windows.get("com_problema"):
+        primeiro = _passo(
+            "1. Driver, não depuração",
+            [
+                "Gerenciador de Dispositivos → procure o item com ⚠ amarelo",
+                "instalar o Samsung USB Driver for Mobile Phones (Windows)",
+                "reconectar o cabo e rodar celular.status de novo",
+            ],
+            f"O Windows vê {nomes}, mas com problema de driver. Enquanto o driver "
+            "não estiver certo, o adb não enxerga o aparelho — e nenhum passo "
+            "seguinte muda nada.",
+        )
+    elif windows.get("visivel"):
+        primeiro = _passo(
+            "1. Cabo e porta estão bons",
+            [
+                "o Windows já vê o aparelho — não troque cabo ainda",
+                "ligar a Depuração USB (ver o caminho sem tela abaixo)",
+                "conferir: adb devices",
+            ],
+            f"O Windows vê {nomes}. Ou seja: a placa e o cabo funcionam, e o adb "
+            "vazio significa que a Depuração USB nunca foi ligada (ou foi "
+            "desligada).",
+        )
+    else:
+        primeiro = _passo(
+            "1. Nada aparece na USB",
+            [
+                "trocar o cabo (de preferência o original)",
+                "usar a porta USB de trás do PC, sem hub",
+                "segurar Power por 10 s e ligar de novo",
+                "conferir: celular.status",
+            ],
+            "O Windows não vê aparelho nenhum. Aqui o problema é físico: cabo, "
+            "porta, bateria ou a placa USB do aparelho — antes de qualquer coisa "
+            "de software.",
+        )
+    # O passo 2 do plano genérico é justamente "abra o Gerenciador de Dispositivos
+    # e veja se o Windows enxerga" — já respondido pela sonda, sai do caminho.
+    resto = _plano_vazio()[2:]
+    for indice, passo in enumerate(resto, start=2):
+        passo["titulo"] = passo["titulo"].split(". ", 1)[-1]
+        passo["titulo"] = f"{indice}. {passo['titulo']}"
+    return [primeiro, *resto]
 
 
 def _plano_nao_autorizado() -> list[dict[str, Any]]:
@@ -435,7 +575,7 @@ def plano(estado_atual: str = "auto", *, rodar: Callable[[list[str]], tuple[int,
             _passo("2. Depois", ["reiniciar o aparelho", "celular.plano"], "Recalcula o estado."),
         ]
     else:
-        passos = _plano_vazio()
+        passos = _plano_vazio((medido or {}).get("windows"))
 
     titulos = {
         "sem-ferramentas": "Faltam as ferramentas",

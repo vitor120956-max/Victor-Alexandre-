@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.60.6 ---------------------------------------
+# --- o caminho exato do bug de 0.60.7 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.60.6 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.60.7 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -737,3 +737,99 @@ def test_preparar_apaga_o_zip_depois_de_extrair(ligado):
 
     C.preparar(baixar=baixar, resolver_scrcpy=lambda: {"url": "https://github/scrcpy.zip"})
     assert criados and all(not caminho.exists() for caminho in criados)
+
+
+# --- sonda do Windows: cabo/driver/depuração, três respostas diferentes ------
+
+def test_sonda_recusa_fora_do_windows():
+    resultado = C.windows_ve()
+    assert resultado["consulta"] is False
+    assert "Windows" in resultado["motivo"]
+
+
+def test_sonda_le_o_que_o_powershell_devolveu(monkeypatch):
+    monkeypatch.setattr(C.os, "name", "nt")
+    monkeypatch.setattr(C.sys, "platform", "win32")
+
+    def rodar(argumentos):
+        assert argumentos[0] == "powershell"
+        return 0, (
+            "OK|USB|SAMSUNG Mobile USB Composite Device\n"
+            "Error|USB|MTP\n"
+            "OK|USB|SAMSUNG Mobile USB Composite Device\n"
+        ), ""
+
+    resultado = C.windows_ve(rodar=rodar)
+    assert resultado["consulta"] is True
+    assert resultado["visivel"] is True
+    assert resultado["com_problema"] is True
+    assert len(resultado["dispositivos"]) == 2  # linha repetida não conta
+    assert "driver" in resultado["resumo"].lower()
+
+
+def test_sonda_sem_aparelho_nao_inventa_driver(monkeypatch):
+    monkeypatch.setattr(C.os, "name", "nt")
+    monkeypatch.setattr(C.sys, "platform", "win32")
+    resultado = C.windows_ve(rodar=lambda argumentos: (0, "", ""))
+    assert resultado == {
+        "consulta": True,
+        "dispositivos": [],
+        "visivel": False,
+        "com_problema": False,
+        "resumo": "O Windows não vê nenhum aparelho na USB.",
+    }
+
+
+def test_plano_vazio_muda_o_primeiro_passo_quando_a_sonda_responde():
+    visivel = {"consulta": True, "visivel": True, "com_problema": False, "dispositivos": [{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile"}]}
+    driver = {"consulta": True, "visivel": True, "com_problema": True, "dispositivos": [{"status": "Error", "classe": "USB", "nome": "MTP"}]}
+    nada = {"consulta": True, "visivel": False, "com_problema": False, "dispositivos": []}
+
+    assert "cabo e porta estão bons" in C._plano_vazio(visivel)[0]["titulo"].lower()
+    assert "driver" in C._plano_vazio(driver)[0]["titulo"].lower()
+    assert "nada aparece" in C._plano_vazio(nada)[0]["titulo"].lower()
+    # o passo "abra o Gerenciador de Dispositivos" sai quando a sonda já respondeu
+    assert all("Gerenciador" not in passo["titulo"] for passo in C._plano_vazio(visivel))
+    # e continua lá quando não há sonda
+    assert any("Windows vê" in passo["titulo"] for passo in C._plano_vazio())
+
+
+def test_status_sonda_o_windows_so_quando_o_adb_nao_ve_nada(ligado, monkeypatch):
+    from pathlib import Path as _Path
+
+    adb = ligado / "adb.exe"
+    adb.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(C, "ferramentas", lambda: {"adb": str(adb), "scrcpy": "x", "completo": True})
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr(C, "windows_ve", lambda rodar=None: {"consulta": True, "visivel": True, "com_problema": False, "dispositivos": []})
+
+    vazio = C.estado(rodar=lambda argumentos: (0, "List of devices attached\n\n", ""))
+    assert vazio["situacao"] == "vazio"
+    assert vazio["windows"]["visivel"] is True
+
+    cheio = C.estado(
+        rodar=lambda argumentos: (0, "List of devices attached\nABC123\tdevice product:on7xelte\n", "")
+    )
+    assert cheio["situacao"] == "autorizado"
+    assert "windows" not in cheio  # não pergunta o que não precisa
+
+
+def test_status_derruba_adb_de_outra_versao_e_tenta_de_novo(ligado, monkeypatch):
+    adb = ligado / "adb.exe"
+    adb.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(C, "ferramentas", lambda: {"adb": str(adb), "scrcpy": "x", "completo": True})
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr(C, "windows_ve", lambda rodar=None: {"consulta": False, "dispositivos": []})
+    chamadas: list[list[str]] = []
+
+    def rodar(argumentos):
+        chamadas.append(argumentos)
+        if argumentos[1] == "kill-server":
+            return 0, "", ""
+        if len(chamadas) == 1:
+            return 1, "", "adb server version (40) doesn't match this client (41); killing..."
+        return 0, "List of devices attached\nXYZ9000\tdevice product:on7xelte\n", ""
+
+    resultado = C.estado(rodar=rodar)
+    assert resultado["situacao"] == "autorizado"
+    assert chamadas[1][1] == "kill-server"
