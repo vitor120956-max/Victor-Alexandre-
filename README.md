@@ -619,6 +619,31 @@ Windows) e `celular.puxar` (fotos e documentos por `adb pull`). Tudo atrás de
 faz: tocar em “Permitir depuração USB?” — esse consentimento é do Android, na
 tela.
 
+## Atualizar
+
+**Pelo Git (recomendado).** Na primeira vez, na mão:
+
+```bat
+cd /d D:\JARVIS
+git fetch origin
+git checkout arena/f26cfa7a-victor-alexandre
+git pull --ff-only
+```
+
+Das próximas em diante, basta **duplo clique em `atualizar.bat`**. Ele confere o
+ramo, **para se houver arquivo seu alterado** (não joga nada por cima), faz
+`--ff-only`, mostra o que entrou, avisa quando as dependências mudaram e diz o que
+reiniciar. `.env`, `storage\`, `.venv\` e `node_modules\` nunca são tocados —
+estão no `.gitignore`.
+
+**Pelo zip, sem Git:** baixe
+<https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre>,
+descompacte **por cima** de `D:\JARVIS` e **preserve** `.env`, `storage\` e
+`.venv\`. A interface já vem compilada em `web-dist\`, então não precisa de Node.
+
+Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
+`{"version": "0.60.0", "skills": 288}`.
+
 ## Verificações
 
 ```bash
