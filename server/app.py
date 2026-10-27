@@ -37,6 +37,7 @@ from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
 from . import agenda as agenda_local
 from . import sistema as sistema_mod
+from . import tokens
 from .sistema import SistemaError, token_host as sistema_token_host
 from .skill_registry import SkillError, SkillRegistry, build_registry
 from .workspace import MAX_DOCUMENT_BYTES, VISIBLE_EXTENSIONS, download_url, regular_file, safe_path
@@ -207,9 +208,14 @@ def _autorizacao_do_dono(
         campos = set((definition.input_model.model_json_schema().get("properties") or {}))
     except Exception:  # schema quebrado não vira bypass
         return parametros, False
-    if "autorizacao" in campos and not str(dados.get("autorizacao") or "").strip():
+    if "autorizacao" in campos:
         token = sistema_token_host()
-        if token:
+        atual = str(dados.get("autorizacao") or "").strip()
+        # No modo dono, quem está na própria máquina não digita token — e não deve
+        # ser punido quando o valor chega torto (o chat já mandou a frase inteira
+        # no campo, por exemplo). Token válido continua sendo respeitado; qualquer
+        # outra coisa é trocada pelo de verdade.
+        if token and (not atual or not tokens.iguais(atual, token)):
             dados["autorizacao"] = token
             preencheu = True
     if definition.id == "sistema.executar" and not str(dados.get("confirmacao") or "").strip():
@@ -268,7 +274,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.60.3",
+        version="0.60.4",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -366,7 +372,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.60.3",
+            "version": "0.60.4",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "confiarLocal": sistema_mod.confiar_local(),

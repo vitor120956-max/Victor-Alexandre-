@@ -713,8 +713,20 @@ def _valor_do_campo(
     return achado.group(1).strip() if achado else None
 
 
+# Campos que **nunca** saem da frase do usuário. O token tem de vir do pedido
+# explícito (ou do modo dono, no servidor): preencher por texto fazia o chat
+# mandar "sim, pode" como se fosse autorização, e a skill recusava com razão.
+# `confirmacao` fica de fora da lista de propósito: é o código curto do plano,
+# não é segredo, e colar à mão é um caminho legítimo.
+CAMPOS_NUNCA_DO_TEXTO = frozenset({"autorizacao", "token", "senha"})
+
+
 def extrair_parametros(consulta: str, schema: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    propriedades = schema.get("properties") or {}
+    propriedades = {
+        nome: spec
+        for nome, spec in (schema.get("properties") or {}).items()
+        if nome not in CAMPOS_NUNCA_DO_TEXTO
+    }
     textos = [nome for nome, spec in propriedades.items() if isinstance(spec, dict) and spec.get("type") == "string" and not spec.get("enum")]
     unico_texto = len(textos) == 1
     valores: dict[str, Any] = {}
@@ -764,7 +776,11 @@ def parametros_explicitos(consulta: str, schema: dict[str, Any]) -> dict[str, An
     Com isso o usuário sempre consegue preencher o que o agente não adivinhou,
     sem formulário e sem IA — inclusive campo de tipo composto, escrito em JSON.
     """
-    propriedades = schema.get("properties") or {}
+    propriedades = {
+        nome: spec
+        for nome, spec in (schema.get("properties") or {}).items()
+        if nome not in CAMPOS_NUNCA_DO_TEXTO
+    }
     valores: dict[str, Any] = {}
     for parte in _RE_SEPARADOR.split(consulta or ""):
         achado = _RE_PAR.search(parte.strip())

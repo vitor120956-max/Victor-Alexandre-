@@ -104,14 +104,45 @@ def test_modo_ligado_nao_preenche_para_outra_maquina(monkeypatch):
     assert preencheu is False
 
 
-def test_modo_ligado_respeita_token_digitado(monkeypatch):
+def test_modo_ligado_respeita_o_token_certo_digitado(monkeypatch):
+    """Token válido e explícito continua sendo usado como veio."""
+    from server.skill_registry import SistemaInstalarInput
+    from server.sistema import token_host
+
+    monkeypatch.setenv("JARVIS_HOST_CONFIAR_LOCAL", "1")
+    certo = token_host()
+    dados, preencheu = app_mod._autorizacao_do_dono(
+        _Pedido(), _Skill("sistema.instalar", SistemaInstalarInput), {"autorizacao": certo}
+    )
+    assert dados["autorizacao"] == certo
+    assert preencheu is False
+
+
+def test_modo_ligado_corrige_token_torto_na_propria_maquina(monkeypatch):
+    """O bug de 0.60.4: o chat mandava "sim, pode" no campo do token."""
+    from server.skill_registry import SistemaInstalarInput
+    from server.sistema import token_host
+
+    monkeypatch.setenv("JARVIS_HOST_CONFIAR_LOCAL", "1")
+    certo = token_host()
+    for torto in ("sim, pode", "não", "baixa o adb e o scrcpy", "1234"):
+        dados, preencheu = app_mod._autorizacao_do_dono(
+            _Pedido(), _Skill("sistema.instalar", SistemaInstalarInput), {"autorizacao": torto}
+        )
+        assert dados["autorizacao"] == certo, torto
+        assert preencheu is True
+
+
+def test_modo_ligado_nao_corrige_para_outra_maquina(monkeypatch):
     from server.skill_registry import SistemaInstalarInput
 
     monkeypatch.setenv("JARVIS_HOST_CONFIAR_LOCAL", "1")
     dados, preencheu = app_mod._autorizacao_do_dono(
-        _Pedido(), _Skill("sistema.instalar", SistemaInstalarInput), {"autorizacao": "digitado"}
+        _Pedido("192.168.0.42"),
+        _Skill("sistema.instalar", SistemaInstalarInput),
+        {"autorizacao": "sim, pode"},
     )
-    assert dados["autorizacao"] == "digitado"
+    assert dados["autorizacao"] == "sim, pode"
     assert preencheu is False
 
 
@@ -294,3 +325,45 @@ def test_rota_planos_diz_se_a_instalacao_esta_ligada(cliente: TestClient, monkey
     assert cliente.get("/api/host/planos").json()["instalar"] is False
     monkeypatch.setenv("JARVIS_HOST_INSTALAR", "1")
     assert cliente.get("/api/host/planos").json()["instalar"] is True
+
+
+# --- tokens: acento nao pode derrubar a requisicao ---------------------------
+
+def test_comparar_token_com_acento_nao_estoura():
+    from server import tokens
+
+    assert tokens.iguais("não", "abc") is False
+    assert tokens.iguais("ação", "ação") is True
+    assert tokens.iguais("", "") is True
+    assert tokens.iguais(None, "abc") is False
+
+
+def test_explicar_distingue_nao_token_de_token_errado():
+    from server import tokens
+
+    texto = tokens.explicar("não, pode")
+    assert "não é um token" in texto
+    assert "acento" in texto
+
+    assert "inválido" in tokens.explicar("abcdefgh")
+
+    vazio = tokens.explicar("", modo_dono=False)
+    assert "ligar-celular.bat" in vazio
+    assert "JARVIS_HOST_CONFIAR_LOCAL" in vazio
+
+
+def test_explicar_modo_dono_ligado_de_outra_maquina():
+    from server import tokens
+
+    texto = tokens.explicar("", modo_dono=True, da_propria_maquina=False)
+    assert "própria máquina" in texto
+
+
+def test_token_gerado_parece_token():
+    import secrets
+
+    from server import tokens
+
+    assert tokens.parece_token(secrets.token_urlsafe(24))
+    assert not tokens.parece_token("sim")
+    assert not tokens.parece_token("baixa o adb")

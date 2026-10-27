@@ -42,10 +42,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus, urlparse
 from urllib.request import Request, urlopen
 
-from . import busca_web
+from . import busca_web, tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.60.3"
+VERSAO = "0.60.4"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -178,14 +178,11 @@ def _autorizado(autorizacao: str) -> tuple[bool, str]:
     esperado = token_host()
     if not esperado:
         return False, "Não foi possível preparar o token de host em storage/host-token.txt."
-    if not autorizacao.strip():
-        return False, (
-            "Modo host exige o token de storage/host-token.txt. "
-            "Ele aparece no terminal quando a API sobe e nunca vai para o Git."
-        )
-    if not hmac.compare_digest(autorizacao.strip(), esperado):
-        return False, "Token de host inválido. Confira o valor em storage/host-token.txt."
-    return True, ""
+    if (autorizacao or "").strip() and tokens.iguais(autorizacao, esperado):
+        return True, ""
+    # `compare_digest` com texto acentuado levanta TypeError; o módulo `tokens`
+    # compara em bytes e sabe distinguir "não é token" de "token errado".
+    return False, tokens.explicar(autorizacao, modo_dono=confiar_local())
 
 
 def confiar_local() -> bool:

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
+import { autorizacaoParaConfirmar } from '../lib/confirmacao';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
 import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
@@ -466,7 +467,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { id: createId('message'), role: 'user' as const, content: text, timestamp: new Date().toISOString() },
       ].slice(-120));
       setProcessing('python');
-      void requestAgenteLocal(pendente.pedido, text, true)
+      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.60.4).
+      void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true)
         .then((resultado) => {
           setProcessing(null);
           appendJarvisMessage(montarRespostaAgente(resultado), 'python');
@@ -927,7 +929,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     appendJarvisMessage(reply);
-  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
+  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, modoDono, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     if (patch.notifications && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {

@@ -555,3 +555,45 @@ def test_configurador_liga_o_modo_dono():
     texto, _, depois = modulo.ajustar("")
     assert "JARVIS_HOST_CONFIAR_LOCAL=1" in texto
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
+
+
+# --- o caminho exato do bug de 0.60.4 ---------------------------------------
+
+def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
+    """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema, "token_host", lambda: "abc123XYZ_ok-token")
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.baixar(url="https://example.com/x.zip", autorizacao="não, pode")
+    texto = str(erro.value)
+    assert "compar" not in texto.lower()
+    assert "não é um token" in texto
+
+
+def test_preparar_sem_token_explica_o_modo_dono(ligado, monkeypatch):
+    from server import sistema
+
+    monkeypatch.setattr(sistema, "token_host", lambda: "abc123XYZ_ok-token")
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.baixar(url="https://example.com/x.zip", autorizacao="")
+    assert "ligar-celular.bat" in str(erro.value)
+
+
+def test_agente_nao_tira_token_da_frase():
+    from server import agente_local
+
+    schema = {
+        "properties": {
+            "autorizacao": {"type": "string"},
+            "arquivo": {"type": "string"},
+        },
+        "required": [],
+    }
+    valores, _ = agente_local.extrair_parametros("sim, pode", schema)
+    assert "autorizacao" not in valores
+
+    explicitos = agente_local.parametros_explicitos("autorizacao=sim pode", schema)
+    assert "autorizacao" not in explicitos

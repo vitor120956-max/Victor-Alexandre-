@@ -26,9 +26,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.60.3"
+VERSAO = "0.60.4"
 
 PROJETO = Path(__file__).resolve().parents[1]
 STORAGE = PROJETO / "storage"
@@ -122,9 +123,9 @@ def _autorizado(autorizacao: str) -> tuple[bool, str]:
     if not esperado:
         return False, "Token de host ausente: suba a API uma vez para gerar storage/host-token.txt."
     if not (autorizacao or "").strip():
-        return False, "Modo host exige o token de storage/host-token.txt."
-    if not secrets.compare_digest((autorizacao or "").strip(), esperado):
-        return False, "Token de host inválido."
+        return False, tokens.explicar(autorizacao)
+    if not tokens.iguais(autorizacao, esperado):
+        return False, tokens.explicar(autorizacao)
     return True, ""
 
 
