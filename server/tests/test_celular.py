@@ -370,3 +370,42 @@ def test_skill_de_plano_responde_pelo_registro():
     resultado = asyncio.run(registro.execute("celular.plano", {"estado": "vazio"}))
     assert resultado["situacao"] == "vazio"
     assert "BLOCKED BY FRP LOCK" in resultado["resposta"]
+
+
+# --- banner e avisos ---------------------------------------------------------
+
+def test_banner_mostra_o_estado_do_celular(capsys, tmp_path, monkeypatch):
+    """O banner precisa dizer se a camada do celular está ligada."""
+    from fastapi.testclient import TestClient
+
+    from server.app import create_app
+    from server.skill_registry import build_registry
+
+    monkeypatch.setenv("JARVIS_DADOS", str(tmp_path))
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setenv("JARVIS_HOST_PC", "0")
+    aplicacao = create_app(registry=build_registry(tmp_path / "files"))
+    with TestClient(aplicacao):
+        pass
+    saida = capsys.readouterr().out
+    assert "celular=ligado" in saida
+    assert "pc=desligado" in saida
+
+
+def test_nenhum_modulo_tem_escape_invalido():
+    """`\\S`, `\\M`, `\\D` em docstring viram SyntaxWarning no Python novo."""
+    import warnings
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parents[2] / "server"
+    ruins = []
+    for arquivo in sorted(raiz.rglob("*.py")):
+        texto = arquivo.read_text(encoding="utf-8")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", SyntaxWarning)
+                warnings.simplefilter("error", DeprecationWarning)
+                compile(texto, str(arquivo), "exec")
+        except (SyntaxWarning, DeprecationWarning) as exc:
+            ruins.append(f"{arquivo.name}: {exc}")
+    assert ruins == [], "\n".join(ruins)

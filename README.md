@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.60.0.**
+**Versão atual: 0.60.1.**
 
 ## O que ele faz sem chave de IA
 
@@ -610,7 +610,7 @@ traz o diagnóstico de placa antes de comprar a peça (R$ 70–160 o módulo), o
 caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
 (Nura) com seus limites e riscos.
 
-Na **0.60.0** isso virou cinco skills: `celular.status` (onde está o adb, onde
+Na **0.60.1** isso virou cinco skills: `celular.status` (onde está o adb, onde
 está o scrcpy), `celular.plano` (o caminho exato para o estado medido, inclusive
 quando a depuração nunca foi ligada), `celular.preparar` (baixa as duas
 ferramentas com SHA-256), `celular.espelhar` (a tela do celular numa janela do
@@ -650,7 +650,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.60.0", "skills": 288}`.
+`{"version": "0.60.1", "skills": 288}`.
 
 ## Verificações
 

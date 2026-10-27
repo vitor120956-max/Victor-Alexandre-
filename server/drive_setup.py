@@ -1,4 +1,4 @@
-"""Configurar o Google Drive como espaço de fora — feito pelo próprio JARVIS.
+r"""Configurar o Google Drive como espaço de fora — feito pelo próprio JARVIS.
 
 O módulo não tem opinião: ele **copia** `biblioteca/` e `repos/` para
 `<Drive>/JARVIS-DADOS/` e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`.
@@ -153,7 +153,7 @@ def estado(
     processos: list[str] | None = None,
     simulado_registro: Any = None,
 ) -> dict[str, Any]:
-    """Retrato sem efeito: o que está onde, o que o `.env` diz, quanto cabe.
+    r"""Retrato sem efeito: o que está onde, o que o `.env` diz, quanto cabe.
 
     Também responde a pergunta que importa depois de configurar: **o Drive ainda
     está no ar?** Se a biblioteca mora em `G:\Meu Drive` e o app do Drive não
@@ -412,7 +412,7 @@ def _versao(texto: str) -> tuple:
 
 
 def achar_executavel(raizes: list[Path] | None = None) -> Path | None:
-    """Onde está o `GoogleDriveFS.exe`, se estiver no lugar de sempre.
+    r"""Onde está o `GoogleDriveFS.exe`, se estiver no lugar de sempre.
 
     O Drive atualiza trocando a pasta da versão (`...\Drive File Stream\110.0.3.0`),
     então a busca pega a pasta mais nova em vez de decorar um caminho.

@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web
 from .review import common, finalize, finding
 
-VERSAO = "0.60.0"
+VERSAO = "0.60.1"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"

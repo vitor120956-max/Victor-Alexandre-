@@ -261,13 +261,14 @@ def create_app(
                 f"instalar={'ligado' if os.getenv('JARVIS_HOST_INSTALAR') == '1' else 'desligado'}, "
                 f"root={'ligado' if os.getenv('JARVIS_HOST_ROOT') == '1' else 'desligado'}, "
                 f"pc={'ligado' if os.getenv('JARVIS_HOST_PC') == '1' else 'desligado'}, "
+                f"celular={'ligado' if os.getenv('JARVIS_HOST_CELULAR') == '1' else 'desligado'}, "
                 f"dono={'LIGADO (sem digitar token nesta máquina)' if sistema_mod.confiar_local() else 'desligado'})"
             )
 
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.60.0",
+        version="0.60.1",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -365,7 +366,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.60.0",
+            "version": "0.60.1",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "confiarLocal": sistema_mod.confiar_local(),

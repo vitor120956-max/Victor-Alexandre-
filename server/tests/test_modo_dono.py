@@ -231,7 +231,7 @@ def test_arquivo_de_token_fica_fora_do_git():
 
 
 # ---------------------------------------------------------------------------
-# A rota que alimenta o botão "Executar este plano" (0.60.0)
+# A rota que alimenta o botão "Executar este plano" (0.60.1)
 # ---------------------------------------------------------------------------
 
 

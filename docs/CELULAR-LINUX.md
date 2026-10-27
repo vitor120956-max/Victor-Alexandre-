@@ -314,9 +314,9 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 
 ---
 
-## 9. As skills `celular.*` (0.60.0)
+## 9. As skills `celular.*` (0.60.1)
 
-A partir da 0.60.0 o JARVIS tem o próprio caminho para isso. Cinco skills, e a
+A partir da 0.60.1 o JARVIS tem o próprio caminho para isso. Cinco skills, e a
 regra é a de sempre: leitura sem confirmação, execução com confirmação, e tudo
 atrás de `JARVIS_HOST_CELULAR=1`.
 
