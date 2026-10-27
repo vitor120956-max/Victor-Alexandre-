@@ -650,6 +650,20 @@ def url_do_scrcpy(*, abrir: Callable[[str], Any] | None = None) -> dict[str, Any
     )
 
 
+def _dados_do_download(baixado: dict[str, Any]) -> dict[str, Any]:
+    """Acha o arquivo no que `sistema.baixar` devolve.
+
+    `sistema.baixar` é skill de análise: devolve o envelope (`analysis`, `rows`,
+    `metrics`, `findings`) e guarda o bônus em `download`. A 0.60.0 lia
+    `baixado["arquivo"]` direto e por isso nunca achava o zip — daí o
+    "não deixou arquivo utilizável" logo no primeiro download real.
+    """
+    interno = baixado.get("download")
+    if isinstance(interno, dict) and interno.get("arquivo"):
+        return interno
+    return baixado
+
+
 def preparar(
     *,
     baixar: Callable[..., dict[str, Any]] | None = None,
@@ -673,18 +687,30 @@ def preparar(
         if not url:
             raise CelularError(f"Não achei o endereço oficial do {nome}.")
         baixado = baixar(url, autorizacao=autorizacao)
-        caminho = Path(baixado.get("arquivo", ""))
+        info = _dados_do_download(baixado if isinstance(baixado, dict) else {})
+        caminho = Path(str(info.get("arquivo") or ""))
         if not caminho.is_file():
-            raise CelularError(f"O download de {nome} não deixou arquivo utilizável.")
+            onde = f" ({caminho})" if str(caminho) not in {"", "."} else ""
+            raise CelularError(
+                f"O download de {nome} não deixou arquivo utilizável{onde}. "
+                "Confira a pasta storage/host-downloads: se ela estiver vazia, o "
+                "arquivo não chegou ao disco e o problema é a conexão."
+            )
         extraido = _extrair(caminho, destino)
+        # O zip já cumpriu o papel. Guardar 90 MB num pendrive de 4 GB só atrapalha
+        # o próximo download; a quarentena é do próprio JARVIS, não do usuário.
+        try:
+            caminho.unlink(missing_ok=True)
+        except OSError:
+            pass
         pasta = normalizar(nome, ADB_NOMES if nome == "platform-tools" else SCRCPY_NOMES)
         resultado["baixados"].append(
             {
                 "ferramenta": nome,
                 "url": url,
                 "arquivo": str(caminho),
-                "sha256": baixado.get("sha256", ""),
-                "bytes": baixado.get("bytes", 0),
+                "sha256": info.get("sha256", ""),
+                "bytes": info.get("bytes", 0),
                 "extraido": extraido,
                 "pasta": str(pasta) if pasta else "",
             }

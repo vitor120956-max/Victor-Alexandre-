@@ -37,7 +37,7 @@ from typing import Any
 from .estacao import proxima_execucao
 from .workspace import safe_path
 
-VERSAO = "0.60.5"
+VERSAO = "0.60.6"
 MAX_SAIDA = 20_000
 MAX_ARQUIVO = 2_000_000
 TIMEOUT_PADRAO = 60

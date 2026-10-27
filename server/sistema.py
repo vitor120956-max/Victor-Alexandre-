@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web, tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.60.5"
+VERSAO = "0.60.6"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -1661,7 +1661,16 @@ def baixar(
             tipo = resposta.headers.get("content-type", "")
     except HTTPError as exc:
         raise SistemaError(f"O servidor respondeu {exc.code} para {destino}.") from exc
-    except (URLError, OSError) as exc:
+    except OSError as exc:
+        # Windows: 28 (ENOSPC) e 112 (ERROR_DISK_FULL). Pendrive cheio é comum
+        # neste projeto, e "falha de rede" mandaria a pessoa conferir a coisa errada.
+        if getattr(exc, "errno", None) in {28, 112}:
+            raise SistemaError(
+                "Sem espaço em disco para o download. Libere espaço (o zip do "
+                "platform-tools e o do scrcpy somam cerca de 90 MB) e tente de novo."
+            ) from exc
+        raise SistemaError(f"Falha de rede ao baixar {destino}: {type(exc).__name__}.") from exc
+    except URLError as exc:
         raise SistemaError(f"Falha de rede ao baixar {destino}: {type(exc).__name__}.") from exc
     baixado = {
         "arquivo": str(caminho),

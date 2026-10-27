@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.60.5 ---------------------------------------
+# --- o caminho exato do bug de 0.60.6 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -628,3 +628,112 @@ def test_nenhum_texto_de_atalho_manda_digitar_ctrl_c():
     for nome in alvos:
         texto = (raiz / nome).read_text(encoding="utf-8", errors="replace")
         assert "Ctrl+C" not in texto, nome
+
+
+# --- contrato com o sistema.baixar de verdade --------------------------------
+
+class _Resposta:
+    """Imita o que `urllib` devolve: contexto, read em blocos e headers."""
+
+    def __init__(self, conteudo: bytes) -> None:
+        self._conteudo = conteudo
+        self._posicao = 0
+        self.headers = {"content-type": "application/zip"}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def read(self, tamanho: int = -1) -> bytes:
+        if tamanho < 0:
+            tamanho = len(self._conteudo) - self._posicao
+        bloco = self._conteudo[self._posicao : self._posicao + tamanho]
+        self._posicao += len(bloco)
+        return bloco
+
+
+def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as pacote:
+        pacote.writestr(f"{pasta}/{executavel}", "x")
+        pacote.writestr(f"{pasta}/LEIA.txt", "ok")
+    return buffer.getvalue()
+
+
+def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
+    """O contrato que o bug da 0.60.6 quebrou: o caminho mora em `download`."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
+    monkeypatch.setattr(sistema, "_url_segura", lambda url: url)
+    monkeypatch.setattr(sistema, "_auditar", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        sistema, "urlopen", lambda *_a, **_k: _Resposta(_zip_em_memoria("platform-tools", "adb.exe"))
+    )
+    resultado = sistema.baixar(url="https://dl.google.com/android/repository/platform-tools.zip")
+    assert "arquivo" not in resultado  # é envelope, não o bônus
+    assert resultado["download"]["arquivo"].endswith(".zip")
+    assert Path(resultado["download"]["arquivo"]).is_file()
+
+
+def test_preparar_com_o_sistema_baixar_de_verdade(ligado, monkeypatch):
+    """O teste que faltava: preparar lendo o retorno real de `sistema.baixar`."""
+    from server import sistema
+
+    zips = {
+        "platform-tools": _zip_em_memoria("platform-tools", "adb.exe"),
+        "scrcpy": _zip_em_memoria("scrcpy-win64-v3", "scrcpy.exe"),
+    }
+
+    def urlopen(pedido, timeout=None):
+        url = getattr(pedido, "full_url", str(pedido))
+        return _Resposta(zips["scrcpy"] if "github" in url else zips["platform-tools"])
+
+    monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
+    monkeypatch.setattr(sistema, "_url_segura", lambda url: url)
+    monkeypatch.setattr(sistema, "_auditar", lambda *_a, **_k: None)
+    monkeypatch.setattr(sistema, "urlopen", urlopen)
+
+    resultado = C.preparar(
+        resolver_scrcpy=lambda: {"url": "https://github.com/x/scrcpy-win64-v3.zip", "versao": "v3"},
+    )
+    ferramentas = resultado["ferramentas"]
+    assert ferramentas["completo"] is True, resultado
+    assert Path(ferramentas["adb"]).is_file()
+    assert Path(ferramentas["scrcpy"]).is_file()
+    assert len(resultado["baixados"]) == 2
+    assert all(item["sha256"] for item in resultado["baixados"])
+
+
+def test_mensagem_de_download_sem_arquivo_diz_o_caminho(ligado, tmp_path):
+    sumido = tmp_path / "nao-existe" / "platform-tools.zip"
+
+    def baixar(url, autorizacao=""):
+        return {"download": {"arquivo": str(sumido)}}
+
+    with pytest.raises(C.CelularError) as erro:
+        C.preparar(baixar=baixar, resolver_scrcpy=lambda: {"url": "https://x/y.zip"})
+    assert str(sumido) in str(erro.value)
+    assert "host-downloads" in str(erro.value)
+
+
+def test_preparar_apaga_o_zip_depois_de_extrair(ligado):
+    """90 MB no pendrive não podem ficar de enfeite na quarentena."""
+    zips = ligado / "quarentena"
+    zips.mkdir(parents=True, exist_ok=True)
+    criados: list[Path] = []
+
+    def baixar(url, autorizacao=""):
+        pasta, exe = ("platform-tools", "adb.exe") if "google" in url else ("scrcpy-win64-v9", "scrcpy.exe")
+        caminho = zips / f"{pasta}.zip"
+        with zipfile.ZipFile(caminho, "w") as pacote:
+            pacote.writestr(f"{pasta}/{exe}", "x")
+        criados.append(caminho)
+        return {"download": {"arquivo": str(caminho), "sha256": "abc", "bytes": 10}}
+
+    C.preparar(baixar=baixar, resolver_scrcpy=lambda: {"url": "https://github/scrcpy.zip"})
+    assert criados and all(not caminho.exists() for caminho in criados)

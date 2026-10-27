@@ -669,7 +669,7 @@ def test_erro_desconhecido() -> None:
 
 def test_catalogo_tem_o_vocabulario() -> None:
     catalogo = escritorio_catalog()
-    assert catalogo["versao"] == "0.60.5"
+    assert catalogo["versao"] == "0.60.6"
     assert len(catalogo["servicos"]) == len(SERVICOS) >= 15
     assert len(catalogo["flags"]) == len(FLAGS) == 10
     assert len(catalogo["codigos"]) == len(CODIGOS_SAIDA) == 6
@@ -685,7 +685,7 @@ def test_catalogo_tem_o_vocabulario() -> None:
 
 def test_api_health_reflete_versao_e_catalogo(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.60.5"
+    assert health["version"] == "0.60.6"
     assert health["skills"] == 288
 
 
