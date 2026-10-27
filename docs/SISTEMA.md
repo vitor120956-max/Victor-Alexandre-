@@ -10,7 +10,7 @@ Isso muda o contrato do projeto. Até a 0.29.0, toda resposta marcava `executed:
 
 | # | Trava | Padrão | Como ligar |
 |---|---|---|---|
-| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.57.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
+| 1 | **Token de host** | gerado no primeiro uso | já vem ligada; o valor está em `storage/host-token.txt` e aparece no terminal da API. Só é exigido de quem **grava ou executa** — desde a 0.49.0, buscar e ler página não pedem token. Desde a 0.58.0, `JARVIS_HOST_CONFIAR_LOCAL=1` preenche o token sozinho para quem está na própria máquina |
 | 2 | **Rede** | desligada | `JARVIS_HOST_REDE=1` ao subir a API |
 | 3 | **Instalação** | desligada | `JARVIS_HOST_INSTALAR=1` (implica rede) |
 
@@ -26,7 +26,7 @@ O token é impresso assim, com só oito caracteres visíveis:
 JARVIS modo host: token em storage/host-token.txt -> Ab3d…9xQz (rede=ligada, instalar=ligado)
 ```
 
-## Modo dono: instalar sem digitar o token (0.57.0)
+## Modo dono: instalar sem digitar o token (0.58.0)
 
 O token de host não é chave de ninguém: é uma string que o próprio JARVIS sorteia
 e guarda em `storage/host-token.txt`. Mas copiar e colar aquilo a cada instalação
@@ -63,7 +63,51 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.57.0", "skills": 281, "confiarLocal": true }
+GET /api/health  →  { "version": "0.58.0", "skills": 281, "confiarLocal": true }
+```
+
+## O botão “Executar este plano” (0.58.0)
+
+Antes, o plano de instalação saía com um código de uso único e o passo seguinte
+era chamar `sistema.executar` por conta própria. Agora a tela faz isso:
+
+1. você executa `sistema.instalar` (ou `sistema.desinstalar`) e a resposta traz
+   `confirmacao` mais a lista `rows` com alvo, tipo, comando, risco e SHA-256;
+2. o próprio formulário mostra o cartão **“Plano pronto para executar”**, com o
+   comando exato e uma caixa de confirmação;
+3. a página **Skills** mostra, no topo, os planos pendentes que ainda valem —
+   vindos de `GET /api/host/planos`, atualizado a cada 30 segundos;
+4. o botão **Executar este plano** manda `sistema.executar` com o código, e só
+   depois de você marcar a caixa.
+
+O que o botão **não** faz: não escolhe plano por você (com dois pendentes, cada
+um tem o seu botão), não ignora `JARVIS_HOST_INSTALAR=1` (com a trava desligada
+os botões ficam desativados e a página diz qual variável ligar), não reusa
+código (cada execução consome o token) e não esconde o comando — ele aparece em
+texto antes do clique.
+
+`GET /api/host/planos` devolve o código de uso único **só** para requisição vinda
+da própria máquina. De fora, a resposta diz que existe plano, mas omite
+`confirmacao`.
+
+```json
+{
+  "ok": true,
+  "local": true,
+  "instalar": true,
+  "total": 1,
+  "planos": [
+    {
+      "confirmacao": "665422bd",
+      "acao": "instalar",
+      "rotulo": "pacote-teste.deb",
+      "tipo": "deb",
+      "comando": "dpkg -i /tmp/host-downloads/pacote-teste.deb",
+      "sha256": "48a62627…",
+      "expira_em": 599
+    }
+  ]
+}
 ```
 
 ## As doze skills

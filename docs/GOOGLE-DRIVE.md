@@ -1,4 +1,4 @@
-# Google Drive como espaço de fora (0.57.0)
+# Google Drive como espaço de fora (0.58.0)
 
 O Drive serve para uma coisa: guardar o que é **grande e parado** — livro, PDF,
 vídeo baixado, repositório. Ele não serve para o que o JARVIS regrava a cada

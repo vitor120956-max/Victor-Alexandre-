@@ -12,6 +12,7 @@ O que estes testes provam, e o que eles não deixam acontecer:
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -227,3 +228,69 @@ def test_arquivo_de_token_fica_fora_do_git():
     raiz = Path(__file__).resolve().parents[2]
     ignorados = (raiz / ".gitignore").read_text(encoding="utf-8")
     assert "storage/" in ignorados
+
+
+# ---------------------------------------------------------------------------
+# A rota que alimenta o botão "Executar este plano" (0.58.0)
+# ---------------------------------------------------------------------------
+
+
+def _plano_falso(confirmacao: str = "ab12cd34") -> dict[str, Any]:
+    return {
+        "confirmacao": confirmacao,
+        "acao": "instalar",
+        "arquivo": "setup.exe",
+        "rotulo": "setup.exe",
+        "tipo": "exe",
+        "comando": "setup.exe /S",
+        "sha256": "a" * 64,
+        "expira_em": 300,
+    }
+
+
+def test_planos_traz_comando_e_hash(monkeypatch):
+    monkeypatch.setattr(sistema, "_CONFIRMACAO", {})
+    monkeypatch.setattr(
+        sistema,
+        "_CONFIRMACAO",
+        {"ab12cd34": {"expira": 9_999_999_999, "comando": ["setup.exe", "/S"], "sha256": "b" * 64, "rotulo": "setup.exe"}},
+    )
+    pendentes = sistema.planos_pendentes()
+    assert pendentes[0]["comando"] == "setup.exe /S"
+    assert pendentes[0]["sha256"] == "b" * 64
+
+
+def test_rota_planos_devolve_o_codigo_para_a_propria_maquina(cliente: TestClient, monkeypatch):
+    monkeypatch.setattr(sistema, "_CONFIRMACAO", {"ab12cd34": {"expira": 9_999_999_999, "rotulo": "setup.exe"}})
+    corpo = cliente.get("/api/host/planos").json()
+    assert corpo["ok"] is True
+    assert corpo["local"] is True
+    assert corpo["total"] == 1
+    assert corpo["planos"][0]["confirmacao"] == "ab12cd34"
+
+
+def test_rota_planos_nao_vaza_o_codigo_para_fora(monkeypatch):
+    from server import app as app_mod2
+
+    monkeypatch.setattr(sistema, "_CONFIRMACAO", {"ab12cd34": {"expira": 9_999_999_999}})
+    monkeypatch.setattr(app_mod2, "_veio_da_propria_maquina", lambda _pedido: False)
+    aplicacao = app_mod2.create_app(registry=build_registry(Path(tempfile.mkdtemp())))
+    with TestClient(aplicacao) as test_client:
+        corpo = test_client.get("/api/host/planos").json()
+    assert corpo["local"] is False
+    assert corpo["total"] == 1
+    assert "confirmacao" not in corpo["planos"][0]
+
+
+def test_rota_planos_sem_plano(cliente: TestClient, monkeypatch):
+    monkeypatch.setattr(sistema, "_CONFIRMACAO", {})
+    corpo = cliente.get("/api/host/planos").json()
+    assert corpo["planos"] == []
+    assert corpo["total"] == 0
+
+
+def test_rota_planos_diz_se_a_instalacao_esta_ligada(cliente: TestClient, monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_INSTALAR", "0")
+    assert cliente.get("/api/host/planos").json()["instalar"] is False
+    monkeypatch.setenv("JARVIS_HOST_INSTALAR", "1")
+    assert cliente.get("/api/host/planos").json()["instalar"] is True

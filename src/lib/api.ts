@@ -163,6 +163,26 @@ export interface BackendHealth {
   confiarLocal?: boolean;
 }
 
+export interface PlanoPendente {
+  confirmacao: string;
+  acao: string;
+  arquivo: string;
+  rotulo: string;
+  tipo: string;
+  comando: string;
+  sha256: string;
+  expira_em: number;
+}
+
+export interface PlanosPendentes {
+  ok: boolean;
+  planos: PlanoPendente[];
+  total: number;
+  local: boolean;
+  instalar: boolean;
+  confiarLocal: boolean;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code = 'API_ERROR') {
     super(message);
@@ -202,6 +222,10 @@ export async function getBackendHealth(): Promise<BackendHealth> {
 export async function listPythonSkills(): Promise<PythonSkill[]> {
   const response = await apiFetch<{ ok: boolean; skills: PythonSkill[] }>('/api/skills');
   return response.skills;
+}
+
+export async function listarPlanosPendentes(): Promise<PlanosPendentes> {
+  return apiFetch<PlanosPendentes>('/api/host/planos');
 }
 
 export async function executePythonSkill(

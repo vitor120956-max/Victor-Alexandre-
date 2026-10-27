@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Check, Clipboard, Code2, Download, Play, ShieldAlert } from 'lucide-react';
+import { Check, Clipboard, Code2, Download, Play, ShieldAlert, Terminal } from 'lucide-react';
 import { Modal } from './Modal';
 import { useApp } from '../context/AppContext';
 import { normalizeSkillParameters } from '../lib/api';
+import { parametrosDeExecucao, planoDoResultado } from '../lib/planos';
 import type { PythonSkill, SchemaProperty, SkillExecution } from '../lib/api';
 
 function initialParameters(skill: PythonSkill | null): Record<string, unknown> {
@@ -26,7 +27,15 @@ function resultText(execution: SkillExecution): string {
   return JSON.stringify(result, null, 2);
 }
 
-export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | null; onClose: () => void }) {
+export function PythonSkillRunner({
+  skill,
+  onClose,
+  onExecuted,
+}: {
+  skill: PythonSkill | null;
+  onClose: () => void;
+  onExecuted?: () => void;
+}) {
   const { executeSkill, pushToast, hostToken, modoDono } = useApp();
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [dryRun, setDryRun] = useState(false);
@@ -34,6 +43,9 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
   const [running, setRunning] = useState(false);
   const [execution, setExecution] = useState<SkillExecution | null>(null);
   const [requestError, setRequestError] = useState('');
+  const [planoConfirmado, setPlanoConfirmado] = useState(false);
+  const [executandoPlano, setExecutandoPlano] = useState(false);
+  const [execucaoDoPlano, setExecucaoDoPlano] = useState<SkillExecution | null>(null);
 
   useEffect(() => {
     const iniciais = initialParameters(skill);
@@ -47,6 +59,8 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
     setConfirmed(false);
     setExecution(null);
     setRequestError('');
+    setPlanoConfirmado(false);
+    setExecucaoDoPlano(null);
   }, [skill, hostToken, modoDono]);
 
   const update = (name: string, value: unknown) => {
@@ -59,6 +73,8 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
     if (!skill || running) return;
     setExecution(null);
     setRequestError('');
+    setPlanoConfirmado(false);
+    setExecucaoDoPlano(null);
     let normalizedParameters: Record<string, unknown>;
     try {
       normalizedParameters = normalizeSkillParameters(skill, parameters);
@@ -71,10 +87,37 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
       const response = await executeSkill(skill.id, normalizedParameters, { dryRun, confirmed });
       setExecution(response);
       if (response.ok) pushToast(dryRun ? 'Simulação concluída' : 'Skill Python executada', skill.name);
+      if (response.ok && !dryRun) onExecuted?.();
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : 'Falha ao executar a skill.');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const plano = execution?.ok ? planoDoResultado(execution.result) : null;
+
+  const executarPlanoAgora = async () => {
+    if (!plano || executandoPlano || !planoConfirmado) return;
+    setExecutandoPlano(true);
+    setExecucaoDoPlano(null);
+    try {
+      const resposta = await executeSkill(
+        'sistema.executar',
+        parametrosDeExecucao(plano, { hostToken, modoDono }),
+        { confirmed: true },
+      );
+      setExecucaoDoPlano(resposta);
+      if (resposta.ok) onExecuted?.();
+      pushToast(
+        resposta.ok ? 'Plano executado' : 'Plano recusado',
+        resposta.ok ? plano.alvo || plano.confirmacao : resposta.error?.message,
+        resposta.ok ? 'success' : 'warning',
+      );
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Falha ao executar o plano.');
+    } finally {
+      setExecutandoPlano(false);
     }
   };
 
@@ -143,6 +186,37 @@ export function PythonSkillRunner({ skill, onClose }: { skill: PythonSkill | nul
               <div className="execution-result-heading"><span>{execution.ok ? <Check size={15} /> : <ShieldAlert size={15} />}{execution.ok ? execution.dryRun ? 'Simulação concluída' : 'Resultado da execução' : 'Execução recusada'}</span>{execution.durationMs !== undefined && <small>{execution.durationMs} ms</small>}</div>
               {execution.error && <p>{execution.error.message}</p>}
               {execution.ok && <><pre>{resultText(execution)}</pre><div className="execution-result-actions"><button className="copy-result" onClick={copyResult}><Clipboard size={14} /> Copiar resultado</button>{typeof execution.result?.downloadUrl === 'string' && <a className="copy-result" href={execution.result.downloadUrl} download><Download size={14} /> Baixar arquivo</a>}</div></>}
+              {plano && (
+                <div className="plano-card">
+                  <div className="plano-card-heading"><Terminal size={15} /><strong>Plano pronto para executar</strong></div>
+                  <p>Este plano vale uma vez e expira em poucos minutos. Executar aqui é o mesmo que chamar <code>sistema.executar</code> — não instala nada novo, só roda o que está acima.</p>
+                  <dl className="plano-detalhes">
+                    {plano.alvo && <><dt>Alvo</dt><dd>{plano.alvo}</dd></>}
+                    {plano.tipo && <><dt>Tipo</dt><dd>{plano.tipo}</dd></>}
+                    {plano.risco && <><dt>Risco</dt><dd>{plano.risco}</dd></>}
+                    {plano.sha256 && <><dt>SHA-256</dt><dd className="plano-sha">{plano.sha256.slice(0, 32)}…</dd></>}
+                  </dl>
+                  {plano.comando && <pre className="plano-comando">{plano.comando}</pre>}
+                  <label className="confirmation-box">
+                    <ShieldAlert size={18} />
+                    <span>Confirmo que revi o comando acima e quero executá-lo neste PC.</span>
+                    <input type="checkbox" checked={planoConfirmado} onChange={(event) => setPlanoConfirmado(event.target.checked)} />
+                  </label>
+                  <div className="execution-result-actions">
+                    <button type="button" className="button button-primary" onClick={() => void executarPlanoAgora()} disabled={!planoConfirmado || executandoPlano}>
+                      <Play size={15} />{executandoPlano ? 'Executando…' : 'Executar este plano'}
+                    </button>
+                    <span className="plano-nota">Vale uma vez · exige <code>JARVIS_HOST_INSTALAR=1</code></span>
+                  </div>
+                  {execucaoDoPlano && (
+                    <div className={execucaoDoPlano.ok ? 'execution-result' : 'execution-result execution-refused'}>
+                      <div className="execution-result-heading"><span>{execucaoDoPlano.ok ? <Check size={15} /> : <ShieldAlert size={15} />}{execucaoDoPlano.ok ? 'Plano executado' : 'Execução recusada'}</span>{execucaoDoPlano.durationMs !== undefined && <small>{execucaoDoPlano.durationMs} ms</small>}</div>
+                      {execucaoDoPlano.error && <p>{execucaoDoPlano.error.message}</p>}
+                      {execucaoDoPlano.ok && <pre>{resultText(execucaoDoPlano)}</pre>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

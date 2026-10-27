@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.57.0.**
+**Versão atual: 0.58.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -61,6 +61,8 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 **Agenda, sem calendário na nuvem:** `marca audiência amanhã às 14h`, `o que eu tenho para hoje`, `minha agenda da semana`, `conclui o compromisso audiência` — `agenda.marcar`, `agenda.listar`, `agenda.concluir` e `agenda.remover`. A data é interpretada **sem modelo** e devolvida por extenso (`terça-feira, 27/10/2026 às 14:00`) para você conferir; se a frase não tiver data reconhecível, ele **recusa em vez de adivinhar**. Fica num `agenda.json` na raiz de dados. **Não avisa sozinho** — você pergunta, ele responde. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
 **Backup que abre:** `faz backup dos meus dados em E:/JARVIS-backups`, `quanto vai pesar o backup`, `quais backups eu tenho`, `restaura o backup … para D:/restaurado` — `backup.planejar`, `backup.criar`, `backup.listar` e `backup.restaurar`. Compacta `storage/` sem `.venv`, `node_modules`, `.git` nem a pasta de backups; grava SHA-256 ao lado, confere o `.zip` logo depois de escrever e avisa quando o destino está **no mesmo disco** dos dados (cópia no mesmo HD não protege de HD morto). Restaura só em pasta vazia, recusando caminho que escape dela. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
+
+**O plano vira botão:** depois de `sistema.instalar`, o cartão **“Plano pronto para executar”** mostra o comando exato, o risco e o SHA-256, com o botão **Executar este plano** — que só funciona depois de você marcar a caixa, e continua exigindo `JARVIS_HOST_INSTALAR=1`. A página **Skills** lista no topo os planos pendentes (`GET /api/host/planos`, renovado a cada 30 s) e diz qual variável ligar quando a trava está desligada. O código de uso único só sai para quem está na própria máquina. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
 **Instalar sem digitar token — só de dentro da máquina:** `set JARVIS_HOST_CONFIAR_LOCAL=1` liga o **modo dono**. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 

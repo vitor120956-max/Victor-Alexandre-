@@ -97,6 +97,7 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `faz backup dos meus dados em E:/JARVIS-backups` | `backup.criar` (zip + sha256 + aviso de disco) | **sim** |
 | `quanto vai pesar o backup` · `quais backups eu tenho` | `backup.planejar` / `backup.listar` | não |
 | `como está o git` · `últimos commits do git` | `git.status` / `git.log` (só leitura) | não |
+| (na tela) **Executar este plano** | `sistema.executar` com o código do plano | **sim** (caixa de confirmação + `JARVIS_HOST_INSTALAR=1`) |
 | `usa a habilidade frontend-design para …` | `habilidades.aplicar` (devolve o roteiro) | não |
 
 Pergunta com `?` nunca dispara a skill de cópia: no máximo ela mostra o estado.

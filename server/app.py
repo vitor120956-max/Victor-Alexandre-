@@ -266,7 +266,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.57.0",
+        version="0.58.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -308,12 +308,33 @@ def create_app(
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    @application.get("/api/host/planos")
+    def host_planos(request: Request) -> dict[str, Any]:
+        """Planos de instalação/desinstalação prontos e ainda válidos.
+
+        O código de uso único só sai para quem está na própria máquina; de fora
+        a tela vê que existe plano, mas não o código.
+        """
+        planos = sistema_mod.planos_pendentes()
+        local = _veio_da_propria_maquina(request)
+        if not local:
+            for plano in planos:
+                plano.pop("confirmacao", None)
+        return {
+            "ok": True,
+            "planos": planos,
+            "total": len(planos),
+            "local": local,
+            "instalar": os.getenv("JARVIS_HOST_INSTALAR", "0").strip() == "1",
+            "confiarLocal": sistema_mod.confiar_local(),
+        }
+
     @application.get("/api/health")
     def health() -> dict[str, Any]:
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.57.0",
+            "version": "0.58.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             "confiarLocal": sistema_mod.confiar_local(),

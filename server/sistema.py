@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web
 from .review import common, finalize, finding
 
-VERSAO = "0.57.0"
+VERSAO = "0.58.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -217,6 +217,8 @@ def planos_pendentes() -> list[dict[str, Any]]:
                 "arquivo": registro.get("arquivo", ""),
                 "rotulo": registro.get("rotulo", ""),
                 "tipo": registro.get("tipo", ""),
+                "comando": " ".join(registro.get("comando") or []),
+                "sha256": registro.get("sha256", ""),
                 "expira_em": max(0, int(registro.get("expira", 0) - agora)),
             }
         )
