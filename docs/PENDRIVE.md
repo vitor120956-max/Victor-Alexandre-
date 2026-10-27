@@ -544,7 +544,7 @@ O número que aparece é a quantidade de entradas em `node_modules`. Se ele **cr
 
 #### Se passar de 30 minutos parado
 
-1. **Não apague nada.** Se precisar, `Ctrl+C` é seguro: rode `npm install` de novo depois.
+1. **Não apague nada.** Se precisar, fechar a janela é seguro: rode `npm install` de novo depois.
 2. Confira espaço em `D:` — precisa de ~300 MB livres.
 3. Rode com log detalhado para ver onde parou:
 
@@ -656,7 +656,7 @@ Ele pergunta provedor, base e modelo (já sugere OpenAI, `https://api.openai.com
 .venv\Scripts\python configurar-chave.py --limpar   # apaga só a chave, mantém o resto
 ```
 
-Depois de gravar, **reinicie o servidor**: Ctrl+C na janela do `iniciar.py` e suba de novo. Ele só lê o `.env` na inicialização.
+Depois de gravar, **reinicie o servidor**: feche a janela do `iniciar.py` e suba de novo. Ele só lê o `.env` na inicialização.
 
 Editar na mão também funciona:
 

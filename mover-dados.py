@@ -244,7 +244,7 @@ def mover_para_drive(destino_drive: Path, origens: dict[str, Path]) -> int:
     print("skills.json e host-*.json — eles mudam toda hora e fariam o Drive")
     print("sincronizar sem parar.")
     print("\nAgora:")
-    print("  1. feche a API (Ctrl+C na janela do iniciar.py) e suba de novo;")
+    print("  1. feche a janela da API no X e suba de novo;")
     print("  2. na interface, rode a skill dados.status e confira os caminhos;")
     print("  3. deixe o Drive em 'Fazer backup' (espelho) só dessa pasta, ou")
     print("     pause a sincronização enquanto o JARVIS estiver indexando livros;")
@@ -337,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nPronto. O .env foi atualizado em {caminho_env}:")
     print(f"  {VARIAVEL}={destino}")
     print("\nAgora:")
-    print("  1. feche a API (Ctrl+C na janela do iniciar.py) e suba de novo;")
+    print("  1. feche a janela da API no X e suba de novo;")
     print("  2. confira em http://127.0.0.1:8000/api/health e rode a skill armazenamento.status;")
     print(f"  3. só depois de ver tudo funcionando, apague a pasta antiga: {raiz_dados}")
     return 0

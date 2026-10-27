@@ -92,10 +92,10 @@ a skill.
 
 ## Testes
 
-- `pytest server/tests` → **2.672 passed**.
-- `test_celular.py` → **53** (3 novos: token com acento vira explicação, token
-  vazio explica o modo dono, agente não tira token da frase; +1: o
-  `atualizar.bat` avisa para fechar a API antes de copiar).
+- `pytest server/tests` → **2.673 passed**.
+- `test_celular.py` → **54**: token com acento vira explicação, token vazio
+  explica o modo dono, agente não tira token da frase, `atualizar.bat` avisa
+  antes de copiar e nenhum atalho manda digitar `Ctrl+C`.
 - `test_modo_dono.py` → **28** (3 novos + 1 reescrito: token certo é respeitado,
   token torto é corrigido na própria máquina, e **não** é corrigido vindo de
   outra máquina).

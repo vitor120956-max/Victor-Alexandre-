@@ -4324,7 +4324,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             "bytes": relatorio["bytes_total"],
             "arquivos": relatorio["arquivos_total"],
             "passos": [
-                f"1. Feche a API (Ctrl+C na janela do iniciar.py).",
+                f"1. Feche a janela da API no X (nao precisa digitar nada).",
                 f"2. No cmd: robocopy \"{origem}\" \"{destino}\" /E /R:1 /W:1 /NFL /NDL",
                 f"3. No .env do projeto: {dados_locais.VARIAVEL}={destino}",
                 "4. Suba a API de novo; `armazenamento.status` mostra a raiz nova.",

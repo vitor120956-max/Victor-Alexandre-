@@ -67,7 +67,7 @@ def principal() -> int:
     print(f"  API:       http://127.0.0.1:{args.porta}/api/health")
     if interface is None:
         print("  AVISO: nenhuma interface compilada encontrada — a API responde, a tela não.")
-    print("  Para parar: Ctrl+C")
+    print("  Para parar: feche esta janela no X")
     print()
 
     uvicorn.run("server.app:create_app", factory=True, host=args.host, port=args.porta, reload=False)

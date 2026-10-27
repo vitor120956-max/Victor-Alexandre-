@@ -365,7 +365,7 @@ Depois do `celular.preparar`, as ferramentas ficam em `storage\ferramentas\`:
 numa pasta com a versão no nome (`scrcpy-win64-v3.3.1\`), então o JARVIS renomeia
 para `scrcpy\` — se você baixar na mão, saiba que esse é o layout esperado.
 
-Depois, `Ctrl+C` na API, suba de novo e confira a primeira linha do terminal:
+Depois, feche a janela da API (o X), suba de novo e confira a primeira linha do terminal:
 
 ```text
 (rede=ligada, instalar=desligado, root=desligado, pc=desligado, celular=ligado, dono=desligado)

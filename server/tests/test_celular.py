@@ -607,3 +607,12 @@ def test_atualizar_bat_avisa_para_fechar_a_api_antes():
     copia = texto.index("robocopy")
     assert aviso < copia
     assert "Ctrl+C" not in texto
+
+
+def test_nenhum_texto_de_atalho_manda_digitar_ctrl_c():
+    """Quem usa o JARVIS fecha a janela; Ctrl+C digitado no prompt nao existe."""
+    raiz = Path(__file__).resolve().parents[2]
+    alvos = ["configurar-celular.py", "iniciar.py", "mover-dados.py", "atualizar.bat"]
+    for nome in alvos:
+        texto = (raiz / nome).read_text(encoding="utf-8", errors="replace")
+        assert "Ctrl+C" not in texto, nome

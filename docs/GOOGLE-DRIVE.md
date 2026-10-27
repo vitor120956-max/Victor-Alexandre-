@@ -139,7 +139,7 @@ Nada é apagado nesse passo: a pasta antiga continua onde está.
 
 ### Passo 3 — reiniciar o JARVIS
 
-Feche a janela do `iniciar.py` (Ctrl+C) e abra de novo. O `.env` só é lido na
+Feche a janela do `iniciar.py` (o X) e abra de novo. O `.env` só é lido na
 subida.
 
 ### Passo 4 — conferir

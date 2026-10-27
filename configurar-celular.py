@@ -140,7 +140,7 @@ def main() -> int:
     print("  troque JARVIS_HOST_CONFIAR_LOCAL=1 por =0 no .env e reinicie.")
     print()
     print("  Agora faca:")
-    print("    1) na janela da API: Ctrl+C")
+    print("    1) feche a janela da API no X (nao digite nada nela)")
     print("    2) .venv\\Scripts\\python iniciar.py")
     print("    3) confira a primeira linha do banner:")
     print("       rede=ligada ... celular=ligado")
