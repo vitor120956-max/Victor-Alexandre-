@@ -19,7 +19,7 @@ Formatos aceitos (todos sem modelo):
 O arquivo é `agenda.json`; cada item tem id curto, título, quando (ISO), nota,
 status (`aberto`/`concluido`) e quando foi criado. Nada sai da máquina.
 
-**Lembretes (0.60.1).** Cada item guarda por quantos minutos antes avisar
+**Lembretes (0.60.2).** Cada item guarda por quantos minutos antes avisar
 (`avisar_antes`, 30 por padrão; 0 desliga). `devidos()` responde “o que precisa
 de atenção agora”: o que já passou e o que chega dentro da janela. Quem mostra é
 a tela — o JARVIS não tem serviço em segundo plano, então o aviso aparece
@@ -36,7 +36,7 @@ from typing import Any
 
 from . import dados as dados_locais
 
-VERSAO = "0.60.1"
+VERSAO = "0.60.2"
 
 ARQUIVO = "agenda.json"
 MAX_ITENS = 2_000
@@ -383,7 +383,7 @@ def devidos(
     """O que precisa de atenção agora: o que passou e o que chega na janela.
 
     Cada item usa o próprio `avisar_antes`; o parâmetro `antecedencia` é só o
-    padrão de quem não declarou nada (itens antigos, criados antes da 0.60.1).
+    padrão de quem não declarou nada (itens antigos, criados antes da 0.60.2).
     """
     momento = _agora(agora)
     try:

@@ -1970,7 +1970,7 @@ def checar_limites(payload: dict[str, Any]) -> dict[str, Any]:
 def navegador_catalog() -> dict[str, Any]:
     return {
         "fonte": "citrolabs/ego-lite (MIT)",
-        "versao": "0.60.1",
+        "versao": "0.60.2",
         "principio": "Uma space por objetivo; o documento principal antes dos frames; recibo não é prova.",
         "papeis": [
             {"papel": "button", "rotulo": "Botão", "acionavel": True},

@@ -41,7 +41,7 @@ from urllib.request import Request, urlopen
 
 from . import sistema as sistema_mod
 
-VERSAO = "0.60.1"
+VERSAO = "0.60.2"
 
 MAX_CABECALHO = 8 * 1024 * 1024
 TIMEOUT_CABECALHO = 12

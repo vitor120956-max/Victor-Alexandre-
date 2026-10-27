@@ -409,3 +409,73 @@ def test_nenhum_modulo_tem_escape_invalido():
         except (SyntaxWarning, DeprecationWarning) as exc:
             ruins.append(f"{arquivo.name}: {exc}")
     assert ruins == [], "\n".join(ruins)
+
+
+# --- configurar-celular.py ---------------------------------------------------
+
+def _carregar_configurador():
+    """Importa o script da raiz sem depender do nome do módulo."""
+    import importlib.util
+    from pathlib import Path
+
+    caminho = Path(__file__).resolve().parents[2] / "configurar-celular.py"
+    especificacao = importlib.util.spec_from_file_location("configurar_celular", caminho)
+    modulo = importlib.util.module_from_spec(especificacao)
+    especificacao.loader.exec_module(modulo)
+    return modulo
+
+
+def test_configurador_troca_o_valor_sem_duplicar():
+    modulo = _carregar_configurador()
+    texto, antes, depois = modulo.ajustar("JARVIS_HOST_REDE=0\nJARVIS_HOST_CELULAR=0\nOUTRA=1\n")
+    linhas = texto.splitlines()
+    assert "JARVIS_HOST_REDE=1" in linhas
+    assert "JARVIS_HOST_CELULAR=1" in linhas
+    assert "JARVIS_HOST_REDE=0" not in linhas
+    assert linhas.count("JARVIS_HOST_REDE=1") == 1
+    assert "OUTRA=1" in linhas
+    assert antes["JARVIS_HOST_REDE"] == "JARVIS_HOST_REDE=0"
+    assert depois["JARVIS_HOST_CELULAR"] == "JARVIS_HOST_CELULAR=1"
+
+
+def test_configurador_acrescenta_o_que_falta():
+    modulo = _carregar_configurador()
+    texto, antes, _ = modulo.ajustar("OUTRA=1\n")
+    assert "OUTRA=1" in texto
+    assert "JARVIS_HOST_REDE=1" in texto
+    assert "JARVIS_HOST_CELULAR=1" in texto
+    assert antes["JARVIS_HOST_REDE"] == "(não existia)"
+
+
+def test_configurador_ignora_comentario_com_a_chave():
+    modulo = _carregar_configurador()
+    texto, _, _ = modulo.ajustar("# JARVIS_HOST_REDE=0\n")
+    linhas = [l for l in texto.splitlines() if l.startswith("JARVIS_HOST_REDE")]
+    assert linhas == ["JARVIS_HOST_REDE=1"]
+    assert "# JARVIS_HOST_REDE=0" in texto
+
+
+def test_configurador_e_idempotente():
+    modulo = _carregar_configurador()
+    primeira, _, _ = modulo.ajustar("JARVIS_HOST_REDE=0\n")
+    segunda, _, _ = modulo.ajustar(primeira)
+    assert primeira == segunda
+
+
+def test_configurador_grava_crlf_sem_bom(tmp_path):
+    modulo = _carregar_configurador()
+    alvo = tmp_path / ".env"
+    modulo._gravar(alvo, "A=1\nB=2\n")
+    dados = alvo.read_bytes()
+    assert not dados.startswith(b"\xef\xbb\xbf")
+    assert dados.count(b"\n") == dados.count(b"\r\n") == 2
+
+
+def test_configurador_le_arquivo_com_bom(tmp_path):
+    modulo = _carregar_configurador()
+    alvo = tmp_path / ".env"
+    alvo.write_bytes(b"\xef\xbb\xbfJARVIS_HOST_REDE=0\r\n")
+    texto = modulo._ler(alvo)
+    assert texto.startswith("JARVIS_HOST_REDE=0")
+    _, antes, _ = modulo.ajustar(texto)
+    assert antes["JARVIS_HOST_REDE"] == "JARVIS_HOST_REDE=0"

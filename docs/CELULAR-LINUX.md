@@ -314,9 +314,9 @@ origem (`403 ORIGEM_RECUSADA`) só barra página de **outro site**; e o modo don
 
 ---
 
-## 9. As skills `celular.*` (0.60.1)
+## 9. As skills `celular.*` (0.60.0)
 
-A partir da 0.60.1 o JARVIS tem o próprio caminho para isso. Cinco skills, e a
+A partir da 0.60.0 o JARVIS tem o próprio caminho para isso. Cinco skills, e a
 regra é a de sempre: leitura sem confirmação, execução com confirmação, e tudo
 atrás de `JARVIS_HOST_CELULAR=1`.
 
@@ -330,6 +330,38 @@ atrás de `JARVIS_HOST_CELULAR=1`.
 
 O que o `celular.puxar` **não** faz: não lê `/data`, não copia base de aplicativo,
 não apaga nada no aparelho e não aceita destino fora da raiz de dados.
+
+### Como ligar (o passo que costuma falhar)
+
+O `.env` fica na raiz do projeto: `D:\JARVIS\.env`. Como o nome começa com ponto,
+ele some no meio dos outros — e, no Bloco de Notas, digitar `.env` no campo de
+nome costuma salvar como `.env.txt`, que o JARVIS não lê.
+
+Para não errar, use o atalho:
+
+```bat
+cd /d D:\JARVIS
+ligar-celular.bat
+```
+
+ou, pelo Python:
+
+```bat
+.venv\Scripts\python configurar-celular.py
+```
+
+O script acha o `.env` (ou cria a partir do `.env.example`), **substitui** a linha
+de `JARVIS_HOST_REDE` e `JARVIS_HOST_CELULAR` se ela já existir — sem duplicar
+chave —, grava em UTF-8 sem BOM com CRLF, renomeia um `.env.txt` perdido e mostra
+o antes e o depois. Nenhuma outra variável é tocada.
+
+Depois, `Ctrl+C` na API, suba de novo e confira a primeira linha do terminal:
+
+```text
+(rede=ligada, instalar=desligado, root=desligado, pc=desligado, celular=ligado, dono=desligado)
+```
+
+`rede=ligada` é obrigatório porque baixar o `adb` e o `scrcpy` é download.
 
 ### O que nenhum programa resolve
 
