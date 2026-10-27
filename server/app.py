@@ -197,10 +197,11 @@ def _autorizacao_do_dono(
 ) -> tuple[dict[str, Any], bool]:
     """Modo dono: completa o token de host e o plano quando o pedido é daqui.
 
-    Nada é preenchido quando `JARVIS_HOST_CONFIAR_LOCAL` está desligado
-    (o padrão) ou quando a requisição vem de outra máquina.
+    A regra mora em `sistema.confiar_no_pedido`: desde a 0.60.5 vale para a
+    própria máquina por padrão, e `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o
+    pedido de token até em 127.0.0.1. Requisição de outra máquina nunca preenche.
     """
-    if not sistema_mod.confiar_local() or not _veio_da_propria_maquina(request):
+    if not sistema_mod.confiar_no_pedido(_veio_da_propria_maquina(request)):
         return parametros, False
     dados = dict(parametros)
     preencheu = False
@@ -213,9 +214,10 @@ def _autorizacao_do_dono(
         atual = str(dados.get("autorizacao") or "").strip()
         # No modo dono, quem está na própria máquina não digita token — e não deve
         # ser punido quando o valor chega torto (o chat já mandou a frase inteira
-        # no campo, por exemplo). Token válido continua sendo respeitado; qualquer
-        # outra coisa é trocada pelo de verdade.
-        if token and (not atual or not tokens.iguais(atual, token)):
+        # no campo, por exemplo). Só o que **não parece token** é trocado: cada
+        # camada (sistema, elevação, evolução) tem o seu arquivo de token, então
+        # um valor com formato válido segue para a validação de quem o conhece.
+        if token and (not atual or not tokens.parece_token(atual)):
             dados["autorizacao"] = token
             preencheu = True
     if definition.id == "sistema.executar" and not str(dados.get("confirmacao") or "").strip():
@@ -224,6 +226,15 @@ def _autorizacao_do_dono(
             dados["confirmacao"] = pendentes[0]["confirmacao"]
             preencheu = True
     return dados, preencheu
+
+
+def _rotulo_dono() -> str:
+    """Como o banner explica o token — sem prometer o que a configuração não faz."""
+    if sistema_mod.exigir_token_local():
+        return "token exigido até nesta máquina (JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1)"
+    if sistema_mod.confiar_local():
+        return "LIGADO (sem digitar token nesta máquina)"
+    return "automático na própria máquina (127.0.0.1 não digita token)"
 
 
 def pasta_da_interface(base: Path | None = None) -> Path | None:
@@ -268,13 +279,13 @@ def create_app(
                 f"root={'ligado' if os.getenv('JARVIS_HOST_ROOT') == '1' else 'desligado'}, "
                 f"pc={'ligado' if os.getenv('JARVIS_HOST_PC') == '1' else 'desligado'}, "
                 f"celular={'ligado' if os.getenv('JARVIS_HOST_CELULAR') == '1' else 'desligado'}, "
-                f"dono={'LIGADO (sem digitar token nesta máquina)' if sistema_mod.confiar_local() else 'desligado'})"
+                f"dono={_rotulo_dono()})"
             )
 
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.60.4",
+        version="0.60.5",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -364,18 +375,21 @@ def create_app(
             "total": len(planos),
             "local": local,
             "instalar": os.getenv("JARVIS_HOST_INSTALAR", "0").strip() == "1",
-            "confiarLocal": sistema_mod.confiar_local(),
+            "confiarLocal": sistema_mod.confiar_no_pedido(local),
         }
 
     @application.get("/api/health")
-    def health() -> dict[str, Any]:
+    def health(request: Request) -> dict[str, Any]:
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.60.4",
+            "version": "0.60.5",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
-            "confiarLocal": sistema_mod.confiar_local(),
+            # Respondido por origem: o front esconde o campo de token quando é True.
+            "confiarLocal": sistema_mod.confiar_no_pedido(_veio_da_propria_maquina(request)),
+            "confiarLocalPorVariavel": sistema_mod.confiar_local(),
+            "exigirTokenLocal": sistema_mod.exigir_token_local(),
             "interface": interface.name if interface else "ausente",
         }
 
@@ -580,13 +594,13 @@ def create_app(
     @application.post("/api/agente/executar")
     async def agente_executar(request: Request, payload: AgenteRequest) -> dict[str, Any]:
         autorizacao = payload.autorizacao
-        if (
-            not autorizacao.strip()
-            and sistema_mod.confiar_local()
-            and _veio_da_propria_maquina(request)
-        ):
-            # Modo dono: quem está na própria máquina não digita o token.
-            autorizacao = sistema_token_host()
+        if sistema_mod.confiar_no_pedido(_veio_da_propria_maquina(request)):
+            # Modo dono: quem está na própria máquina não digita o token — e não é
+            # punido quando o valor chega torto (texto do chat, token velho da tela).
+            certo = sistema_token_host()
+            atual = (autorizacao or "").strip()
+            if certo and (not atual or not tokens.parece_token(atual)):
+                autorizacao = certo
         try:
             resultado = await agente_atender(
                 payload.pedido,

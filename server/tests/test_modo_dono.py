@@ -64,10 +64,30 @@ def test_origem_igual_ao_host_da_api_passa():
     assert app_mod._mesma_origem(pedido) is True
 
 
-def test_modo_desligado_nao_preenche(monkeypatch):
+def test_propria_maquina_nao_digita_token_por_padrao(monkeypatch):
+    """0.60.5: sem variável nenhuma, 127.0.0.1 já não pede token."""
     monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
     skill = _Skill("sistema.executar", SistemaExecutarInput)
     dados, preencheu = app_mod._autorizacao_do_dono(_Pedido(), skill, {})
+    assert dados["autorizacao"]
+    assert preencheu is True
+
+
+def test_trava_explicita_devolve_o_token_ate_na_propria_maquina(monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
+    skill = _Skill("sistema.executar", SistemaExecutarInput)
+    dados, preencheu = app_mod._autorizacao_do_dono(_Pedido(), skill, {})
+    assert dados == {}
+    assert preencheu is False
+
+
+def test_pedido_de_outra_maquina_nunca_e_preenchido(monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    skill = _Skill("sistema.executar", SistemaExecutarInput)
+    dados, preencheu = app_mod._autorizacao_do_dono(_Pedido("192.168.0.42"), skill, {})
     assert dados == {}
     assert preencheu is False
 
@@ -119,7 +139,7 @@ def test_modo_ligado_respeita_o_token_certo_digitado(monkeypatch):
 
 
 def test_modo_ligado_corrige_token_torto_na_propria_maquina(monkeypatch):
-    """O bug de 0.60.4: o chat mandava "sim, pode" no campo do token."""
+    """O bug de 0.60.5: o chat mandava "sim, pode" no campo do token."""
     from server.skill_registry import SistemaInstalarInput
     from server.sistema import token_host
 
@@ -204,7 +224,8 @@ def cliente(tmp_path, monkeypatch):
         yield test_client
 
 
-def test_api_sem_modo_dono_continua_exigindo_token(cliente: TestClient):
+def test_api_com_trava_local_continua_exigindo_token(cliente: TestClient, monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
     resposta = cliente.post(
         "/api/skills/sistema.executar/execute",
         json={"parameters": {"confirmacao": "abcd1234"}, "confirmed": True},
@@ -213,6 +234,20 @@ def test_api_sem_modo_dono_continua_exigindo_token(cliente: TestClient):
     corpo = resposta.json()
     assert corpo["ok"] is False
     assert "token" in corpo["error"]["message"].lower()
+
+
+def test_api_na_propria_maquina_nao_reclama_do_token(cliente: TestClient, monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    resposta = cliente.post(
+        "/api/skills/sistema.executar/execute",
+        json={"parameters": {"confirmacao": "abcd1234"}, "confirmed": True},
+    )
+    corpo = resposta.json()
+    # passou da trava do token e parou na próxima trava (rede) — o esperado
+    assert corpo["ok"] is False
+    assert "token" not in corpo["error"]["message"].lower()
+    assert "rede desligada" in corpo["error"]["message"].lower()
 
 
 def test_api_com_modo_dono_nao_reclama_do_token(cliente: TestClient, monkeypatch):
@@ -249,10 +284,16 @@ def test_api_aceita_origem_local(cliente: TestClient):
     assert resposta.status_code == 200
 
 
-def test_health_diz_se_o_modo_dono_esta_ligado(cliente: TestClient, monkeypatch):
+def test_health_responde_por_origem_quem_pode_ficar_sem_token(cliente: TestClient, monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    corpo = cliente.get("/api/health").json()
+    assert corpo["confiarLocal"] is True  # o test client fala de 127.0.0.1
+    assert corpo["confiarLocalPorVariavel"] is False
+    assert corpo["exigirTokenLocal"] is False
+
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
     assert cliente.get("/api/health").json()["confiarLocal"] is False
-    monkeypatch.setenv("JARVIS_HOST_CONFIAR_LOCAL", "1")
-    assert cliente.get("/api/health").json()["confiarLocal"] is True
 
 
 def test_arquivo_de_token_fica_fora_do_git():
@@ -347,16 +388,19 @@ def test_explicar_distingue_nao_token_de_token_errado():
 
     assert "inválido" in tokens.explicar("abcdefgh")
 
-    vazio = tokens.explicar("", modo_dono=False)
-    assert "ligar-celular.bat" in vazio
-    assert "JARVIS_HOST_CONFIAR_LOCAL" in vazio
+    vazio = tokens.explicar("", automatico_local=True)
+    assert "não veio da própria máquina" in vazio
+    assert "storage/host-token.txt" in vazio
+
+    travado = tokens.explicar("", trava_local=True)
+    assert "JARVIS_HOST_EXIGIR_TOKEN_LOCAL" in travado
 
 
 def test_explicar_modo_dono_ligado_de_outra_maquina():
     from server import tokens
 
     texto = tokens.explicar("", modo_dono=True, da_propria_maquina=False)
-    assert "própria máquina" in texto
+    assert "própria máquina" in texto or "da própria máquina" in texto
 
 
 def test_token_gerado_parece_token():

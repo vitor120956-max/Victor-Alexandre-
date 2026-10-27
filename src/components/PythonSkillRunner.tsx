@@ -170,7 +170,7 @@ export function PythonSkillRunner({
           <div className="python-runner-intro"><span><Code2 size={18} /></span><div><strong>{skill.id}</strong><p>{skill.description}</p></div></div>
           <form onSubmit={submit} className="form-stack">
             {modoDono && 'autorizacao' in skill.inputSchema.properties && (
-              <p className="form-note">Modo dono ligado: esta API está na sua máquina, então o token de host é preenchido sozinho. A confirmação e as travas continuam valendo.</p>
+              <p className="form-note">Nesta máquina o token de host é preenchido sozinho — não há o que digitar. A confirmação, o plano e as travas de rede e instalação continuam valendo; pedido de outra máquina ainda pede token.</p>
             )}
             {Object.entries(skill.inputSchema.properties)
               .filter(([name]) => !(modoDono && name === 'autorizacao'))

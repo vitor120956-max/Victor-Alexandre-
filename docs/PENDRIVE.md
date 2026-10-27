@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.60.4 D:\JARVIS
+jarvis-nucleo-pessoal@0.60.5 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.60.4"` e `"skills": 288`.
+Esperado: `"version": "0.60.5"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Cansou de digitar? `set JARVIS_HOST_CONFIAR_LOCAL=1` liga o **modo dono**: o token é preenchido sozinho para quem está na própria máquina; as travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.60.5 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -829,7 +829,8 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 | `.venv` quebrou depois de trocar de porta USB | caminho absoluto mudou | apagar `.venv` e recriar na máquina |
 | `Building wheel for pyyaml ... error` / `Microsoft Visual C++ 14.0 or greater is required` | `PyYAML` não tem wheel para Python 3.15 no Windows; vinha pelo `uvicorn[standard]` | usar o `requirements.txt` da 0.40.1 (sem `[standard]`) e rodar o `pip install` de novo — o `pip` aborta **tudo** quando um pacote falha, então até aqui nada foi instalado (§1) |
 | `Faltam as bibliotecas Python` mas o `.venv` existe | o `pip install` parou no meio; o `.venv` está vazio | subir `pip list` e conferir; quase sempre é o caso da linha acima |
-| `Token de host inválido` | token de outro projeto/cópia — ou, na própria máquina, modo dono desligado | ler `storage/host-token.txt` desta cópia; ou rodar `ligar-celular.bat` e reiniciar a API |
+| `Token de host inválido` | token de outro projeto/cópia | ler `storage/host-token.txt` desta cópia |
+| `pedido não veio da própria máquina` | a API foi chamada por outro PC | usar a interface em `127.0.0.1` ou colar o token |
 | `não é um token: o valor tem acento` | colou uma frase no campo do token | copiar só o conteúdo de `storage/host-token.txt` |
 | `A origem não existe` | caminho errado | informar o caminho completo da pasta Downloads |
 | `formato fora da lista permitida` | extensão não suportada | salvar como PDF ou converter para um dos nove formatos |
@@ -848,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.60.4` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.60.5` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

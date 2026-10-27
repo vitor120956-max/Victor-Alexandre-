@@ -47,28 +47,42 @@ def iguais(informado: str, esperado: str) -> bool:
         return False
 
 
-def explicar(informado: str, *, modo_dono: bool = False, da_propria_maquina: bool = False) -> str:
+def explicar(
+    informado: str,
+    *,
+    modo_dono: bool = False,
+    da_propria_maquina: bool = False,
+    automatico_local: bool = False,
+    trava_local: bool = False,
+) -> str:
     """Mensagem acionável para um token recusado.
 
-    Ordem de importância: primeiro o caso que o dono do projeto mais encontra —
-    querer operar a própria máquina sem digitar nada —, depois o valor que nem
-    token é, e por último o token simplesmente errado.
+    O caso mais comum de longe é o dono do projeto na própria máquina: a partir
+    da 0.60.5 o token nem é pedido ali, então "recusou" quase sempre significa
+    que o pedido veio de fora — e a mensagem precisa dizer isso, não mandar
+    configurar o que já está configurado.
     """
     valor = (informado or "").strip()
     if not valor:
-        if modo_dono and not da_propria_maquina:
+        if trava_local:
             return (
-                "O modo dono só vale para a própria máquina (127.0.0.1). "
-                "De outra máquina, cole o token de storage/host-token.txt."
+                "Token vazio. `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` está ligado, então "
+                "até nesta máquina o token é pedido: copie o valor de "
+                "storage/host-token.txt."
             )
-        if not modo_dono:
+        if da_propria_maquina:
+            return "Token vazio. Cole o valor de storage/host-token.txt."
+        if automatico_local or modo_dono:
             return (
-                "Sem token e sem modo dono. Na sua própria máquina, rode "
-                "ligar-celular.bat (ou ponha JARVIS_HOST_CONFIAR_LOCAL=1 no .env) e "
-                "reinicie a API — aí o token é preenchido sozinho. De outra máquina, "
-                "cole o valor de storage/host-token.txt."
+                "Sem token e este pedido não veio da própria máquina. Em 127.0.0.1 ele "
+                "é preenchido sozinho; de outra máquina, cole o valor de "
+                "storage/host-token.txt."
             )
-        return "Token vazio. Cole o valor de storage/host-token.txt."
+        return (
+            "Sem token. Na sua máquina ele é preenchido sozinho — reinicie a API para "
+            "carregar o .env atualizado. De outra máquina, cole o valor de "
+            "storage/host-token.txt."
+        )
     if tem_fora_de_ascii(valor):
         return (
             "Isso não é um token: o valor tem acento ou símbolo. Token de host é só "

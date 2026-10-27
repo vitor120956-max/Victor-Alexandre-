@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web, tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.60.4"
+VERSAO = "0.60.5"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -56,6 +56,7 @@ AUDITORIA = STORAGE / "host-audit.jsonl"
 AMBIENTE_REDE = "JARVIS_HOST_REDE"
 AMBIENTE_INSTALAR = "JARVIS_HOST_INSTALAR"
 AMBIENTE_CONFIAR_LOCAL = "JARVIS_HOST_CONFIAR_LOCAL"
+AMBIENTE_EXIGIR_TOKEN_LOCAL = "JARVIS_HOST_EXIGIR_TOKEN_LOCAL"
 
 MAX_TEXTO = 1_800_000
 MAX_ROWS = 200
@@ -182,7 +183,12 @@ def _autorizado(autorizacao: str) -> tuple[bool, str]:
         return True, ""
     # `compare_digest` com texto acentuado levanta TypeError; o módulo `tokens`
     # compara em bytes e sabe distinguir "não é token" de "token errado".
-    return False, tokens.explicar(autorizacao, modo_dono=confiar_local())
+    return False, tokens.explicar(
+        autorizacao,
+        modo_dono=confiar_local(),
+        automatico_local=True,
+        trava_local=exigir_token_local(),
+    )
 
 
 def confiar_local() -> bool:
@@ -197,6 +203,35 @@ def confiar_local() -> bool:
     mostrado antes, o token de uso único do plano e a confirmação da tela.
     """
     return os.environ.get(AMBIENTE_CONFIAR_LOCAL, "0").strip() == "1"
+
+
+def exigir_token_local() -> bool:
+    """Trava de quem quer o token de volta **até** na própria máquina.
+
+    `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1`. Existe para quem deixa a API aberta na
+    rede e não quer que um processo local dispare instalação sem digitar nada.
+    """
+    return os.environ.get(AMBIENTE_EXIGIR_TOKEN_LOCAL, "0").strip() == "1"
+
+
+def confiar_no_pedido(da_propria_maquina: bool) -> bool:
+    """O servidor pode preencher o token sozinho nesta requisição?
+
+    **Padrão: sim, quando a requisição vem da própria máquina** (127.0.0.1, ::1).
+    Isso não abre nada para fora por dois motivos concretos: o token fica em
+    `storage/host-token.txt`, que qualquer processo do mesmo usuário já lê; e
+    requisição de outra máquina não tem IP local, então continua exigindo token.
+    A página de um site de fora continua barrada pela checagem de `Origin`.
+
+    Duas variáveis mudam isso:
+    - `JARVIS_HOST_CONFIAR_LOCAL=1` liga o dono para qualquer `confiar_local()`
+      (é o que os testes antigos e o `ligar-celular.bat` usam);
+    - `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` volta ao comportamento antigo e pede
+      token até em 127.0.0.1.
+    """
+    if not da_propria_maquina:
+        return False  # de outra máquina, nunca
+    return confiar_local() or not exigir_token_local()
 
 
 def remocao_sugerida(tipo: str, rotulo: str) -> dict[str, str]:

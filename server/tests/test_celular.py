@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.60.4 ---------------------------------------
+# --- o caminho exato do bug de 0.60.5 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -572,14 +572,26 @@ def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch)
     assert "não é um token" in texto
 
 
-def test_preparar_sem_token_explica_o_modo_dono(ligado, monkeypatch):
+def test_preparar_sem_token_explica_que_nao_veio_da_maquina(ligado, monkeypatch):
     from server import sistema
 
     monkeypatch.setattr(sistema, "token_host", lambda: "abc123XYZ_ok-token")
     monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
     with pytest.raises(sistema.SistemaError) as erro:
         sistema.baixar(url="https://example.com/x.zip", autorizacao="")
-    assert "ligar-celular.bat" in str(erro.value)
+    assert "não veio da própria máquina" in str(erro.value)
+
+
+def test_preparar_sem_token_com_trava_local_explica_a_trava(ligado, monkeypatch):
+    from server import sistema
+
+    monkeypatch.setattr(sistema, "token_host", lambda: "abc123XYZ_ok-token")
+    monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.baixar(url="https://example.com/x.zip", autorizacao="")
+    assert "JARVIS_HOST_EXIGIR_TOKEN_LOCAL" in str(erro.value)
 
 
 def test_agente_nao_tira_token_da_frase():

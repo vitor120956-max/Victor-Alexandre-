@@ -1318,10 +1318,19 @@ def test_executar_mostra_sha256(monkeypatch, instalacao_ligada, token, estado):
 # ---------------------------------------------------------------------------
 
 
-def test_api_assinatura_exige_token(client):
+def test_api_assinatura_exige_token_com_trava_local(client, monkeypatch):
+    """Com JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1 o token voltava a ser pedido até aqui."""
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
     corpo = client.post("/api/skills/sistema.assinatura/execute", json={"parameters": {"arquivo": "/tmp/x.msi"}}).json()
     assert corpo["error"]["code"] == "SKILL_ERROR"
     assert "token" in corpo["error"]["message"]
+
+
+def test_api_assinatura_na_propria_maquina_passa_do_token(client, monkeypatch):
+    """0.60.5: sem a trava, 127.0.0.1 não digita token e o erro é do arquivo."""
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    corpo = client.post("/api/skills/sistema.assinatura/execute", json={"parameters": {"arquivo": "/tmp/x.msi"}}).json()
+    assert "token" not in corpo["error"]["message"].lower()
 
 
 def test_api_desinstalar_responde(client, token):
@@ -1355,7 +1364,7 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.60.4"
+    assert dados["version"] == "0.60.5"
     assert dados["skills"] == 288
 
 
@@ -1364,17 +1373,25 @@ def test_api_lista_as_dezesseis_skills_de_sistema(client):
     assert len([item for item in ids if item.startswith("sistema.")]) == 16
 
 
-def test_api_sistema_disco_exige_token(client):
+def test_api_sistema_disco_exige_token_com_trava_local(client, monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
     resposta = client.post("/api/skills/sistema.disco/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is False
     assert resposta["error"]["code"] == "SKILL_ERROR"
     assert "token" in resposta["error"]["message"]
 
 
+def test_api_sistema_disco_responde_na_propria_maquina(client, monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    resposta = client.post("/api/skills/sistema.disco/execute", json={"parameters": {}}).json()
+    assert resposta["ok"] is True
+    assert resposta["result"]["metrics"]["unidades"] >= 1
+
+
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.60.4"
+    assert resposta["result"]["versao"] == "0.60.5"
 
 
 def test_api_baixar_exige_confirmacao(client):
@@ -1394,9 +1411,18 @@ def test_api_executar_exige_confirmacao(client):
     assert resposta["error"]["code"] == "CONFIRMATION_REQUIRED"
 
 
-def test_api_instalar_nao_exige_confirmacao(client):
+def test_api_instalar_monta_o_plano_na_propria_maquina(client, monkeypatch):
+    """`sistema.instalar` monta o plano (não executa) e não pede confirmação.
+
+    Antes da 0.60.5 este teste parava na recusa do token; com o dono automático
+    em 127.0.0.1 ele chega na skill de verdade.
+    """
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
     resposta = client.post("/api/skills/sistema.instalar/execute", json={"parameters": {"pacote": "pip:rich"}}).json()
-    assert resposta["error"]["code"] == "SKILL_ERROR"
+    assert resposta["ok"] is True
+    assert resposta["result"]["metrics"]["executado"] is False
+    linhas = {linha["campo"]: linha["valor"] for linha in resposta["result"]["rows"]}
+    assert linhas["confirmação"]  # o token de uso único que libera o sistema.executar
 
 
 def test_api_skill_inexistente(client):
