@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.60.7
+# Biblioteca e armazenamento — 0.60.8
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -259,7 +259,7 @@ Limites, sem enfeite:
 | Testes das habilidades de fora | **41** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
 | Testes do correio | **25** (`test_correio.py`, com `.eml` e `.mbox` montados no teste) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.689** |
+| Suíte da API | **2.696** |
 | Skills no registro | **288** (75 novas: biblioteca.*, armazenamento.*, mesa.*, habilidades.*, github.*, correio.*, catalogo.*, cultura.*, pc.*, instalador.*, agenda.*, backup.* e git.*) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

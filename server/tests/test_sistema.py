@@ -1327,7 +1327,7 @@ def test_api_assinatura_exige_token_com_trava_local(client, monkeypatch):
 
 
 def test_api_assinatura_na_propria_maquina_passa_do_token(client, monkeypatch):
-    """0.60.7: sem a trava, 127.0.0.1 não digita token e o erro é do arquivo."""
+    """0.60.8: sem a trava, 127.0.0.1 não digita token e o erro é do arquivo."""
     monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
     corpo = client.post("/api/skills/sistema.assinatura/execute", json={"parameters": {"arquivo": "/tmp/x.msi"}}).json()
     assert "token" not in corpo["error"]["message"].lower()
@@ -1364,7 +1364,7 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.60.7"
+    assert dados["version"] == "0.60.8"
     assert dados["skills"] == 288
 
 
@@ -1391,7 +1391,7 @@ def test_api_sistema_disco_responde_na_propria_maquina(client, monkeypatch):
 def test_api_sistema_regras_responde(client):
     resposta = client.post("/api/skills/sistema.regras/execute", json={"parameters": {}}).json()
     assert resposta["ok"] is True
-    assert resposta["result"]["versao"] == "0.60.7"
+    assert resposta["result"]["versao"] == "0.60.8"
 
 
 def test_api_baixar_exige_confirmacao(client):
@@ -1414,7 +1414,7 @@ def test_api_executar_exige_confirmacao(client):
 def test_api_instalar_monta_o_plano_na_propria_maquina(client, monkeypatch):
     """`sistema.instalar` monta o plano (não executa) e não pede confirmação.
 
-    Antes da 0.60.7 este teste parava na recusa do token; com o dono automático
+    Antes da 0.60.8 este teste parava na recusa do token; com o dono automático
     em 127.0.0.1 ele chega na skill de verdade.
     """
     monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)

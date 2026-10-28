@@ -58,7 +58,7 @@ def explicar(
     """Mensagem acionável para um token recusado.
 
     O caso mais comum de longe é o dono do projeto na própria máquina: a partir
-    da 0.60.7 o token nem é pedido ali, então "recusou" quase sempre significa
+    da 0.60.8 o token nem é pedido ali, então "recusou" quase sempre significa
     que o pedido veio de fora — e a mensagem precisa dizer isso, não mandar
     configurar o que já está configurado.
     """

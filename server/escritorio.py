@@ -29,7 +29,7 @@ MAX_OPERACOES = 20_000
 MAX_MENSAGEM = 20_000
 MAX_RECEITA = 80
 
-VERSAO = "0.60.7"
+VERSAO = "0.60.8"
 
 
 class EscritorioError(ValueError):

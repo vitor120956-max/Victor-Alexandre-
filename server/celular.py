@@ -133,7 +133,7 @@ def ferramentas() -> dict[str, Any]:
         "completo": not faltando,
         "faltando": faltando,
         "nota": (
-            "Tudo pronto." if not faltando
+            "As duas ferramentas estão instaladas." if not faltando
             else "Peça `celular.preparar` para baixar e conferir as duas ferramentas."
         ),
     }
@@ -326,6 +326,146 @@ def situacao_de(aparelhos: list[dict[str, str]]) -> str:
 
 
 # --- o plano -----------------------------------------------------------------
+
+def _linhas_dos_aparelhos(aparelhos: list[dict[str, str]]) -> list[str]:
+    linhas = []
+    for item in aparelhos:
+        modelo = item.get("model") or item.get("produto") or ""
+        detalhe = f" ({modelo})" if modelo else ""
+        traduzido = {
+            "device": "autorizado",
+            "unauthorized": "não autorizado neste PC",
+            "offline": "offline",
+            "recovery": "no recovery",
+            "sideload": "em sideload",
+            "bootloader": "no bootloader",
+        }.get(item["estado"], item["estado"])
+        linhas.append(f"• {item['serial']}{detalhe}: {traduzido}")
+    return linhas
+
+
+def resumo(medido: dict[str, Any]) -> dict[str, Any]:
+    """Traduz o que foi medido em uma resposta de chat — e o próximo passo.
+
+    `celular.status` olhava só a pasta das ferramentas: dizia "Tudo pronto" com
+    o celular desligado, sem cabo e sem depuração. Aqui a resposta parte do que
+    o adb e o Windows realmente viram, e o campo `resposta` já traz a ação
+    seguinte (cabo, driver, depuração ou espelhar).
+    """
+    info = medido.get("ferramentas") or {}
+    aparelhos = medido.get("aparelhos") or []
+    windows = medido.get("windows") or {}
+    # `estado()` só devolve `situacao` quando chegou a rodar o adb; os caminhos de
+    # recusa (sem ferramenta, trava desligada, adb quebrado) vêm com `motivo`.
+    if medido.get("situacao"):
+        situacao = medido["situacao"]
+    elif not info.get("completo"):
+        situacao = "sem-ferramentas"
+    elif medido.get("executado") and medido.get("motivo"):
+        situacao = "erro-adb"
+    elif not medido.get("executado"):
+        situacao = "desligado"
+    else:
+        situacao = "vazio"
+
+    ferramentas_txt = (
+        f"adb: {info.get('adb') or 'não encontrado'} · scrcpy: {info.get('scrcpy') or 'não encontrado'}"
+    )
+    linhas: list[str] = [ferramentas_txt]
+    if aparelhos:
+        linhas.append("Aparelhos no adb:\n" + "\n".join(_linhas_dos_aparelhos(aparelhos)))
+    if windows and windows.get("consulta"):
+        linhas.append("Windows na USB: " + str(windows.get("resumo") or "sem resposta"))
+
+    if situacao == "sem-ferramentas":
+        acao = (
+            "Faltam as ferramentas. Rode `celular.preparar` para baixar adb e scrcpy "
+            "(com hash) — sem elas o JARVIS não fala com o aparelho."
+        )
+        titulo = "Faltam as ferramentas"
+    elif situacao == "desligado":
+        acao = (
+            f"{AMBIENTE} está desligado, então nada foi executado. "
+            "Rode `ligar-celular.bat` e reinicie a API."
+        )
+        titulo = "A camada do celular está desligada"
+    elif situacao == "erro-adb":
+        acao = (
+            "O adb rodou e terminou com erro: "
+            + (str(medido.get("motivo") or "sem detalhe").splitlines()[0][:240])
+            + ". Se falar de versão de servidor, feche outros programas que usam adb "
+            "(Android Studio, emuladores) e rode de novo."
+        )
+        titulo = "O adb falhou"
+    elif situacao == "autorizado":
+        serial = next((a["serial"] for a in aparelhos if a["estado"] == "device"), "")
+        acao = (
+            f"Pronto: {serial} autorizado. Próximo passo é `celular.espelhar` — a janela "
+            "do scrcpy abre no PC com a tela do aparelho. Para puxar arquivo, "
+            "`celular.puxar`."
+        )
+        titulo = "Aparelho pronto"
+    elif situacao == "nao-autorizado":
+        acao = (
+            "A Depuração USB está ligada, mas este PC ainda não foi autorizado. Falta o "
+            "toque em “Permitir depuração USB?” na tela do aparelho — nenhum programa "
+            "substitui esse toque. Com a tela quebrada, `celular.plano` traz o caminho de "
+            "autorizar às cegas por teclado USB."
+        )
+        titulo = "Depuração ligada, PC não autorizado"
+    elif situacao == "recovery":
+        acao = (
+            "O aparelho está no recovery — é a janela boa para resgatar arquivo antes de "
+            "qualquer flash: `celular.puxar` (no recovery o ADB costuma dispensar "
+            "autorização)."
+        )
+        titulo = "Aparelho no recovery"
+    elif situacao == "offline":
+        acao = (
+            "O aparelho aparece como offline: o cabo ou a porta está instável. Troque o "
+            "cabo, use a porta de trás do PC e rode de novo."
+        )
+        titulo = "Aparelho offline"
+    elif windows.get("com_problema"):
+        acao = (
+            "O Windows vê o aparelho, mas com problema de driver — enquanto ele estiver "
+            "com ⚠ no Gerenciador de Dispositivos o adb não enxerga nada. Instale o "
+            "Samsung USB Driver for Mobile Phones, reconecte o cabo e rode de novo."
+        )
+        titulo = "Nenhum aparelho no adb: falta driver"
+    elif windows.get("visivel"):
+        acao = (
+            "O Windows vê o aparelho, mas o adb não: cabo e porta estão bons, e o que "
+            "falta é ligar a Depuração USB (ou o consentimento dele). Rode "
+            "`celular.plano` para o caminho sem tela."
+        )
+        titulo = "Nenhum aparelho no adb: falta a Depuração USB"
+    elif windows.get("consulta"):
+        acao = (
+            "O Windows não vê nada na USB: aqui é cabo, porta, bateria ou a placa USB do "
+            "aparelho — antes de qualquer coisa de software. Troque o cabo, use a porta de "
+            "trás do PC, segure Power por 10 s e ligue de novo."
+        )
+        titulo = "Nenhum aparelho no adb — e o Windows também não vê"
+    else:
+        acao = (
+            "O adb não vê aparelho. Confira o cabo e rode `celular.plano` para o passo a "
+            "passo do seu caso."
+        )
+        titulo = "Nenhum aparelho no adb"
+
+    return {
+        "situacao": situacao,
+        "titulo": titulo,
+        "aparelhos": aparelhos,
+        "windows": windows,
+        "ferramentas": info,
+        "executado": bool(medido.get("executado")),
+        "motivo": medido.get("motivo", ""),
+        "proximo_passo": acao,
+        "resposta": "\n\n".join([*linhas, acao]),
+    }
+
 
 def _passo(titulo: str, comandos: list[str], nota: str) -> dict[str, Any]:
     return {"titulo": titulo, "comandos": comandos, "nota": nota}

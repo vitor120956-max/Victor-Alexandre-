@@ -123,10 +123,35 @@ function formatLeanChatResult(skillId: string, result: Record<string, unknown>):
   ].join('\n\n');
 }
 
+function formatCelularChatResult(skillId: string, result: Record<string, unknown>): string {
+  const resposta = typeof result.resposta === 'string' ? result.resposta.trim() : '';
+  if (skillId === 'celular.status') {
+    const proximo = typeof result.proximo_passo === 'string' ? result.proximo_passo : '';
+    return [resposta || 'Estado do celular medido.', proximo && !resposta.includes(proximo) ? proximo : '']
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  if (skillId === 'celular.preparar') {
+    const baixados = list(result.baixados);
+    return [
+      resposta,
+      baixados.length
+        ? baixados
+            .map((item) => `• ${String(item.ferramenta)}: ${String(item.pasta || item.arquivo)} — SHA-256 ${String(item.sha256 || '').slice(0, 16)}…`)
+            .join('\n')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  return resposta || 'Skill do celular concluída.';
+}
+
 export function formatPythonChatResult(skillId: string, result: Record<string, unknown>): string {
   if (skillId.startsWith('legal.')) return formatLegalChatResult(skillId, result);
   if (skillId.startsWith('reverse.')) return formatReverseChatResult(skillId, result);
   if (skillId.startsWith('lean.')) return formatLeanChatResult(skillId, result);
+  if (skillId.startsWith('celular.')) return formatCelularChatResult(skillId, result);
   if (skillId.startsWith('engineering.')) return String(result.markdown ?? 'Workflow concluído sem saída textual.');
   if (skillId === 'planning.list') {
     const plans = list(result.plans);
@@ -200,5 +225,8 @@ export function formatPythonChatResult(skillId: string, result: Record<string, u
       'Para gravar, abra Skills → files.organize, desative a simulação, revise e confirme.',
     ].filter(Boolean).join('\n\n');
   }
+  // Muitas skills devolvem o texto pronto em `resposta`; mostrar isso é melhor
+  // que o aviso genérico de "catálogo respondendo".
+  if (typeof result.resposta === 'string' && result.resposta.trim()) return result.resposta.trim();
   return `Skill Python operacional. Versão ${String(result.python ?? 'desconhecida')} em ${String(result.system ?? 'ambiente local')}. O catálogo e a execução estão respondendo pela API.`;
 }

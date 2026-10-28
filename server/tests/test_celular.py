@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.60.7 ---------------------------------------
+# --- o caminho exato do bug de 0.60.8 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.60.7 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.60.8 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -833,3 +833,123 @@ def test_status_derruba_adb_de_outra_versao_e_tenta_de_novo(ligado, monkeypatch)
     resultado = C.estado(rodar=rodar)
     assert resultado["situacao"] == "autorizado"
     assert chamadas[1][1] == "kill-server"
+
+
+# --- celular.status mede o aparelho (0.60.8) ---------------------------------
+
+def _status_handler_com(monkeypatch, medido):
+    from server import skill_registry
+
+    monkeypatch.setattr(skill_registry.celular, "estado", lambda **_k: medido)
+    registro = skill_registry.build_registry(Path("/tmp/status-files") / "files")
+    import asyncio
+
+    return asyncio.run(registro.execute("celular.status", {}, False))
+
+
+def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
+    resultado = _status_handler_com(
+        monkeypatch,
+        {
+            "ferramentas": {"completo": True, "adb": "C:\\J\\adb.exe", "scrcpy": "C:\\J\\scrcpy.exe"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [{"serial": "R58M12ABC", "estado": "device", "model": "SM-G610M"}],
+            "situacao": "autorizado",
+        },
+    )
+    assert resultado["situacao"] == "autorizado"
+    assert "R58M12ABC" in resultado["resposta"]
+    assert "celular.espelhar" in resultado["proximo_passo"]
+
+
+def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
+    """O bug da 0.60.8: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    resultado = _status_handler_com(
+        monkeypatch,
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": {"consulta": True, "visivel": False, "com_problema": False, "dispositivos": [], "resumo": "O Windows não vê nenhum aparelho na USB."},
+        },
+    )
+    assert resultado["situacao"] == "vazio"
+    assert "tudo pronto" not in resultado["resposta"].lower()
+    assert "cabo" in resultado["proximo_passo"].lower()
+
+
+def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": {"consulta": True, "visivel": False, "com_problema": False, "dispositivos": [], "resumo": "x"},
+        }
+    )
+    assert "Windows também não vê" in resultado["titulo"]
+    assert "cabo" in resultado["proximo_passo"]
+
+
+def test_status_sem_cabo_com_driver_ruim_manda_instalar_driver(monkeypatch):
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": {"consulta": True, "visivel": True, "com_problema": True, "dispositivos": [{"status": "Error", "classe": "USB", "nome": "MTP"}], "resumo": "x"},
+        }
+    )
+    assert "driver" in resultado["titulo"].lower()
+    assert "Samsung USB Driver" in resultado["proximo_passo"]
+
+
+def test_status_sem_cabo_mas_windows_vendo_manda_ligar_depuracao():
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": {"consulta": True, "visivel": True, "com_problema": False, "dispositivos": [{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile"}], "resumo": "x"},
+        }
+    )
+    assert "Depuração USB" in resultado["titulo"]
+    assert "celular.plano" in resultado["proximo_passo"]
+
+
+def test_status_nao_autorizado_explica_o_toque():
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [{"serial": "ABC", "estado": "unauthorized"}],
+            "situacao": "nao-autorizado",
+        }
+    )
+    assert "não autorizado" in resultado["resposta"]
+    assert "Permitir" in resultado["proximo_passo"]
+
+
+def test_status_quando_o_adb_falha_nao_culpa_a_trava():
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 1,
+            "motivo": "adb server version (40) doesn't match this client",
+            "aparelhos": [],
+        }
+    )
+    assert resultado["situacao"] == "erro-adb"
+    assert "adb" in resultado["titulo"].lower()
+    assert "JARVIS_HOST_CELULAR" not in resultado["resposta"]

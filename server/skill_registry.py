@@ -4085,15 +4085,13 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        info = celular.ferramentas()
-        return {
-            **info,
-            "resposta": (
-                "adb: " + (info["adb"] or "não encontrado")
-                + " · scrcpy: " + (info["scrcpy"] or "não encontrado")
-                + ". " + info["nota"]
-            ),
-        }
+        # Antes da 0.60.8 isto só olhava a pasta das ferramentas e respondia
+        # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
+        try:
+            medido = celular.estado()
+        except celular.CelularError as exc:
+            raise SkillError(str(exc)) from exc
+        return celular.resumo(medido)
 
     def celular_plano_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CelularPlanoInput)
@@ -5218,7 +5216,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("pc.abrir-programa", "Abrir programa no PC", "Abre um programa da lista fechada, sem argumento e sem caminho livre. Exige `JARVIS_HOST_PC=1` e confirmação; no Linux/macOS a skill recusa e explica.", "PC", PcProgramaInput, pc_abrir_programa_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.abrir-arquivo", "Abrir arquivo no PC", "Abre um documento com o programa padrão do Windows, só dentro de storage/, Downloads, Documentos, Desktop ou OneDrive, e só de formato de leitura — `.exe`, `.bat`, `.ps1` e `.lnk` são recusados.", "PC", PcArquivoInput, pc_abrir_arquivo_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.comando", "Comando pronto do PC", "Roda um comando de leitura da lista fechada (ipconfig, systeminfo, tasklist, ver, query user, disco, data, boot) e devolve a saída. O comando é escolhido por nome — não existe linha livre para injetar nada.", "PC", PcComandoInput, pc_comando_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
-        SkillDefinition("celular.status", "Ferramentas do celular", "Diz se `adb` e `scrcpy` estão instalados e onde, e se a permissão `JARVIS_HOST_CELULAR` está ligada. Só olha o disco — não executa nada e não fala com o aparelho.", "Celular", EmptyInput, celular_status_handler, timeout_seconds=10),
+        SkillDefinition("celular.status", "Estado do celular", "Mede o aparelho de verdade: roda `adb devices -l` (só leitura), diz se está autorizado, com depuração desligada ou sem cabo, e consulta a USB do Windows quando o adb não vê nada. Traz também onde estão `adb` e `scrcpy`. Nada é alterado no aparelho.", "Celular", EmptyInput, celular_status_handler, timeout_seconds=90),
         SkillDefinition("celular.plano", "Plano para destravar o celular sem tela", "Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive quando a Depuração USB nunca foi ligada. Traz os comandos, a sequência de teclas do `scrcpy --otg`, o TalkBack, a tela de teste e o limite do flash sem Desbloqueio OEM.", "Celular", CelularPlanoInput, celular_plano_handler, timeout_seconds=40),
         SkillDefinition("celular.espelhar", "Ver o celular na tela do PC", "Abre o `scrcpy`: a tela do celular vira uma janela do Windows, com mouse e teclado do PC — funciona mesmo com o painel quebrado, desde que a depuração já esteja autorizada. Exige `JARVIS_HOST_CELULAR=1` e confirmação.", "Celular", CelularEspelharInput, celular_espelhar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("celular.puxar", "Resgatar fotos e documentos do celular", "Copia por `adb pull` as pastas de mídia permitidas (DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram) para dentro da raiz de dados. Não lê `/data`, não copia chave de aplicativo e não apaga nada no aparelho.", "Celular", CelularPuxarInput, celular_puxar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
