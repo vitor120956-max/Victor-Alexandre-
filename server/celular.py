@@ -196,75 +196,168 @@ def parsear_dispositivos(saida: str) -> list[dict[str, str]]:
     return aparelhos
 
 
+# A sonda pergunta ao Windows o que está na USB e, principalmente, o InstanceId:
+# é lá que está o VID/PID. Sem isso, "USB Composite Device" — nome genérico do
+# driver que qualquer webcam, hub ou teclado usa — passava por celular, e o
+# plano mandava a pessoa ligar a Depuração USB de um aparelho que nem estava
+# conectado.
+VID_SAMSUNG = "04e8"
 _SONDA_WINDOWS = (
     "$d = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
-    "Where-Object { $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|Composite' }; "
-    "if ($d) { $d | ForEach-Object { \"$($_.Status)|$($_.Class)|$($_.FriendlyName)\" } }"
+    "Where-Object { $_.Class -eq 'USB' -or $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-' }; "
+    "if ($d) { $d | ForEach-Object { "
+    "\"$($_.Status)`t$($_.Class)`t$($_.FriendlyName)`t$($_.InstanceId)`t$($_.Manufacturer)\" } }"
 )
+
+# Nome que só existe em aparelho, não em driver genérico.
+_RE_NOME_DE_APARELHO = re.compile(r"SAMSUNG|Galaxy|Android|ADB|MTP|SM-\w", re.I)
+
+
+def _vid(instance_id: str) -> str:
+    achado = re.search(r"VID_([0-9A-Fa-f]{4})", instance_id or "")
+    return achado.group(1).lower() if achado else ""
 
 
 def _limpar_sonda(linhas: list[str]) -> list[dict[str, str]]:
+    """Lê a saída da sonda: status, classe, nome, InstanceId e fabricante."""
     achados: list[dict[str, str]] = []
     for linha in linhas:
-        partes = (linha or "").strip().split("|", 2)
-        if len(partes) != 3 or not partes[2].strip():
+        partes = (linha or "").rstrip("\r").split("\t")
+        if len(partes) < 3:
             continue
-        achados.append({"status": partes[0].strip(), "classe": partes[1].strip(), "nome": partes[2].strip()})
+        nome = partes[2].strip()
+        if not nome:
+            continue
+        instance = partes[3].strip() if len(partes) > 3 else ""
+        fabricante = partes[4].strip() if len(partes) > 4 else ""
+        achados.append(
+            {
+                "status": partes[0].strip(),
+                "classe": partes[1].strip(),
+                "nome": nome,
+                "instance": instance,
+                "vid": _vid(instance),
+                "fabricante": fabricante,
+            }
+        )
     vistos: set[str] = set()
     unicos: list[dict[str, str]] = []
     for item in achados:
-        chave = item["nome"].lower()
+        chave = (item["instance"] or item["nome"]).lower()
         if chave in vistos:
             continue
         vistos.add(chave)
         unicos.append(item)
-    return unicos[:8]
+    return unicos[:10]
+
+
+def e_aparelho(item: dict[str, str]) -> bool:
+    """É o celular — não um webcam, hub ou teclado usando o mesmo driver?
+
+    Samsung é identificada pelo VID (04E8), que vem do hardware e não depende de
+    nome de driver instalado. Nome com marca/modelo também vale; "USB Composite
+    Device" sozinho, não.
+    """
+    if item.get("vid") == VID_SAMSUNG:
+        return True
+    if _RE_NOME_DE_APARELHO.search(item.get("nome") or ""):
+        return True
+    return "samsung" in (item.get("fabricante") or "").lower()
 
 
 def windows_ve(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
     """O que o **Windows** vê na USB, sem passar pelo adb. Só leitura.
 
     É a pergunta que decide o próximo passo quando o `adb devices` volta vazio:
-    - Windows vê o aparelho e ele está OK  → cabo e porta estão bons; falta a
+    - Windows vê o **celular** e ele está OK → cabo e porta estão bons; falta a
       Depuração USB (com a tela morta, o problema é o consentimento);
-    - Windows vê com problema (driver)      → instalar o Samsung USB Driver;
-    - Windows não vê nada                   → cabo, porta ou aparelho desligado.
-
-    Sem isso, a pessoa fica sem saber se compra cabo, driver ou tela de teste.
+    - Windows vê o celular com problema (driver) → instalar o Samsung USB Driver;
+    - Windows só vê dispositivo USB genérico → o celular **não** está na porta;
+    - Windows não vê nada → cabo, porta ou aparelho desligado.
     """
     if os.name != "nt" or sys.platform != "win32":
-        return {"consulta": False, "motivo": "A sonda de USB só existe no Windows.", "dispositivos": []}
+        return {
+            "consulta": False,
+            "motivo": "A sonda de USB só existe no Windows.",
+            "dispositivos": [],
+            "telefones": [],
+            "visivel": False,
+            "com_problema": False,
+        }
     executar = rodar or _rodar
     try:
         codigo, saida, erro = executar(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", _SONDA_WINDOWS]
         )
     except CelularError:
-        return {"consulta": False, "motivo": "Não consegui consultar o Windows.", "dispositivos": []}
+        return {
+            "consulta": False,
+            "motivo": "Não consegui consultar o Windows.",
+            "dispositivos": [],
+            "telefones": [],
+            "visivel": False,
+            "com_problema": False,
+        }
     if codigo != 0 and not saida.strip():
         return {
             "consulta": False,
             "motivo": _cortar(erro or "O PowerShell não respondeu."),
             "dispositivos": [],
+            "telefones": [],
+            "visivel": False,
+            "com_problema": False,
         }
     achados = _limpar_sonda(saida.splitlines())
-    com_problema = [item for item in achados if item["status"] and item["status"].upper() != "OK"]
-    return {
+    telefones = [item for item in achados if e_aparelho(item)]
+    com_problema = [item for item in telefones if item["status"] and item["status"].upper() != "OK"]
+    genericos = [item for item in achados if item not in telefones]
+    resultado = {
         "consulta": True,
         "dispositivos": achados,
-        "visivel": bool(achados),
+        "telefones": telefones,
+        "genericos": genericos,
+        "visivel": bool(telefones),
         "com_problema": bool(com_problema),
-        "resumo": _resumo_da_sonda(achados, com_problema),
     }
+    resultado["resumo"] = _resumo_da_sonda(resultado)
+    return resultado
 
 
-def _resumo_da_sonda(achados: list[dict[str, str]], com_problema: list[dict[str, str]]) -> str:
-    if not achados:
-        return "O Windows não vê nenhum aparelho na USB."
-    nomes = ", ".join(item["nome"][:48] for item in achados[:3])
-    if com_problema:
-        return f"O Windows vê {len(achados)} item(ns) com problema de driver ({nomes})."
-    return f"O Windows vê o aparelho ({nomes})."
+def sem_driver_samsung(telefones: list[dict[str, str]]) -> bool:
+    """Aparelho da Samsung reconhecido pelo VID, mas com nome/driver genérico.
+
+    Quando o driver da Samsung não está instalado, o Windows chama o aparelho de
+    "USB Composite Device" ou "MTP" — mesmo com a Depuração USB ligada, o adb não
+    enxerga esse aparelho. Instalar o driver é o passo que destrava.
+    """
+    for item in telefones:
+        nome = (item.get("nome") or "").lower()
+        if item.get("vid") == VID_SAMSUNG and "samsung" not in nome:
+            return True
+    return False
+
+
+def _descrever(item: dict[str, str]) -> str:
+    vid = f" VID_{item['vid'].upper()}" if item.get("vid") else ""
+    return f"{item['nome'][:44]}{vid}"
+
+
+def _resumo_da_sonda(sonda: dict[str, Any]) -> str:
+    telefones = sonda.get("telefones") or []
+    genericos = sonda.get("genericos") or []
+    if telefones:
+        nomes = ", ".join(_descrever(item) for item in telefones[:3])
+        if sonda.get("com_problema"):
+            return f"O Windows vê o celular, mas com problema de driver ({nomes})."
+        return f"O Windows vê o celular ({nomes})."
+    if genericos:
+        quantos = len(genericos)
+        exemplo = _descrever(genericos[0])
+        return (
+            f"O Windows vê {quantos} dispositivo(s) USB, mas nenhum parece ser o celular "
+            f"(ex.: {exemplo}, que não é Samsung)."
+        )
+    return "O Windows não vê nenhum aparelho na USB."
 
 
 def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
@@ -327,6 +420,22 @@ def situacao_de(aparelhos: list[dict[str, str]]) -> str:
 
 # --- o plano -----------------------------------------------------------------
 
+def _linhas_da_usb(windows: dict[str, Any]) -> str:
+    """Lista o que a sonda viu, com VID — para a pessoa julgar, não adivinhar."""
+    itens = windows.get("dispositivos") or []
+    if not itens:
+        return ""
+    linhas = []
+    for item in itens[:5]:
+        marca = "celular" if e_aparelho(item) else "não é Samsung"
+        vid = f" VID_{item['vid'].upper()}" if item.get("vid") else " sem VID"
+        status = item.get("status") or "?"
+        linhas.append(f"• {item['nome'][:52]}{vid} [{status}, {marca}]")
+    if len(itens) > 5:
+        linhas.append(f"• … e mais {len(itens) - 5}")
+    return "\n".join(linhas)
+
+
 def _linhas_dos_aparelhos(aparelhos: list[dict[str, str]]) -> list[str]:
     linhas = []
     for item in aparelhos:
@@ -376,6 +485,9 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
         linhas.append("Aparelhos no adb:\n" + "\n".join(_linhas_dos_aparelhos(aparelhos)))
     if windows and windows.get("consulta"):
         linhas.append("Windows na USB: " + str(windows.get("resumo") or "sem resposta"))
+        detalhe = _linhas_da_usb(windows)
+        if detalhe:
+            linhas.append(detalhe)
 
     if situacao == "sem-ferramentas":
         acao = (
@@ -426,20 +538,37 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
             "cabo, use a porta de trás do PC e rode de novo."
         )
         titulo = "Aparelho offline"
-    elif windows.get("com_problema"):
+    elif windows.get("com_problema") and windows.get("telefones"):
         acao = (
-            "O Windows vê o aparelho, mas com problema de driver — enquanto ele estiver "
+            "O Windows vê o celular, mas com problema de driver — enquanto ele estiver "
             "com ⚠ no Gerenciador de Dispositivos o adb não enxerga nada. Instale o "
             "Samsung USB Driver for Mobile Phones, reconecte o cabo e rode de novo."
         )
         titulo = "Nenhum aparelho no adb: falta driver"
+    elif windows.get("visivel") and sem_driver_samsung(windows.get("telefones") or []):
+        acao = (
+            "O Windows reconhece a Samsung (VID_04E8), mas com nome de driver genérico. "
+            "Sem o Samsung USB Driver for Mobile Phones o adb não enxerga o aparelho, "
+            "nem com a Depuração USB ligada. Instale o driver, reconecte o cabo e rode "
+            "de novo — é o passo que destrava daqui."
+        )
+        titulo = "Celular reconhecido, mas sem o driver da Samsung"
     elif windows.get("visivel"):
         acao = (
-            "O Windows vê o aparelho, mas o adb não: cabo e porta estão bons, e o que "
+            "O Windows vê o celular, mas o adb não: cabo e porta estão bons, e o que "
             "falta é ligar a Depuração USB (ou o consentimento dele). Rode "
             "`celular.plano` para o caminho sem tela."
         )
         titulo = "Nenhum aparelho no adb: falta a Depuração USB"
+    elif windows.get("genericos"):
+        acao = (
+            "O Windows lista dispositivo(s) USB, mas nenhum é o celular (sem VID de "
+            "Samsung 04E8). Faça o teste que prova: rode `celular.status` com o cabo "
+            "conectado e de novo com o cabo fora — se a lista não mudar, o aparelho não "
+            "está sendo reconhecido. Nesse caso é cabo, porta ou a placa USB do celular, "
+            "e ligar a Depuração USB não resolveria nada."
+        )
+        titulo = "O que o Windows vê não é o celular"
     elif windows.get("consulta"):
         acao = (
             "O Windows não vê nada na USB: aqui é cabo, porta, bateria ou a placa USB do "
@@ -560,8 +689,11 @@ def _plano_vazio(windows: dict[str, Any] | None = None) -> list[dict[str, Any]]:
 
 def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
     """O mesmo plano, mas começando pelo que o Windows já respondeu."""
-    nomes = "; ".join(item["nome"][:60] for item in windows.get("dispositivos", [])[:3])
-    if windows.get("com_problema"):
+    telefones = windows.get("telefones") or []
+    genericos = windows.get("genericos") or []
+    nomes = "; ".join(_descrever(item) for item in telefones[:3])
+
+    if windows.get("com_problema") and telefones:
         primeiro = _passo(
             "1. Driver, não depuração",
             [
@@ -569,21 +701,48 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
                 "instalar o Samsung USB Driver for Mobile Phones (Windows)",
                 "reconectar o cabo e rodar celular.status de novo",
             ],
-            f"O Windows vê {nomes}, mas com problema de driver. Enquanto o driver "
-            "não estiver certo, o adb não enxerga o aparelho — e nenhum passo "
-            "seguinte muda nada.",
+            f"O Windows vê o celular ({nomes}), mas com problema de driver. Enquanto "
+            "o driver não estiver certo, o adb não enxerga o aparelho — e nenhum "
+            "passo seguinte muda nada.",
         )
-    elif windows.get("visivel"):
+    elif telefones and sem_driver_samsung(telefones):
+        primeiro = _passo(
+            "1. Reconhecido pela Samsung — falta o driver",
+            [
+                "baixar o Samsung USB Driver for Mobile Phones (site da Samsung)",
+                "instalar, reiniciar o PC se ele pedir",
+                "reconectar o cabo e rodar celular.status de novo",
+            ],
+            f"O Windows vê um aparelho Samsung ({nomes}), mas com nome de driver "
+            "genérico. Sem o driver da Samsung o adb não enxerga o celular — nem "
+            "com a Depuração USB ligada. Resolva o driver antes de qualquer passo "
+            "de configurar o aparelho.",
+        )
+    elif telefones:
         primeiro = _passo(
             "1. Cabo e porta estão bons",
             [
-                "o Windows já vê o aparelho — não troque cabo ainda",
+                "o Windows já vê o celular — não troque cabo ainda",
                 "ligar a Depuração USB (ver o caminho sem tela abaixo)",
                 "conferir: adb devices",
             ],
-            f"O Windows vê {nomes}. Ou seja: a placa e o cabo funcionam, e o adb "
-            "vazio significa que a Depuração USB nunca foi ligada (ou foi "
-            "desligada).",
+            f"O Windows vê o celular ({nomes}). Ou seja: a placa e o cabo "
+            "funcionam, e o adb vazio significa que a Depuração USB nunca foi "
+            "ligada (ou foi desligada).",
+        )
+    elif genericos:
+        primeiro = _passo(
+            "1. O que o Windows vê não é o celular",
+            [
+                "com o celular conectado, rode: celular.status",
+                "desconecte o cabo do celular e rode celular.status de novo",
+                "se os mesmos itens continuarem na lista, eles são do PC (webcam, hub, teclado)",
+                "se sumirem, o celular está conectado — mas sem driver reconhecido",
+            ],
+            "O Windows lista dispositivo(s) USB genérico(s), sem VID de Samsung "
+            "(04E8) e sem nome de aparelho. Isso NÃO prova que o celular está na "
+            "porta — o teste conectar/desconectar é o que prova. Enquanto o "
+            "celular não aparecer, ligar a Depuração USB não muda nada.",
         )
     else:
         primeiro = _passo(

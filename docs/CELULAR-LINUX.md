@@ -322,7 +322,7 @@ atrás de `JARVIS_HOST_CELULAR=1`.
 
 | Skill | O que faz | Confirmação |
 |---|---|---|
-| `celular.status` | Mede o aparelho: `adb devices -l` (só leitura), estado de autorização e, quando o adb não vê nada, a USB do Windows. Também diz onde estão `adb` e `scrcpy`. | não |
+| `celular.status` | Mede o aparelho: `adb devices -l` (só leitura), estado de autorização e, quando o adb não vê nada, a USB do Windows com VID/PID (Samsung = `04E8`), separando o celular de driver genérico. Também diz onde estão `adb` e `scrcpy`. | não |
 | `celular.plano` | Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive “nunca foi ligada”. | não (só lê) |
 | `celular.preparar` | Baixa platform-tools (Google) e scrcpy (GitHub) para `ferramentas/`, com SHA-256 e extração à prova de zip-slip. | **sim** |
 | `celular.espelhar` | Abre o `scrcpy`: a tela do celular vira janela do Windows. Opcionalmente grava `.mp4`. | **sim** |

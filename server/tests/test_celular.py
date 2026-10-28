@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.60.9 ---------------------------------------
+# --- o caminho exato do bug de 0.61.0 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.60.9 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.0 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -754,9 +754,9 @@ def test_sonda_le_o_que_o_powershell_devolveu(monkeypatch):
     def rodar(argumentos):
         assert argumentos[0] == "powershell"
         return 0, (
-            "OK|USB|SAMSUNG Mobile USB Composite Device\n"
-            "Error|USB|MTP\n"
-            "OK|USB|SAMSUNG Mobile USB Composite Device\n"
+            "OK\tUSB\tSAMSUNG Mobile USB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M1\tSamsung Electronics Co., Ltd.\n"
+            "Error\tUSB\tSAMSUNG Mobile USB Composite Device\tUSB\\VID_04E8&PID_6861\\R58M2\tSamsung Electronics Co., Ltd.\n"
+            "OK\tUSB\tSAMSUNG Mobile USB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M1\tSamsung Electronics Co., Ltd.\n"
         ), ""
 
     resultado = C.windows_ve(rodar=rodar)
@@ -764,6 +764,7 @@ def test_sonda_le_o_que_o_powershell_devolveu(monkeypatch):
     assert resultado["visivel"] is True
     assert resultado["com_problema"] is True
     assert len(resultado["dispositivos"]) == 2  # linha repetida não conta
+    assert resultado["telefones"][0]["vid"] == "04e8"
     assert "driver" in resultado["resumo"].lower()
 
 
@@ -771,19 +772,29 @@ def test_sonda_sem_aparelho_nao_inventa_driver(monkeypatch):
     monkeypatch.setattr(C.os, "name", "nt")
     monkeypatch.setattr(C.sys, "platform", "win32")
     resultado = C.windows_ve(rodar=lambda argumentos: (0, "", ""))
-    assert resultado == {
+    assert resultado["consulta"] is True
+    assert resultado["dispositivos"] == []
+    assert resultado["telefones"] == []
+    assert resultado["visivel"] is False
+    assert resultado["com_problema"] is False
+    assert resultado["resumo"] == "O Windows não vê nenhum aparelho na USB."
+
+
+def _sonda(telefones=(), genericos=(), problema=False):
+    return {
         "consulta": True,
-        "dispositivos": [],
-        "visivel": False,
-        "com_problema": False,
-        "resumo": "O Windows não vê nenhum aparelho na USB.",
+        "dispositivos": [*telefones, *genericos],
+        "telefones": list(telefones),
+        "genericos": list(genericos),
+        "visivel": bool(telefones),
+        "com_problema": problema,
     }
 
 
 def test_plano_vazio_muda_o_primeiro_passo_quando_a_sonda_responde():
-    visivel = {"consulta": True, "visivel": True, "com_problema": False, "dispositivos": [{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile"}]}
-    driver = {"consulta": True, "visivel": True, "com_problema": True, "dispositivos": [{"status": "Error", "classe": "USB", "nome": "MTP"}]}
-    nada = {"consulta": True, "visivel": False, "com_problema": False, "dispositivos": []}
+    visivel = _sonda([{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}])
+    driver = _sonda([{"status": "Error", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}], problema=True)
+    nada = _sonda()
 
     assert "cabo e porta estão bons" in C._plano_vazio(visivel)[0]["titulo"].lower()
     assert "driver" in C._plano_vazio(driver)[0]["titulo"].lower()
@@ -864,7 +875,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.60.9: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.0: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -889,11 +900,54 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
             "codigo": 0,
             "aparelhos": [],
             "situacao": "vazio",
-            "windows": {"consulta": True, "visivel": False, "com_problema": False, "dispositivos": [], "resumo": "x"},
+            "windows": _sonda(),
         }
     )
     assert "Windows também não vê" in resultado["titulo"]
     assert "cabo" in resultado["proximo_passo"]
+
+
+def test_status_com_usb_generico_nao_culpa_a_depuracao():
+    """O bug da 0.61.0: webcam com nome de driver generico virava "o celular"."""
+    generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": _sonda(genericos=[generico]),
+        }
+    )
+    assert "não é o celular" in resultado["titulo"]
+    assert "Depuração USB não resolveria" in resultado["proximo_passo"]
+    assert "VID" not in resultado["titulo"]
+
+
+def test_status_com_samsung_de_verdade_manda_ligar_depuracao():
+    samsung = {"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile USB Composite Device", "vid": "04e8"}
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": _sonda([samsung]),
+        }
+    )
+    assert "Depuração USB" in resultado["titulo"]
+    assert "04E8" in resultado["resposta"]
+
+
+def test_vid_da_samsung_desempatou_nome_generico():
+    """VID vem do hardware: nao depende do driver instalado."""
+    assert C.e_aparelho({"nome": "USB Composite Device", "vid": "04e8"}) is True
+    assert C.e_aparelho({"nome": "USB Composite Device", "vid": "1bcf"}) is False
+    assert C.e_aparelho({"nome": "USB Composite Device", "vid": "", "fabricante": "Samsung Electronics"}) is True
+    assert C.e_aparelho({"nome": "MTP", "vid": ""}) is True
+    assert C.e_aparelho({"nome": "USB Composite Device", "vid": ""}) is False
 
 
 def test_status_sem_cabo_com_driver_ruim_manda_instalar_driver(monkeypatch):
@@ -904,7 +958,7 @@ def test_status_sem_cabo_com_driver_ruim_manda_instalar_driver(monkeypatch):
             "codigo": 0,
             "aparelhos": [],
             "situacao": "vazio",
-            "windows": {"consulta": True, "visivel": True, "com_problema": True, "dispositivos": [{"status": "Error", "classe": "USB", "nome": "MTP"}], "resumo": "x"},
+            "windows": _sonda([{"status": "Error", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}], problema=True),
         }
     )
     assert "driver" in resultado["titulo"].lower()
@@ -919,7 +973,7 @@ def test_status_sem_cabo_mas_windows_vendo_manda_ligar_depuracao():
             "codigo": 0,
             "aparelhos": [],
             "situacao": "vazio",
-            "windows": {"consulta": True, "visivel": True, "com_problema": False, "dispositivos": [{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile"}], "resumo": "x"},
+            "windows": _sonda([{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}]),
         }
     )
     assert "Depuração USB" in resultado["titulo"]
@@ -953,3 +1007,60 @@ def test_status_quando_o_adb_falha_nao_culpa_a_trava():
     assert resultado["situacao"] == "erro-adb"
     assert "adb" in resultado["titulo"].lower()
     assert "JARVIS_HOST_CELULAR" not in resultado["resposta"]
+
+
+def test_samsung_com_nome_generico_e_driver_faltando():
+    """VID 04E8 + nome genérico = Samsung reconhecida sem o driver dela."""
+    generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "04e8"}
+    completo = {"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile USB Composite Device", "vid": "04e8"}
+    assert C.sem_driver_samsung([generico]) is True
+    assert C.sem_driver_samsung([completo]) is False
+    assert C.sem_driver_samsung([]) is False
+    assert C.sem_driver_samsung([{"nome": "USB Composite Device", "vid": "1bcf"}]) is False
+
+    resultado = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": _sonda([generico]),
+        }
+    )
+    assert "driver" in resultado["titulo"].lower()
+    assert "Samsung USB Driver" in resultado["proximo_passo"]
+    assert "VID_04E8" in resultado["proximo_passo"]
+    assert C._plano_vazio(_sonda([generico]))[0]["titulo"].startswith("1. Reconhecido")
+
+
+def test_lista_da_usb_marca_quem_e_celular():
+    sonda = _sonda(
+        [{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}],
+        [{"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": ""}],
+    )
+    texto = C._linhas_da_usb(sonda)
+    linhas = texto.splitlines()
+    assert "celular" in linhas[0]
+    assert "não é Samsung" in linhas[1]
+    assert "VID_04E8" in linhas[0]
+
+
+def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
+    from server import skill_registry
+
+    sonda = _sonda([{"status": "OK", "classe": "USB", "nome": "SAMSUNG Mobile", "vid": "04e8"}])
+    medido = {
+        "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+        "executado": True,
+        "codigo": 0,
+        "aparelhos": [],
+        "situacao": "vazio",
+        "windows": sonda,
+    }
+    monkeypatch.setattr(skill_registry.celular, "estado", lambda **_k: medido)
+    import asyncio
+
+    resultado = asyncio.run(skill_registry.build_registry(Path("/tmp/vid") / "files").execute("celular.status", {}, False))
+    assert "VID_04E8" in resultado["resposta"]
+    assert "celular" in resultado["resposta"]
