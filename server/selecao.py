@@ -20,7 +20,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.60.8"
+VERSAO = "0.60.9"
 
 MODOS = ("lite", "full", "ultra")
 

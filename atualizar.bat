@@ -69,8 +69,28 @@ echo.
 echo   Ficam intocados: .env, storage, .venv e node_modules.
 echo.
 set JARVIS_DESTINO=%CD%
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $ProgressPreference='SilentlyContinue'; $z=$env:TEMP+'\jarvis-novo.zip'; $d=$env:TEMP+'\jarvis-novo'; Invoke-WebRequest -Uri 'https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre' -OutFile $z; if(Test-Path $d){Remove-Item $d -Recurse -Force}; Expand-Archive -LiteralPath $z -DestinationPath $d -Force; $r=(Get-ChildItem -LiteralPath $d -Directory | Select-Object -First 1).FullName; robocopy $r $env:JARVIS_DESTINO /E /XF .env /XD .venv storage node_modules .git /NFL /NDL /NJH /NJS; if($LASTEXITCODE -ge 8){exit 1}else{exit 0}"
+if exist "%~dp0atualizar-baixar.ps1" goto com_progresso
+goto sem_progresso
+
+REM ===========================================================================
+REM  Com o auxiliar: porcentagem, MB, velocidade e tempo que falta
+REM ===========================================================================
+:com_progresso
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0atualizar-baixar.ps1" -Destino "%CD%"
 if errorlevel 1 goto zipfalhou
+goto copiou
+
+REM ===========================================================================
+REM  Sem o auxiliar (arquivo apagado): baixa pela barra do proprio PowerShell
+REM ===========================================================================
+:sem_progresso
+echo   AVISO: atualizar-baixar.ps1 nao esta nesta pasta.
+echo   A barra de progresso aqui e a do Windows, mais lenta.
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $z=$env:TEMP+'\jarvis-novo.zip'; $d=$env:TEMP+'\jarvis-novo'; Write-Host '  baixando...' -NoNewline; Invoke-WebRequest -Uri 'https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre' -OutFile $z; if(Test-Path $d){Remove-Item $d -Recurse -Force}; Expand-Archive -LiteralPath $z -DestinationPath $d -Force; $r=(Get-ChildItem -LiteralPath $d -Directory | Select-Object -First 1).FullName; Write-Host '  copiando...' -NoNewline; robocopy $r $env:JARVIS_DESTINO /E /XF .env /XD .venv storage node_modules .git /NFL /NDL /NJH /NJS; if($LASTEXITCODE -ge 8){exit 1}else{exit 0}"
+if errorlevel 1 goto zipfalhou
+
+:copiou
 echo.
 echo   Copia concluida.
 goto checar_dist
