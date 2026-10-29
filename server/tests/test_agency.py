@@ -452,7 +452,7 @@ def test_permissions_reject_duplicates_and_empty_entries() -> None:
 
 def test_api_exposes_the_agency_catalog_and_baseline(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.61.5"
+    assert health["version"] == "0.61.6"
     assert health["skills"] == 289
 
     catalog = client.get("/api/skills").json()["skills"]

@@ -42,10 +42,21 @@ function Ler-Usb {
             }
             $chave = $_.InstanceId
             if (-not $chave) { $chave = $_.FriendlyName }
+            # O modelo vem do proprio aparelho (SM-A346B, SM-G610M): e o que
+            # separa um Galaxy de outro quando o driver tem nome generico.
+            $modelo = ''
+            if ($vid -eq '04E8' -or $_.FriendlyName -match 'SAMSUNG|Galaxy|SM-|MTP|Android') {
+                try {
+                    $prop = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' -ErrorAction SilentlyContinue
+                    if ($prop -and $prop.Data) { $modelo = [string]$prop.Data }
+                } catch { $modelo = '' }
+                if ($modelo -like '\*' -or $modelo -notmatch '^(SM-|GT-|SCH-)') { $modelo = '' }
+            }
             [pscustomobject]@{
                 Chave  = $chave
                 Nome   = $_.FriendlyName
                 Vid    = $vid
+                Modelo = $modelo
                 Status = [string]$_.Status
             }
         }
@@ -54,7 +65,9 @@ function Ler-Usb {
 function Descrever($item) {
     $vid = 'sem VID'
     if ($item.Vid -and $item.Vid -ne '0000') { $vid = "VID_$($item.Vid)" }
-    return ("{0} [{1}]" -f $item.Nome, $vid)
+    $modelo = ''
+    if ($item.Modelo) { $modelo = " $($item.Modelo)" }
+    return ("{0}{1} [{2}]" -f $item.Nome, $modelo, $vid)
 }
 
 Write-Host ''
@@ -103,7 +116,9 @@ while ($true) {
             $hora = (Get-Date).ToString('HH:mm:ss')
             Write-Host ("{0}  ENTROU  {1}" -f $hora, (Descrever $item)) -ForegroundColor Green
             if ($item.Vid -eq '04E8') {
-                Write-Host '          E a Samsung: o celular esta na porta agora.' -ForegroundColor Green
+                $quem = 'Samsung'
+                if ($item.Modelo) { $quem = "Samsung $($item.Modelo)" }
+                Write-Host ("          E a {0}: o aparelho esta na porta agora." -f $quem) -ForegroundColor Green
                 Write-Host '          Rode "status do celular" no JARVIS para o proximo passo.' -ForegroundColor Green
             } elseif ($item.Vid -eq '0000' -or $item.Nome -match 'esconhecid|unknown') {
                 Write-Host '          O Windows viu algo e nao conseguiu identificar: cabo de' -ForegroundColor Yellow

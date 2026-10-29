@@ -15,7 +15,7 @@ describe('autorizacaoParaConfirmar', () => {
   });
 
   it('não existe caminho que devolva texto de conversa como token', () => {
-    // Guarda contra a regressão da 0.61.5: a confirmação mandava "sim, pode".
+    // Guarda contra a regressão da 0.61.6: a confirmação mandava "sim, pode".
     const texto = 'sim, pode';
     expect(autorizacaoParaConfirmar(true, texto)).toBe('');
     expect(autorizacaoParaConfirmar(false, texto)).toBe(texto);

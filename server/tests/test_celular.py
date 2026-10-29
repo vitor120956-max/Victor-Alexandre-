@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.5 ---------------------------------------
+# --- o caminho exato do bug de 0.61.6 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.5 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.6 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.5: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.6: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.5: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.6: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.5: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.6: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.61.5: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.61.6: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1247,7 +1247,7 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     assert "O celular apareceu na USB" in comparacao["frase"]
 
 
-# --- 0.61.5: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+# --- 0.61.6: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
 
 ARP_WINDOWS = """
 Interface: 192.168.0.10 --- 0x6
@@ -1342,7 +1342,7 @@ def test_a_skill_de_rede_esta_no_registro(tmp_path):
     assert getattr(definicao, "requires_confirmation", False) is False
 
 
-# --- 0.61.5: o que apareceu na varredura de casa -----------------------------
+# --- 0.61.6: o que apareceu na varredura de casa -----------------------------
 
 ARP_DA_CASA = """
 Interface: 192.168.15.8 --- 0x4
@@ -1357,7 +1357,7 @@ Interface: 192.168.15.8 --- 0x4
 
 
 def test_broadcast_e_endereco_de_rede_nao_sao_dispositivos():
-    """A 0.61.5 listava `192.168.15.255` como "dispositivo que respondeu"."""
+    """A 0.61.6 listava `192.168.15.255` como "dispositivo que respondeu"."""
     assert C._endereco_de_dispositivo("192.168.15.22", "8c:77:12:dd:ee:ff") is True
     assert C._endereco_de_dispositivo("192.168.15.255", "ff:ff:ff:ff:ff:ff") is False
     assert C._endereco_de_dispositivo("192.168.15.0", "01:00:5e:00:00:fb") is False
@@ -1394,7 +1394,7 @@ def test_a_varredura_da_casa_mostra_mac_e_nao_conta_broadcast(ligado, monkeypatc
 
 
 def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
-    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.61.5."""
+    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.61.6."""
     from server.agente_local import entrada_de_skill, pesquisar
     from server.skill_registry import build_registry
 
@@ -1410,3 +1410,100 @@ def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
         assert ranking[0]["score"] >= 0.5, (frase, ranking[0]["score"])
     # e o pedido de status continua indo para a skill de status
     assert pesquisar("status do celular", entradas)[0]["entrada"].skill_id == "celular.status"
+
+
+# --- 0.61.6: o A34 provou a porta; o J7 não apareceu -------------------------
+
+A34 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M9\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-A346B"
+J7 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R28M1\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-G610M"
+
+
+def test_a_sonda_le_o_modelo_do_aparelho():
+    itens = C._limpar_sonda([A34, J7])
+    assert [item["modelo"] for item in itens] == ["SM-A346B", "SM-G610M"]
+
+
+def test_modelo_de_outro_fabricante_nao_e_apresentado_como_modelo():
+    """O mesmo campo traz caminho interno do Windows em webcam/hub."""
+    itens = C._limpar_sonda(
+        ["OK\tUSB\tWebcam\tUSB\\VID_046D&PID_0825\\A\tLogitech\tCM_PROB_NONE\t\\Device\\USBPDO-3",
+         "OK\tUSB\tLeitor\tUSB\\VID_046D&PID_0825\\B\tLogitech\tCM_PROB_NONE\tSM-A346B"]
+    )
+    assert itens[0]["modelo"] == ""   # caminho interno do Windows
+    assert itens[1]["modelo"] == ""   # modelo de Samsung em aparelho de outra marca
+
+
+def test_o_modelo_aparece_na_linha_do_chat():
+    itens = C._limpar_sonda([A34])
+    linha = C._linhas_da_usb({"dispositivos": itens})
+    assert "SM-A346B" in linha
+    assert "celular" in linha
+
+
+def test_o_que_ja_apareceu_fica_guardado(ligado):
+    itens = C._limpar_sonda([A34])
+    C.registrar_aparelhos(itens)
+
+    vistos = C.aparelhos_ja_vistos()
+    assert vistos[0]["modelo"] == "SM-A346B"
+    assert "porta já viu um Samsung" in C._frase_do_que_ja_passou()
+    assert "SM-A346B" in C._frase_do_que_ja_passou()
+
+
+def test_memoria_so_conta_samsung(ligado):
+    generico = C._limpar_sonda(
+        ["OK\tUSB\tUSB Mass Storage Device\tUSB\\VID_058F&PID_6366\\X\tAlcor\tCM_PROB_NONE\t"]
+    )
+    C.registrar_aparelhos(generico)
+    assert C.aparelhos_ja_vistos() == []
+    assert C._frase_do_que_ja_passou() == ""
+
+
+def test_nada_aparecendo_depois_do_a34_nao_culpa_o_pc(ligado, monkeypatch):
+    """O caso real: A34 entrou, J7 (cabo só-carga) não entrou e a lista ficou igual."""
+    C.registrar_aparelhos(C._limpar_sonda([A34]))
+    resposta = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": _sonda(),
+        }
+    )
+    assert resposta["titulo"] == "Nenhum aparelho no adb — e o Windows também não vê"
+    assert "porta já viu um Samsung" in resposta["proximo_passo"]
+    assert "SM-A346B" in resposta["proximo_passo"]
+    assert "cabo de dados ou o conector" in resposta["proximo_passo"]
+    # e a tela bloqueada não entra como suspeita
+    assert "Tela bloqueada não é causa" in resposta["proximo_passo"]
+
+
+def test_tela_bloqueada_nao_aparece_como_causa_em_nenhum_texto():
+    texto = (RAIZ_TESTE := __import__("pathlib").Path(__file__).resolve().parents[2] / "server" / "celular.py").read_text(encoding="utf-8")
+    assert "Tela bloqueada NÃO explica" in texto
+    assert "o aparelho aparece na USB" in texto
+
+
+def test_plano_manda_testar_o_cabo_em_outro_aparelho_igual():
+    plano = C._plano_vazio(_sonda())
+    comandos = " ".join(plano[0]["comandos"])
+    assert "MESMO cabo em outro aparelho" in comandos
+    assert "vigiar-usb.bat" in comandos
+
+
+def test_a_memoria_da_porta_aparece_tambem_quando_ha_dispositivo_generico(ligado):
+    C.registrar_aparelhos(C._limpar_sonda([A34]))
+    generico = {"status": "OK", "classe": "USB", "nome": "USB Mass Storage Device", "vid": "058f", "modelo": ""}
+    resposta = C.resumo(
+        {
+            "ferramentas": {"completo": True, "adb": "a", "scrcpy": "s"},
+            "executado": True,
+            "codigo": 0,
+            "aparelhos": [],
+            "situacao": "vazio",
+            "windows": _sonda(genericos=[generico]),
+        }
+    )
+    assert "porta já viu um Samsung" in resposta["proximo_passo"]

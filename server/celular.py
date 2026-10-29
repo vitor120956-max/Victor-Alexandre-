@@ -209,13 +209,24 @@ VID_SAMSUNG = "04e8"
 # ("Dispositivo USB desconhecido", VID_0000). Esse último é a assinatura de
 # cabo só-carga ou conector sem contato, e sem ele a resposta diria "não é o
 # celular" quando na verdade o celular está lá, mudo.
+#
+# A sétima coluna é o **modelo** (SM-A346B, SM-G610M): o Windows publica isso em
+# `DEVPKEY_Device_BusReportedDeviceDesc` e ele é a única coisa que separa um
+# Galaxy de outro quando o nome do driver é o genérico "USB Composite Device".
+# A consulta só é feita nos candidatos a aparelho — numa máquina de 4 GB cada
+# `Get-PnpDeviceProperty` custa uma ida ao registro.
 _SONDA_WINDOWS = (
     "$d = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
     "Where-Object { $_.Class -in @('USB','WPD','Portable Devices','AndroidUsbDeviceClass','Modem') "
     "-or $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown|escritor|escriptor' "
     "-or $_.InstanceId -match 'VID_04E8' }; "
     "if ($d) { $d | ForEach-Object { "
-    "\"$($_.Status)`t$($_.Class)`t$($_.FriendlyName)`t$($_.InstanceId)`t$($_.Manufacturer)`t$($_.Problem)\" } }"
+    "$m = ''; "
+    "if ($_.InstanceId -match 'VID_04E8' -or $_.FriendlyName -match 'SAMSUNG|Galaxy|SM-|MTP|Android') { "
+    "try { $p = Get-PnpDeviceProperty -InstanceId $_.InstanceId "
+    "-KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' -ErrorAction SilentlyContinue; "
+    "if ($p -and $p.Data) { $m = [string]$p.Data } } catch { $m = '' } }; "
+    "\"$($_.Status)`t$($_.Class)`t$($_.FriendlyName)`t$($_.InstanceId)`t$($_.Manufacturer)`t$($_.Problem)`t$m\" } }"
 )
 
 # Nome que só existe em aparelho, não em driver genérico.
@@ -225,6 +236,27 @@ _RE_NOME_DE_APARELHO = re.compile(r"SAMSUNG|Galaxy|Android|ADB|MTP|SM-\w", re.I)
 def _vid(instance_id: str) -> str:
     achado = re.search(r"VID_([0-9A-Fa-f]{4})", instance_id or "")
     return achado.group(1).lower() if achado else ""
+
+
+_RE_MODELO = re.compile(r"^(SM-[A-Z0-9]{2,}|GT-[A-Z0-9]{2,}|SCH-[A-Z0-9]{2,}|SAMSUNG[- ]?[A-Z0-9]+)$", re.I)
+
+
+def _modelo_limpo(instance: str, modelo: str) -> str:
+    """Aceita o modelo só quando é de aparelho e combina com o VID da Samsung.
+
+    Em dispositivo de outro fabricante o mesmo campo traz o caminho interno do
+    Windows (algo como `\\Device\\USBPDO-3`), que não ajuda ninguém.
+    """
+    modelo = (modelo or "").strip()
+    if not modelo or modelo.startswith("\\"):
+        return ""
+    if not _RE_MODELO.match(modelo):
+        return ""
+    # Só vale em dispositivo com o VID da Samsung: um "SM-..." pendurado em
+    # aparelho de outra marca é ruído do registro, não modelo de celular.
+    if "vid_04e8" not in (instance or "").lower():
+        return ""
+    return modelo.upper()
 
 
 def _limpar_sonda(linhas: list[str]) -> list[dict[str, str]]:
@@ -240,6 +272,10 @@ def _limpar_sonda(linhas: list[str]) -> list[dict[str, str]]:
         instance = partes[3].strip() if len(partes) > 3 else ""
         fabricante = partes[4].strip() if len(partes) > 4 else ""
         problema = partes[5].strip() if len(partes) > 5 else ""
+        # `DEVPKEY_Device_BusReportedDeviceDesc`: o modelo que o próprio aparelho
+        # informa ("SM-A346B", "SM-G610M"). Sem ele, todo Galaxy é "USB Composite
+        # Device" e não há como saber qual dos dois está na porta.
+        modelo = partes[6].strip() if len(partes) > 6 else ""
         achados.append(
             {
                 "status": partes[0].strip(),
@@ -249,6 +285,7 @@ def _limpar_sonda(linhas: list[str]) -> list[dict[str, str]]:
                 "vid": _vid(instance),
                 "fabricante": fabricante,
                 "problema": "" if problema.upper() in {"CM_PROB_NONE", "NONE"} else problema,
+                "modelo": _modelo_limpo(instance, modelo),
             }
         )
     vistos: set[str] = set()
@@ -492,11 +529,82 @@ def _nome_curto(item: dict[str, str], limite: int = 44) -> str:
     return nome[:limite]
 
 
+def _arquivo_de_vistos() -> Path:
+    """Quem já apareceu nesta máquina — a memória que prova "a porta funciona"."""
+    return dados.raiz() / "celular" / "aparelhos-vistos.json"
+
+
+def _ler_vistos() -> dict[str, Any]:
+    try:
+        dados_lidos = json.loads(_arquivo_de_vistos().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return dados_lidos if isinstance(dados_lidos, dict) else {}
+
+
+def registrar_aparelhos(telefones: list[dict[str, str]]) -> None:
+    """Guarda o que apareceu, para o próximo "nada aparece" não culpar o PC.
+
+    Quando o A34 entra e o J7 não, essa memória é o que permite dizer a verdade
+    em vez de repetir o teste: **esta porta já viu um Samsung**.
+    """
+    if not telefones:
+        return
+    vistos = _ler_vistos()
+    agora = datetime.now().isoformat(timespec="seconds")
+    mudou = False
+    for item in telefones:
+        chave = f"{item.get('vid') or '?'}|{item.get('modelo') or item.get('nome') or '?'}"
+        if chave in vistos and not item.get("modelo"):
+            continue
+        vistos[chave] = {
+            "vid": item.get("vid") or "",
+            "modelo": item.get("modelo") or "",
+            "nome": (item.get("nome") or "")[:64],
+            "quando": agora,
+        }
+        mudou = True
+    if not mudou:
+        return
+    arquivo = _arquivo_de_vistos()
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(json.dumps(vistos, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def aparelhos_ja_vistos() -> list[dict[str, str]]:
+    """Os aparelhos Samsung que já passaram por esta máquina, o mais recente antes."""
+    itens = [
+        item
+        for item in _ler_vistos().values()
+        if isinstance(item, dict) and item.get("vid") == VID_SAMSUNG
+    ]
+    itens.sort(key=lambda item: str(item.get("quando") or ""), reverse=True)
+    return itens
+
+
+def _frase_do_que_ja_passou() -> str:
+    vistos = aparelhos_ja_vistos()
+    if not vistos:
+        return ""
+    recente = vistos[0]
+    quem = recente.get("modelo") or recente.get("nome") or "um Samsung"
+    try:
+        quando = datetime.fromisoformat(str(recente.get("quando"))).strftime("%d/%m %H:%M")
+    except (TypeError, ValueError):
+        quando = "antes"
+    return (
+        f"Esta porta já viu um Samsung ({quem}, em {quando}): o PC, a porta e a "
+        "instalação do Windows estão provados bons. O que não aparece agora é o "
+        "aparelho que você plugou — cabo de dados ou o conector dele."
+    )
+
+
 def _descrever(item: dict[str, str]) -> str:
     vid = ""
     if item.get("vid") and item["vid"] != "0000":
         vid = f" VID_{item['vid'].upper()}"
-    return f"{_nome_curto(item)}{vid}"
+    modelo = f" {item['modelo']}" if item.get("modelo") else ""
+    return f"{_nome_curto(item)}{modelo}{vid}"
 
 
 def _resumo_da_sonda(sonda: dict[str, Any]) -> str:
@@ -569,6 +677,11 @@ def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) 
     if not aparelhos:
         # Sem aparelho no adb a pergunta seguinte é sempre a mesma: o Windows vê?
         sonda = windows_ve(rodar=executar)
+        if sonda.get("consulta") and sonda.get("telefones"):
+            try:
+                registrar_aparelhos(sonda["telefones"])
+            except OSError:
+                pass
         if sonda.get("consulta"):
             # O teste conectar/desconectar sai pronto daqui: comparo com a
             # checagem anterior em vez de pedir que a pessoa compare listas.
@@ -917,7 +1030,8 @@ def _linhas_da_usb(windows: dict[str, Any]) -> str:
         problema = item.get("problema") or ""
         if problema and status.upper() != "OK":
             status = f"{status}: {_traduzir_problema(problema)}"
-        linhas.append(f"• {_nome_curto(item, 52)}{vid} [{status}, {marca}]")
+        modelo = f" {item['modelo']}" if item.get("modelo") else ""
+        linhas.append(f"• {_nome_curto(item, 44)}{modelo}{vid} [{status}, {marca}]")
     if len(itens) > 5:
         linhas.append(f"• … e mais {len(itens) - 5}")
     return "\n".join(linhas)
@@ -1036,11 +1150,15 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
         )
         titulo = "Nenhum aparelho no adb: falta driver"
     elif windows.get("visivel") and sem_driver_samsung(windows.get("telefones") or []):
+        quem = next((item.get("modelo") for item in windows.get("telefones") or [] if item.get("modelo")), "")
         acao = (
-            "O Windows reconhece a Samsung (VID_04E8), mas com nome de driver genérico. "
-            "Sem o Samsung USB Driver for Mobile Phones o adb não enxerga o aparelho, "
-            "nem com a Depuração USB ligada. Instale o driver, reconecte o cabo e rode "
-            "de novo — é o passo que destrava daqui."
+            "O Windows reconhece a Samsung"
+            + (f" ({quem})" if quem else "")
+            + " pelo VID_04E8, com nome genérico de driver. MTP (copiar arquivo à mão) "
+            "funciona assim, mas o adb precisa de um driver para a interface ADB: ligue a "
+            "Depuração USB e rode `status do celular`; se o adb continuar sem ver o "
+            "aparelho, instale o Samsung USB Driver for Mobile Phones — é o passo que "
+            "publica essa interface no Windows."
         )
         titulo = "Celular reconhecido, mas sem o driver da Samsung"
     elif windows.get("visivel"):
@@ -1062,6 +1180,7 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
         titulo = "A porta viu algo que o Windows não identificou"
     elif windows.get("genericos"):
         comparacao = windows.get("comparacao") or {}
+        passado = _frase_do_que_ja_passou()
         if comparacao and not comparacao.get("primeira") and not comparacao.get("mudou"):
             acao = (
                 "A lista de USB é idêntica à da checagem anterior: nem com o cabo o Windows "
@@ -1071,7 +1190,10 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
                 "o instante em que algo muda, abra `vigiar-usb.bat` e deixe a janela aberta "
                 "trocando de cabo. Enquanto nada novo aparecer, ligar a Depuração USB não "
                 "mudaria nada."
+                + (f" {_frase_do_que_ja_passou()}" if _frase_do_que_ja_passou() else "")
             )
+            if passado:
+                acao = f"{passado} {acao}"
             titulo = "A USB não mudou nada entre as duas checagens"
         else:
             acao = (
@@ -1080,13 +1202,20 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
                 "comparo com esta lista e digo exatamente o que entrou ou saiu — não precisa "
                 "anotar nada no olho."
             )
+            if passado:
+                acao = f"{passado} {acao}"
             titulo = "O que o Windows vê não é o celular"
     elif windows.get("consulta"):
+        passado = _frase_do_que_ja_passou()
         acao = (
             "O Windows não vê nada na USB: aqui é cabo, porta, bateria ou a placa USB do "
             "aparelho — antes de qualquer coisa de software. Troque o cabo, use a porta de "
-            "trás do PC, segure Power por 10 s e ligue de novo."
+            "trás do PC, segure Power por 10 s e ligue de novo. Tela bloqueada não é causa: "
+            "o aparelho aparece na USB mesmo travado — o desbloqueio muda o acesso a "
+            "arquivo, não a presença na porta."
         )
+        if passado:
+            acao = f"{passado} {acao}"
         titulo = "Nenhum aparelho no adb — e o Windows também não vê"
     else:
         acao = (
@@ -1226,9 +1355,10 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
                 "reconectar o cabo e rodar celular.status de novo",
             ],
             f"O Windows vê um aparelho Samsung ({nomes}), mas com nome de driver "
-            "genérico. Sem o driver da Samsung o adb não enxerga o celular — nem "
-            "com a Depuração USB ligada. Resolva o driver antes de qualquer passo "
-            "de configurar o aparelho.",
+            "genérico. MTP funciona assim; o adb precisa de um driver para a "
+            "interface ADB. Ligue a Depuração USB e teste; se o adb continuar sem "
+            "ver, instale o Samsung USB Driver for Mobile Phones — ele publica "
+            "essa interface.",
         )
     elif telefones:
         primeiro = _passo(
@@ -1297,14 +1427,17 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
         primeiro = _passo(
             "1. Nada aparece na USB",
             [
-                "trocar o cabo (de preferência o original)",
-                "usar a porta USB de trás do PC, sem hub",
+                "usar o MESMO cabo em outro aparelho de entrada igual (outro micro-USB): se nada aparecer, o cabo é só de carga",
+                "trocar o cabo por um que transfira dados (o original da Samsung, se houver)",
+                "usar a porta USB de trás do PC, sem hub — e conferir que ela funciona com um pendrive",
+                "abrir vigiar-usb.bat e apertar/balançar o conector do aparelho devagar, olhando a janela",
                 "segurar Power por 10 s e ligar de novo",
-                "conferir: celular.status",
             ],
             "O Windows não vê aparelho nenhum. Aqui o problema é físico: cabo, "
             "porta, bateria ou a placa USB do aparelho — antes de qualquer coisa "
-            "de software.",
+            "de software. Tela bloqueada NÃO explica: o aparelho aparece na USB "
+            "mesmo travado (o desbloqueio muda o acesso a arquivo, não a presença "
+            "na porta).",
         )
     # O passo 2 do plano genérico é justamente "abra o Gerenciador de Dispositivos
     # e veja se o Windows enxerga" — já respondido pela sonda, sai do caminho.
