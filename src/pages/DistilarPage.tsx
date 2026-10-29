@@ -95,7 +95,7 @@ export function DistilarPage() {
   const executar = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!backendOnline) {
-      setErro('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi analisado.');
+      setErro('A API Python está offline. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.');
       return;
     }
     if (tab === 'persona' && !confirmado) {

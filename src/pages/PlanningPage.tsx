@@ -285,7 +285,7 @@ export function PlanningPage() {
       </section>
 
       {!backendOnline ? (
-        <div className="legal-offline panel"><span><FolderLock size={25} /></span><div><h2>Planos indisponíveis offline</h2><p>Inicie a API Python com <code>npm run dev</code>. O navegador não simula gravações nem inventa recuperação.</p></div></div>
+        <div className="legal-offline panel"><span><FolderLock size={25} /></span><div><h2>Planos indisponíveis offline</h2><p>Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code>. O navegador não simula gravações nem inventa recuperação.</p></div></div>
       ) : (
         <>
           <div className="planning-layout">

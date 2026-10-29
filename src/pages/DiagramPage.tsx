@@ -485,7 +485,7 @@ export function DiagramPage() {
 
   const run = async (skillId: string, parameters: Record<string, unknown>, next: DiagramTab) => {
     if (!backendOnline) {
-      setError('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi desenhado.');
+      setError('A API Python está offline. Suba a API com .venv\Scripts\python iniciar.py; nada foi desenhado.');
       return;
     }
     setBusy(true);

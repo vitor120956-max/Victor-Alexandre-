@@ -445,7 +445,7 @@ function JudgeView({ result }: { result: Row }) {
 
 function LibraryView({ reference }: { reference: Row | null }) {
   if (!reference) {
-    return <p className="taste-empty"><AlertTriangle size={14} />A biblioteca vem da API Python. Inicie o núcleo com “npm run dev”.</p>;
+    return <p className="taste-empty"><AlertTriangle size={14} />A biblioteca vem da API Python. Suba a API com .venv\Scripts\python iniciar.py.</p>;
   }
   const metrics = asRow(reference.metrics);
   const directions = asRows(reference.directions);
@@ -557,7 +557,7 @@ export function TastePage() {
 
   const run = async (skillId: string, parameters: Record<string, unknown>) => {
     if (!backendOnline) {
-      setError('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi analisado.');
+      setError('A API Python está offline. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.');
       return;
     }
     setBusy(true);

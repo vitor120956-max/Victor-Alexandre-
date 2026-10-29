@@ -373,7 +373,7 @@ export function AgencyPage() {
 
   const run = async (skillId: string, parameters: Record<string, unknown>) => {
     if (!backendOnline) {
-      setError('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi analisado.');
+      setError('A API Python está offline. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.');
       return;
     }
     setBusy(true);

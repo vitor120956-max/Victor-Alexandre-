@@ -68,7 +68,7 @@ interface AppContextValue {
   pythonSkills: PythonSkill[];
   aiStatus: AIStatus;
   processing: 'ai' | 'python' | null;
-  refreshBackend: () => Promise<void>;
+  refreshBackend: () => Promise<boolean>;
   executeSkill: (skillId: string, parameters: Record<string, unknown>, options?: { dryRun?: boolean; confirmed?: boolean }) => Promise<SkillExecution>;
   taskModalOpen: boolean;
   openTaskModal: () => void;
@@ -183,26 +183,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [setMessages, speak]);
 
   const refreshBackend = useCallback(async () => {
+    // A saúde manda: se /api/health responde, a API está de pé. Antes, um erro
+    // só em /api/ai/status (ou no catálogo) marcava a API inteira como offline e
+    // o chat recusava tudo, inclusive as skills.
+    let health: Awaited<ReturnType<typeof getBackendHealth>> | null = null;
     try {
-      const [health, catalog, ai] = await Promise.all([getBackendHealth(), listPythonSkills(), getAIStatus()]);
-      setBackendOnline(health.ok);
-      setBackendVersion(health.version);
-      setModoDono(Boolean(health.confiarLocal));
-      setPythonSkills(catalog);
-      setAIStatus(ai);
+      health = await getBackendHealth();
     } catch {
+      health = null;
+    }
+    if (!health?.ok) {
       setBackendOnline(false);
       setBackendVersion(null);
       setModoDono(false);
       setPythonSkills([]);
       setAIStatus(initialAIStatus);
+      return false;
     }
+    setBackendOnline(true);
+    setBackendVersion(health.version);
+    setModoDono(Boolean(health.confiarLocal));
+    const [catalog, ai] = await Promise.allSettled([listPythonSkills(), getAIStatus()]);
+    setPythonSkills(catalog.status === 'fulfilled' ? catalog.value : []);
+    setAIStatus(ai.status === 'fulfilled' ? ai.value : initialAIStatus);
+    return true;
   }, []);
 
   useEffect(() => {
-    void refreshBackend();
-    const timer = window.setInterval(() => void refreshBackend(), 60000);
-    return () => window.clearInterval(timer);
+    let cancelado = false;
+    let timer = 0;
+    // Com a API de pé, confere a cada 30 s. Caída, tenta a cada 3 s: assim a
+    // tela volta sozinha no instante em que a API sobe, sem recarregar a página.
+    const ciclo = async () => {
+      const online = await refreshBackend();
+      if (cancelado) return;
+      timer = window.setTimeout(() => void ciclo(), online ? 30000 : 3000);
+    };
+    void ciclo();
+    return () => {
+      cancelado = true;
+      window.clearTimeout(timer);
+    };
   }, [refreshBackend]);
 
   // Lembretes da agenda: consulta sem gravar nada. O que já foi mostrado fica
@@ -467,7 +488,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { id: createId('message'), role: 'user' as const, content: text, timestamp: new Date().toISOString() },
       ].slice(-120));
       setProcessing('python');
-      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.61.0).
+      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.61.1).
       void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true)
         .then((resultado) => {
           setProcessing(null);
@@ -529,7 +550,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
       } else {
         const reason = !backendOnline
-          ? 'A API Python está offline e nenhum provedor externo foi chamado.'
+          ? 'A API Python não respondeu em http://127.0.0.1:8000 — nada foi executado.\n\nPara subir, nesta ordem:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nQuando ela voltar, esta tela reconecta sozinha em até 3 segundos: basta repetir o pedido.'
           : !aiStatus.configured
             ? 'A API Python está online, mas a IA externa ainda não foi configurada no servidor.'
             : 'A IA externa está desativada nas suas configurações.';
@@ -550,7 +571,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       || intent.type === 'meeting:analyze' || intent.type === 'changelog:generate' || intent.type === 'random:pick'
     ) {
       if (!backendOnline) {
-        appendJarvisMessage('A skill Python não está acessível porque a API está offline. Inicie o servidor com “npm run dev” e tente novamente.');
+        appendJarvisMessage('A skill Python não está acessível porque a API não respondeu em http://127.0.0.1:8000.\n\nSuba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nA tela reconecta sozinha em até 3 segundos depois que ele subir.');
         return;
       }
       let skillId = 'system.status';
@@ -601,67 +622,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
       case 'document:workspace':
         reply = backendOnline
           ? 'Abra a página Documentos para criar DOCX, XLSX, PPTX ou PDF. A interface valida uma simulação e só grava depois da sua confirmação; uploads e downloads também ficam lá.'
-          : 'A página Documentos precisa da API Python online. Inicie o núcleo com “npm run dev”; nenhum arquivo foi criado.';
+          : 'A página Documentos precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nenhum arquivo foi criado.';
         break;
       case 'engineering:workspace':
         reply = backendOnline
           ? 'Abra a página Engenharia para usar especificação, plano vertical, matriz de testes, revisão estática, STRIDE, Web Vitals, ADR e gate de release. Para revisar código pelo chat, informe a linguagem: “revisar código python: <trecho>”. Nenhum workflow executa deploy.'
-          : 'Os workflows de Engenharia precisam da API Python online. Inicie o núcleo com “npm run dev”; nenhum código foi analisado ou enviado à IA.';
+          : 'Os workflows de Engenharia precisam da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nenhum código foi analisado ou enviado à IA.';
         break;
       case 'planning:workspace':
         reply = backendOnline
           ? 'Abra a página Planos para criar ou atualizar um plano persistente. Toda gravação passa por simulação e confirmação. Para recuperar sem escolher ambiguidades, use “retomar plano ID”; para listar os IDs, use “listar planos”.'
-          : 'Os planos persistentes precisam da API Python online. Inicie o núcleo com “npm run dev”; nenhum arquivo foi criado ou lido.';
+          : 'Os planos persistentes precisam da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nenhum arquivo foi criado ou lido.';
         break;
       case 'reverse:workspace':
         reply = backendOnline
           ? 'Abra a página Reversa para enviar um artefato e executar inspeção, layout, strings, entropia, análise JavaScript/Electron ou comparação. Tudo é estático: parsers próprios em Python, sem shell, rede, MCP ou execução do alvo. Pelo chat, use “inspecionar artefato app/main.js”, “strings de app.asar”, “entropia de firmware.bin”, “analisar javascript app” ou “comparar artefatos a.bin e b.bin”.'
-          : 'A análise reversa precisa da API Python online. Inicie o núcleo com “npm run dev”; nenhum artefato foi lido, executado ou enviado à IA.';
+          : 'A análise reversa precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nenhum artefato foi lido, executado ou enviado à IA.';
         break;
       case 'lean:workspace':
         reply = backendOnline
           ? 'Abra a página Enxuto para aplicar a escada, revisar um diff, levantar dívida de atalhos ou auditar uma árvore de código. Tudo é estático e nada é executado. Pelo chat, use “revisar mudança: <diff>”, “auditar código app” ou “dívida de atalhos em app”. O código analisado fica na área da página Reversa.'
-          : 'A engenharia enxuta precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado ou enviado à IA.';
+          : 'A engenharia enxuta precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado ou enviado à IA.';
         break;
       case 'agency:workspace':
         reply = backendOnline
           ? 'Abra a página Agentes para revisar a equipe declarada, o quadro, o orçamento, a parada de trabalho e as permissões. A análise é estática: nada é executado, agendado ou conectado a um agente real. O watchdog calcula uma impressão digital da subárvore parada e suprime a revisão quando o hash não muda.'
-          : 'O governo de agentes precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+          : 'O governo de agentes precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'studio:workspace':
         reply = backendOnline
           ? 'Abra a página Estúdio para revisar um pacote de design: manifesto, DESIGN.md e tokens.css, contraste WCAG, crítica em cinco dimensões e o linter anti-clichê do HTML. Nada é compilado, renderizado ou publicado, e nenhum daemon ou plugin do upstream é instalado.'
-          : 'O estúdio de design precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+          : 'O estúdio de design precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'diagram:workspace':
         reply = backendOnline
           ? 'Abra a página Diagramas para escolher o tipo pelo pedido, validar o IR em JSON, medir o layout, gerar HTML autocontido com SVG e conferir o contrato de entrega em gates. Tudo é estático: nenhum CLI, template, plugin ou captura do upstream é usado.'
-          : 'Os diagramas precisam da API Python online. Inicie o núcleo com “npm run dev”; nada foi desenhado.';
+          : 'Os diagramas precisam da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi desenhado.';
         break;
       case 'browser:workspace':
         reply = backendOnline
           ? 'Abra a página Navegador para ler o snapshot, resolver o alvo, montar o roteiro de rodadas, checar o plano, ler os recibos e classificar os limites. Tudo é estático: nada de app, binário ou skill do upstream; nenhum navegador é aberto.'
-          : 'O navegador assistido precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+          : 'O navegador assistido precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'office:workspace':
         reply = backendOnline
           ? 'Abra a página Escritório para montar o comando `gws`, planejar receitas, ler páginas, dividir lotes, comparar escopos e triar erros. Tudo é estático: o CLI não é instalado, nenhuma credencial é lida e nada é enviado ao Google.'
-          : 'O escritório assistido precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi calculado.';
+          : 'O escritório assistido precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi calculado.';
         break;
       case 'career:workspace':
         reply = backendOnline
           ? 'Abra a página Carreira para triar a vaga com nota 1–5 e evidência declarada, checar o ATS, auditar bullets, rascunhar a carta, planejar a entrevista e ler o funil. Tudo é estático: nada de portal, candidatura, PDF ou plugin do upstream.'
-          : 'A triagem de carreira precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+          : 'A triagem de carreira precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'estacao:workspace':
         reply = backendOnline
           ? 'Abra a página Estação para rodar comandos de verdade no diretório dela, decidir a fila de aprovação, auditar a execução e a recuperação após queda, checar a agenda e higienizar notas e skills. O executor é local; a VM e o navegador do upstream não existem aqui.'
-          : 'A estação do agente precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi calculado.';
+          : 'A estação do agente precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi calculado.';
         break;
       case 'taste:workspace':
         reply = backendOnline
           ? 'Abra a página Direção para sortear três direções, auditar o argumento e o deck de copy, varrer as regras caseiras, confrontar o registro datado de tells e fechar a nota com tetos. Tudo é estático: nenhum script Node, navegador ou plugin do upstream é executado.'
-          : 'A direção de arte precisa da API Python online. Inicie o núcleo com “npm run dev”; nada foi analisado.';
+          : 'A direção de arte precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'greeting':
         reply = `Olá, ${preferences.name}. Estou por aqui. Você pode me pedir uma tarefa, uma anotação, um cálculo ou dizer “ajuda”.`;

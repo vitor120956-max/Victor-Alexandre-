@@ -424,7 +424,7 @@ export function EstudioPage() {
 
   const run = async (skillId: string, parameters: Record<string, unknown>) => {
     if (!backendOnline) {
-      setError('A API Python está offline. Inicie o núcleo com “npm run dev”; nada foi analisado.');
+      setError('A API Python está offline. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.');
       return;
     }
     setBusy(true);
@@ -649,7 +649,7 @@ export function EstudioPage() {
               {reference ? (
                 <ReferenceResult reference={reference} />
               ) : (
-                <p className="studio-empty"><AlertTriangle size={14} />A referência vem da API Python. {backendOnline ? 'Carregando…' : 'Inicie o núcleo com “npm run dev”.'}</p>
+                <p className="studio-empty"><AlertTriangle size={14} />A referência vem da API Python. {backendOnline ? 'Carregando…' : 'Suba a API com .venv\Scripts\python iniciar.py.'}</p>
               )}
               <button type="button" className="button button-primary" onClick={() => { setTab('contract'); setError(''); }}><ArrowRight size={15} />Revisar um pacote</button>
             </div>

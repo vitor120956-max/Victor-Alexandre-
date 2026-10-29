@@ -57,7 +57,7 @@ export function EngineeringPage() {
       </section>
 
       {!backendOnline ? (
-        <div className="legal-offline panel"><span><Code2 size={25} /></span><div><h2>Workflows indisponíveis offline</h2><p>Inicie a API Python com <code>npm run dev</code>. Nenhum rascunho será simulado no navegador.</p></div></div>
+        <div className="legal-offline panel"><span><Code2 size={25} /></span><div><h2>Workflows indisponíveis offline</h2><p>Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code>. Nenhum rascunho será simulado no navegador.</p></div></div>
       ) : (
         <>
           <div className="engineering-grid">

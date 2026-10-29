@@ -191,7 +191,7 @@ export function LegalPage() {
       </section>
 
       {!backendOnline ? (
-        <div className="legal-offline panel"><span><Scale size={25} /></span><div><h2>Corpus jurídico indisponível offline</h2><p>A página não usa dados simulados. Inicie a API Python com <code>npm run dev</code> para consultar os textos locais.</p></div></div>
+        <div className="legal-offline panel"><span><Scale size={25} /></span><div><h2>Corpus jurídico indisponível offline</h2><p>A página não usa dados simulados. Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code> para consultar os textos locais.</p></div></div>
       ) : (
         <div className="legal-workspace">
           <main className="legal-results" aria-live="polite" aria-busy={busy}>

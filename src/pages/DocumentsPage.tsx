@@ -226,7 +226,7 @@ export function DocumentsPage() {
       </header>
 
       {!backendOnline ? (
-        <div className="legal-offline panel"><span><FileText size={25} /></span><div><h2>Área de documentos indisponível offline</h2><p>Inicie a API Python com <code>npm run dev</code>. Nenhum arquivo será simulado ou enviado à IA.</p></div></div>
+        <div className="legal-offline panel"><span><FileText size={25} /></span><div><h2>Área de documentos indisponível offline</h2><p>Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code>. Nenhum arquivo será simulado ou enviado à IA.</p></div></div>
       ) : (
         <>
           <div className="documents-layout">

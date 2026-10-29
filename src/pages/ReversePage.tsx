@@ -574,7 +574,7 @@ export function ReversePage() {
       </header>
 
       {!backendOnline ? (
-        <div className="legal-offline panel"><span><Binary size={25} /></span><div><h2>Análise reversa indisponível offline</h2><p>Inicie a API Python com <code>npm run dev</code>. Nenhum artefato será simulado, executado ou enviado à IA.</p></div></div>
+        <div className="legal-offline panel"><span><Binary size={25} /></span><div><h2>Análise reversa indisponível offline</h2><p>Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code>. Nenhum artefato será simulado, executado ou enviado à IA.</p></div></div>
       ) : (
         <>
           <div className="reverse-layout">

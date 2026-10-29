@@ -163,7 +163,7 @@ export function SkillsPage() {
           )}
         </div>
       )}
-      {!backendOnline && <div className="python-offline-note"><Code2 size={16} /><span>O catálogo Python está indisponível. Inicie a API com <code>npm run dev</code>; as skills do navegador continuam funcionando.</span></div>}
+      {!backendOnline && <div className="python-offline-note"><Code2 size={16} /><span>O catálogo Python está indisponível. Inicie a API com <code>.venv\Scripts\python iniciar.py</code>; as skills do navegador continuam funcionando.</span></div>}
       <div className="skill-filters">{categories.map((category) => <button key={category} className={classNames(filter === category && 'active')} onClick={() => setFilter(category)}>{category}{category === 'Python' && backendOnline ? ` · ${pythonSkills.length}` : ''}</button>)}</div>
       <div className="skills-grid">
         {visible.map((skill) => {
