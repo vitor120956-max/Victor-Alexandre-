@@ -197,7 +197,7 @@ def _autorizacao_do_dono(
 ) -> tuple[dict[str, Any], bool]:
     """Modo dono: completa o token de host e o plano quando o pedido é daqui.
 
-    A regra mora em `sistema.confiar_no_pedido`: desde a 0.62.1 vale para a
+    A regra mora em `sistema.confiar_no_pedido`: desde a 0.62.2 vale para a
     própria máquina por padrão, e `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o
     pedido de token até em 127.0.0.1. Requisição de outra máquina nunca preenche.
     """
@@ -285,7 +285,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.62.1",
+        version="0.62.2",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -383,7 +383,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.62.1",
+            "version": "0.62.2",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             # Respondido por origem: o front esconde o campo de token quando é True.

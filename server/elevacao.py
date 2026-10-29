@@ -29,7 +29,7 @@ from typing import Any
 from . import tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.62.1"
+VERSAO = "0.62.2"
 
 PROJETO = Path(__file__).resolve().parents[1]
 STORAGE = PROJETO / "storage"

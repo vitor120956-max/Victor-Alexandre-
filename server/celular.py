@@ -1816,9 +1816,10 @@ def otg(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> 
         "comando": f'"{caminho}" --otg',
         "atalho": "teclado-pelo-pc.bat",
         "passos": [
-            "fechar o MTP antes: no celular, notificação USB → “Carregar este dispositivo” (o Windows solta a interface)",
+            "NÃO é preciso mexer na tela do celular: quem solta o MTP é o driver do PC",
+            "se o scrcpy reclamar de USB, instalar o driver libusb com o Zadig na interface do aparelho (uma vez; o .bat explica)",
             "duplo clique em teclado-pelo-pc.bat (ele chama o scrcpy --otg)",
-            "se aparecer erro de USB, instalar o driver libusb com o Zadig (uma vez; o .bat explica o passo a passo)",
+            "a partir daí o mouse e o teclado do PC controlam o celular: dá para puxar a barra de notificações arrastando do topo",
             "olhando a tela do celular, digitar o PIN com o teclado do PC e apertar Enter",
             "navegar com Tab/setas até Configurações → Sobre o telefone → Informações do software",
             "tocar 7 vezes em Número da versão (Enter 7 vezes no item)",
@@ -1827,10 +1828,16 @@ def otg(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> 
         ],
         "atalhos": ATALHOS_OTG,
         "aviso": (
-            "No Windows o scrcpy --otg precisa do driver libusb (Zadig) na interface do "
-            "aparelho; com o driver padrão ele não consegue falar HID. Depois de usar, "
-            "dá para devolver o driver do Windows no Gerenciador de Dispositivos "
-            "(Desinstalar dispositivo → reiniciar), e o MTP volta."
+            "No Windows, `ERROR: Could not find any USB device` NÃO é cabo nem celular: é "
+            "driver. O driver de MTP segura o aparelho e o libusb não consegue abrir. "
+            "Conserto com o Zadig: Options → List All Devices → escolher o aparelho "
+            "Samsung → driver WinUSB → Replace Driver. Plano B: Google USB Driver "
+            "(usb_driver_r13-windows.zip) instalado como “Android ADB Interface”, que "
+            "faz adb, scrcpy e scrcpy --otg funcionarem juntos."
+        ),
+        "desfazer": (
+            "Gerenciador de Dispositivos → clique direito no aparelho → Desinstalar "
+            "dispositivo → desconectar e reconectar o cabo: o Windows reinstala o MTP."
         ),
         "depois": (
             "Com a Depuração USB ligada, `celular.espelhar` abre a tela numa janela do "
