@@ -96,6 +96,16 @@ interface AppContextValue {
   pushToast: (title: string, description?: string, tone?: Toast['tone']) => void;
 }
 
+/**
+ * Endereço que a pessoa abriu no navegador. Interface e API vêm da mesma porta
+ * (`iniciar.py --porta 8001`, por exemplo), então fixar 8000 na mensagem daria
+ * um endereço que não existe naquela execução.
+ */
+const enderecoDaApi = (): string =>
+  typeof window !== 'undefined' && window.location?.host
+    ? window.location.origin
+    : 'http://127.0.0.1:8000';
+
 const AppContext = createContext<AppContextValue | null>(null);
 
 const initialAIStatus: AIStatus = { configured: false, provider: 'Não configurado', model: null, external: true };
@@ -550,7 +560,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
       } else {
         const reason = !backendOnline
-          ? 'A API Python não respondeu em http://127.0.0.1:8000 — nada foi executado.\n\nPara subir, nesta ordem:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nQuando ela voltar, esta tela reconecta sozinha em até 3 segundos: basta repetir o pedido.'
+          ? `A API Python não respondeu em ${enderecoDaApi()} — nada foi executado.\n\nPara subir, nesta ordem:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nQuando ela voltar, esta tela reconecta sozinha em até 3 segundos: basta repetir o pedido.`
           : !aiStatus.configured
             ? 'A API Python está online, mas a IA externa ainda não foi configurada no servidor.'
             : 'A IA externa está desativada nas suas configurações.';
@@ -571,7 +581,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       || intent.type === 'meeting:analyze' || intent.type === 'changelog:generate' || intent.type === 'random:pick'
     ) {
       if (!backendOnline) {
-        appendJarvisMessage('A skill Python não está acessível porque a API não respondeu em http://127.0.0.1:8000.\n\nSuba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nA tela reconecta sozinha em até 3 segundos depois que ele subir.');
+        appendJarvisMessage(`A skill Python não está acessível porque a API não respondeu em ${enderecoDaApi()}.\n\nSuba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py\n\nA tela reconecta sozinha em até 3 segundos depois que ele subir.`);
         return;
       }
       let skillId = 'system.status';

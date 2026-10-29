@@ -42,6 +42,9 @@ E as **47** ocorrências de `npm run dev` espalhadas pela interface (31 arquivos
 viraram o comando de verdade. Havia páginas inteiras mandando rodar algo que não
 existe na sua instalação.
 
+O endereço citado na mensagem agora é o da barra do navegador: se você subir com
+`--porta 8001`, ela não vai mandar procurar a API em 8000.
+
 ## No `iniciar.py`
 
 **Banner duplicado, resolvido.** O `iniciar.py` importava o servidor só para
@@ -101,10 +104,10 @@ ficou aberta: feche-a no X e rode de novo.
 
 ## Testes
 
-- `pytest server/tests` → **2.723 passed**.
-- `server/tests/test_iniciar.py` → **8** novos: usa a instância (não a factory),
+- `pytest server/tests` → **2.724 passed**.
+- `server/tests/test_iniciar.py` → **9** novos: usa a instância (não a factory),
   não importa `server.app` antes do uvicorn, porta ocupada sai com código 1 e
   explica, JARVIS já rodando sai com 0 e avisa, banner sai uma vez só, nada
-  pede Ctrl+C, nenhum `npm run dev` no front, e a mensagem de offline traz o
-  comando certo.
+  pede Ctrl+C, nenhum `npm run dev` no front, a mensagem de offline traz o
+  comando certo e o endereço que ela cita é o da porta aberta.
 - `vitest` → 124, `tsc -b` limpo, build embutido ok.

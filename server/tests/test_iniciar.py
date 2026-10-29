@@ -142,6 +142,15 @@ def test_o_front_nao_manda_rodar_npm_em_instalacao_por_zip():
 
 def test_mensagem_offline_traz_o_comando_certo():
     texto = (RAIZ / "src" / "context" / "AppContext.tsx").read_text(encoding="utf-8")
-    trecho = re.search(r"A API Python não respondeu em http://127\.0\.0\.1:8000.{0,400}", texto, re.S)
+    trecho = re.search(r"A API Python não respondeu em \$\{enderecoDaApi\(\)\}.{0,400}", texto, re.S)
     assert trecho, "mensagem de offline não encontrada"
     assert "iniciar.py" in trecho.group(0)
+
+
+def test_endereco_da_mensagem_segue_a_porta_que_a_pessoa_abriu():
+    """`--porta 8001` não pode anunciar 8000: a mensagem usa o que está na barra."""
+    texto = (RAIZ / "src" / "context" / "AppContext.tsx").read_text(encoding="utf-8")
+    trecho = re.search(r"const enderecoDaApi = .*?;\n", texto, re.S)
+    assert trecho, "helper enderecoDaApi não encontrado"
+    assert "window.location.origin" in trecho.group(0)
+    assert "127.0.0.1:8000" not in texto.split("const enderecoDaApi")[0]
