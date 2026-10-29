@@ -752,8 +752,9 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
             "A porta USB viu um dispositivo que o Windows não conseguiu identificar — é a "
             "assinatura de cabo só de carga, conector sujo/oxidado ou porta fraca: o PC "
             "manda energia e a conversa não acontece. Troque o cabo por um de dados, use a "
-            "porta de trás do PC, limpe o conector do celular. Driver e Depuração USB não "
-            "mudam nada enquanto isso não for resolvido."
+            "porta de trás do PC, limpe o conector do celular — e deixe `vigiar-usb.bat` "
+            "aberto enquanto troca: ele apita no instante em que algo entrar. Driver e "
+            "Depuração USB não mudam nada enquanto isso não for resolvido."
         )
         titulo = "A porta viu algo que o Windows não identificou"
     elif windows.get("genericos"):
@@ -763,8 +764,10 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
                 "A lista de USB é idêntica à da checagem anterior: nem com o cabo o Windows "
                 "viu algo novo, então o aparelho não chegou a ser visto — não é driver nem "
                 "Depuração USB. Teste físico, nesta ordem: cabo que transfira dados, porta "
-                "de trás do PC sem hub, e o conector do celular (poeira/oxidação). Enquanto "
-                "nada novo aparecer, ligar a Depuração USB não mudaria nada."
+                "de trás do PC sem hub, e o conector do celular (poeira/oxidação). Para ver "
+                "o instante em que algo muda, abra `vigiar-usb.bat` e deixe a janela aberta "
+                "trocando de cabo. Enquanto nada novo aparecer, ligar a Depuração USB não "
+                "mudaria nada."
             )
             titulo = "A USB não mudou nada entre as duas checagens"
         else:
@@ -945,6 +948,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
                 "usar a porta USB de trás do PC, direto na placa, sem hub nem extensão",
                 "passar a lanterna no conector do celular: poeira e oxidação tiram o contato dos dados",
                 "conferir se o celular está ligado (desligado, ele só carrega, não aparece)",
+                "abrir vigiar-usb.bat e trocar de cabo com a janela aberta: ela apita quando algo entra",
                 "rodar celular.status com o cabo fora e de novo com ele: a comparação é automática",
             ],
             f"O Windows listou {nomes_desc}: um dispositivo que ele não conseguiu "
@@ -960,6 +964,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             primeiro = _passo(
                 f"1. A USB está idêntica à das {hora}",
                 [
+                    "abrir vigiar-usb.bat e deixar a janela aberta (apita quando algo entra)",
                     "plugar o cabo no celular e rodar celular.status",
                     "tirar o cabo do celular e rodar celular.status de novo",
                     "eu comparo as duas listas e digo exatamente o que entrou ou saiu",
@@ -974,6 +979,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             primeiro = _passo(
                 "1. O que o Windows vê não é o celular",
                 [
+                    "abrir vigiar-usb.bat (apita na hora em que algo entra ou sai)",
                     "plugar o cabo no celular e rodar celular.status",
                     "tirar o cabo e rodar celular.status de novo — eu comparo as duas listas",
                     "se nada mudar, o aparelho não está sendo visto (cabo, porta ou conector)",

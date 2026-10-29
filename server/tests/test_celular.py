@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.2 ---------------------------------------
+# --- o caminho exato do bug de 0.61.3 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.2 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.3 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.2: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.3: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.2: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.3: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.2: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.3: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.61.2: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.61.3: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",

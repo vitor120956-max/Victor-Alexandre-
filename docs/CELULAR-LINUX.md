@@ -344,6 +344,15 @@ cd /d D:\JARVIS
 ligar-celular.bat
 ```
 
+Se o aparelho não aparecer nem no Windows (o caso clássico: carrega, mas nada na
+lista), abra a vigia antes de trocar de cabo — ela apita na hora em que algo
+mudar:
+
+```bat
+cd /d D:\JARVIS
+vigiar-usb.bat
+```
+
 ou, pelo Python:
 
 ```bat
