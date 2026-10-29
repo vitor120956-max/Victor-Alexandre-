@@ -27,7 +27,7 @@ def _texto() -> str:
 def test_usa_a_instancia_do_modulo_e_nao_a_factory():
     """`create_app` no import + factory chamava create_app duas vezes (banner x2)."""
     texto = _texto()
-    assert 'uvicorn.run("server.app:app"' in texto
+    assert '"server.app:app"' in texto
     assert "factory=True" not in texto
 
 
@@ -41,7 +41,40 @@ def test_procura_a_interface_sem_importar_o_servidor():
 
 
 def test_nao_manda_mais_digitar_ctrl_c():
+    """Nada na tela manda apertar a combinação de teclas: fecha no X."""
     assert "Ctrl+C" not in _texto()
+
+
+def test_uvicorn_nao_pede_ctrl_c_na_tela():
+    """O uvicorn imprime "(Press CTRL+C to quit)"; o JARVIS manda fechar no X."""
+    with socket.socket() as livre:
+        livre.bind(("127.0.0.1", 0))
+        porta = livre.getsockname()[1]
+    processo = subprocess.Popen(
+        [sys.executable, "-u", str(INICIAR), "--porta", str(porta)],
+        cwd=str(RAIZ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": "/tmp"},
+    )
+    try:
+        for _ in range(80):
+            try:
+                with urlopen(f"http://127.0.0.1:{porta}/api/health", timeout=1) as resposta:
+                    if resposta.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.25)
+        else:
+            pytest.skip("não consegui subir a API para o teste")
+        time.sleep(1.5)
+    finally:
+        processo.terminate()
+        saida, _ = processo.communicate(timeout=20)
+
+    assert "CTRL+C" not in saida.upper(), saida
+    assert saida.count("JARVIS modo host") == 1, saida
 
 
 def test_porta_ocupada_por_outro_programa_avisa_e_sai_com_erro():

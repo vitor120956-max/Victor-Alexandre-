@@ -65,6 +65,11 @@ tem — um banner, metade do trabalho de subida (num pendrive, isso conta).
 
 Antes, os dois casos viravam o mesmo erro de socket do uvicorn.
 
+**Ninguém mais pede Ctrl+C.** O uvicorn fechava o banner com
+`Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)` — em inglês,
+mandando apertar a tecla que você já disse que não dá para usar. Essa linha
+saiu; no lugar ficam o endereço e "Para parar: feche esta janela no X".
+
 ## Como testar
 
 1. Feche a janela da API no **X** (se estiver aberta).
@@ -96,9 +101,10 @@ ficou aberta: feche-a no X e rode de novo.
 
 ## Testes
 
-- `pytest server/tests` → **2.722 passed**.
-- `server/tests/test_iniciar.py` → **7** novos: usa a instância (não a factory),
+- `pytest server/tests` → **2.723 passed**.
+- `server/tests/test_iniciar.py` → **8** novos: usa a instância (não a factory),
   não importa `server.app` antes do uvicorn, porta ocupada sai com código 1 e
-  explica, JARVIS já rodando sai com 0 e avisa, nenhum `npm run dev` no front, e
-  a mensagem de offline traz o comando certo.
+  explica, JARVIS já rodando sai com 0 e avisa, banner sai uma vez só, nada
+  pede Ctrl+C, nenhum `npm run dev` no front, e a mensagem de offline traz o
+  comando certo.
 - `vitest` → 124, `tsc -b` limpo, build embutido ok.

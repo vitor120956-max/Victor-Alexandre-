@@ -15,6 +15,8 @@ Nada aqui instala, baixa ou altera arquivo: só sobe o servidor.
 from __future__ import annotations
 
 import argparse
+import copy
+import logging
 import os
 import sys
 from pathlib import Path
@@ -63,6 +65,27 @@ def _porta_livre(host: str, porta: int) -> bool:
         except OSError:
             return False
     return True
+
+
+class _SemCtrlC(logging.Filter):
+    """O uvicorn fecha o banner pedindo a combinação de teclas para encerrar.
+
+    Aqui a janela se fecha no X, então essa linha em inglês só confundiria: o
+    endereço e a instrução certa já aparecem no bloco do JARVIS.
+    """
+
+    def filter(self, registro: logging.LogRecord) -> bool:
+        return "CTRL+C" not in registro.getMessage()
+
+
+def _config_de_log() -> dict:
+    """Log do uvicorn igual ao de sempre, sem a linha do atalho de teclado."""
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config["filters"] = {"sem-ctrl-c": {"()": _SemCtrlC}}
+    config["handlers"]["default"]["filters"] = ["sem-ctrl-c"]
+    return config
 
 
 def principal() -> int:
@@ -122,7 +145,13 @@ def principal() -> int:
     # "server.app:app" (e não a factory) importa o módulo uma vez e usa a
     # instância que ele já criou. Com a factory, o módulo era importado e
     # `create_app()` rodava de novo: banner duplicado e o dobro do trabalho.
-    uvicorn.run("server.app:app", host=args.host, port=args.porta, reload=False)
+    uvicorn.run(
+        "server.app:app",
+        host=args.host,
+        port=args.porta,
+        reload=False,
+        log_config=_config_de_log(),
+    )
     return 0
 
 
