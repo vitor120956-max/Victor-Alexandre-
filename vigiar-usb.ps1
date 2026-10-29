@@ -3,21 +3,28 @@
 # Por que este arquivo existe: quando o celular nao aparece, o teste que decide
 # e "plugue e desplugue e veja se a lista muda". Rodar `status do celular` a
 # cada tentativa tem dois problemas: demora (cada rodada abre PowerShell,
-# consulta o adb e a USB) e nao mostra o instante. Aqui a janela fica aberta,
-# checa a cada 2 segundos e apita na hora em que algo entra ou sai.
+# consulta o adb e a USB) e nao mostra o instante.
+#
+# COMO ELE OLHA A USB (importa, e mudou na 0.61.8):
+#
+#   1. **Modo evento** (padrao): assina o evento de PnP do Windows com
+#      `Register-WmiEvent` sobre `__InstanceOperationEvent` / Win32_PnPEntity e
+#      espera com `Wait-Event`. O Windows avisa na hora em que algo entra ou sai,
+#      e a espera custa zero. Nao existe "passar batido": o evento nao depende do
+#      intervalo, so da assinatura estar ativa.
+#   2. **Modo consulta**: lista tudo com `Get-PnpDevice` a cada N ms. E o modo
+#      antigo, mantido como reserva. Numa maquina de 4 GB essa consulta pode
+#      levar ~4,7 s (medido num Windows 10 1607 com ICH7) - mais que o intervalo
+#      pedido. Por isso ele avisa quando isso acontece, em vez de fingir que
+#      esta olhando 5 vezes por segundo.
 #
 # O que aparece:
 #   - a lista atual, para saber o que ja estava la (hub, controladora, pendrive);
-#   - uma linha verde "ENTROU" e um apito a cada dispositivo novo (com o VID);
+#   - linha verde "ENTROU" e apito a cada dispositivo novo (com VID e modelo);
 #   - "SAIU" quando o cabo sai;
-#   - a cada 30 s, "ainda vigiando" com o tempo decorrido - a janela parada
+#   - a cada 30 s, "ainda vigiando" com o tempo decorrido - janela parada
 #     nunca e sinal de travamento;
 #   - quando aparece VID_04E8, avisa em destaque que e a Samsung.
-#
-# Modo atento (para conector com mau contato): um aparelho com solda trincada as
-# vezes aparece por menos de um segundo. `vigiar-usb-atento.bat` chama este
-# script com -Intervalo 400 -Minutos 10, que olha a USB 5 vezes por segundo.
-# Sem isso, uma piscada de 0,5 s pode passar entre duas checagens de 2 s.
 #
 # Toda entrada e saida tambem vai para um arquivo (storage\celular\vigia-DATA.log):
 # se a janela fechar, o que passou continua registrado para colar no chat.
@@ -33,10 +40,13 @@ param(
     [int]$Intervalo = 2000,
     [int]$Minutos = 0,
     [string]$Log = '',
-    [switch]$SemLog
+    [switch]$SemLog,
+    [ValidateSet('auto', 'evento', 'consulta')]
+    [string]$Modo = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'
+$FonteEvento = 'JARVIS-USB-{0}' -f $PID
 
 # O log: por padrao em storage\celular (ou JARVIS_DADOS). Falha em gravar nunca
 # derruba a vigia - ela e a informacao principal, o arquivo e so a copia.
@@ -58,38 +68,23 @@ function Registrar([string]$texto) {
     try { Add-Content -Path $CaminhoLog -Value ("{0}  {1}" -f (Get-Date).ToString('HH:mm:ss'), $texto) -Encoding UTF8 } catch { }
 }
 
-function Ler-Usb {
-    Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.Class -in @('USB', 'WPD', 'Portable Devices', 'AndroidUsbDeviceClass', 'Modem') -or
-            $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown|escritor|escriptor' -or
-            $_.InstanceId -match 'VID_04E8'
-        } |
-        ForEach-Object {
-            $vid = ''
-            if ($_.InstanceId -match 'VID_([0-9A-Fa-f]{4})') {
-                $vid = $Matches[1].ToUpper()
-            }
-            $chave = $_.InstanceId
-            if (-not $chave) { $chave = $_.FriendlyName }
-            # O modelo vem do proprio aparelho (SM-A346B, SM-G610M): e o que
-            # separa um Galaxy de outro quando o driver tem nome generico.
-            $modelo = ''
-            if ($vid -eq '04E8' -or $_.FriendlyName -match 'SAMSUNG|Galaxy|SM-|MTP|Android') {
-                try {
-                    $prop = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' -ErrorAction SilentlyContinue
-                    if ($prop -and $prop.Data) { $modelo = [string]$prop.Data }
-                } catch { $modelo = '' }
-                if ($modelo -like '\*' -or $modelo -notmatch '^(SM-|GT-|SCH-)') { $modelo = '' }
-            }
-            [pscustomobject]@{
-                Chave  = $chave
-                Nome   = $_.FriendlyName
-                Vid    = $vid
-                Modelo = $modelo
-                Status = [string]$_.Status
-            }
-        }
+function Vid-De([string]$instanceId) {
+    if ($instanceId -match 'VID_([0-9A-Fa-f]{4})') { return $Matches[1].ToUpper() }
+    return ''
+}
+
+function Modelo-De([string]$instanceId, [string]$vid) {
+    # O modelo vem do proprio aparelho (SM-A346B, SM-G610M): e o que separa um
+    # Galaxy de outro quando o driver tem nome generico.
+    if (-not $instanceId) { return '' }
+    if ($vid -ne '04E8' -and $instanceId -notmatch 'VID_04E8') { return '' }
+    try {
+        $prop = Get-PnpDeviceProperty -InstanceId $instanceId -KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' -ErrorAction SilentlyContinue
+        if (-not $prop -or -not $prop.Data) { return '' }
+        $modelo = [string]$prop.Data
+        if ($modelo -like '\*' -or $modelo -notmatch '^(SM-|GT-|SCH-)') { return '' }
+        return $modelo
+    } catch { return '' }
 }
 
 function Descrever($item) {
@@ -100,38 +95,136 @@ function Descrever($item) {
     return ("{0}{1} [{2}]" -f $item.Nome, $modelo, $vid)
 }
 
+function Anunciar-Entrada($item, [string]$hora) {
+    Write-Host ("{0}  ENTROU  {1}" -f $hora, (Descrever $item)) -ForegroundColor Green
+    Registrar ("ENTROU  " + (Descrever $item))
+    if ($item.Vid -eq '04E8') {
+        $quem = 'Samsung'
+        if ($item.Modelo) { $quem = "Samsung $($item.Modelo)" }
+        Write-Host ("          E a {0}: o aparelho esta na porta agora." -f $quem) -ForegroundColor Green
+        Write-Host '          Rode "status do celular" no JARVIS para o proximo passo.' -ForegroundColor Green
+    } elseif ($item.Vid -eq '0000' -or $item.Nome -match 'esconhecid|unknown') {
+        Write-Host '          O Windows viu algo e nao conseguiu identificar: cabo de' -ForegroundColor Yellow
+        Write-Host '          carga ou conector. Troque por um cabo de dados e veja de novo.' -ForegroundColor Yellow
+    }
+    [console]::Beep(1200, 120)
+}
+
+function Anunciar-Saida($item, [string]$hora) {
+    Write-Host ("{0}  SAIU    {1}" -f $hora, (Descrever $item)) -ForegroundColor DarkYellow
+    Registrar ("SAIU    " + (Descrever $item))
+}
+
+# --------------------------------------------------------------- modo consulta
+function Ler-Usb {
+    Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Class -in @('USB', 'WPD', 'Portable Devices', 'AndroidUsbDeviceClass', 'Modem') -or
+            $_.FriendlyName -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown|escritor|escriptor' -or
+            $_.InstanceId -match 'VID_04E8'
+        } |
+        ForEach-Object {
+            $vid = Vid-De ([string]$_.InstanceId)
+            $modelo = Modelo-De ([string]$_.InstanceId) $vid
+            $chave = $_.InstanceId
+            if (-not $chave) { $chave = $_.FriendlyName }
+            [pscustomobject]@{
+                Chave  = $chave
+                Nome   = $_.FriendlyName
+                Vid    = $vid
+                Modelo = $modelo
+                Status = [string]$_.Status
+            }
+        }
+}
+
+# ----------------------------------------------------------------- modo evento
+function Interessa([string]$instanceId, [string]$nome) {
+    if ($instanceId -match '^USB') { return $true }
+    if ($instanceId -match 'VID_04E8') { return $true }
+    if ($nome -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown') { return $true }
+    return $false
+}
+
+function Item-DeEvento($evento) {
+    $novo = $evento.SourceEventArgs.NewEvent
+    $classe = [string]$novo.ClassPath.ClassName
+    $alvo = $novo.TargetInstance
+    if (-not $alvo) { return $null }
+    $instanceId = [string]$alvo.DeviceID
+    $nome = [string]$alvo.Name
+    if (-not (Interessa $instanceId $nome)) { return $null }
+    $vid = Vid-De $instanceId
+    # Win32_PnPEntity tambem dispara __InstanceModificationEvent (status, driver):
+    # isso nao e aparelho entrando nem saindo. Classificar errado aqui faria um
+    # "SAIU" falso no meio da vigia.
+    $operacao = 'mudou'
+    if ($classe -like '*Creation*') { $operacao = 'entrou' }
+    if ($classe -like '*Deletion*') { $operacao = 'saiu' }
+    $modelo = ''
+    if ($operacao -eq 'entrou') { $modelo = Modelo-De $instanceId $vid }
+    return [pscustomobject]@{
+        Chave    = $instanceId
+        Nome     = $nome
+        Vid      = $vid
+        Modelo   = $modelo
+        Status   = [string]$alvo.Status
+        Operacao = $operacao
+    }
+}
+
+# ------------------------------------------------------------------ cabecalho
 Write-Host ''
 Write-Host '  JARVIS - vigiando a USB do Windows' -ForegroundColor Cyan
 Write-Host '  Plugue e desplugue o cabo do celular: o que mudar aparece aqui na hora.'
-Write-Host ("  Olhando a cada {0} ms." -f $Intervalo) -ForegroundColor DarkGray
 if ($CaminhoLog) {
     Write-Host ("  Log: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
 }
-if ($Intervalo -gt 1000) {
-    Write-Host '  Conector com mau contato? Feche e use vigiar-usb-atento.bat (5x por segundo).' -ForegroundColor DarkGray
-}
 Write-Host '  Para parar: feche esta janela no X.'
+
+$AssinaturaOk = $false
+if ($Modo -ne 'consulta') {
+    try {
+        $consultaWmi = "SELECT * FROM __InstanceOperationEvent WITHIN 1 WHERE TargetInstance ISA 'Win32_PnPEntity'"
+        Register-WmiEvent -Query $consultaWmi -SourceIdentifier $FonteEvento -ErrorAction Stop | Out-Null
+        $AssinaturaOk = $true
+        Write-Host '  Modo evento: o Windows avisa na hora (nao existe intervalo para passar batido).' -ForegroundColor DarkGray
+    } catch {
+        $AssinaturaOk = $false
+        Write-Host '  O Windows recusou a assinatura de eventos; vou consultar a lista.' -ForegroundColor DarkYellow
+        $Modo = 'consulta'
+    }
+}
+if (-not $AssinaturaOk) {
+    Write-Host ("  Modo consulta: olhando a cada {0} ms." -f $Intervalo) -ForegroundColor DarkGray
+    if ($Intervalo -lt 1000) {
+        Write-Host '  Atencao: aqui a consulta costuma levar segundos; o intervalo real sera o da consulta.' -ForegroundColor DarkYellow
+    }
+}
 Write-Host ''
 
+# A lista de agora: serve para nao anunciar como novo o que ja estava na porta.
 $mapa = @{}
 try {
-    $atuais = @(Ler-Usb)
+    foreach ($item in @(Ler-Usb)) { $mapa[$item.Chave] = $item }
 } catch {
-    Write-Host '  Nao consegui consultar a USB do Windows (Get-PnpDevice).' -ForegroundColor Red
-    Write-Host '  Este script existe so para o Windows 10 ou mais novo.'
-    exit 1
+    if (-not $AssinaturaOk) {
+        Write-Host '  Nao consegui consultar a USB do Windows (Get-PnpDevice).' -ForegroundColor Red
+        Write-Host '  Este script existe so para o Windows 10 ou mais novo.'
+        exit 1
+    }
+    Write-Host '  Nao consegui listar o estado atual; sigo so com os eventos.' -ForegroundColor DarkYellow
 }
-foreach ($item in $atuais) { $mapa[$item.Chave] = $item }
 
-Write-Host ("  Agora: {0} dispositivo(s) na USB." -f $atuais.Count)
-$mostrar = @($atuais | Select-Object -First 8)
+Write-Host ("  Agora: {0} dispositivo(s) na USB." -f $mapa.Count)
+$mostrar = @($mapa.Values | Select-Object -First 8)
 foreach ($item in $mostrar) {
     $marca = ''
     if ($item.Vid -eq '04E8') { $marca = '  <-- SAMSUNG' }
     Write-Host ("    - {0}{1}" -f (Descrever $item), $marca) -ForegroundColor DarkGray
 }
-if ($atuais.Count -gt $mostrar.Count) {
-    Write-Host ("    ... e mais {0}" -f ($atuais.Count - $mostrar.Count)) -ForegroundColor DarkGray
+if ($mapa.Count -gt $mostrar.Count) {
+    Write-Host ("    ... e mais {0}" -f ($mapa.Count - $mostrar.Count)) -ForegroundColor DarkGray
 }
 Write-Host ''
 Write-Host '  Esperando mudanca...' -ForegroundColor DarkGray
@@ -141,61 +234,93 @@ $ultimoAviso = Get-Date
 $limite = $null
 if ($Minutos -gt 0) { $limite = $inicio.AddMinutes($Minutos) }
 
-while ($true) {
-    Start-Sleep -Milliseconds $Intervalo
-
-    $marca = Get-Date
-    $novo = @{}
-    foreach ($item in @(Ler-Usb)) { $novo[$item.Chave] = $item }
-    $gasto = ((Get-Date) - $marca).TotalMilliseconds
-    if ($gasto -gt (2 * $Intervalo) -and $gasto -gt 2000) {
-        # Numa maquina de 4 GB a consulta pode passar do intervalo: sem dizer
-        # isso, "nada mudou" viraria "o programa travou".
-        Write-Host ("          (a consulta levou {0:N0} ms; o intervalo efetivo e esse)" -f $gasto) -ForegroundColor DarkGray
-    }
-
-    foreach ($chave in @($novo.Keys)) {
-        if (-not $mapa.ContainsKey($chave)) {
-            $item = $novo[$chave]
-            $hora = (Get-Date).ToString('HH:mm:ss')
-            Write-Host ("{0}  ENTROU  {1}" -f $hora, (Descrever $item)) -ForegroundColor Green
-            Registrar ("ENTROU  " + (Descrever $item))
-            if ($item.Vid -eq '04E8') {
-                $quem = 'Samsung'
-                if ($item.Modelo) { $quem = "Samsung $($item.Modelo)" }
-                Write-Host ("          E a {0}: o aparelho esta na porta agora." -f $quem) -ForegroundColor Green
-                Write-Host '          Rode "status do celular" no JARVIS para o proximo passo.' -ForegroundColor Green
-            } elseif ($item.Vid -eq '0000' -or $item.Nome -match 'esconhecid|unknown') {
-                Write-Host '          O Windows viu algo e nao conseguiu identificar: cabo de' -ForegroundColor Yellow
-                Write-Host '          carga ou conector. Troque por um cabo de dados e veja de novo.' -ForegroundColor Yellow
-            }
-            [console]::Beep(1200, 120)
-        }
-    }
-    foreach ($chave in @($mapa.Keys)) {
-        if (-not $novo.ContainsKey($chave)) {
-            $item = $mapa[$chave]
-            $hora = (Get-Date).ToString('HH:mm:ss')
-            Write-Host ("{0}  SAIU    {1}" -f $hora, (Descrever $item)) -ForegroundColor DarkYellow
-            Registrar ("SAIU    " + (Descrever $item))
-        }
-    }
-
-    $mapa = $novo
-
+function Mostrar-Sinal($desde) {
     $agora = Get-Date
-    if (($agora - $ultimoAviso).TotalSeconds -ge 30) {
+    if (($agora - $desde).TotalSeconds -ge 30) {
         $minutos = [int]($agora - $inicio).TotalMinutes
         Write-Host ("          ainda vigiando ({0} min) - nada mudou na USB" -f $minutos) -ForegroundColor DarkGray
-        $ultimoAviso = $agora
+        return $agora
     }
-    if ($limite -and $agora -gt $limite) {
-        Write-Host ''
-        Write-Host ("  Tempo esgotado ({0} min): encerrando a vigia." -f $Minutos) -ForegroundColor DarkGray
-        if ($CaminhoLog) {
-            Write-Host ("  O que passou ficou em: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
-            Write-Host '  Cole esse arquivo no chat se quiser que eu leia a sessao inteira.' -ForegroundColor DarkGray
+    return $desde
+}
+
+function Fim-Do-Tempo {
+    $agora = Get-Date
+    if (-not $limite) { return $false }
+    if ($agora -le $limite) { return $false }
+    Write-Host ''
+    Write-Host ("  Tempo esgotado ({0} min): encerrando a vigia." -f $Minutos) -ForegroundColor DarkGray
+    if ($CaminhoLog) {
+        Write-Host ("  O que passou ficou em: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
+        Write-Host '  Cole esse arquivo no chat se quiser que eu leia a sessao inteira.' -ForegroundColor DarkGray
+    }
+    return $true
+}
+
+try {
+    if ($AssinaturaOk) {
+        # ------------------------------------------------ laco por evento
+        while ($true) {
+            $evento = Wait-Event -SourceIdentifier $FonteEvento -Timeout 2
+            $processados = 0
+            while ($evento -and $processados -lt 40) {
+                $hora = (Get-Date).ToString('HH:mm:ss')
+                $item = $null
+                try { $item = Item-DeEvento $evento } catch { $item = $null }
+                if ($item -and $item.Operacao -eq 'entrou') {
+                    $mapa[$item.Chave] = $item
+                    Anunciar-Entrada $item $hora
+                    $ultimoAviso = Get-Date
+                } elseif ($item -and $item.Operacao -eq 'saiu') {
+                    if ($mapa.ContainsKey($item.Chave)) { $item = $mapa[$item.Chave] }
+                    $mapa.Remove($item.Chave)
+                    Anunciar-Saida $item $hora
+                    $ultimoAviso = Get-Date
+                }
+                Remove-Event -EventIdentifier $evento.EventIdentifier -ErrorAction SilentlyContinue
+                $processados = $processados + 1
+                $evento = Wait-Event -SourceIdentifier $FonteEvento -Timeout 1
+            }
+            $ultimoAviso = Mostrar-Sinal $ultimoAviso
+            if (Fim-Do-Tempo) { break }
         }
-        exit 0
+    } else {
+        # ----------------------------------------------- laco por consulta
+        $avisoDemora = Get-Date
+        while ($true) {
+            Start-Sleep -Milliseconds $Intervalo
+
+            $marca = Get-Date
+            $novo = @{}
+            foreach ($item in @(Ler-Usb)) { $novo[$item.Chave] = $item }
+            $gasto = ((Get-Date) - $marca).TotalMilliseconds
+
+            # Numa maquina de 4 GB a consulta passa do intervalo: dizer isso uma
+            # vez a cada minuto - repetir a cada volta enchia o log de ruido.
+            if ($gasto -gt 1000 -and ((Get-Date) - $avisoDemora).TotalSeconds -ge 60) {
+                Write-Host ("          (a consulta levou {0:N0} ms - o intervalo real e esse; o modo evento nao tem esse custo)" -f $gasto) -ForegroundColor DarkGray
+                $avisoDemora = Get-Date
+            }
+
+            foreach ($chave in @($novo.Keys)) {
+                if (-not $mapa.ContainsKey($chave)) {
+                    Anunciar-Entrada $novo[$chave] (Get-Date).ToString('HH:mm:ss')
+                }
+            }
+            foreach ($chave in @($mapa.Keys)) {
+                if (-not $novo.ContainsKey($chave)) {
+                    Anunciar-Saida $mapa[$chave] (Get-Date).ToString('HH:mm:ss')
+                }
+            }
+            $mapa = $novo
+            $ultimoAviso = Mostrar-Sinal $ultimoAviso
+            if (Fim-Do-Tempo) { break }
+        }
+    }
+} finally {
+    if ($AssinaturaOk) {
+        Unregister-Event -SourceIdentifier $FonteEvento -ErrorAction SilentlyContinue
+        Get-Event -SourceIdentifier $FonteEvento -ErrorAction SilentlyContinue |
+            Remove-Event -ErrorAction SilentlyContinue
     }
 }

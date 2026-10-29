@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.61.7.**
+**Versão atual: 0.61.8.**
 
 ## O que ele faz sem chave de IA
 
@@ -68,7 +68,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **O plano vira botão:** depois de `sistema.instalar`, o cartão **“Plano pronto para executar”** mostra o comando exato, o risco e o SHA-256, com o botão **Executar este plano** — que só funciona depois de você marcar a caixa, e continua exigindo `JARVIS_HOST_INSTALAR=1`. A página **Skills** lista no topo os planos pendentes (`GET /api/host/planos`, renovado a cada 30 s) e diz qual variável ligar quando a trava está desligada. O código de uso único só sai para quem está na própria máquina. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
-**Instalar sem digitar token — só de dentro da máquina:** desde a 0.61.7 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
+**Instalar sem digitar token — só de dentro da máquina:** desde a 0.61.8 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
 **Git só de leitura:** `como está o git`, `o que mudou no git`, `últimos commits do git`, `qual o remoto do git` — `git.status`, `git.diff`, `git.log` e `git.remoto`. Quatro consultas com argumentos fixos, `shell=False`, `GIT_TERMINAL_PROMPT=0` e teto de 20 s; só aceita repositório dentro do projeto, da raiz de dados ou de `storage/repos`. **Não faz `commit`, `push`, `pull`, `checkout` nem `reset`** — nem como texto livre, porque não existe campo para linha de comando. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
@@ -613,14 +613,14 @@ caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
 **Ligar em um clique:** duplo clique em **`ligar-celular.bat`**. Ele ajusta
 `JARVIS_HOST_REDE=1`, `JARVIS_HOST_CELULAR=1` e `JARVIS_HOST_CONFIAR_LOCAL=1` no
 `.env` — o último é o **modo dono** registrado no banner (numa outra máquina o
-token continua sendo pedido, e desde a 0.61.7 ele já não é pedido nem sem essa
+token continua sendo pedido, e desde a 0.61.8 ele já não é pedido nem sem essa
 linha). Troca a linha se ela já
 existir, sem duplicar chave, em UTF-8 sem BOM e com CRLF. Se o `.env` não
 existir, cria a partir do `.env.example`; se achar um `.env.txt` perdido (o Bloco
 de Notas adora salvar assim), renomeia. Depois é só reiniciar a API e conferir
 `rede=ligada ... celular=ligado` na primeira linha do banner.
 
-**Quando o celular não aparece:** duplo clique em **`vigiar-usb.bat`**. Ele deixa uma janela aberta checando a USB do Windows a cada 2 segundos e apita no instante em que algum dispositivo entra ou sai, dizendo se é a Samsung (`VID_04E8`, com o **modelo**, ex.: `SM-A346B`), se é o `VID_0000` (a porta viu algo e não conseguiu identificar: cabo de carga ou conector) ou se é só o que já estava lá. É o teste conectar/desconectar sem precisar rodar `status do celular` a cada cabo. Só leitura, sem admin, e fecha no X. Se o conector tem mau contato, o aparelho pode aparecer por menos de um segundo: **`vigiar-usb-atento.bat`** olha a USB 5 vezes por segundo por 10 minutos, e toda entrada e saída fica gravada em `storage\celular\vigia-*.log` — dá para colar no chat depois. E `celular.eventos` lê o log do Windows (canal System, sem admin) para dizer o que passou pela USB nos últimos minutos, mesmo o que a janela não alcançou.
+**Quando o celular não aparece:** duplo clique em **`vigiar-usb.bat`**. Ele deixa uma janela aberta checando a USB do Windows a cada 2 segundos e apita no instante em que algum dispositivo entra ou sai, dizendo se é a Samsung (`VID_04E8`, com o **modelo**, ex.: `SM-A346B`), se é o `VID_0000` (a porta viu algo e não conseguiu identificar: cabo de carga ou conector) ou se é só o que já estava lá. É o teste conectar/desconectar sem precisar rodar `status do celular` a cada cabo. Só leitura, sem admin, e fecha no X. Se o conector tem mau contato, o aparelho pode aparecer por menos de um segundo: **`vigiar-usb-atento.bat`** assina o evento de PnP do Windows e é avisado no instante em que algo entra ou sai — sem intervalo para passar batido (na consulta por lista, esta máquina leva ~5 s por volta), e toda entrada e saída fica gravada em `storage\celular\vigia-*.log` — dá para colar no chat depois. E `celular.eventos` lê o log do Windows (canal System, sem admin) para dizer o que passou pela USB nos últimos minutos, mesmo o que a janela não alcançou.
 
 Na **0.60.0** isso virou cinco skills: `celular.status` (mede o aparelho: `adb devices`, autorização e, sem aparelho à vista, a USB do Windows — além de onde estão o adb e o scrcpy), `celular.plano` (o caminho exato para o estado medido, inclusive
 quando a depuração nunca foi ligada), `celular.preparar` (baixa as duas
@@ -643,7 +643,7 @@ instalada e faz a coisa certa:
 
 Durante a atualização aparecem **porcentagem, MB, velocidade e tempo que falta**
 no download, e `X de Y arquivos` na cópia — mais o título da janela acompanhando.
-(Veio na 0.61.7; antes a tela ficava parada num cursor piscando.)
+(Veio na 0.61.8; antes a tela ficava parada num cursor piscando.)
 
 Feche a janela da API **antes** de rodar: arquivo aberto pela API pode não ser
 copiado. Nos dois casos ele avisa se existe uma pasta `dist\` de build antigo (a
@@ -667,7 +667,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.61.7", "skills": 290}`.
+`{"version": "0.61.8", "skills": 290}`.
 
 ## Verificações
 

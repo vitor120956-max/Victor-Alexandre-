@@ -87,4 +87,4 @@ def test_o_bat_chama_o_script_com_a_politica_certa():
 def test_a_camada_do_celular_aponta_para_a_vigia_no_plano():
     """Quem recebe "teste cabo e porta" precisa saber que existe a janela ao vivo."""
     texto = (RAIZ / "server" / "celular.py").read_text(encoding="utf-8")
-    assert "vigiar-usb.bat" in texto
+    assert "vigiar-usb-atento.bat" in texto

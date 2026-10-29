@@ -984,7 +984,7 @@ def resumo_de_eventos(medido: dict[str, Any]) -> dict[str, Any]:
         return {
             "titulo": "Não deu para ler o histórico",
             "resposta": str(medido.get("motivo") or "A leitura não rodou."),
-            "proximo_passo": "A vigia (vigiar-usb.bat) continua sendo o teste ao vivo; o histórico é o que fica depois.",
+            "proximo_passo": "A vigia (vigiar-usb-atento.bat) continua sendo o teste ao vivo; o histórico é o que fica depois.",
             "eventos": medido,
         }
     minutos = medido.get("minutos") or 30
@@ -1007,7 +1007,7 @@ def resumo_de_eventos(medido: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         proximo_passo = (
-            "Rode `vigiar-usb-atento.bat` (5 leituras por segundo, 10 min) com o cabo "
+            "Rode `vigiar-usb-atento.bat` (modo evento: o Windows avisa no instante, 10 min) com o cabo "
             "plugado e mexa o conector devagar: a janela pega a piscada."
         )
     elif eventos_lidos:
@@ -1104,7 +1104,7 @@ def resumo_da_rede(medido: dict[str, Any]) -> dict[str, Any]:
         )
         proximo_passo = (
             "O caminho continua sendo a linha de dados: cabo de dados, porta traseira e "
-            "conector. Use `vigiar-usb.bat` enquanto troca."
+            "conector. Use `vigiar-usb-atento.bat` enquanto troca."
         )
     else:
         titulo = "Ninguém respondeu na rede"
@@ -1305,7 +1305,7 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
             "A porta USB viu um dispositivo que o Windows não conseguiu identificar — é a "
             "assinatura de cabo só de carga, conector sujo/oxidado ou porta fraca: o PC "
             "manda energia e a conversa não acontece. Troque o cabo por um de dados, use a "
-            "porta de trás do PC, limpe o conector do celular — e deixe `vigiar-usb.bat` "
+            "porta de trás do PC, limpe o conector do celular — e deixe `vigiar-usb-atento.bat` "
             "aberto enquanto troca: ele apita no instante em que algo entrar. Driver e "
             "Depuração USB não mudam nada enquanto isso não for resolvido."
         )
@@ -1319,8 +1319,8 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
                 "viu algo novo, então o aparelho não chegou a ser visto — não é driver nem "
                 "Depuração USB. Teste físico, nesta ordem: cabo que transfira dados, porta "
                 "de trás do PC sem hub, e o conector do celular (poeira/oxidação). Para ver "
-                "o instante em que algo muda, abra `vigiar-usb.bat` e deixe a janela aberta "
-                "trocando de cabo. Enquanto nada novo aparecer, ligar a Depuração USB não "
+                "o instante em que algo muda, abra `vigiar-usb-atento.bat` e deixe a janela "
+                "aberta trocando de cabo. Enquanto nada novo aparecer, ligar a Depuração USB não "
                 "mudaria nada."
                 + (f" {_frase_do_que_ja_passou()}" if _frase_do_que_ja_passou() else "")
             )
@@ -1513,7 +1513,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
                 "usar a porta USB de trás do PC, direto na placa, sem hub nem extensão",
                 "passar a lanterna no conector do celular: poeira e oxidação tiram o contato dos dados",
                 "conferir se o celular está ligado (desligado, ele só carrega, não aparece)",
-                "abrir vigiar-usb.bat e trocar de cabo com a janela aberta: ela apita quando algo entra",
+                "abrir vigiar-usb-atento.bat e trocar de cabo com a janela aberta: o Windows avisa no instante",
                 "rodar celular.status com o cabo fora e de novo com ele: a comparação é automática",
             ],
             f"O Windows listou {nomes_desc}: um dispositivo que ele não conseguiu "
@@ -1529,7 +1529,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             primeiro = _passo(
                 f"1. A USB está idêntica à das {hora}",
                 [
-                    "abrir vigiar-usb.bat e deixar a janela aberta (apita quando algo entra)",
+                    "abrir vigiar-usb-atento.bat e deixar a janela aberta (avisa no instante)",
                     "plugar o cabo no celular e rodar celular.status",
                     "tirar o cabo do celular e rodar celular.status de novo",
                     "eu comparo as duas listas e digo exatamente o que entrou ou saiu",
@@ -1544,7 +1544,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             primeiro = _passo(
                 "1. O que o Windows vê não é o celular",
                 [
-                    "abrir vigiar-usb.bat (apita na hora em que algo entra ou sai)",
+                    "abrir vigiar-usb-atento.bat (evento do Windows: apita no instante, sem intervalo)",
                     "plugar o cabo no celular e rodar celular.status",
                     "tirar o cabo e rodar celular.status de novo — eu comparo as duas listas",
                     "se nada mudar, o aparelho não está sendo visto (cabo, porta ou conector)",
@@ -1562,7 +1562,7 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
                 "usar o MESMO cabo em outro aparelho de entrada igual (outro micro-USB): se nada aparecer, o cabo é só de carga",
                 "trocar o cabo por um que transfira dados (o original da Samsung, se houver)",
                 "usar a porta USB de trás do PC, sem hub — e conferir que ela funciona com um pendrive",
-                "abrir vigiar-usb.bat e apertar/balançar o conector do aparelho devagar, olhando a janela",
+                "abrir vigiar-usb-atento.bat e apertar/balançar o conector devagar, olhando a janela",
                 "segurar Power por 10 s e ligar de novo",
             ],
             "O Windows não vê aparelho nenhum. Aqui o problema é físico: cabo, "
