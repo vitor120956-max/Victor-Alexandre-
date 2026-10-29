@@ -5,7 +5,7 @@
 # cada tentativa tem dois problemas: demora (cada rodada abre PowerShell,
 # consulta o adb e a USB) e nao mostra o instante.
 #
-# COMO ELE OLHA A USB (importa, e mudou na 0.62.2):
+# COMO ELE OLHA A USB (importa, e mudou na 0.62.3):
 #
 #   1. **Modo evento** (padrao): assina o evento de PnP do Windows com
 #      `Register-WmiEvent` sobre `__InstanceOperationEvent` / Win32_PnPEntity e

@@ -1,0 +1,29 @@
+@echo off
+chcp 65001 >nul
+cd /d "%~dp0"
+echo.
+echo   JARVIS - ver com qual driver o Windows esta falando com o celular
+echo.
+echo   Serve para saber, sem adivinhar, se o erro do scrcpy --otg
+echo   ("Could not find any USB device") e falta de driver ou outra coisa.
+echo   Versao: 0.62.3
+echo.
+if not exist "sonda-otg.ps1" goto semsonda
+powershell -NoProfile -ExecutionPolicy Bypass -File "sonda-otg.ps1"
+echo.
+echo   Codigo da sonda:
+echo     0 = driver de OTG ok, pode abrir teclado-pelo-pc.bat
+echo     1 = falta o driver (Zadig) - o passo a passo esta acima
+echo     2 = o Windows nao ve o celular na USB (cabo, porta ou tela apagada)
+echo.
+echo   Cole esta tela no chat do JARVIS se quiser que eu leia.
+echo.
+pause
+exit /b 0
+
+:semsonda
+echo   Nao achei sonda-otg.ps1 nesta pasta.
+echo   Rode atualizar.bat para baixar a versao completa.
+echo.
+pause
+exit /b 1

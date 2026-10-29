@@ -11,6 +11,9 @@ echo.
 echo   Nao precisa de adaptador OTG nem de mouse novo: e o cabo que ja esta
 echo   ligado. Aqui o cursor do mouse do PC aparece na tela do celular.
 echo.
+echo   Versao deste arquivo: 0.62.3   (se o numero nao aparecer, este .bat
+echo   e antigo: rode atualizar.bat antes de tudo.)
+echo.
 pause
 echo.
 
@@ -42,6 +45,17 @@ echo   Para abrir a barra de notificacoes sem tocar na tela:
 echo     clique no topo da tela e ARRASTE para baixo (com o mouse do PC);
 echo     a tecla Windows do teclado tambem costuma abrir a gaveta.
 echo.
+echo   Conferindo o driver do Windows antes de abrir (leva alguns segundos):
+echo.
+if not exist "sonda-otg.ps1" goto semSonda
+powershell -NoProfile -ExecutionPolicy Bypass -File "sonda-otg.ps1"
+goto depoisSonda
+
+:semSonda
+echo   (sonda-otg.ps1 nao esta aqui - pulando a conferencia do driver)
+
+:depoisSonda
+echo.
 pause
 echo.
 echo   Abrindo... (olhe a tela do CELULAR, nao a do PC)
@@ -70,6 +84,9 @@ echo.
 echo   Isso NAO e o cabo e NAO e o celular: e o driver do Windows. O driver
 echo   de MTP (que faz o "Desbloqueie para acessar os dados") esta segurando
 echo   o aparelho, e o modo --otg precisa falar com ele por outro driver.
+echo.
+echo   A sonda acima ja disse qual driver esta em uso e qual e o id do
+echo   aparelho. Se ela disse "FALTA O DRIVER", siga por aqui.
 echo   Conserto (uma vez so, com o celular plugado):
 echo.
 echo     1. baixe o Zadig:  https://zadig.akeo.ie
@@ -111,6 +128,9 @@ echo   Para voltar o aparelho ao normal depois de usar o --otg:
 echo      Gerenciador de Dispositivos -^> direito no aparelho -^>
 echo      Desinstalar dispositivo -^> desconecte e reconecte o cabo.
 echo      O Windows reinstala o MTP sozinho.
+echo.
+echo   Para rever o diagnostico do driver a qualquer momento, rode:
+echo     sonda-otg.bat
 echo.
 echo   Cole esta tela no chat do JARVIS se continuar.
 echo.

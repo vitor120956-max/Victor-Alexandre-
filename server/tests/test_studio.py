@@ -521,7 +521,7 @@ def test_reference_documents_the_schema() -> None:
 
 def test_api_exposes_the_studio_catalog_and_reference(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.62.2"
+    assert health["version"] == "0.62.3"
     assert health["skills"] == 291
 
     catalog = client.get("/api/skills").json()["skills"]
