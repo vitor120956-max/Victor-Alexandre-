@@ -2078,6 +2078,11 @@ class CelularPlanoInput(BaseModel):
     estado: Literal["auto", "autorizado", "nao-autorizado", "vazio", "recovery", "offline"] = Field(default="auto", title="Estado do aparelho", json_schema_extra={"description": "`auto` mede com `adb devices` (exige JARVIS_HOST_CELULAR=1). Os demais forçam o cenário."})
 
 
+class CelularEventosInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    minutos: int = Field(default=30, ge=1, le=1440, title="Últimos quantos minutos", json_schema_extra={"description": "Janela do log do Windows a ler (1 a 1440). Padrão: 30."})
+
+
 class CelularPuxarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pastas: str = Field(default="", max_length=200, title="Pastas do celular", json_schema_extra={"description": "Separadas por vírgula: DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram. Vazio copia as cinco principais."})
@@ -4085,13 +4090,17 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.61.6 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.61.7 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
         except celular.CelularError as exc:
             raise SkillError(str(exc)) from exc
         return celular.resumo(medido)
+
+    def celular_eventos_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularEventosInput)
+        return celular.resumo_de_eventos(celular.eventos(minutos=data.minutos))
 
     def celular_rede_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # A pergunta "dá para acessar pelo Wi-Fi?" é respondida com medição, não
@@ -5222,6 +5231,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("pc.abrir-arquivo", "Abrir arquivo no PC", "Abre um documento com o programa padrão do Windows, só dentro de storage/, Downloads, Documentos, Desktop ou OneDrive, e só de formato de leitura — `.exe`, `.bat`, `.ps1` e `.lnk` são recusados.", "PC", PcArquivoInput, pc_abrir_arquivo_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=20),
         SkillDefinition("pc.comando", "Comando pronto do PC", "Roda um comando de leitura da lista fechada (ipconfig, systeminfo, tasklist, ver, query user, disco, data, boot) e devolve a saída. O comando é escolhido por nome — não existe linha livre para injetar nada.", "PC", PcComandoInput, pc_comando_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("celular.status", "Estado do celular", "Mede o aparelho de verdade: roda `adb devices -l` (só leitura), diz se está autorizado, com depuração desligada ou sem cabo, e consulta a USB do Windows quando o adb não vê nada. Traz também onde estão `adb` e `scrcpy`. Nada é alterado no aparelho.", "Celular", EmptyInput, celular_status_handler, timeout_seconds=90),
+        SkillDefinition("celular.eventos", "O que passou na USB (histórico do Windows)", "Lê o log de eventos do Windows (canal System, sem precisar de administrador) e mostra o que o sistema registrou de USB/PnP nos últimos minutos — inclusive um aparelho que apareceu por menos de um segundo, que a vigia de 2 s pode não pegar. Diz se algum evento cita Samsung, VID_04E8 ou Android, e o que isso significa: com mau contato no conector, o aparelho pisca e some.", "Celular", CelularEventosInput, celular_eventos_handler, timeout_seconds=60),
         SkillDefinition("celular.rede", "Dispositivos na rede local e no Wi-Fi (celular sem cabo)", "Se o aparelho está conectado no Wi-Fi de casa, responde se dá para entrar nele e acessar pela rede sem cabo: varre a rede local (só leitura) e mostra o IP, o MAC, o nome e as portas abertas de cada dispositivo, marcando o que tem prefixo Samsung e o que tem a 5555 do adb sem fio. Diz sem rodeio que o Wi-Fi não substitui o cabo — o Android não abre porta nenhuma sem Depuração USB já ligada (ou sem `adb tcpip 5555` feito antes pelo cabo) — e que derrubar o Wi-Fi para o aparelho reconectar, ou cair a rede e voltar, não dá acesso a ele.", "Celular", EmptyInput, celular_rede_handler, timeout_seconds=60),
         SkillDefinition("celular.plano", "Plano para destravar o celular sem tela", "Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive quando a Depuração USB nunca foi ligada. Traz os comandos, a sequência de teclas do `scrcpy --otg`, o TalkBack, a tela de teste e o limite do flash sem Desbloqueio OEM.", "Celular", CelularPlanoInput, celular_plano_handler, timeout_seconds=40),
         SkillDefinition("celular.espelhar", "Ver o celular na tela do PC", "Abre o `scrcpy`: a tela do celular vira uma janela do Windows, com mouse e teclado do PC — funciona mesmo com o painel quebrado, desde que a depuração já esteja autorizada. Exige `JARVIS_HOST_CELULAR=1` e confirmação.", "Celular", CelularEspelharInput, celular_espelhar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),

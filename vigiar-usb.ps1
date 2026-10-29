@@ -14,6 +14,14 @@
 #     nunca e sinal de travamento;
 #   - quando aparece VID_04E8, avisa em destaque que e a Samsung.
 #
+# Modo atento (para conector com mau contato): um aparelho com solda trincada as
+# vezes aparece por menos de um segundo. `vigiar-usb-atento.bat` chama este
+# script com -Intervalo 400 -Minutos 10, que olha a USB 5 vezes por segundo.
+# Sem isso, uma piscada de 0,5 s pode passar entre duas checagens de 2 s.
+#
+# Toda entrada e saida tambem vai para um arquivo (storage\celular\vigia-DATA.log):
+# se a janela fechar, o que passou continua registrado para colar no chat.
+#
 # Regras que este script respeita:
 # - nada acentuado na saida (o console do Windows com chcp 65001 embaralha);
 # - so leitura: nao instala, nao altera, nao toca em aparelho nenhum;
@@ -23,10 +31,32 @@
 [CmdletBinding()]
 param(
     [int]$Intervalo = 2000,
-    [int]$Minutos = 0
+    [int]$Minutos = 0,
+    [string]$Log = '',
+    [switch]$SemLog
 )
 
 $ErrorActionPreference = 'Stop'
+
+# O log: por padrao em storage\celular (ou JARVIS_DADOS). Falha em gravar nunca
+# derruba a vigia - ela e a informacao principal, o arquivo e so a copia.
+$CaminhoLog = ''
+if (-not $SemLog) {
+    if (-not $Log) {
+        $base = Join-Path (Get-Location).Path 'storage\celular'
+        if ($env:JARVIS_DADOS) { $base = Join-Path $env:JARVIS_DADOS 'celular' }
+        $Log = Join-Path $base ('vigia-{0}.log' -f (Get-Date).ToString('yyyy-MM-dd-HHmm'))
+    }
+    try {
+        New-Item -ItemType Directory -Force -Path (Split-Path $Log) | Out-Null
+        $CaminhoLog = $Log
+    } catch { $CaminhoLog = '' }
+}
+
+function Registrar([string]$texto) {
+    if (-not $CaminhoLog) { return }
+    try { Add-Content -Path $CaminhoLog -Value ("{0}  {1}" -f (Get-Date).ToString('HH:mm:ss'), $texto) -Encoding UTF8 } catch { }
+}
 
 function Ler-Usb {
     Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
@@ -73,6 +103,13 @@ function Descrever($item) {
 Write-Host ''
 Write-Host '  JARVIS - vigiando a USB do Windows' -ForegroundColor Cyan
 Write-Host '  Plugue e desplugue o cabo do celular: o que mudar aparece aqui na hora.'
+Write-Host ("  Olhando a cada {0} ms." -f $Intervalo) -ForegroundColor DarkGray
+if ($CaminhoLog) {
+    Write-Host ("  Log: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
+}
+if ($Intervalo -gt 1000) {
+    Write-Host '  Conector com mau contato? Feche e use vigiar-usb-atento.bat (5x por segundo).' -ForegroundColor DarkGray
+}
 Write-Host '  Para parar: feche esta janela no X.'
 Write-Host ''
 
@@ -107,14 +144,22 @@ if ($Minutos -gt 0) { $limite = $inicio.AddMinutes($Minutos) }
 while ($true) {
     Start-Sleep -Milliseconds $Intervalo
 
+    $marca = Get-Date
     $novo = @{}
     foreach ($item in @(Ler-Usb)) { $novo[$item.Chave] = $item }
+    $gasto = ((Get-Date) - $marca).TotalMilliseconds
+    if ($gasto -gt (2 * $Intervalo) -and $gasto -gt 2000) {
+        # Numa maquina de 4 GB a consulta pode passar do intervalo: sem dizer
+        # isso, "nada mudou" viraria "o programa travou".
+        Write-Host ("          (a consulta levou {0:N0} ms; o intervalo efetivo e esse)" -f $gasto) -ForegroundColor DarkGray
+    }
 
     foreach ($chave in @($novo.Keys)) {
         if (-not $mapa.ContainsKey($chave)) {
             $item = $novo[$chave]
             $hora = (Get-Date).ToString('HH:mm:ss')
             Write-Host ("{0}  ENTROU  {1}" -f $hora, (Descrever $item)) -ForegroundColor Green
+            Registrar ("ENTROU  " + (Descrever $item))
             if ($item.Vid -eq '04E8') {
                 $quem = 'Samsung'
                 if ($item.Modelo) { $quem = "Samsung $($item.Modelo)" }
@@ -132,6 +177,7 @@ while ($true) {
             $item = $mapa[$chave]
             $hora = (Get-Date).ToString('HH:mm:ss')
             Write-Host ("{0}  SAIU    {1}" -f $hora, (Descrever $item)) -ForegroundColor DarkYellow
+            Registrar ("SAIU    " + (Descrever $item))
         }
     }
 
@@ -145,7 +191,11 @@ while ($true) {
     }
     if ($limite -and $agora -gt $limite) {
         Write-Host ''
-        Write-Host '  Tempo esgotado: fechei a vigia. Nada novo apareceu.' -ForegroundColor DarkGray
+        Write-Host ("  Tempo esgotado ({0} min): encerrando a vigia." -f $Minutos) -ForegroundColor DarkGray
+        if ($CaminhoLog) {
+            Write-Host ("  O que passou ficou em: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
+            Write-Host '  Cole esse arquivo no chat se quiser que eu leia a sessao inteira.' -ForegroundColor DarkGray
+        }
         exit 0
     }
 }

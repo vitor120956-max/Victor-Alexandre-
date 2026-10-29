@@ -323,6 +323,7 @@ atrás de `JARVIS_HOST_CELULAR=1`.
 | Skill | O que faz | Confirmação |
 |---|---|---|
 | `celular.status` | Mede o aparelho: `adb devices -l` (só leitura), estado de autorização e, quando o adb não vê nada, a USB do Windows com VID/PID (Samsung = `04E8`), separando o celular de driver genérico, dispositivo que o Windows viu mas não identificou (`VID_0000`) e código de problema do Windows. Compara a lista com a da checagem anterior (guardada em `storage/celular/usb-ultima.json`) e diz o que entrou ou saiu — o teste conectar/desconectar sem a pessoa comparar no olho. Também diz onde estão `adb` e `scrcpy`. | não |
+| `celular.eventos` | Lê o log de eventos do Windows (canal System, sem admin) e mostra o que passou de USB/PnP nos últimos minutos — inclusive aparelho que apareceu por menos de um segundo, que a vigia de 2 s pode não pegar. Diz se algum evento cita Samsung/VID_04E8/Android. | não |
 | `celular.rede` | Varre a rede local (só leitura): IP, MAC, nome e portas abertas de cada dispositivo, com prefixo Samsung marcado e destaque para a 5555 do adb sem fio. Explica por que o Wi-Fi não substitui o cabo — sem Depuração USB ligada (ou sem `adb tcpip 5555` feito antes pelo cabo) o Android não abre porta nenhuma. | não |
 | `celular.plano` | Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive “nunca foi ligada”. | não (só lê) |
 | `celular.preparar` | Baixa platform-tools (Google) e scrcpy (GitHub) para `ferramentas/`, com SHA-256 e extração à prova de zip-slip. | **sim** |

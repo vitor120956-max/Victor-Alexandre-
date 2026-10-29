@@ -521,8 +521,8 @@ def test_reference_documents_the_schema() -> None:
 
 def test_api_exposes_the_studio_catalog_and_reference(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.61.6"
-    assert health["skills"] == 289
+    assert health["version"] == "0.61.7"
+    assert health["skills"] == 290
 
     catalog = client.get("/api/skills").json()["skills"]
     studio = {skill["id"] for skill in catalog if skill["id"].startswith("studio.")}

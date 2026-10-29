@@ -908,6 +908,138 @@ def rede(
     }
 
 
+# ------------------------------------------------- o que passou (histórico)
+#
+# A vigia olha a USB a cada 2 segundos. Um conector com solda trincada pode
+# apresentar o aparelho por menos que isso — e a janela diria "nada mudou" com
+# toda a honestidade. O log de eventos do Windows guarda esses instantes: aqui a
+# leitura é do canal System (não exige administrador) filtrado por PnP/USB.
+
+_EVENTOS_WINDOWS = (
+    "$desde = (Get-Date).AddMinutes(-{minutos}); "
+    "try { $e = @(Get-WinEvent -FilterHashtable @{{LogName='System'; StartTime=$desde}} -ErrorAction Stop) } "
+    "catch {{ $e = @() }}; "
+    "$e | Where-Object {{ $_.ProviderName -match 'PnP|USB|DriverFrameworks|Hub' }} | "
+    "ForEach-Object {{ \"$($_.TimeCreated.ToString('HH:mm:ss'))`t$($_.Id)`t$($_.ProviderName)`t"
+    "$($_.Message -replace '`r|`n', ' ')\" }}"
+)
+
+
+def _linha_de_evento(linha: str) -> dict[str, str] | None:
+    partes = (linha or "").rstrip("\r").split("\t")
+    if len(partes) < 3:
+        return None
+    hora, codigo, provedor = partes[0].strip(), partes[1].strip(), partes[2].strip()
+    mensagem = partes[3].strip() if len(partes) > 3 else ""
+    if not hora or not provedor:
+        return None
+    return {
+        "hora": hora,
+        "codigo": codigo,
+        "provedor": provedor,
+        "mensagem": mensagem[:240],
+    }
+
+
+def _menciona_aparelho(evento: dict[str, str]) -> bool:
+    texto = f"{evento.get('mensagem') or ''} {evento.get('provedor') or ''}".lower()
+    return any(marca in texto for marca in ("04e8", "samsung", "galaxy", "sm-", "android"))
+
+
+def eventos(*, minutos: int = 30, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
+    """O que o Windows registrou na USB no período — inclusive o que durou pouco."""
+    if not ligado():
+        return {"executado": False, "motivo": f"{AMBIENTE} está desligado, então nada foi executado.", "eventos": []}
+    if os.name != "nt" or sys.platform != "win32":
+        return {"executado": False, "motivo": "O histórico de eventos do Windows só existe no Windows.", "eventos": []}
+    minutos = max(1, min(int(minutos or 30), 1440))
+    executar = rodar or _rodar
+    try:
+        codigo, saida, erro = executar(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _EVENTOS_WINDOWS.format(minutos=minutos)]
+        )
+    except CelularError:
+        return {"executado": False, "motivo": "Não consegui ler o histórico do Windows.", "eventos": []}
+    if codigo != 0 and not saida.strip():
+        return {
+            "executado": False,
+            "motivo": _cortar(erro or "O PowerShell não respondeu."),
+            "eventos": [],
+            "minutos": minutos,
+        }
+    lidos = [_linha_de_evento(linha) for linha in saida.splitlines()]
+    lista = [evento for evento in lidos if evento]
+    return {
+        "executado": True,
+        "minutos": minutos,
+        "eventos": lista[:60],
+        "total": len(lista),
+        "com_aparelho": [evento for evento in lista if _menciona_aparelho(evento)][:20],
+    }
+
+
+def resumo_de_eventos(medido: dict[str, Any]) -> dict[str, Any]:
+    """Traduz o histórico em resposta: o aparelho chegou a ser visto, mesmo rápido?"""
+    if not medido.get("executado"):
+        return {
+            "titulo": "Não deu para ler o histórico",
+            "resposta": str(medido.get("motivo") or "A leitura não rodou."),
+            "proximo_passo": "A vigia (vigiar-usb.bat) continua sendo o teste ao vivo; o histórico é o que fica depois.",
+            "eventos": medido,
+        }
+    minutos = medido.get("minutos") or 30
+    eventos_lidos = medido.get("eventos") or []
+    com_aparelho = medido.get("com_aparelho") or []
+    linhas = [f"Últimos {minutos} min no log do Windows: {medido.get('total', 0)} evento(s) de USB/PnP."]
+    if eventos_lidos:
+        for evento in eventos_lidos[:10]:
+            linhas.append(f"• {evento['hora']} #{evento['codigo']} {evento['provedor']} — {evento['mensagem'][:140]}")
+        if len(eventos_lidos) > 10:
+            linhas.append(f"• … e mais {len(eventos_lidos) - 10}")
+    if com_aparelho:
+        titulo = "O Windows viu o aparelho — mesmo que por pouco tempo"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                "Alguns eventos citam Samsung/VID_04E8/Android: o celular chegou a ser "
+                "apresentado ao Windows nesta janela. Se a vigia não o mostrou, ele durou "
+                "menos que o intervalo — sintoma clássico de conector com mau contato.",
+            ]
+        )
+        proximo_passo = (
+            "Rode `vigiar-usb-atento.bat` (5 leituras por segundo, 10 min) com o cabo "
+            "plugado e mexa o conector devagar: a janela pega a piscada."
+        )
+    elif eventos_lidos:
+        titulo = "Nenhum evento citando o celular"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                "Os eventos acima são do PC (hub, controladora, driver). Nada citando "
+                "Samsung, VID_04E8 ou Android: nesta janela o aparelho não foi apresentado "
+                "ao Windows nenhuma vez, nem por um instante.",
+            ]
+        )
+        proximo_passo = (
+            "Isso reforça cabo ou conector: teste o mesmo cabo em outro aparelho de "
+            "entrada micro-USB. Se nada aparecer lá também, o cabo é de carga."
+        )
+    else:
+        titulo = "Nenhum evento de USB no período"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                "Nem do PC: o log do Windows não registrou nada de USB nesse intervalo. "
+                "Isso é normal quando a porta não teve nenhuma mudança.",
+            ]
+        )
+        proximo_passo = (
+            "Plugue o celular com a vigia aberta e confira; depois rode este histórico de "
+            "novo — o que passar fica registrado mesmo com a janela fechada."
+        )
+    return {"titulo": titulo, "resposta": resposta, "proximo_passo": proximo_passo, "eventos": medido}
+
+
 def resumo_da_rede(medido: dict[str, Any]) -> dict[str, Any]:
     """Traduz a varredura em resposta de chat — inclusive quando ela não serve."""
     if not medido.get("executado"):

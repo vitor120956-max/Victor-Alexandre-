@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.6 ---------------------------------------
+# --- o caminho exato do bug de 0.61.7 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.6 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.7 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.6: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.7: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.6: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.7: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.6: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.7: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.61.6: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.61.7: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1247,7 +1247,7 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     assert "O celular apareceu na USB" in comparacao["frase"]
 
 
-# --- 0.61.6: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+# --- 0.61.7: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
 
 ARP_WINDOWS = """
 Interface: 192.168.0.10 --- 0x6
@@ -1342,7 +1342,7 @@ def test_a_skill_de_rede_esta_no_registro(tmp_path):
     assert getattr(definicao, "requires_confirmation", False) is False
 
 
-# --- 0.61.6: o que apareceu na varredura de casa -----------------------------
+# --- 0.61.7: o que apareceu na varredura de casa -----------------------------
 
 ARP_DA_CASA = """
 Interface: 192.168.15.8 --- 0x4
@@ -1357,7 +1357,7 @@ Interface: 192.168.15.8 --- 0x4
 
 
 def test_broadcast_e_endereco_de_rede_nao_sao_dispositivos():
-    """A 0.61.6 listava `192.168.15.255` como "dispositivo que respondeu"."""
+    """A 0.61.7 listava `192.168.15.255` como "dispositivo que respondeu"."""
     assert C._endereco_de_dispositivo("192.168.15.22", "8c:77:12:dd:ee:ff") is True
     assert C._endereco_de_dispositivo("192.168.15.255", "ff:ff:ff:ff:ff:ff") is False
     assert C._endereco_de_dispositivo("192.168.15.0", "01:00:5e:00:00:fb") is False
@@ -1394,7 +1394,7 @@ def test_a_varredura_da_casa_mostra_mac_e_nao_conta_broadcast(ligado, monkeypatc
 
 
 def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
-    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.61.6."""
+    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.61.7."""
     from server.agente_local import entrada_de_skill, pesquisar
     from server.skill_registry import build_registry
 
@@ -1412,7 +1412,7 @@ def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
     assert pesquisar("status do celular", entradas)[0]["entrada"].skill_id == "celular.status"
 
 
-# --- 0.61.6: o A34 provou a porta; o J7 não apareceu -------------------------
+# --- 0.61.7: o A34 provou a porta; o J7 não apareceu -------------------------
 
 A34 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M9\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-A346B"
 J7 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R28M1\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-G610M"
@@ -1507,3 +1507,91 @@ def test_a_memoria_da_porta_aparece_tambem_quando_ha_dispositivo_generico(ligado
         }
     )
     assert "porta já viu um Samsung" in resposta["proximo_passo"]
+
+
+# --- 0.61.7: histórico do Windows e vigia atenta -----------------------------
+
+EVENTOS = (
+    "09:27:26\t400\tMicrosoft-Windows-Kernel-PnP\tDevice USB\\ROOT_HUB\\1 was configured\n"
+    "09:27:31\t20001\tMicrosoft-Windows-UserPnp\tDriver installed for USB Composite Device\n"
+    "09:27:33\t441\tMicrosoft-Windows-Kernel-PnP\tDevice USB\\VID_04E8&PID_6860\\R58M9 could not be started\n"
+)
+
+
+def test_le_uma_linha_de_evento_do_log():
+    evento = C._linha_de_evento("09:27:33\t441\tMicrosoft-Windows-Kernel-PnP\tDevice falhou")
+    assert evento["hora"] == "09:27:33"
+    assert evento["codigo"] == "441"
+    assert "falhou" in evento["mensagem"]
+    assert C._linha_de_evento("linha sem tabulação") is None
+
+
+def test_historico_recusa_fora_do_windows(ligado):
+    medido = C.eventos(rodar=lambda _a: (0, "", ""))
+    assert medido["executado"] is False
+    assert "Windows" in medido["motivo"]
+
+
+def _medido_eventos(linhas, minutos=30):
+    return {
+        "executado": True,
+        "minutos": minutos,
+        "eventos": [e for e in (C._linha_de_evento(l) for l in linhas) if e],
+        "total": len(linhas),
+        "com_aparelho": [e for e in (C._linha_de_evento(l) for l in linhas) if e and C._menciona_aparelho(e)],
+    }
+
+
+def test_historico_avisa_quando_o_aparelho_apareceu_mesmo_rapido():
+    resposta = C.resumo_de_eventos(_medido_eventos(EVENTOS.splitlines()))
+    assert "mesmo que por pouco tempo" in resposta["titulo"]
+    assert "menos que o intervalo" in resposta["resposta"]
+    assert "vigiar-usb-atento.bat" in resposta["proximo_passo"]
+
+
+def test_historico_sem_aparelho_reforca_cabo_ou_conector():
+    so_pc = [EVENTOS.splitlines()[0], EVENTOS.splitlines()[1]]
+    resposta = C.resumo_de_eventos(_medido_eventos(so_pc))
+    assert resposta["titulo"] == "Nenhum evento citando o celular"
+    assert "cabo" in resposta["proximo_passo"]
+
+
+def test_historico_vazio_nao_inventa():
+    resposta = C.resumo_de_eventos(_medido_eventos([]))
+    assert resposta["titulo"] == "Nenhum evento de USB no período"
+
+
+def test_a_skill_de_historico_esta_no_registro(tmp_path):
+    from server.skill_registry import build_registry
+
+    registro = build_registry(tmp_path)
+    assert registro.get("celular.eventos") is not None
+
+
+def test_vigia_atenta_existe_e_olha_mais_rapido():
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    bat = (raiz / "vigiar-usb-atento.bat").read_text(encoding="utf-8", errors="replace")
+    assert "vigiar-usb.ps1" in bat
+    assert "-Intervalo 400" in bat
+    assert "-Minutos 10" in bat
+
+
+def test_vigia_padrao_aponta_para_o_modo_atento():
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    ps1 = (raiz / "vigiar-usb.ps1").read_text(encoding="utf-8", errors="replace")
+    assert "vigiar-usb-atento.bat" in ps1
+    assert "500" in ps1 or "400" in ps1
+
+
+def test_vigia_grava_log_e_diz_onde():
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    ps1 = (raiz / "vigiar-usb.ps1").read_text(encoding="utf-8", errors="replace")
+    assert "vigia-" in ps1
+    assert "Add-Content" in ps1
+    assert "storage\\celular" in ps1
