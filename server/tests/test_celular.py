@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.4 ---------------------------------------
+# --- o caminho exato do bug de 0.61.5 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.4 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.5 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.4: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.5: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.4: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.5: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.4: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.5: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.61.4: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.61.5: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1247,7 +1247,7 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     assert "O celular apareceu na USB" in comparacao["frase"]
 
 
-# --- 0.61.4: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+# --- 0.61.5: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
 
 ARP_WINDOWS = """
 Interface: 192.168.0.10 --- 0x6
@@ -1340,3 +1340,73 @@ def test_a_skill_de_rede_esta_no_registro(tmp_path):
     assert definicao is not None
     # só leitura: não pede confirmação nem declara efeito colateral
     assert getattr(definicao, "requires_confirmation", False) is False
+
+
+# --- 0.61.5: o que apareceu na varredura de casa -----------------------------
+
+ARP_DA_CASA = """
+Interface: 192.168.15.8 --- 0x4
+  Internet Address      Physical Address      Type
+  192.168.15.1          2c-4d-54-11-22-33     dynamic
+  192.168.15.5          00-11-22-33-44-55     dynamic
+  192.168.15.12         3c-5a-37-aa-bb-cc     dynamic
+  192.168.15.22         8c-77-12-dd-ee-ff     dynamic
+  192.168.15.255        ff-ff-ff-ff-ff-ff     static
+  192.168.15.0          01-00-5e-00-00-fb     static
+"""
+
+
+def test_broadcast_e_endereco_de_rede_nao_sao_dispositivos():
+    """A 0.61.5 listava `192.168.15.255` como "dispositivo que respondeu"."""
+    assert C._endereco_de_dispositivo("192.168.15.22", "8c:77:12:dd:ee:ff") is True
+    assert C._endereco_de_dispositivo("192.168.15.255", "ff:ff:ff:ff:ff:ff") is False
+    assert C._endereco_de_dispositivo("192.168.15.0", "01:00:5e:00:00:fb") is False
+    assert C._endereco_de_dispositivo("224.0.0.1", "01:00:5e:00:00:01") is False
+
+
+def test_nome_que_e_o_proprio_ip_nao_e_nome():
+    """`gethostbyaddr` devolve o IP quando não resolve — a linha saía repetida."""
+    assert C._nome_util("192.168.15.12", "192.168.15.12") == ""
+    assert C._nome_util("192.168.15.12", "") == ""
+    assert C._nome_util("192.168.15.22", "A34") == "A34"
+
+
+def test_a_varredura_da_casa_mostra_mac_e_nao_conta_broadcast(ligado, monkeypatch):
+    monkeypatch.setattr(C, "_portas_abertas", lambda hosts: {ip: [] for ip in hosts})
+
+    def nome(ip):
+        return "192.168.15.12" if ip.endswith(".12") else ("A34" if ip.endswith(".22") else "")
+
+    monkeypatch.setattr(C, "_gethostbyaddr", nome)
+    medido = C.rede(rodar=lambda _a: (0, ARP_DA_CASA, ""), tocar=lambda _p: None, ip_local="192.168.15.8")
+
+    ips = [host["ip"] for host in medido["hosts"]]
+    assert ips == ["192.168.15.1", "192.168.15.5", "192.168.15.12", "192.168.15.22"]
+    nomes = {host["ip"]: host["nome"] for host in medido["hosts"]}
+    assert nomes["192.168.15.12"] == ""
+    assert nomes["192.168.15.22"] == "A34"
+
+    resposta = C.resumo_da_rede(medido)
+    assert "8c:77:12:dd:ee:ff" in resposta["resposta"]
+    assert "[prefixo Samsung]" in resposta["resposta"]
+    assert ".255" not in resposta["resposta"]
+    assert "192.168.15.12 192.168.15.12" not in resposta["resposta"]
+
+
+def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
+    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.61.5."""
+    from server.agente_local import entrada_de_skill, pesquisar
+    from server.skill_registry import build_registry
+
+    registro = build_registry(tmp_path)
+    entradas = [entrada_de_skill(item) for item in registro.list()]
+    for frase in (
+        "quais dispositivos estao na rede local",
+        "quais aparelhos estao conectados no wifi",
+        "da para acessar o celular pelo wifi sem cabo",
+    ):
+        ranking = pesquisar(frase, entradas)
+        assert ranking[0]["entrada"].skill_id == "celular.rede", frase
+        assert ranking[0]["score"] >= 0.5, (frase, ranking[0]["score"])
+    # e o pedido de status continua indo para a skill de status
+    assert pesquisar("status do celular", entradas)[0]["entrada"].skill_id == "celular.status"

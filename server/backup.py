@@ -31,7 +31,7 @@ from typing import Any
 
 from . import dados as dados_locais
 
-VERSAO = "0.61.4"
+VERSAO = "0.61.5"
 
 IGNORAR = {".venv", "node_modules", "__pycache__", ".git", ".pytest_cache", "backups", ".mypy_cache"}
 NOME_BACKUP = "jarvis-dados-{quando}.zip"

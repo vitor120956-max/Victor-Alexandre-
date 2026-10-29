@@ -39,7 +39,7 @@ def client(tmp_path: Path):
 def test_health_and_catalog(client: TestClient):
     health = client.get("/api/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.61.4"
+    assert health.json()["version"] == "0.61.5"
     assert health.json()["skills"] == 289
     catalog = client.get("/api/skills").json()["skills"]
     assert {skill["id"] for skill in catalog} >= {

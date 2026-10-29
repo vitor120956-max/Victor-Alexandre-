@@ -93,6 +93,9 @@ _SINONIMOS: dict[str, tuple[str, ...]] = {
     "seguranca": ("risco", "confianca"),
     "wifi": ("rede", "wireless"),
     "celular": ("telefone", "aparelho"),
+    "aparelho": ("celular",),
+    "aparelhos": ("celular", "dispositivos"),
+    "dispositivos": ("aparelhos", "rede"),
 }
 
 

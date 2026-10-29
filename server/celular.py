@@ -648,6 +648,28 @@ def _ler_arp(tabela: str) -> dict[str, str]:
     return achados
 
 
+def _endereco_de_dispositivo(ip: str, mac: str) -> bool:
+    """Broadcast, endereço de rede e multicast não são dispositivos.
+
+    A tabela ARP guarda a linha `192.168.15.255` (broadcast) e às vezes
+    `...0` da faixa — listar isso como "dispositivo que respondeu" só confunde
+    quem está contando o que tem em casa.
+    """
+    if ip.rsplit(".", 1)[-1] in {"0", "255"}:
+        return False
+    if (mac or "").lower() in {"ff:ff:ff:ff:ff:ff", "00:00:00:00:00:00"}:
+        return False
+    return ip.split(".", 1)[0] not in {"224", "239", "255"}
+
+
+def _nome_util(ip: str, nome: str) -> str:
+    """`gethostbyaddr` devolve o próprio IP quando não resolve — isso não é nome."""
+    nome = (nome or "").strip()
+    if not nome or nome == ip or re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", nome):
+        return ""
+    return nome
+
+
 def _fabricante_do_mac(mac: str) -> str:
     prefixo = (mac or "").replace(":", "")[:6].lower()
     return "prefixo Samsung" if prefixo in _OUIS_SAMSUNG else ""
@@ -742,7 +764,11 @@ def rede(
         }
     tabela = _ler_arp(saida)
     enderecos = sorted(
-        (ip for ip in tabela if _prefixo(ip) == prefixo and ip != meu_ip),
+        (
+            ip
+            for ip in tabela
+            if _prefixo(ip) == prefixo and ip != meu_ip and _endereco_de_dispositivo(ip, tabela[ip])
+        ),
         key=lambda ip: int(ip.split(".")[-1]),
     )[:32]
     portas = _portas_abertas(enderecos) if enderecos else {}
@@ -754,7 +780,7 @@ def rede(
             {
                 "ip": ip,
                 "mac": mac,
-                "nome": _gethostbyaddr(ip),
+                "nome": _nome_util(ip, _gethostbyaddr(ip)),
                 "fabricante": _fabricante_do_mac(mac),
                 "portas": abertas,
                 "servicos": [PORTAS_DE_APARELHO.get(porta, str(porta)) for porta in abertas],
@@ -795,7 +821,10 @@ def resumo_da_rede(medido: dict[str, Any]) -> dict[str, Any]:
                 portas = ", ".join(f"{porta} ({servico})" for porta, servico in zip(host["portas"], host["servicos"]))
             else:
                 portas = "nenhuma porta aberta"
-            linhas.append(f"• {host['ip']}{nome}{marca} — {portas}")
+            # O MAC entra na linha: quando o nome não diz nada ("A34", vazio), é
+            # ele que permite reconhecer o aparelho.
+            mac = f" · {host['mac']}" if host.get("mac") else ""
+            linhas.append(f"• {host['ip']}{nome}{marca}{mac} — {portas}")
         if len(hosts) > 12:
             linhas.append(f"• … e mais {len(hosts) - 12}")
     else:
