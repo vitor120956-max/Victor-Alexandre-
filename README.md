@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.61.3.**
+**Versão atual: 0.61.4.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,7 +44,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 288, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 289, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Correio sem entrar na conta:** exporte sua caixa (Takeout ou “Baixar mensagem” do Gmail) e ponha em `storage/correio`: `filtra meus e-mails por importância` classifica por regra determinística — **intimação/processo** (100), **fatura/boleto** (85, +10 se vence em até 7 dias), **governo** (75), **segurança** (70), **pessoal** (45), **newsletter** (5) — e ordena; `analisa meus e-mails enviados` mede o seu estilo (saudação, fecho, assinatura, tamanho, listas); `escreve um e-mail para a Ana sobre o relatório: enviar planilha; pedir retorno` monta o rascunho nesse estilo. **Não marca como lido e não envia.** Para o JARVIS ler a caixa *por programa* seria preciso OAuth; mas, com você já logado no navegador do seu PC, ele abre o Gmail pela tela (`mesa.*`, com a sua autorização) e `abre o gmail com as faturas` devolve a busca já filtrada para a sua sessão — sem chave e sem nada sair da máquina. Em [`docs/CORREIO.md`](docs/CORREIO.md).
 
@@ -68,7 +68,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **O plano vira botão:** depois de `sistema.instalar`, o cartão **“Plano pronto para executar”** mostra o comando exato, o risco e o SHA-256, com o botão **Executar este plano** — que só funciona depois de você marcar a caixa, e continua exigindo `JARVIS_HOST_INSTALAR=1`. A página **Skills** lista no topo os planos pendentes (`GET /api/host/planos`, renovado a cada 30 s) e diz qual variável ligar quando a trava está desligada. O código de uso único só sai para quem está na própria máquina. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
-**Instalar sem digitar token — só de dentro da máquina:** desde a 0.61.3 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
+**Instalar sem digitar token — só de dentro da máquina:** desde a 0.61.4 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
 **Git só de leitura:** `como está o git`, `o que mudou no git`, `últimos commits do git`, `qual o remoto do git` — `git.status`, `git.diff`, `git.log` e `git.remoto`. Quatro consultas com argumentos fixos, `shell=False`, `GIT_TERMINAL_PROMPT=0` e teto de 20 s; só aceita repositório dentro do projeto, da raiz de dados ou de `storage/repos`. **Não faz `commit`, `push`, `pull`, `checkout` nem `reset`** — nem como texto livre, porque não existe campo para linha de comando. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
@@ -546,7 +546,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **288 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **289 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -613,7 +613,7 @@ caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
 **Ligar em um clique:** duplo clique em **`ligar-celular.bat`**. Ele ajusta
 `JARVIS_HOST_REDE=1`, `JARVIS_HOST_CELULAR=1` e `JARVIS_HOST_CONFIAR_LOCAL=1` no
 `.env` — o último é o **modo dono** registrado no banner (numa outra máquina o
-token continua sendo pedido, e desde a 0.61.3 ele já não é pedido nem sem essa
+token continua sendo pedido, e desde a 0.61.4 ele já não é pedido nem sem essa
 linha). Troca a linha se ela já
 existir, sem duplicar chave, em UTF-8 sem BOM e com CRLF. Se o `.env` não
 existir, cria a partir do `.env.example`; se achar um `.env.txt` perdido (o Bloco
@@ -643,7 +643,7 @@ instalada e faz a coisa certa:
 
 Durante a atualização aparecem **porcentagem, MB, velocidade e tempo que falta**
 no download, e `X de Y arquivos` na cópia — mais o título da janela acompanhando.
-(Veio na 0.61.3; antes a tela ficava parada num cursor piscando.)
+(Veio na 0.61.4; antes a tela ficava parada num cursor piscando.)
 
 Feche a janela da API **antes** de rodar: arquivo aberto pela API pode não ser
 copiado. Nos dois casos ele avisa se existe uma pasta `dist\` de build antigo (a
@@ -667,7 +667,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.61.3", "skills": 288}`.
+`{"version": "0.61.4", "skills": 289}`.
 
 ## Verificações
 
@@ -755,7 +755,7 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 288 skills
+├── skill_registry.py        # allowlist, Pydantic e 289 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

@@ -648,7 +648,7 @@ def test_medico_recusa_bundle_vazio():
 
 def test_catalogo_publica_guardas_eventos_e_regras():
     dados = catalogo()
-    assert dados["versao"] == "0.61.3"
+    assert dados["versao"] == "0.61.4"
     assert len(dados["guardas_do_portao"]) == 5
     assert tuple(dados["eventos"]) == EVENTOS
     assert len(dados["regras"]) == 12
@@ -681,13 +681,13 @@ def test_registro_publica_sete_skills_de_continuidade(tmp_path):
 
 def test_registro_total_de_skills_e_176(tmp_path):
     registry = build_registry(tmp_path / "files")
-    assert len(registry.list()) == 288
+    assert len(registry.list()) == 289
 
 
 def test_api_executa_fases_e_regras(client):
     resposta = client.post("/api/skills/continuidade.regras/execute", json={"parameters": {}})
     assert resposta.status_code == 200
-    assert resposta.json()["result"]["versao"] == "0.61.3"
+    assert resposta.json()["result"]["versao"] == "0.61.4"
 
     resposta = client.post(
         "/api/skills/continuidade.fases/execute",

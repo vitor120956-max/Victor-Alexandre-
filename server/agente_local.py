@@ -91,6 +91,8 @@ _SINONIMOS: dict[str, tuple[str, ...]] = {
     "traduzir": ("traduzir", "texto"),
     "revisar": ("revisao", "revisar"),
     "seguranca": ("risco", "confianca"),
+    "wifi": ("rede", "wireless"),
+    "celular": ("telefone", "aparelho"),
 }
 
 

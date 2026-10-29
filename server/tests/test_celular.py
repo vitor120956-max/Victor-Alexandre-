@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.3 ---------------------------------------
+# --- o caminho exato do bug de 0.61.4 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.3 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.4 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.3: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.4: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.3: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.4: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.3: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.4: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.61.3: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.61.4: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1245,3 +1245,98 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     comparacao = C.comparar_com_ultima({"dispositivos": [hub, celular]})
 
     assert "O celular apareceu na USB" in comparacao["frase"]
+
+
+# --- 0.61.4: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+
+ARP_WINDOWS = """
+Interface: 192.168.0.10 --- 0x6
+  Internet Address      Physical Address      Type
+  192.168.0.1           b0-4e-26-11-22-33     dynamic
+  192.168.0.12          8c-77-12-aa-bb-cc     dynamic
+  192.168.0.50          00-11-22-33-44-55     dynamic
+  192.168.1.7           aa-bb-cc-dd-ee-ff     dynamic
+"""
+
+
+def test_le_a_tabela_arp_do_windows_e_do_linux():
+    iphone = C._ler_arp(ARP_WINDOWS)
+    assert iphone["192.168.0.12"] == "8c:77:12:aa:bb:cc"
+
+    linux = "192.168.0.12     0x1   0x2    8c:77:12:aa:bb:cc     *        eth0"
+    assert C._ler_arp(linux)["192.168.0.12"] == "8c:77:12:aa:bb:cc"
+
+
+def test_marca_prefixo_samsung_sem_afirmar_o_que_nao_sabe():
+    assert C._fabricante_do_mac("8c:77:12:aa:bb:cc") == "prefixo Samsung"
+    assert C._fabricante_do_mac("00:11:22:33:44:55") == ""
+
+
+def test_rede_recusa_quando_a_camada_esta_desligada(raiz):
+    medido = C.rede(rodar=lambda _a: (0, ARP_WINDOWS, ""), tocar=lambda _p: None, ip_local="192.168.0.10")
+    assert medido["executado"] is False
+    assert "desligado" in medido["motivo"]
+    resposta = C.resumo_da_rede(medido)
+    assert resposta["titulo"] == "Não deu para olhar a rede"
+
+
+def test_rede_so_olha_a_propria_faixa_e_nao_a_si_mesma(ligado, monkeypatch):
+    monkeypatch.setattr(C, "_portas_abertas", lambda hosts: {ip: [] for ip in hosts})
+    monkeypatch.setattr(C, "_gethostbyaddr", lambda ip: "Galaxy-J7" if ip.endswith(".12") else "")
+    medido = C.rede(
+        rodar=lambda _a: (0, ARP_WINDOWS, ""),
+        tocar=lambda _p: None,
+        ip_local="192.168.0.10",
+    )
+
+    assert medido["executado"] is True
+    assert medido["rede"] == "192.168.0.0/24"
+    ips = [host["ip"] for host in medido["hosts"]]
+    assert "192.168.1.7" not in ips          # outra faixa
+    assert "192.168.0.10" not in ips         # o próprio PC
+    assert ips == ["192.168.0.1", "192.168.0.12", "192.168.0.50"]  # ordem numérica
+    assert medido["hosts"][1]["nome"] == "Galaxy-J7"
+
+
+def _medido_rede(hosts, com_adb=()):
+    return {"executado": True, "pc": "192.168.0.10", "rede": "192.168.0.0/24", "hosts": hosts, "com_adb": list(com_adb)}
+
+
+def test_rede_sem_porta_aberta_explica_que_wifi_nao_substitui_o_cabo():
+    host = {"ip": "192.168.0.12", "mac": "8c:77:12:aa:bb:cc", "nome": "Galaxy-J7", "fabricante": "prefixo Samsung", "portas": [], "servicos": []}
+    resposta = C.resumo_da_rede(_medido_rede([host]))
+
+    assert resposta["titulo"] == "A rede não dá acesso ao celular"
+    assert "adb tcpip 5555" in resposta["resposta"]
+    assert "não substitui o cabo" in resposta["resposta"]
+    assert "derrubar o Wi-Fi" in resposta["resposta"].lower() or "Derrubar o Wi-Fi" in resposta["resposta"]
+
+
+def test_rede_com_5555_aberta_manda_conectar():
+    host = {"ip": "192.168.0.12", "mac": "8c:77:12:aa:bb:cc", "nome": "Galaxy-J7", "fabricante": "prefixo Samsung", "portas": [5555], "servicos": ["adb sem fio"]}
+    resposta = C.resumo_da_rede(_medido_rede([host], com_adb=[host]))
+
+    assert "adb por rede" in resposta["titulo"]
+    assert "adb connect 192.168.0.12:5555" in resposta["resposta"]
+
+
+def test_rede_sem_ninguem_aponta_wifi_de_visitante():
+    resposta = C.resumo_da_rede(_medido_rede([]))
+    assert resposta["titulo"] == "Ninguém respondeu na rede"
+    assert "mesmo Wi-Fi" in resposta["proximo_passo"]
+
+
+def test_rede_lista_porta_com_nome_do_servico():
+    host = {"ip": "192.168.0.20", "mac": "aa:bb:cc:dd:ee:ff", "nome": "", "fabricante": "", "portas": [8080, 9000], "servicos": ["servidor HTTP de app", "servidor de app"]}
+    resposta = C.resumo_da_rede(_medido_rede([host]))
+    assert "8080 (servidor HTTP de app)" in resposta["resposta"]
+
+
+def test_a_skill_de_rede_esta_no_registro(tmp_path):
+    from server.skill_registry import build_registry
+
+    registro = build_registry(tmp_path)
+    definicao = registro.get("celular.rede")
+    assert definicao is not None
+    # só leitura: não pede confirmação nem declara efeito colateral
+    assert getattr(definicao, "requires_confirmation", False) is False

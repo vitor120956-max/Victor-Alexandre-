@@ -29,6 +29,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import zipfile
@@ -577,6 +578,279 @@ def estado(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) 
                 sonda["comparacao"] = {}
         resultado["windows"] = sonda
     return resultado
+
+
+# ------------------------------------------------------------------ rede local
+#
+# A pergunta que motivou isto: *"ele está no Wi-Fi de casa, não dá para acessar
+# por aí?"* Não por adivinhação — por medição. O que a rede pode (e não pode) dar:
+#
+# - **Não substitui o cabo.** O Android não abre porta nenhuma por padrão. O
+#   `adb` por rede existe em duas formas: `adb tcpip 5555`, que precisa ser
+#   rodado **uma vez pelo cabo**, ou a "Depuração sem fio" do Android 11+ (com
+#   código de pareamento na tela). Sem uma das duas, não há o que conectar.
+# - **Dá o retrato:** se o aparelho está na rede, qual IP/MAC/nome ele tem e se
+#   alguma porta está aberta (a 5555 é o jackpot; 8080/9000 aparecem quando há
+#   app com servidor instalado).
+# - **Derrubar o Wi-Fi não dá acesso a nada.** Quando ele volta, reconecta ao
+#   roteador como antes; quem está na rede só vê tráfego, não o aparelho.
+#
+# Tudo aqui é leitura: um toque TCP em cada host para popular a tabela ARP, sem
+# enviar pacote de dados a ninguém e sem tentar login.
+
+PORTAS_DE_APARELHO = {
+    5555: "adb sem fio",
+    8022: "SSH de app (Termux)",
+    8080: "servidor HTTP de app",
+    8443: "servidor HTTPS de app",
+    9000: "servidor de app",
+    62078: "serviço de sincronização",
+}
+
+# Prefixos Samsung registrados no IEEE. Lista parcial: serve para marcar
+# "provavelmente Samsung", não para provar — o nome do host diz mais.
+_OUIS_SAMSUNG = frozenset(
+    {
+        "0012fb", "001632", "002119", "0021d1", "3423ba", "38aa3c", "503237",
+        "5c0a5b", "781fdb", "78abbb", "8c7712", "8c71f8", "a02195", "b479a7",
+        "c0bdd1", "c819f7", "d022be", "d857ef", "dc7144", "e8508b", "f409d8",
+        "f49f54",
+    }
+)
+
+
+def _ip_local() -> str:
+    """IP desta máquina na rede — sem enviar pacote (o UDP só resolve a rota)."""
+    sonda = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sonda.connect(("8.8.8.8", 80))
+        return str(sonda.getsockname()[0])
+    except OSError:
+        return ""
+    finally:
+        sonda.close()
+
+
+def _prefixo(ip: str) -> str:
+    partes = ip.split(".")
+    return ".".join(partes[:3]) if len(partes) == 4 else ""
+
+
+def _ler_arp(tabela: str) -> dict[str, str]:
+    """Lê `arp -a` (Windows e Linux) e devolve {ip: mac}."""
+    achados: dict[str, str] = {}
+    for linha in (tabela or "").splitlines():
+        mac = re.search(r"\b([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})\b", linha)
+        ip = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", linha)
+        if not mac or not ip:
+            continue
+        achados[ip.group(1)] = mac.group(1).lower().replace("-", ":")
+    return achados
+
+
+def _fabricante_do_mac(mac: str) -> str:
+    prefixo = (mac or "").replace(":", "")[:6].lower()
+    return "prefixo Samsung" if prefixo in _OUIS_SAMSUNG else ""
+
+
+def _gethostbyaddr(ip: str) -> str:
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except (OSError, IndexError):
+        return ""
+
+
+def _tocar_hosts(prefixo: str, tempo: float = 0.2, limite: float = 8.0) -> None:
+    """Um connect TCP em cada IP: quem existe responde ARP e entra na tabela.
+
+    Não manda dado nenhum — a resposta não importa, só o fato de o host existir.
+    """
+    from concurrent.futures import ThreadPoolExecutor, wait  # noqa: PLC0415
+
+    def tocar(numero: int) -> None:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(tempo)
+                s.connect_ex((f"{prefixo}.{numero}", 9))
+        except OSError:
+            pass
+
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        futuros = [pool.submit(tocar, numero) for numero in range(1, 255)]
+        wait(futuros, timeout=limite)
+
+
+def _portas_abertas(hosts: list[str], tempo: float = 0.3) -> dict[str, list[int]]:
+    from concurrent.futures import ThreadPoolExecutor, wait  # noqa: PLC0415
+
+    resultado: dict[str, list[int]] = {ip: [] for ip in hosts}
+
+    def testar(ip: str, porta: int) -> None:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(tempo)
+                if s.connect_ex((ip, porta)) == 0:
+                    resultado[ip].append(porta)
+        except OSError:
+            pass
+
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        futuros = [pool.submit(testar, ip, porta) for ip in hosts for porta in PORTAS_DE_APARELHO]
+        wait(futuros, timeout=20.0)
+    return resultado
+
+
+def rede(
+    *,
+    rodar: Callable[[list[str]], tuple[int, str, str]] | None = None,
+    tocar: Callable[[str], None] | None = None,
+    ip_local: str = "",
+) -> dict[str, Any]:
+    """Retrato da rede local: o celular está nela? Alguma porta aberta? Só leitura."""
+    if not ligado():
+        return {
+            "executado": False,
+            "motivo": f"{AMBIENTE} está desligado, então nada foi executado.",
+            "hosts": [],
+        }
+    meu_ip = ip_local or _ip_local()
+    prefixo = _prefixo(meu_ip)
+    if not prefixo:
+        return {
+            "executado": False,
+            "motivo": "Este PC não está em rede (sem IP de rede local) — a varredura não tem o que ver.",
+            "hosts": [],
+        }
+    executar = rodar or _rodar
+    try:
+        if tocar:
+            tocar(prefixo)
+        else:
+            _tocar_hosts(prefixo)
+        codigo, saida, erro = executar(["arp", "-a"])
+    except (CelularError, OSError):
+        return {
+            "executado": False,
+            "motivo": "Não consegui ler a tabela ARP do sistema (comando arp -a).",
+            "hosts": [],
+        }
+    if codigo != 0 and not saida.strip():
+        return {
+            "executado": False,
+            "motivo": _cortar(erro or "O comando arp não respondeu."),
+            "hosts": [],
+        }
+    tabela = _ler_arp(saida)
+    enderecos = sorted(
+        (ip for ip in tabela if _prefixo(ip) == prefixo and ip != meu_ip),
+        key=lambda ip: int(ip.split(".")[-1]),
+    )[:32]
+    portas = _portas_abertas(enderecos) if enderecos else {}
+    hosts = []
+    for ip in enderecos:
+        mac = tabela[ip]
+        abertas = sorted(portas.get(ip) or [])
+        hosts.append(
+            {
+                "ip": ip,
+                "mac": mac,
+                "nome": _gethostbyaddr(ip),
+                "fabricante": _fabricante_do_mac(mac),
+                "portas": abertas,
+                "servicos": [PORTAS_DE_APARELHO.get(porta, str(porta)) for porta in abertas],
+            }
+        )
+    return {
+        "executado": True,
+        "pc": meu_ip,
+        "rede": f"{prefixo}.0/24",
+        "hosts": hosts,
+        "com_adb": [host for host in hosts if 5555 in host["portas"]],
+    }
+
+
+def resumo_da_rede(medido: dict[str, Any]) -> dict[str, Any]:
+    """Traduz a varredura em resposta de chat — inclusive quando ela não serve."""
+    if not medido.get("executado"):
+        motivo = str(medido.get("motivo") or "A varredura não rodou.")
+        return {
+            "titulo": "Não deu para olhar a rede",
+            "resposta": motivo,
+            "proximo_passo": (
+                "Se o celular está no Wi-Fi, nada disso muda o diagnóstico do cabo: sem "
+                "Depuração USB ligada o Android não abre porta para o PC, e sem porta não "
+                "existe acesso por rede."
+            ),
+            "rede": medido,
+        }
+    hosts = medido.get("hosts") or []
+    com_adb = medido.get("com_adb") or []
+    linhas = [f"Rede local: {medido.get('rede')} — este PC é {medido.get('pc')}."]
+    if hosts:
+        linhas.append(f"{len(hosts)} dispositivo(s) responderam:")
+        for host in hosts[:12]:
+            nome = f" {host['nome']}" if host.get("nome") else ""
+            marca = f" [{host['fabricante']}]" if host.get("fabricante") else ""
+            if host["portas"]:
+                portas = ", ".join(f"{porta} ({servico})" for porta, servico in zip(host["portas"], host["servicos"]))
+            else:
+                portas = "nenhuma porta aberta"
+            linhas.append(f"• {host['ip']}{nome}{marca} — {portas}")
+        if len(hosts) > 12:
+            linhas.append(f"• … e mais {len(hosts) - 12}")
+    else:
+        linhas.append("Nenhum outro dispositivo respondeu na rede.")
+
+    if com_adb:
+        host = com_adb[0]
+        titulo = "Tem adb por rede: dá para conectar sem cabo"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                f"O aparelho em {host['ip']} tem a porta 5555 aberta — é o adb sem fio. "
+                f"Com as ferramentas instaladas, `adb connect {host['ip']}:5555` conecta."
+            ]
+        )
+        proximo_passo = (
+            "Rode `celular.status` depois do connect: autorizado, o `celular.espelhar` "
+            "abre a tela numa janela do PC."
+        )
+    elif hosts:
+        titulo = "A rede não dá acesso ao celular"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                "Nenhuma porta de aparelho aberta. O Android não abre nada por padrão: o adb "
+                "por rede só existe depois de `adb tcpip 5555` (que se roda uma vez **pelo "
+                "cabo**) ou da Depuração sem fio do Android 11+ (que pede código na tela).",
+                "Ou seja: o Wi-Fi mostra que o aparelho está vivo e qual é o IP dele, mas não "
+                "substitui o cabo. Derrubar o Wi-Fi para ele reconectar também não abre nada — "
+                "só faz o aparelho voltar para a mesma rede.",
+            ]
+        )
+        proximo_passo = (
+            "O caminho continua sendo a linha de dados: cabo de dados, porta traseira e "
+            "conector. Use `vigiar-usb.bat` enquanto troca."
+        )
+    else:
+        titulo = "Ninguém respondeu na rede"
+        resposta = "\n\n".join(
+            linhas
+            + [
+                "Nenhum vizinho respondeu: este PC pode estar em outra rede (Wi-Fi de visitante, "
+                "4G, isolamento de clientes do roteador) ou o firewall bloqueia a varredura.",
+            ]
+        )
+        proximo_passo = (
+            "Confira se este PC e o celular estão no mesmo Wi-Fi de casa (mesmo nome de rede) "
+            "e rode de novo."
+        )
+    return {
+        "titulo": titulo,
+        "resposta": resposta,
+        "proximo_passo": proximo_passo,
+        "rede": medido,
+    }
 
 
 def situacao_de(aparelhos: list[dict[str, str]]) -> str:

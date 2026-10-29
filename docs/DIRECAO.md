@@ -225,7 +225,7 @@ A API responde `200` com `{ok: false, error}` quando a entrada é recusada — n
 npx tsc --noEmit
 npx vitest run
 npm run build
-curl -s http://localhost:8000/api/health   # 0.61.3, 288 skills
+curl -s http://localhost:8000/api/health   # 0.61.4, 288 skills
 ```
 
 A suíte cobre determinismo do sorteio, semente, ficha por seção, preservação de paleta e tipo, redesenho sem motivo, vocabulário inválido, prova sem fonte, orçamento de título, formas proibidas, deck limpo e sujo, as 29 regras, isenções, modo app, ondas de tells, pesos e tetos do júri, revisão incompleta, biblioteca e os sete endpoints.
