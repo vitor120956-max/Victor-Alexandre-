@@ -5,7 +5,7 @@
 # cada tentativa tem dois problemas: demora (cada rodada abre PowerShell,
 # consulta o adb e a USB) e nao mostra o instante.
 #
-# COMO ELE OLHA A USB (importa, e mudou na 0.61.8):
+# COMO ELE OLHA A USB (importa, e mudou na 0.61.9):
 #
 #   1. **Modo evento** (padrao): assina o evento de PnP do Windows com
 #      `Register-WmiEvent` sobre `__InstanceOperationEvent` / Win32_PnPEntity e
@@ -42,7 +42,8 @@ param(
     [string]$Log = '',
     [switch]$SemLog,
     [ValidateSet('auto', 'evento', 'consulta')]
-    [string]$Modo = 'auto'
+    [string]$Modo = 'auto',
+    [switch]$SoAparelhos
 )
 
 $ErrorActionPreference = 'Stop'
@@ -173,12 +174,27 @@ function Item-DeEvento($evento) {
     }
 }
 
+# O que interessa quando o teste e o celular: aparelho (VID da Samsung, modelo,
+# nome de telefone) e o "desconhecido" (porta viu, Windows nao identificou).
+# Leitor de cartao, hub e controladora nao sao: vao para o log e, na tela, viram
+# uma linha so - senao o ruido esconde justamente o que se esta esperando.
+function Testa-Aparelho($item) {
+    if ($item.Vid -eq '04E8') { return $true }
+    if ($item.Vid -eq '0000') { return $true }
+    if ($item.Modelo) { return $true }
+    if ($item.Nome -match 'SAMSUNG|Galaxy|Android|MTP|SM-|esconhecid|unknown') { return $true }
+    return $false
+}
+
 # ------------------------------------------------------------------ cabecalho
 Write-Host ''
 Write-Host '  JARVIS - vigiando a USB do Windows' -ForegroundColor Cyan
 Write-Host '  Plugue e desplugue o cabo do celular: o que mudar aparece aqui na hora.'
 if ($CaminhoLog) {
     Write-Host ("  Log: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
+}
+if ($SoAparelhos) {
+    Write-Host '  Filtro: so aparelho (VID da Samsung, modelo ou desconhecido). O resto vai para o log.' -ForegroundColor DarkGray
 }
 Write-Host '  Para parar: feche esta janela no X.'
 
@@ -234,11 +250,22 @@ $ultimoAviso = Get-Date
 $limite = $null
 if ($Minutos -gt 0) { $limite = $inicio.AddMinutes($Minutos) }
 
+# Contadores da sessao, para o sinal de vida nao mentir: dizer "nada mudou"
+# com o leitor de cartao entrando e saindo cinco vezes e falso.
+$eventosVistos = 0
+$eventosAparelho = 0
+
 function Mostrar-Sinal($desde) {
     $agora = Get-Date
     if (($agora - $desde).TotalSeconds -ge 30) {
         $minutos = [int]($agora - $inicio).TotalMinutes
-        Write-Host ("          ainda vigiando ({0} min) - nada mudou na USB" -f $minutos) -ForegroundColor DarkGray
+        if ($eventosAparelho -gt 0) {
+            Write-Host ("          ainda vigiando ({0} min) - {1} evento(s) de aparelho ate agora" -f $minutos, $eventosAparelho) -ForegroundColor DarkGray
+        } elseif ($eventosVistos -gt 0) {
+            Write-Host ("          ainda vigiando ({0} min) - nenhum aparelho; {1} evento(s) de outros dispositivos USB" -f $minutos, $eventosVistos) -ForegroundColor DarkGray
+        } else {
+            Write-Host ("          ainda vigiando ({0} min) - nada mudou na USB" -f $minutos) -ForegroundColor DarkGray
+        }
         return $agora
     }
     return $desde
@@ -250,6 +277,7 @@ function Fim-Do-Tempo {
     if ($agora -le $limite) { return $false }
     Write-Host ''
     Write-Host ("  Tempo esgotado ({0} min): encerrando a vigia." -f $Minutos) -ForegroundColor DarkGray
+    Write-Host ("  Nesta sessao: {0} evento(s) de USB, {1} de aparelho." -f $eventosVistos, $eventosAparelho) -ForegroundColor DarkGray
     if ($CaminhoLog) {
         Write-Host ("  O que passou ficou em: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
         Write-Host '  Cole esse arquivo no chat se quiser que eu leia a sessao inteira.' -ForegroundColor DarkGray
@@ -263,23 +291,57 @@ try {
         while ($true) {
             $evento = Wait-Event -SourceIdentifier $FonteEvento -Timeout 2
             $processados = 0
-            while ($evento -and $processados -lt 40) {
+            $ruidoEntrou = 0
+            $ruidoSaiu = 0
+            $nomesRuido = @{}
+            while ($evento -and $processados -lt 60) {
                 $hora = (Get-Date).ToString('HH:mm:ss')
                 $item = $null
                 try { $item = Item-DeEvento $evento } catch { $item = $null }
-                if ($item -and $item.Operacao -eq 'entrou') {
-                    $mapa[$item.Chave] = $item
-                    Anunciar-Entrada $item $hora
-                    $ultimoAviso = Get-Date
-                } elseif ($item -and $item.Operacao -eq 'saiu') {
-                    if ($mapa.ContainsKey($item.Chave)) { $item = $mapa[$item.Chave] }
-                    $mapa.Remove($item.Chave)
-                    Anunciar-Saida $item $hora
-                    $ultimoAviso = Get-Date
+                if ($item) {
+                    $eventosVistos = $eventosVistos + 1
+                    $deAparelho = Testa-Aparelho $item
+                    if ($deAparelho) { $eventosAparelho = $eventosAparelho + 1 }
+                    if ($item.Operacao -eq 'entrou') {
+                        $mapa[$item.Chave] = $item
+                        if ($deAparelho -or -not $SoAparelhos) {
+                            Anunciar-Entrada $item $hora
+                            $ultimoAviso = Get-Date
+                        } else {
+                            Registrar ("ENTROU  " + (Descrever $item))
+                            $ruidoEntrou = $ruidoEntrou + 1
+                            $nomesRuido[$item.Nome] = $true
+                        }
+                    } elseif ($item.Operacao -eq 'saiu') {
+                        if ($mapa.ContainsKey($item.Chave)) { $item = $mapa[$item.Chave] }
+                        $mapa.Remove($item.Chave)
+                        if ($deAparelho -or -not $SoAparelhos) {
+                            Anunciar-Saida $item $hora
+                            $ultimoAviso = Get-Date
+                        } else {
+                            Registrar ("SAIU    " + (Descrever $item))
+                            $ruidoSaiu = $ruidoSaiu + 1
+                            $nomesRuido[$item.Nome] = $true
+                        }
+                    }
                 }
                 Remove-Event -EventIdentifier $evento.EventIdentifier -ErrorAction SilentlyContinue
                 $processados = $processados + 1
                 $evento = Wait-Event -SourceIdentifier $FonteEvento -Timeout 1
+            }
+            if (($ruidoEntrou + $ruidoSaiu) -gt 0) {
+                # Uma linha para o que nao e aparelho: o log guarda tudo, a tela
+                # guarda o que interessa.
+                $partes = @()
+                if ($ruidoEntrou -gt 0) { $partes += ("{0} entrou" -f $ruidoEntrou) }
+                if ($ruidoSaiu -gt 0) { $partes += ("{0} saiu" -f $ruidoSaiu) }
+                $lista = @($nomesRuido.Keys | Select-Object -First 3)
+                $nomes = ''
+                if ($lista.Count -gt 0) {
+                    $nomes = ' - ' + ($lista -join ', ')
+                    if ($nomesRuido.Count -gt 3) { $nomes = $nomes + ', ...' }
+                }
+                Write-Host ("          ({0} dispositivo(s) do PC: {1}{2} - no log)" -f ($ruidoEntrou + $ruidoSaiu), ($partes -join ', '), $nomes) -ForegroundColor DarkGray
             }
             $ultimoAviso = Mostrar-Sinal $ultimoAviso
             if (Fim-Do-Tempo) { break }
@@ -304,12 +366,26 @@ try {
 
             foreach ($chave in @($novo.Keys)) {
                 if (-not $mapa.ContainsKey($chave)) {
-                    Anunciar-Entrada $novo[$chave] (Get-Date).ToString('HH:mm:ss')
+                    $item = $novo[$chave]
+                    $eventosVistos = $eventosVistos + 1
+                    if (Testa-Aparelho $item) {
+                        $eventosAparelho = $eventosAparelho + 1
+                        Anunciar-Entrada $item (Get-Date).ToString('HH:mm:ss')
+                    } else {
+                        Registrar ("ENTROU  " + (Descrever $item))
+                    }
                 }
             }
             foreach ($chave in @($mapa.Keys)) {
                 if (-not $novo.ContainsKey($chave)) {
-                    Anunciar-Saida $mapa[$chave] (Get-Date).ToString('HH:mm:ss')
+                    $item = $mapa[$chave]
+                    $eventosVistos = $eventosVistos + 1
+                    if (Testa-Aparelho $item) {
+                        $eventosAparelho = $eventosAparelho + 1
+                        Anunciar-Saida $item (Get-Date).ToString('HH:mm:ss')
+                    } else {
+                        Registrar ("SAIU    " + (Descrever $item))
+                    }
                 }
             }
             $mapa = $novo
