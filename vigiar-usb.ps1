@@ -5,7 +5,7 @@
 # cada tentativa tem dois problemas: demora (cada rodada abre PowerShell,
 # consulta o adb e a USB) e nao mostra o instante.
 #
-# COMO ELE OLHA A USB (importa, e mudou na 0.61.9):
+# COMO ELE OLHA A USB (importa, e mudou na 0.62.0):
 #
 #   1. **Modo evento** (padrao): assina o evento de PnP do Windows com
 #      `Register-WmiEvent` sobre `__InstanceOperationEvent` / Win32_PnPEntity e
@@ -104,6 +104,10 @@ function Anunciar-Entrada($item, [string]$hora) {
         if ($item.Modelo) { $quem = "Samsung $($item.Modelo)" }
         Write-Host ("          E a {0}: o aparelho esta na porta agora." -f $quem) -ForegroundColor Green
         Write-Host '          Rode "status do celular" no JARVIS para o proximo passo.' -ForegroundColor Green
+    } elseif ([string]$item.Chave -match '^SWD|WPDBUSENUM' -or [string]$item.Classe -match 'WPD|Portable') {
+        Write-Host '          E o celular por MTP: o Windows ja o ve, a linha de dados funciona.' -ForegroundColor Green
+        Write-Host '          Se a tela pedir para desbloquear, desbloqueie: ai os arquivos abrem.' -ForegroundColor Green
+        Write-Host '          A Depuracao USB (adb) e outro passo, separado deste.' -ForegroundColor Green
     } elseif ($item.Vid -eq '0000' -or $item.Nome -match 'esconhecid|unknown') {
         Write-Host '          O Windows viu algo e nao conseguiu identificar: cabo de' -ForegroundColor Yellow
         Write-Host '          carga ou conector. Troque por um cabo de dados e veja de novo.' -ForegroundColor Yellow
@@ -140,10 +144,15 @@ function Ler-Usb {
 }
 
 # ----------------------------------------------------------------- modo evento
-function Interessa([string]$instanceId, [string]$nome) {
+function Interessa([string]$instanceId, [string]$nome, [string]$classe) {
     if ($instanceId -match '^USB') { return $true }
     if ($instanceId -match 'VID_04E8') { return $true }
-    if ($nome -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown') { return $true }
+    # ^SWD: o barramento WPD do Windows. E por aqui que o MTP aparece quando o
+    # aparelho esta bloqueado ("desbloqueie o dispositivo para ver os arquivos"):
+    # o InstanceId nao tem VID nenhum, comeca com SWD\WPDBUSENUM.
+    if ($instanceId -match '^SWD') { return $true }
+    if ($classe -match 'WPD|Portable|Android|Modem') { return $true }
+    if ($nome -match 'SAMSUNG|Android|Galaxy|ADB|MTP|SM-|esconhecid|nknown|portat|portable') { return $true }
     return $false
 }
 
@@ -154,7 +163,8 @@ function Item-DeEvento($evento) {
     if (-not $alvo) { return $null }
     $instanceId = [string]$alvo.DeviceID
     $nome = [string]$alvo.Name
-    if (-not (Interessa $instanceId $nome)) { return $null }
+    $classePnp = [string]$alvo.PNPClass
+    if (-not (Interessa $instanceId $nome $classePnp)) { return $null }
     $vid = Vid-De $instanceId
     # Win32_PnPEntity tambem dispara __InstanceModificationEvent (status, driver):
     # isso nao e aparelho entrando nem saindo. Classificar errado aqui faria um
@@ -171,6 +181,7 @@ function Item-DeEvento($evento) {
         Modelo   = $modelo
         Status   = [string]$alvo.Status
         Operacao = $operacao
+        Classe   = $classePnp
     }
 }
 
@@ -182,7 +193,12 @@ function Testa-Aparelho($item) {
     if ($item.Vid -eq '04E8') { return $true }
     if ($item.Vid -eq '0000') { return $true }
     if ($item.Modelo) { return $true }
-    if ($item.Nome -match 'SAMSUNG|Galaxy|Android|MTP|SM-|esconhecid|unknown') { return $true }
+    # WPD/Portable = o Windows vendo o aparelho por MTP (mesmo bloqueado). E o
+    # que faz o Windows dizer "desbloqueie o dispositivo para liberar os recursos".
+    $chave = [string]$item.Chave
+    if ($chave -match '^SWD|WPDBUSENUM') { return $true }
+    if ([string]$item.Classe -match 'WPD|Portable|Android|Modem') { return $true }
+    if ($item.Nome -match 'SAMSUNG|Galaxy|Android|MTP|SM-|esconhecid|unknown|portat|portable') { return $true }
     return $false
 }
 
@@ -255,6 +271,35 @@ if ($Minutos -gt 0) { $limite = $inicio.AddMinutes($Minutos) }
 $eventosVistos = 0
 $eventosAparelho = 0
 
+# Quantas vezes cada dispositivo entrou. Um aparelho que entra 3+ vezes na mesma
+# sessao esta oscilando - e isso nao e curiosidade: porta fraca, cabo ruim ou hub
+# sem energia. Enquanto a porta oscila, um aparelho novo pode nem ser enumerado,
+# entao o aviso vale mais que a contagem.
+$entradasPorDispositivo = @{}
+$jaAvisouOscilacao = @{}
+$oscilando = @{}
+
+function Contar-Entrada($item) {
+    $chave = [string]$item.Chave
+    if (-not $chave) { $chave = [string]$item.Nome }
+    $quantas = 1
+    if ($entradasPorDispositivo.ContainsKey($chave)) {
+        $quantas = [int]$entradasPorDispositivo[$chave] + 1
+    }
+    $entradasPorDispositivo[$chave] = $quantas
+    if ($quantas -ge 3 -and -not $jaAvisouOscilacao.ContainsKey($chave)) {
+        $jaAvisouOscilacao[$chave] = $true
+        $oscilando[$chave] = [pscustomobject]@{ Nome = $item.Nome; Quantas = $quantas }
+        Write-Host ("          ATENCAO: {0} ja entrou {1} vezes nesta sessao." -f $item.Nome, $quantas) -ForegroundColor Yellow
+        Write-Host '          Isso e oscilacao de porta/cabo, nao do aparelho que voce esta testando.' -ForegroundColor Yellow
+        Write-Host '          Enquanto a porta oscila, um aparelho novo pode nem ser enumerado.' -ForegroundColor Yellow
+        Write-Host '          Prefira a porta USB de tras, direto na placa, sem hub - e teste' -ForegroundColor Yellow
+        Write-Host '          com os outros dispositivos desligados dessa porta.' -ForegroundColor Yellow
+        Registrar ("OSCILANDO  {0} entrou {1} vezes" -f $item.Nome, $quantas)
+    }
+    return $quantas
+}
+
 function Mostrar-Sinal($desde) {
     $agora = Get-Date
     if (($agora - $desde).TotalSeconds -ge 30) {
@@ -278,6 +323,15 @@ function Fim-Do-Tempo {
     Write-Host ''
     Write-Host ("  Tempo esgotado ({0} min): encerrando a vigia." -f $Minutos) -ForegroundColor DarkGray
     Write-Host ("  Nesta sessao: {0} evento(s) de USB, {1} de aparelho." -f $eventosVistos, $eventosAparelho) -ForegroundColor DarkGray
+    if ($oscilando.Count -gt 0) {
+        Write-Host '  Dispositivo(s) que ficaram entrando e saindo (porta/cabo instavel):' -ForegroundColor Yellow
+        foreach ($chave in @($oscilando.Keys)) {
+            $dado = $oscilando[$chave]
+            Write-Host ("    - {0}: {1} entrada(s)" -f $dado.Nome, $dado.Quantas) -ForegroundColor Yellow
+        }
+        Write-Host '  Se o celular nao aparece, resolva essa oscilacao antes: porta de tras,' -ForegroundColor Yellow
+        Write-Host '  sem hub, e com o resto dos dispositivos USB fora do caminho.' -ForegroundColor Yellow
+    }
     if ($CaminhoLog) {
         Write-Host ("  O que passou ficou em: {0}" -f $CaminhoLog) -ForegroundColor DarkGray
         Write-Host '  Cole esse arquivo no chat se quiser que eu leia a sessao inteira.' -ForegroundColor DarkGray
@@ -304,6 +358,7 @@ try {
                     if ($deAparelho) { $eventosAparelho = $eventosAparelho + 1 }
                     if ($item.Operacao -eq 'entrou') {
                         $mapa[$item.Chave] = $item
+                        Contar-Entrada $item | Out-Null
                         if ($deAparelho -or -not $SoAparelhos) {
                             Anunciar-Entrada $item $hora
                             $ultimoAviso = Get-Date
@@ -368,6 +423,7 @@ try {
                 if (-not $mapa.ContainsKey($chave)) {
                     $item = $novo[$chave]
                     $eventosVistos = $eventosVistos + 1
+                    Contar-Entrada $item | Out-Null
                     if (Testa-Aparelho $item) {
                         $eventosAparelho = $eventosAparelho + 1
                         Anunciar-Entrada $item (Get-Date).ToString('HH:mm:ss')

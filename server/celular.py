@@ -230,7 +230,13 @@ _SONDA_WINDOWS = (
 )
 
 # Nome que só existe em aparelho, não em driver genérico.
-_RE_NOME_DE_APARELHO = re.compile(r"SAMSUNG|Galaxy|Android|ADB|MTP|SM-\w", re.I)
+# Nomes de aparelho em pt-BR e en-US: o Windows desta maquina fala portugues,
+# e um Galaxy bloqueado aparece como "Dispositivo MTP USB" / "Dispositivo
+# portatil" - sem VID, porque o WPD do Windows nao publica o fabricante.
+_RE_NOME_DE_APARELHO = re.compile(
+    r"SAMSUNG|Galaxy|Android|ADB|MTP|SM-\w|Dispositivo port\w*til|Portable Device|Telefone|Phone",
+    re.I,
+)
 
 
 def _vid(instance_id: str) -> str:
@@ -309,6 +315,11 @@ def e_aparelho(item: dict[str, str]) -> bool:
     Device" sozinho, não.
     """
     if item.get("vid") == VID_SAMSUNG:
+        return True
+    # `SWD\WPDBUSENUM\...`: o barramento WPD do Windows. E assim que um Android
+    # por MTP aparece - e o Windows mostra "desbloqueie o dispositivo para
+    # liberar os recursos" justamente por isso.
+    if str(item.get("instance") or "").upper().startswith("SWD"):
         return True
     if _RE_NOME_DE_APARELHO.search(item.get("nome") or ""):
         return True
@@ -1294,12 +1305,30 @@ def resumo(medido: dict[str, Any]) -> dict[str, Any]:
         )
         titulo = "Celular reconhecido, mas sem o driver da Samsung"
     elif windows.get("visivel"):
-        acao = (
-            "O Windows vê o celular, mas o adb não: cabo e porta estão bons, e o que "
-            "falta é ligar a Depuração USB (ou o consentimento dele). Rode "
-            "`celular.plano` para o caminho sem tela."
-        )
-        titulo = "Nenhum aparelho no adb: falta a Depuração USB"
+        sem_vid = any(not item.get("vid") for item in windows.get("telefones") or [])
+        if sem_vid:
+            acao = (
+                "O Windows já vê o aparelho por MTP (é ele que mostra, na tela do "
+                "celular, “desbloqueie o dispositivo para liberar os recursos”). Ou "
+                "seja: cabo, conector e porta estão bons. O que falta é a Depuração "
+                "USB, e ela se liga dentro do Android — se o toque da tela não "
+                "responde (ou dá toque fantasma), o caminho é operar por mouse USB: "
+                "adaptador OTG + mouse no conector do aparelho. O mouse entra pelo "
+                "controlador USB do celular e não depende do digitalizador quebrado; "
+                "olhando a tela, dá para destravar e chegar em Opções do desenvolvedor. "
+                "Duas alternativas: `scrcpy --otg` (o PC se passa por mouse e teclado "
+                "sem depuração) e o desbloqueio remoto da conta Samsung (Find My "
+                "Mobile), já que o aparelho está no Wi-Fi. Depois de destravar, ligue "
+                "a Depuração USB e o espelhamento completo passa a funcionar."
+            )
+            titulo = "O celular está na porta: falta destravar e ligar a Depuração USB"
+        else:
+            acao = (
+                "O Windows vê o celular, mas o adb não: cabo e porta estão bons, e o que "
+                "falta é ligar a Depuração USB (ou o consentimento dele). Rode "
+                "`celular.plano` para o caminho sem tela."
+            )
+            titulo = "Nenhum aparelho no adb: falta a Depuração USB"
     elif windows.get("desconhecidos"):
         acao = (
             "A porta USB viu um dispositivo que o Windows não conseguiu identificar — é a "
@@ -1493,9 +1522,15 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             "essa interface.",
         )
     elif telefones:
+        tem_wpd = any(not item.get("vid") for item in telefones)
         primeiro = _passo(
             "1. Cabo e porta estão bons",
             [
+                "o Windows já vê o celular — não troque cabo ainda",
+                "se o toque da tela não responde: adaptador OTG + mouse USB (ou scrcpy --otg) para operar o Android",
+                "destravar a tela e ligar a Depuração USB em Opções do desenvolvedor",
+                "conferir: adb devices",
+            ] if tem_wpd else [
                 "o Windows já vê o celular — não troque cabo ainda",
                 "ligar a Depuração USB (ver o caminho sem tela abaixo)",
                 "conferir: adb devices",
@@ -1561,7 +1596,8 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
             [
                 "usar o MESMO cabo em outro aparelho de entrada igual (outro micro-USB): se nada aparecer, o cabo é só de carga",
                 "trocar o cabo por um que transfira dados (o original da Samsung, se houver)",
-                "usar a porta USB de trás do PC, sem hub — e conferir que ela funciona com um pendrive",
+                "usar a porta USB de trás do PC, sem hub — e tirar da porta os outros dispositivos (leitor de cartão, hub)",
+                "se a vigia avisar 'ja entrou N vezes nesta sessao', é a porta/cabo oscilando: resolva isso antes de culpar o celular",
                 "abrir vigiar-usb-atento.bat e apertar/balançar o conector devagar, olhando a janela",
                 "segurar Power por 10 s e ligar de novo",
             ],
