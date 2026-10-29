@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.61.1 ---------------------------------------
+# --- o caminho exato do bug de 0.61.2 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.61.1 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.61.2 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -780,15 +780,19 @@ def test_sonda_sem_aparelho_nao_inventa_driver(monkeypatch):
     assert resultado["resumo"] == "O Windows não vê nenhum aparelho na USB."
 
 
-def _sonda(telefones=(), genericos=(), problema=False):
-    return {
+def _sonda(telefones=(), genericos=(), problema=False, desconhecidos=(), comparacao=None):
+    sonda = {
         "consulta": True,
-        "dispositivos": [*telefones, *genericos],
+        "dispositivos": [*telefones, *genericos, *desconhecidos],
         "telefones": list(telefones),
         "genericos": list(genericos),
+        "desconhecidos": list(desconhecidos),
         "visivel": bool(telefones),
         "com_problema": problema,
     }
+    if comparacao is not None:
+        sonda["comparacao"] = comparacao
+    return sonda
 
 
 def test_plano_vazio_muda_o_primeiro_passo_quando_a_sonda_responde():
@@ -875,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.61.1: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.61.2: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -908,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.61.1: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.61.2: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -921,7 +925,8 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
         }
     )
     assert "não é o celular" in resultado["titulo"]
-    assert "Depuração USB não resolveria" in resultado["proximo_passo"]
+    assert "nenhum é o celular" in resultado["proximo_passo"]
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.61.2: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1064,3 +1069,179 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     resultado = asyncio.run(skill_registry.build_registry(Path("/tmp/vid") / "files").execute("celular.status", {}, False))
     assert "VID_04E8" in resultado["resposta"]
     assert "celular" in resultado["resposta"]
+
+
+# --- 0.61.2: a porta viu algo / a lista não mudou ---------------------------
+
+DESCONHECIDO = {
+    "status": "Error",
+    "classe": "USB",
+    "nome": "Dispositivo USB desconhecido (Falha na solicitação do descritor)",
+    "instance": "USB\\VID_0000&PID_0000\\5&2A0F",
+    "vid": "0000",
+    "fabricante": "(Standard USB Host Controller)",
+    "problema": "CM_PROB_FAILED_START",
+}
+
+
+def test_limpar_sonda_le_o_codigo_do_problema():
+    itens = C._limpar_sonda(
+        ["Error\tUSB\tDispositivo USB desconhecido\tUSB\\VID_0000&PID_0000\\1\t(Generic)\tCM_PROB_FAILED_START",
+         "OK\tUSB\tUSB Root Hub\tUSB\\ROOT_HUB30\\2\t(Generic)\tCM_PROB_NONE"]
+    )
+    assert itens[0]["problema"] == "CM_PROB_FAILED_START"
+    assert itens[1]["problema"] == ""  # "sem problema" não é problema
+    assert itens[0]["vid"] == "0000"
+
+
+def test_sonda_nao_descarta_a_lista_depois_de_dez_itens():
+    """O teto antigo de 10 escondia justamente o que mudou entre duas checagens."""
+    linhas = [f"OK\tUSB\tHub {i}\tUSB\\HUB{i}\\1\t(Generic)\tCM_PROB_NONE" for i in range(14)]
+    assert len(C._limpar_sonda(linhas)) == 14
+
+
+def test_identifica_o_dispositivo_que_o_windows_nao_conseguiu_ler():
+    assert C.e_desconhecido(DESCONHECIDO) is True
+    assert C.e_desconhecido({"nome": "Unknown USB Device (Device Descriptor Request Failed)"}) is True
+    assert C.e_desconhecido({"nome": "USB Composite Device"}) is False
+    assert C.e_desconhecido({"nome": "USB Root Hub"}) is False
+
+
+def test_sonda_com_desconhecido_nao_culpa_driver_nem_depuracao(monkeypatch, raiz):
+    monkeypatch.setattr(C.os, "name", "nt")
+    monkeypatch.setattr(C.sys, "platform", "win32")
+    linha = (
+        "Error\tUSB\tDispositivo USB desconhecido (Falha na solicitação do descritor)\t"
+        "USB\\VID_0000&PID_0000\\5&2A0F\t(Standard)\tCM_PROB_FAILED_START"
+    )
+    resultado = C.windows_ve(rodar=lambda _argumentos: (0, linha + "\n", ""))
+
+    assert resultado["desconhecidos"] and not resultado["telefones"]
+    assert "NÃO conseguiu identificar" in resultado["resumo"]
+    assert "cabo só de carga" in resultado["resumo"]
+
+
+def test_comparacao_guarda_a_primeira_lista(raiz):
+    sonda = {"dispositivos": [{"nome": "USB Root Hub", "instance": "USB\\ROOT_HUB\\1", "vid": ""}]}
+    comparacao = C.comparar_com_ultima(sonda)
+
+    assert comparacao["primeira"] is True
+    assert "Guarda" in comparacao["frase"] or "Guardei" in comparacao["frase"]
+    guardado = C._ler_ultima_sonda()
+    assert guardado["dispositivos"][0]["nome"] == "USB Root Hub"
+
+
+def test_comparacao_ve_que_a_lista_nao_mudou(raiz):
+    sonda = {"dispositivos": [{"nome": "USB Root Hub", "instance": "USB\\ROOT_HUB\\1", "vid": ""}]}
+    C.comparar_com_ultima(sonda)
+    segunda = C.comparar_com_ultima(sonda)
+
+    assert segunda["primeira"] is False
+    assert segunda["mudou"] is False
+    assert "idêntica" in segunda["frase"]
+    assert "não viu nada novo" in segunda["frase"]
+
+
+def test_comparacao_mostra_o_que_entrou_e_o_que_saiu(raiz):
+    hub = {"nome": "USB Root Hub", "instance": "USB\\ROOT_HUB\\1", "vid": ""}
+    celular = {"nome": "SAMSUNG Mobile USB Composite Device", "instance": "USB\\VID_04E8&PID_6860\\ABC", "vid": "04e8"}
+    C.comparar_com_ultima({"dispositivos": [hub]})
+
+    entrou = C.comparar_com_ultima({"dispositivos": [hub, celular]})
+    assert entrou["mudou"] is True
+    assert entrou["novos"][0]["vid"] == "04e8"
+    assert "entrou" in entrou["frase"] and "SAMSUNG" in entrou["frase"]
+
+    saiu = C.comparar_com_ultima({"dispositivos": [hub]})
+    assert saiu["mudou"] is True
+    assert "saiu" in saiu["frase"]
+
+
+def test_comparacao_sobrevive_a_arquivo_corrompido(raiz):
+    arquivo = C._arquivo_da_sonda()
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text("{isto não é json", encoding="utf-8")
+
+    comparacao = C.comparar_com_ultima({"dispositivos": []})
+    assert comparacao["primeira"] is True
+
+
+def test_plano_comeca_pelo_fisico_quando_a_porta_viu_algo_mas_nao_identificou():
+    plano = C._plano_vazio(_sonda(desconhecidos=[DESCONHECIDO]))
+    primeiro = plano[0]
+
+    assert "não conversou" in primeiro["titulo"]
+    assert any("cabo" in comando for comando in primeiro["comandos"])
+    assert "Depuração USB não mudam nada" in primeiro["nota"]
+
+
+def test_plano_diz_que_a_lista_esta_identica_quando_nada_mudou():
+    generico = {"status": "OK", "classe": "USB", "nome": "USB Mass Storage Device", "vid": "058f"}
+    comparacao = {
+        "primeira": False,
+        "mudou": False,
+        "novos": [],
+        "saidos": [],
+        "quando": "2026-10-28T21:38:00",
+        "frase": "idêntica",
+    }
+    plano = C._plano_vazio(_sonda(genericos=[generico], comparacao=comparacao))
+
+    assert "idêntica" in plano[0]["titulo"]
+    assert "21:38" in plano[0]["titulo"]
+
+
+def test_status_mostra_a_comparacao_no_chat(ligado, monkeypatch):
+    adb = ligado / "adb.exe"
+    adb.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(C, "ferramentas", lambda: {"adb": str(adb), "scrcpy": "x", "completo": True})
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+
+    def sonda(rodar=None):
+        return {
+            "consulta": True,
+            "dispositivos": [],
+            "telefones": [],
+            "genericos": [],
+            "desconhecidos": [],
+            "visivel": False,
+            "com_problema": False,
+            "resumo": "O Windows não vê nenhum aparelho na USB.",
+        }
+
+    monkeypatch.setattr(C, "windows_ve", sonda)
+    medido = C.estado(rodar=lambda _argumentos: (0, "List of devices attached\n\n", ""))
+    assert medido["windows"]["comparacao"]["primeira"] is True
+
+    resposta = C.resumo(medido)
+    assert "Guarda" in resposta["resposta"] or "Guardei" in resposta["resposta"]
+
+
+def test_nome_do_desconhecido_nao_gasta_a_linha_com_o_parenteses():
+    assert C._descrever(DESCONHECIDO) == "Dispositivo USB desconhecido"
+
+
+def test_codigo_do_windows_vira_palavra_que_se_entende():
+    linha = C._linhas_da_usb({"dispositivos": [DESCONHECIDO]})
+    assert "driver não iniciou" in linha
+    assert "CM_PROB_FAILED_START" not in linha
+    assert "VID_0000" not in linha
+    assert "não identificado" in linha
+
+
+def test_comparacao_avisa_quando_o_que_entrou_e_o_desconhecido(raiz):
+    hub = {"nome": "USB Root Hub", "instance": "USB\\ROOT_HUB\\1", "vid": ""}
+    C.comparar_com_ultima({"dispositivos": [hub]})
+    comparacao = C.comparar_com_ultima({"dispositivos": [hub, DESCONHECIDO]})
+
+    assert "não identificou o que era" in comparacao["frase"]
+    assert "cabo" in comparacao["frase"]
+
+
+def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
+    hub = {"nome": "USB Root Hub", "instance": "USB\\ROOT_HUB\\1", "vid": ""}
+    celular = {"nome": "SAMSUNG Mobile USB Composite Device", "instance": "USB\\VID_04E8&PID_6860\\A", "vid": "04e8"}
+    C.comparar_com_ultima({"dispositivos": [hub]})
+    comparacao = C.comparar_com_ultima({"dispositivos": [hub, celular]})
+
+    assert "O celular apareceu na USB" in comparacao["frase"]

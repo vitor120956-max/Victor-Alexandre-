@@ -798,7 +798,7 @@ def test_catalogo_orcamentos() -> None:
 
 
 def test_catalogo_versao_nova() -> None:
-    assert estacao_catalog()["versao"] == "0.61.1"
+    assert estacao_catalog()["versao"] == "0.61.2"
 
 
 def test_catalogo_e_somente_leitura() -> None:

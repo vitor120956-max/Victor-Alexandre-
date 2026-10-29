@@ -65,7 +65,7 @@ def test_origem_igual_ao_host_da_api_passa():
 
 
 def test_propria_maquina_nao_digita_token_por_padrao(monkeypatch):
-    """0.61.1: sem variável nenhuma, 127.0.0.1 já não pede token."""
+    """0.61.2: sem variável nenhuma, 127.0.0.1 já não pede token."""
     monkeypatch.delenv("JARVIS_HOST_CONFIAR_LOCAL", raising=False)
     monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
     skill = _Skill("sistema.executar", SistemaExecutarInput)
@@ -139,7 +139,7 @@ def test_modo_ligado_respeita_o_token_certo_digitado(monkeypatch):
 
 
 def test_modo_ligado_corrige_token_torto_na_propria_maquina(monkeypatch):
-    """O bug de 0.61.1: o chat mandava "sim, pode" no campo do token."""
+    """O bug de 0.61.2: o chat mandava "sim, pode" no campo do token."""
     from server.skill_registry import SistemaInstalarInput
     from server.sistema import token_host
 
