@@ -1524,12 +1524,14 @@ def _plano_vazio_com_sonda(windows: dict[str, Any]) -> list[dict[str, Any]]:
     elif telefones:
         tem_wpd = any(not item.get("vid") for item in telefones)
         primeiro = _passo(
-            "1. Cabo e porta estão bons",
+            "1. Cabo e porta estão bons — falta destravar",
             [
-                "o Windows já vê o celular — não troque cabo ainda",
-                "se o toque da tela não responde: adaptador OTG + mouse USB (ou scrcpy --otg) para operar o Android",
-                "destravar a tela e ligar a Depuração USB em Opções do desenvolvedor",
-                "conferir: adb devices",
+                "o Windows já vê o celular (MTP): não troque cabo",
+                "com o toque da tela morto, use o PC como teclado: teclado-pelo-pc.bat (scrcpy --otg, sem OTG nem mouse)",
+                "no celular: notificação USB → “Carregar este dispositivo”; no PC instale o driver libusb (Zadig) se ele pedir",
+                "digite o PIN com o teclado do PC e Enter; navegue com Tab/setas",
+                "Configurações → Sobre o telefone → Informações do software → 7 toques em Número da versão",
+                "Opções do desenvolvedor → ligar Depuração USB; depois: adb devices",
             ] if tem_wpd else [
                 "o Windows já vê o celular — não troque cabo ainda",
                 "ligar a Depuração USB (ver o caminho sem tela abaixo)",
@@ -1757,6 +1759,85 @@ def plano(estado_atual: str = "auto", *, rodar: Callable[[list[str]], tuple[int,
 
 
 # --- ações -------------------------------------------------------------------
+
+# Atalhos de teclado que o Android entende por USB: o caminho para operar o
+# aparelho quando o toque da tela morreu (digitalizador quebrado, toque fantasma).
+ATALHOS_OTG = [
+    "Tab / Shift+Tab: anda de campo em campo (Configurações vira uma lista navegável)",
+    "Setas: move o foco; Enter: abre/confirma",
+    "Esc: volta (equivale ao botão Voltar)",
+    "Home do teclado = tela inicial; Ctrl+Home = recentes em várias versões",
+    "Digite o PIN com os números do teclado e Enter: destrava sem tocar na tela",
+]
+
+
+def otg(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
+    """O PC vira teclado e mouse do celular — sem OTG, sem mouse, sem comprar nada.
+
+    É a saída quando o toque da tela morreu: `scrcpy --otg` emula um teclado e um
+    mouse USB **pelo próprio cabo**. O Android vê um teclado físico e aceita
+    navegação por Tab/setas, então dá para destravar e ligar a Depuração USB sem
+    encostar no vidro.
+
+    O custo honesto: no Windows ele precisa do driver libusb (Zadig) na interface
+    do aparelho, porque o driver padrão do Windows não deixa o scrcpy falar HID.
+    Nada aqui executa — só mede o que existe e devolve o caminho.
+    """
+    info = ferramentas()
+    if not ligado():
+        return {
+            "executado": False,
+            "motivo": f"{AMBIENTE} está desligado, então nada foi executado.",
+            "passos": [],
+        }
+    if not info["scrcpy"]:
+        return {
+            "executado": True,
+            "disponivel": False,
+            "scrcpy": "",
+            "motivo": "O `scrcpy` não está instalado. Rode `celular.preparar` (baixa com hash).",
+            "passos": [],
+            "atalhos": ATALHOS_OTG,
+        }
+    caminho = Path(str(info["scrcpy"]))
+    pasta = caminho.parent
+    zadig = ""
+    for nome in ("zadig.exe", "zadig-2.8.exe", "zadig-2.9.exe"):
+        candidato = pasta / nome
+        if candidato.is_file():
+            zadig = str(candidato)
+            break
+    return {
+        "executado": True,
+        "disponivel": True,
+        "scrcpy": str(caminho),
+        "versao_pasta": pasta.name,
+        "zadig": zadig,
+        "comando": f'"{caminho}" --otg',
+        "atalho": "teclado-pelo-pc.bat",
+        "passos": [
+            "fechar o MTP antes: no celular, notificação USB → “Carregar este dispositivo” (o Windows solta a interface)",
+            "duplo clique em teclado-pelo-pc.bat (ele chama o scrcpy --otg)",
+            "se aparecer erro de USB, instalar o driver libusb com o Zadig (uma vez; o .bat explica o passo a passo)",
+            "olhando a tela do celular, digitar o PIN com o teclado do PC e apertar Enter",
+            "navegar com Tab/setas até Configurações → Sobre o telefone → Informações do software",
+            "tocar 7 vezes em Número da versão (Enter 7 vezes no item)",
+            "voltar e abrir Opções do desenvolvedor → ligar Depuração USB",
+            "fechar a janela do scrcpy e rodar `status do celular`",
+        ],
+        "atalhos": ATALHOS_OTG,
+        "aviso": (
+            "No Windows o scrcpy --otg precisa do driver libusb (Zadig) na interface do "
+            "aparelho; com o driver padrão ele não consegue falar HID. Depois de usar, "
+            "dá para devolver o driver do Windows no Gerenciador de Dispositivos "
+            "(Desinstalar dispositivo → reiniciar), e o MTP volta."
+        ),
+        "depois": (
+            "Com a Depuração USB ligada, `celular.espelhar` abre a tela numa janela do "
+            "Windows: aí o toque fantasma deixa de importar, porque quem manda é o PC."
+        ),
+    }
+
 
 def espelhar(
     *,

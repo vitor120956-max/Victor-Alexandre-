@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.62.0 ---------------------------------------
+# --- o caminho exato do bug de 0.62.1 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -665,7 +665,7 @@ def _zip_em_memoria(pasta: str, executavel: str) -> bytes:
 
 
 def test_sistema_baixar_guarda_o_arquivo_em_download(ligado, monkeypatch):
-    """O contrato que o bug da 0.62.0 quebrou: o caminho mora em `download`."""
+    """O contrato que o bug da 0.62.1 quebrou: o caminho mora em `download`."""
     from server import sistema
 
     monkeypatch.setattr(sistema, "_exigir_rede", lambda *_a, **_k: None)
@@ -879,7 +879,7 @@ def test_status_conectado_e_autorizado_diz_o_proximo_passo(monkeypatch):
 
 
 def test_status_com_tudo_pronto_mas_sem_cabo_nao_diz_tudo_pronto(monkeypatch):
-    """O bug da 0.62.0: respondia "Tudo pronto" com o celular desligado na gaveta."""
+    """O bug da 0.62.1: respondia "Tudo pronto" com o celular desligado na gaveta."""
     resultado = _status_handler_com(
         monkeypatch,
         {
@@ -912,7 +912,7 @@ def test_status_sem_cabo_mas_com_windows_cego_manda_trocar_cabo(monkeypatch):
 
 
 def test_status_com_usb_generico_nao_culpa_a_depuracao():
-    """O bug da 0.62.0: webcam com nome de driver generico virava "o celular"."""
+    """O bug da 0.62.1: webcam com nome de driver generico virava "o celular"."""
     generico = {"status": "OK", "classe": "USB", "nome": "USB Composite Device", "vid": "", "fabricante": "(Generic USB Hub)"}
     resultado = C.resumo(
         {
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.62.0: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.62.1: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.62.0: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.62.1: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1247,7 +1247,7 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     assert "O celular apareceu na USB" in comparacao["frase"]
 
 
-# --- 0.62.0: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+# --- 0.62.1: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
 
 ARP_WINDOWS = """
 Interface: 192.168.0.10 --- 0x6
@@ -1342,7 +1342,7 @@ def test_a_skill_de_rede_esta_no_registro(tmp_path):
     assert getattr(definicao, "requires_confirmation", False) is False
 
 
-# --- 0.62.0: o que apareceu na varredura de casa -----------------------------
+# --- 0.62.1: o que apareceu na varredura de casa -----------------------------
 
 ARP_DA_CASA = """
 Interface: 192.168.15.8 --- 0x4
@@ -1357,7 +1357,7 @@ Interface: 192.168.15.8 --- 0x4
 
 
 def test_broadcast_e_endereco_de_rede_nao_sao_dispositivos():
-    """A 0.62.0 listava `192.168.15.255` como "dispositivo que respondeu"."""
+    """A 0.62.1 listava `192.168.15.255` como "dispositivo que respondeu"."""
     assert C._endereco_de_dispositivo("192.168.15.22", "8c:77:12:dd:ee:ff") is True
     assert C._endereco_de_dispositivo("192.168.15.255", "ff:ff:ff:ff:ff:ff") is False
     assert C._endereco_de_dispositivo("192.168.15.0", "01:00:5e:00:00:fb") is False
@@ -1394,7 +1394,7 @@ def test_a_varredura_da_casa_mostra_mac_e_nao_conta_broadcast(ligado, monkeypatc
 
 
 def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
-    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.62.0."""
+    """"quais dispositivos estão na rede local" ficou presa em 0,47 na 0.62.1."""
     from server.agente_local import entrada_de_skill, pesquisar
     from server.skill_registry import build_registry
 
@@ -1412,7 +1412,7 @@ def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
     assert pesquisar("status do celular", entradas)[0]["entrada"].skill_id == "celular.status"
 
 
-# --- 0.62.0: o A34 provou a porta; o J7 não apareceu -------------------------
+# --- 0.62.1: o A34 provou a porta; o J7 não apareceu -------------------------
 
 A34 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M9\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-A346B"
 J7 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R28M1\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-G610M"
@@ -1509,7 +1509,7 @@ def test_a_memoria_da_porta_aparece_tambem_quando_ha_dispositivo_generico(ligado
     assert "porta já viu um Samsung" in resposta["proximo_passo"]
 
 
-# --- 0.62.0: histórico do Windows e vigia atenta -----------------------------
+# --- 0.62.1: histórico do Windows e vigia atenta -----------------------------
 
 EVENTOS = (
     "09:27:26\t400\tMicrosoft-Windows-Kernel-PnP\tDevice USB\\ROOT_HUB\\1 was configured\n"
@@ -1575,7 +1575,7 @@ def _ps1() -> str:
 
 
 def test_vigia_atenta_usa_modo_evento_e_nao_intervalo_curto():
-    """A 0.62.0 pedia 400 ms, mas a consulta levava 4,7 s: o modo atento nao existia."""
+    """A 0.62.1 pedia 400 ms, mas a consulta levava 4,7 s: o modo atento nao existia."""
     from pathlib import Path as _Path
 
     raiz = _Path(__file__).resolve().parents[2]
@@ -1606,7 +1606,7 @@ def test_vigia_nao_confunde_mudanca_com_entrada_ou_saida():
 
 
 def test_aviso_de_consulta_lenta_nao_repete_a_cada_volta():
-    """Na 0.62.0 a linha saia em toda volta e enchia o log (medido: 4.746 ms)."""
+    """Na 0.62.1 a linha saia em toda volta e enchia o log (medido: 4.746 ms)."""
     ps1 = _ps1()
     assert "TotalSeconds -ge 60" in ps1
 
@@ -1621,7 +1621,7 @@ def test_vigia_grava_log_e_diz_onde():
     assert "storage\\celular" in ps1
 
 
-# --- 0.62.0: o ruido do leitor de cartao escondia o que interessava ----------
+# --- 0.62.1: o ruido do leitor de cartao escondia o que interessava ----------
 
 def test_vigia_atenta_filtra_o_que_nao_e_aparelho():
     """Um leitor de cartao gera 5 linhas por evento; o celular e o que importa."""
@@ -1657,7 +1657,7 @@ def test_sinal_de_vida_nao_diz_que_nada_mudou_quando_algo_mudou():
     assert "Nesta sessao: {0} evento(s) de USB, {1} de aparelho" in ps1
 
 
-# --- 0.62.0: a porta que oscila ---------------------------------------------
+# --- 0.62.1: a porta que oscila ---------------------------------------------
 
 def test_vigia_detecta_dispositivo_que_fica_entrando_e_saindo():
     """O leitor de cartao entrou 5 vezes na sessao: isso e a porta, nao o celular."""
@@ -1685,7 +1685,7 @@ def test_oscilacao_conta_nos_dois_modos():
     assert ps1.count("Contar-Entrada $item") == 2  # evento e consulta
 
 
-# --- 0.62.0: o celular aparece por MTP (WPD) e fala portugues ---------------
+# --- 0.62.1: o celular aparece por MTP (WPD) e fala portugues ---------------
 
 WPD_PT = {
     "status": "OK",
@@ -1737,3 +1737,76 @@ def test_o_plano_com_mtp_manda_usar_mouse_otg_quando_o_toque_morre():
     comandos = " ".join(plano[0]["comandos"])
     assert "OTG" in comandos
     assert "Depuração USB" in comandos
+
+
+# --- 0.62.1: o PC como teclado (sem OTG, sem mouse) -------------------------
+
+def test_otg_lista_os_passos_mesmo_sem_scrcpy(ligado):
+    """Sem scrcpy instalado ainda dá para explicar o caminho."""
+    medido = C.otg()
+    assert medido["executado"] is True
+    assert medido["disponivel"] is False
+    assert "celular.preparar" in medido["motivo"]
+    assert any("Tab" in atalho for atalho in medido["atalhos"])
+
+
+def test_otg_com_scrcpy_devolve_comando_e_atalho(ligado, monkeypatch):
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    monkeypatch.setattr(
+        C,
+        "ferramentas",
+        lambda: {"adb": "a", "scrcpy": str(raiz / "scrcpy.exe"), "completo": True},
+    )
+    medido = C.otg()
+    assert medido["disponivel"] is True
+    assert medido["comando"].endswith("--otg")
+    assert medido["atalho"] == "teclado-pelo-pc.bat"
+    assert any("7 vezes" in passo or "7 toques" in passo for passo in medido["passos"])
+    assert "libusb" in medido["aviso"]
+    assert "espelhar" in medido["depois"]
+
+
+def test_otg_recusa_com_a_camada_desligada(raiz):
+    medido = C.otg()
+    assert medido["executado"] is False
+    assert "desligado" in medido["motivo"]
+
+
+def test_atalhos_explicam_como_destravar_sem_tocar():
+    texto = " ".join(C.ATALHOS_OTG)
+    assert "PIN" in texto
+    assert "Tab" in texto and "Enter" in texto and "Esc" in texto
+
+
+def test_o_bat_do_teclado_existe_e_nao_tem_acento():
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    bat = raiz / "teclado-pelo-pc.bat"
+    assert bat.is_file()
+    bruto = bat.read_bytes()
+    assert [(i, b) for i, b in enumerate(bruto) if b > 127] == []
+    texto = bruto.decode("utf-8")
+    assert "--otg" in texto
+    assert "Carregar este dispositivo" in texto
+    assert "chcp 65001" in texto
+    # nada de credencial nem de exclusao de arquivo por aqui
+    assert "del " not in texto.lower()
+
+
+def test_o_bat_acha_o_scrcpy_em_subpasta_e_avisa_quando_falta():
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    texto = (raiz / "teclado-pelo-pc.bat").read_text(encoding="utf-8")
+    assert 'for /r "storage\\ferramentas" %%f in (scrcpy.exe)' in texto
+    assert "celular.preparar" in texto
+
+
+def test_a_skill_de_otg_esta_no_registro(tmp_path):
+    from server.skill_registry import build_registry
+
+    registro = build_registry(tmp_path)
+    assert registro.get("celular.otg") is not None
