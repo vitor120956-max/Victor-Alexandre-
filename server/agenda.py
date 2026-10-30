@@ -36,7 +36,7 @@ from typing import Any
 
 from . import dados as dados_locais
 
-VERSAO = "0.62.5"
+VERSAO = "0.62.6"
 
 ARQUIVO = "agenda.json"
 MAX_ITENS = 2_000
@@ -383,7 +383,7 @@ def devidos(
     """O que precisa de atenção agora: o que passou e o que chega na janela.
 
     Cada item usa o próprio `avisar_antes`; o parâmetro `antecedencia` é só o
-    padrão de quem não declarou nada (itens antigos, criados antes da 0.62.5).
+    padrão de quem não declarou nada (itens antigos, criados antes da 0.62.6).
     """
     momento = _agora(agora)
     try:

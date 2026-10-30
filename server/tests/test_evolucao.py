@@ -679,7 +679,7 @@ def client():
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.62.5"
+    assert dados["version"] == "0.62.6"
     assert dados["skills"] == 291
 
 
@@ -697,7 +697,7 @@ def test_api_mapa_exige_token(client):
 def test_api_regras_responde(client):
     corpo = client.post("/api/skills/evoluir.regras/execute", json={"parameters": {}}).json()
     assert corpo["ok"] is True
-    assert corpo["result"]["versao"] == "0.62.5"
+    assert corpo["result"]["versao"] == "0.62.6"
 
 
 def test_api_ensaiar_exige_confirmacao(client):

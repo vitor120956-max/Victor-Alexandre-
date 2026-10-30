@@ -1,7 +1,7 @@
 /**
  * Qual valor vai no campo `autorizacao` de uma skill de host.
  *
- * Regra única para toda a interface (era o bug da 0.62.5): o texto que a pessoa
+ * Regra única para toda a interface (era o bug da 0.62.6): o texto que a pessoa
  * digitou no chat **nunca** é token. Antes, o "sim, pode" que liberava a
  * confirmação ia junto como autorização e a skill recusava com "token inválido",
  * mesmo a pessoa estando na própria máquina.

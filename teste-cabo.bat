@@ -6,7 +6,7 @@ echo   JARVIS - teste de cabo, porta e conector do celular
 echo.
 echo   Responde: quando eu plugo o celular, o Windows muda em alguma coisa?
 echo   Se nao mudar, nao e driver (o Zadig so lista o que aparece).
-echo   Versao: 0.62.5
+echo   Versao: 0.62.6
 echo.
 echo   Antes de comecar:
 echo     - feche o Gerenciador de Dispositivos e janelas do Explorer abertas
@@ -24,6 +24,7 @@ echo   Codigo do teste: %CODIGO%
 echo     0 = o celular aparece (VID_04E8): agora sim e driver, rode sonda-otg.bat
 echo     1 = apareceu algo, mas nada Samsung: cole a tela no chat
 echo     2 = NADA apareceu: e fisico (conector, cabo ou porta), nao driver
+echo         -> rode  vigiar-cabo.bat  para saber se e solda fria ou pino quebrado
 echo     3 = a leitura do Windows falhou: rode de novo
 echo.
 pause

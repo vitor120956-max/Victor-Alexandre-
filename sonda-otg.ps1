@@ -9,7 +9,7 @@
 # Esta sonda responde com o que o Windows ja sabe: quais nos USB existem para o
 # aparelho (VID_04E8 = Samsung) e qual driver esta em cada um.
 #
-# O QUE MUDOU NA 0.62.5 (dois furos da 1a versao, que davam falso negativo):
+# O QUE MUDOU NA 0.62.6 (dois furos da 1a versao, que davam falso negativo):
 #
 #   1. a versao antiga consultava `DeviceID LIKE 'USB%'` e depois procurava
 #      "MTP/Portable" DENTRO desse resultado. So que o MTP do celular vive em
