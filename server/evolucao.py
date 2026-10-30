@@ -38,7 +38,7 @@ from typing import Any
 from . import tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.62.4"
+VERSAO = "0.62.5"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage" / "evolucao"

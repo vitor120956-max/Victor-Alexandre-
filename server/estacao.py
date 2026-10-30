@@ -30,7 +30,7 @@ class EstacaoError(ValueError):
     """Erro de entrada da estação; a API devolve 200 com `ok:false`."""
 
 
-VERSAO = "0.62.4"
+VERSAO = "0.62.5"
 MAX_TEXTO = 40_000
 MAX_LISTA = 60
 

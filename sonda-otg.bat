@@ -6,7 +6,7 @@ echo   JARVIS - ver com qual driver o Windows esta falando com o celular
 echo.
 echo   Serve para saber, sem adivinhar, se o erro do scrcpy --otg
 echo   ("Could not find any USB device") e falta de driver ou outra coisa.
-echo   Versao: 0.62.4
+echo   Versao: 0.62.5
 echo.
 if not exist "sonda-otg.ps1" goto semsonda
 set CODIGO=
@@ -33,6 +33,9 @@ echo.
 goto fim
 
 :fim
+echo.
+echo   Se o codigo foi 2 (nada na USB), rode  teste-cabo.bat  para separar
+echo   cabo, porta e conector do celular.
 echo.
 echo   Cole esta tela no chat do JARVIS se quiser que eu leia.
 echo.

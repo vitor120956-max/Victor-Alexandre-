@@ -1816,10 +1816,12 @@ def otg(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> 
         "comando": f'"{caminho}" --otg',
         "atalho": "teclado-pelo-pc.bat",
         "sonda": "sonda-otg.bat",
+        "teste_fisico": "teste-cabo.bat",
         "passos": [
             "NÃO é preciso mexer na tela do celular: quem solta o MTP é o driver do PC",
             "duplo clique em sonda-otg.bat primeiro: ele lista o driver de cada nó USB e conta o que viu (código 0 = ok, 1 = falta driver, 2 = nada na USB, 3 = a consulta ao Windows falhou)",
             "se a sonda não achar o aparelho, rode de novo e aceite o modo de espera: ela fica 30 s olhando enquanto você mexe no cabo",
+            "se a sonda nunca achar nada, o Zadig não resolve (ele só lista aparelho enumerado): rode teste-cabo.bat, que separa conector do celular, porta do PC e cabo, com pausa entre as tentativas",
             "se a sonda disser que falta driver, instalar o libusb com o Zadig na interface do aparelho (uma vez; o .bat e a sonda explicam o clique a clique)",
             "duplo clique em teclado-pelo-pc.bat (ele roda a sonda de novo e chama o scrcpy --otg)",
             "a partir daí o mouse e o teclado do PC controlam o celular: dá para puxar a barra de notificações arrastando do topo",

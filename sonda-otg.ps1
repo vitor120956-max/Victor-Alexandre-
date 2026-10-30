@@ -9,7 +9,7 @@
 # Esta sonda responde com o que o Windows ja sabe: quais nos USB existem para o
 # aparelho (VID_04E8 = Samsung) e qual driver esta em cada um.
 #
-# O QUE MUDOU NA 0.62.4 (dois furos da 1a versao, que davam falso negativo):
+# O QUE MUDOU NA 0.62.5 (dois furos da 1a versao, que davam falso negativo):
 #
 #   1. a versao antiga consultava `DeviceID LIKE 'USB%'` e depois procurava
 #      "MTP/Portable" DENTRO desse resultado. So que o MTP do celular vive em
@@ -138,6 +138,10 @@ if ($dados.Samsung.Count -eq 0) {
     Fala ""
     Fala "  Dica: rode  sonda-otg.bat  e aceite o modo de espera (30s) para"
     Fala "  plugar o cabo enquanto ela olha."
+    Fala ""
+    Fala "  Se nem com a espera aparecer nada, nao e driver (o Zadig so lista o"
+    Fala "  que aparece). Rode  teste-cabo.bat : ele separa cabo, porta e"
+    Fala "  conector do celular, com pausa entre as tentativas."
     Fala ""
     exit 2
 }
