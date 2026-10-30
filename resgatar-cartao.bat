@@ -9,7 +9,7 @@ echo   do aparelho, entra no leitor e as fotos vem para o PC. O conector do
 echo   celular nao e usado em nenhum momento.
 echo.
 echo   O cartao e tratado como SOMENTE LEITURA: nada e apagado nem movido nele.
-echo   Versao: 0.62.9
+echo   Versao: 0.63.0
 echo.
 echo   Como fazer:
 echo     1. desligue o celular;

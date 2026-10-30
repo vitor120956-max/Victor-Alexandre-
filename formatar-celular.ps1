@@ -135,7 +135,7 @@ Fala '  O toque da tela nao funciona e a porta USB perdeu os dados. Mesmo assim 
 Fala '  Android tem um menu de fabrica que se opera SO com botoes: o recovery.'
 Fala '  Este guia leva voce por ele, com pausa em cada passo.'
 Fala ''
-Fala '  Versao: 0.62.9'
+Fala '  Versao: 0.63.0'
 Fala ''
 
 if ($Roteiro) {

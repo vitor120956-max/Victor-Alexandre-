@@ -13,7 +13,7 @@ echo   estava no aparelho (FRP). Sem essa senha o celular nao volta a
 echo   funcionar nem com a tela consertada. O guia pergunta isso primeiro
 echo   e, se a resposta for 'nao sei', ele para sem zerar.
 echo.
-echo   Versao: 0.62.9
+echo   Versao: 0.63.0
 echo.
 echo   Para so LER o roteiro, sem responder nada:
 echo     formatar-celular.bat -Roteiro

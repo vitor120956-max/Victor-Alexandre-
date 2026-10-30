@@ -27,6 +27,7 @@ from .agency import (
     verify_watchdog,
 )
 from . import agenda as agenda_local
+from . import estudo as estudo_local
 from . import backup as backup_local
 from . import git as git_local
 from .documents import create_document, merge_pdfs, read_document
@@ -2281,6 +2282,32 @@ class AgendaMarcarInput(BaseModel):
     avisar_antes: int = Field(default=30, ge=0, le=43200, title="Avisar quantos minutos antes", json_schema_extra={"description": "30 por padrão. `0` desliga o aviso automático deste compromisso."})
 
 
+class EstudoAdicionarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baralho: str = Field(min_length=2, max_length=120, title="Baralho", json_schema_extra={"description": "Nome do baralho: “civil”, “inglês”, “anatomia”. Se não existir, é criado."})
+    texto: str = Field(default="", max_length=200_000, title="Material", json_schema_extra={"description": "Resumo, capítulo ou anotação. Vira cartão pelas frases do tipo “X é Y” e pelos verbetes “Termo: definição”."})
+    frente: str = Field(default="", max_length=300, title="Pergunta (cartão à mão)", json_schema_extra={"description": "Opcional: escreva o cartão você mesmo. Precisa do verso também."})
+    verso: str = Field(default="", max_length=2_000, title="Resposta (cartão à mão)")
+
+
+class EstudoRevisarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baralho: str = Field(default="", max_length=120, title="Baralho", json_schema_extra={"description": "Vazio olha todos. Aceita nome ou id."})
+    limite: int = Field(default=20, ge=1, le=100, title="Quantos cartões", json_schema_extra={"description": "Quantos vencidos trazer de uma vez."})
+
+
+class EstudoResponderInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cartao: str = Field(min_length=4, max_length=40, title="Cartão", json_schema_extra={"description": "O id que veio em estudo.revisar."})
+    nota: str = Field(min_length=1, max_length=10, title="Nota", json_schema_extra={"description": "`errei`, `difícil`, `bom` ou `fácil` (ou 0 a 5)."})
+    baralho: str = Field(default="", max_length=120, title="Baralho", json_schema_extra={"description": "Opcional, só para o relatório."})
+
+
+class EstudoProgressoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baralho: str = Field(default="", max_length=120, title="Baralho", json_schema_extra={"description": "Vazio traz o boletim geral."})
+
+
 class AgendaListarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dias: int = Field(default=0, ge=0, le=3650, title="Janela em dias", json_schema_extra={"description": "0 lista tudo em aberto; 7 olha só a semana; 30 o mês."})
@@ -4090,7 +4117,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.62.9 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.63.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4865,6 +4892,49 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             ),
         }
 
+    def estudo_baralhos_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        itens = estudo_local.baralhos()
+        return {
+            "baralhos": itens,
+            "total": len(itens),
+            "vencidos": sum(i["vencidos"] for i in itens),
+            "aviso": "" if itens else "Nenhum baralho ainda: crie um com estudo.adicionar.",
+        }
+
+    def estudo_adicionar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudoAdicionarInput)
+        try:
+            return estudo_local.adicionar(
+                data.baralho, texto=data.texto, frente=data.frente, verso=data.verso
+            )
+        except estudo_local.EstudoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estudo_revisar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudoRevisarInput)
+        try:
+            return estudo_local.revisar(data.baralho, limite=data.limite)
+        except estudo_local.EstudoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estudo_responder_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudoResponderInput)
+        try:
+            return estudo_local.responder(data.cartao, data.nota)
+        except estudo_local.EstudoError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def estudo_progresso_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudoProgressoInput)
+        dados = estudo_local.progresso()
+        if data.baralho:
+            alvo = estudo_local._resolver_chave(estudo_local.carregar(), data.baralho)
+            dados["baralhos"] = [b for b in dados["baralhos"] if b["baralho"] == alvo]
+            if not dados["baralhos"]:
+                raise SkillError(f'Não existe o baralho "{data.baralho}".')
+        dados["resumo"] = estudo_local.resumo(estudo_local.progresso())
+        return dados
+
     def agenda_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, AgendaListarInput)
         resultado = agenda_local.listar(dias=data.dias, incluir_concluidos=data.incluir_concluidos)
@@ -5306,6 +5376,11 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("estudo.baralhos", "O que está para estudar", "Lista os baralhos com total de cartões, quantos venceram hoje e quantos são novos. Só lê: nada é agendado aqui.", "Estudo", EmptyInput, estudo_baralhos_handler, timeout_seconds=10),
+        SkillDefinition("estudo.adicionar", "Virar material em cartões", "Transforma um resumo, um capítulo ou uma anotação em cartões de pergunta e resposta, sem modelo: reconhece definições (“X é Y”), verbetes (“Termo: definição”, “Termo — definição”) e título seguido do primeiro parágrafo. Diz quantas linhas foram ignoradas em vez de fingir que aproveitou tudo. Também aceita um cartão escrito à mão. Cartão repetido não entra duas vezes.", "Estudo", EstudoAdicionarInput, estudo_adicionar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("estudo.revisar", "O que revisar agora", "Devolve os cartões vencidos, do mais atrasado para o menos, com pergunta, resposta e há quantos dias venceram. É o laço de repetição espaçada: o cartão volta antes de ser esquecido.", "Estudo", EstudoRevisarInput, estudo_revisar_handler, timeout_seconds=15),
+        SkillDefinition("estudo.responder", "Responder um cartão", "Registra a resposta com nota (`errei`, `difícil`, `bom`, `fácil` ou 0 a 5) e aplica o SM-2: a nota mexe na facilidade do cartão e no intervalo até voltar. Cartão errado volta amanhã; fácil some por semanas. Diz quando ele volta.", "Estudo", EstudoResponderInput, estudo_responder_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
+        SkillDefinition("estudo.progresso", "Boletim do estudo", "Números medidos, não elogio: retenção (acertos ÷ respostas), cartões vencidos, novos, dias estudados, sequência de dias seguidos e os cartões que mais erram — os que pedem material melhor.", "Estudo", EstudoProgressoInput, estudo_progresso_handler, timeout_seconds=15),
         SkillDefinition("agenda.marcar", "Marcar compromisso", "Grava um compromisso com data interpretada sem modelo e devolve por extenso o que entendeu (“terça-feira, 27/10/2026 às 14:00”). Se a data não for reconhecível, recusa em vez de adivinhar. Fica em `agenda.json`, sem conta e sem nuvem.", "Agenda", AgendaMarcarInput, agenda_marcar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=10),
         SkillDefinition("agenda.lembretes", "O que está vencendo", "Lista o que já passou e o que chega dentro da janela pedida (30 min por padrão), usando o aviso que cada compromisso declarou. Só lê — quem mostra na tela é a interface, enquanto ela estiver aberta.", "Agenda", AgendaLembretesInput, agenda_lembretes_handler, timeout_seconds=10),
         SkillDefinition("agenda.listar", "Ver a agenda", "Lista os compromissos em ordem de data, marca o que já passou de prazo e diz qual é o próximo. Filtra por janela de dias (`dias=7` para a semana).", "Agenda", AgendaListarInput, agenda_listar_handler, timeout_seconds=10),

@@ -16,7 +16,7 @@ echo     - encoste uma cunha fina (papel dobrado) entre cabo e aparelho.
 echo.
 echo   A janela olha por 60 segundos e avisa na hora em que QUALQUER
 echo   aparelho aparecer no Windows.
-echo   Versao: 0.62.9
+echo   Versao: 0.63.0
 echo.
 echo   Antes de comecar: deixe a tela do celular acesa e feche o Gerenciador
 echo   de Dispositivos e janelas do Explorer abertas na pasta do celular.

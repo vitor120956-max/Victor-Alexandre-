@@ -1,0 +1,349 @@
+/* Estudo — repetição espaçada.
+   Paleta e tipografia vêm do sistema; aqui só o arranjo da sessão.
+   Regra: nada de gradiente roxo, nada de vidro fosco — o cartão é o herói. */
+
+.estudo-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.estudo-metricas {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.estudo-alerta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 12px;
+  background: var(--surface-muted, #faf8f3);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.estudo-alerta-erro {
+  border-color: #d8a6a0;
+  background: #fdf3f2;
+  color: #8a2f26;
+}
+
+.estudo-alerta code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.82rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.estudo-link {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.estudo-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1080px) {
+  .estudo-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.estudo-sessao,
+.estudo-material,
+.estudo-baralhos {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.estudo-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.estudo-cabecalho h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.estudo-cabecalho p {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted, #6b6459);
+}
+
+.estudo-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #eef4ee;
+  color: #2f5c36;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- o cartão */
+
+.estudo-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 14px;
+  background: var(--surface, #fffdf8);
+  min-height: 240px;
+  justify-content: center;
+}
+
+.estudo-tag {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6459);
+}
+
+.estudo-pergunta {
+  margin: 0;
+  font-size: 1.28rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+.estudo-resposta {
+  border-top: 1px dashed var(--border, #e3e0d8);
+  padding-top: 12px;
+}
+
+.estudo-resposta > span {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6459);
+}
+
+.estudo-resposta p {
+  margin: 6px 0 0;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.estudo-notas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .estudo-notas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.estudo-nota {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 10px;
+  background: var(--surface, #fffdf8);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.estudo-nota:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: currentColor;
+}
+
+.estudo-nota strong {
+  font-size: 0.9rem;
+}
+
+.estudo-nota small {
+  font-size: 0.74rem;
+  color: var(--text-muted, #6b6459);
+}
+
+.estudo-nota-errei { color: #8a2f26; }
+.estudo-nota-dificil { color: #7a5a1e; }
+.estudo-nota-bom { color: #2f5c36; }
+.estudo-nota-facil { color: #2b4a6f; }
+
+/* ---------------------------------------------------------------- vazio */
+
+.estudo-vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px;
+  color: var(--text-muted, #6b6459);
+  text-align: center;
+}
+
+.estudo-vazio small {
+  font-size: 0.8rem;
+}
+
+.estudo-vazio-texto {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted, #6b6459);
+}
+
+/* ---------------------------------------------------------------- material */
+
+.estudo-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.estudo-campo > span {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6459);
+  font-size: 0.72rem;
+}
+
+.estudo-campo input,
+.estudo-campo textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 10px;
+  background: var(--surface, #fffdf8);
+  font: inherit;
+  font-size: 0.92rem;
+  resize: vertical;
+}
+
+.estudo-campo textarea {
+  line-height: 1.5;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.86rem;
+}
+
+.estudo-nota-tecnica {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b6459);
+}
+
+/* ---------------------------------------------------------------- baralhos */
+
+.estudo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.estudo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 10px;
+}
+
+.estudo-linha strong {
+  display: block;
+  font-size: 0.94rem;
+}
+
+.estudo-linha small {
+  font-size: 0.78rem;
+  color: var(--text-muted, #6b6459);
+}
+
+.estudo-linha-fim {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.estudo-pill {
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  background: #eef4ee;
+  color: #2f5c36;
+  white-space: nowrap;
+}
+
+.estudo-pill-alerta {
+  background: #fbf1e4;
+  color: #7a5a1e;
+}
+
+.estudo-fracos {
+  border-top: 1px solid var(--border, #e3e0d8);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.estudo-fracos h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.estudo-fracos ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.estudo-fracos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+}
+
+.estudo-fracos small {
+  color: var(--text-muted, #6b6459);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.estudo-fracos p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b6459);
+}

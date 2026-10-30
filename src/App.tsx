@@ -14,6 +14,7 @@ import { LeanPage } from './pages/LeanPage';
 import { AgencyPage } from './pages/AgencyPage';
 import { EstudioPage } from './pages/EstudioPage';
 import { TastePage } from './pages/TastePage';
+import { EstudoPage } from './pages/EstudoPage';
 import { DiagramPage } from './pages/DiagramPage';
 import { CuradoriaPage } from './pages/CuradoriaPage';
 import { MarketingPage } from './pages/MarketingPage';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="agencia" element={<AgencyPage />} />
         <Route path="estudio" element={<EstudioPage />} />
         <Route path="direcao" element={<TastePage />} />
+        <Route path="estudo" element={<EstudoPage />} />
         <Route path="diagramas" element={<DiagramPage />} />
         <Route path="curadoria" element={<CuradoriaPage />} />
         <Route path="marketing" element={<MarketingPage />} />

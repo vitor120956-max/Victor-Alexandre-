@@ -37,6 +37,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 import { Logo } from './Logo';
 import { useApp } from '../context/AppContext';
 import { classNames, formatTime } from '../lib/utils';
@@ -56,6 +57,7 @@ const navigation = [
   { to: '/agencia', label: 'Agentes', icon: ShieldCheck },
   { to: '/estudio', label: 'Estúdio', icon: SwatchBook },
   { to: '/direcao', label: 'Direção', icon: Palette },
+  { to: '/estudo', label: 'Estudo', icon: GraduationCap },
   { to: '/diagramas', label: 'Diagramas', icon: Workflow },
   { to: '/curadoria', label: 'Curadoria', icon: Library },
   { to: '/marketing', label: 'Marketing', icon: TrendingUp },
