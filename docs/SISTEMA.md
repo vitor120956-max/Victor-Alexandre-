@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.63.0", "skills": 288, "confiarLocal": true }
+GET /api/health  →  { "version": "0.64.0", "skills": 288, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)
@@ -142,7 +142,7 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 }
 ```
 
-## As doze skills
+## As doze skills (e as três de `maquina.*`)
 
 | Rota | Efeito | O que devolve |
 |---|---|---|
@@ -158,6 +158,11 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 | `sistema.desinstalar` | leitura | comando de remoção, risco e token de uso único |
 | `sistema.executar` | **executa** | código de saída e mensagens do instalador |
 | `sistema.regras` | leitura | guardas, allowlist, limites e recusas |
+| `maquina.processos` | leitura | processos por grupo, com comando e desfazer — nada é fechado |
+| `maquina.portatil` | leitura | 18 ferramentas portáteis e 9 itens que não são portáteis |
+| `maquina.plano` | leitura | ordem de download com MB acumulado — nada é baixado |
+
+As três `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: `sistema.*` mexe na máquina (baixa, instala, executa), `maquina.*` só lê e explica. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra).
 
 Leitura e efeito nunca dividem a mesma skill. `sistema.rede` não baixa, `sistema.instalar` não executa: quem escreve e quem executa são skills separadas, para que a fronteira apareça no catálogo e no `requiresConfirmation` da API.
 

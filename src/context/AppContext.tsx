@@ -498,7 +498,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { id: createId('message'), role: 'user' as const, content: text, timestamp: new Date().toISOString() },
       ].slice(-120));
       setProcessing('python');
-      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.63.0).
+      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.64.0).
       void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true)
         .then((resultado) => {
           setProcessing(null);

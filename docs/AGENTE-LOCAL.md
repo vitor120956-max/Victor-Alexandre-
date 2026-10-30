@@ -19,7 +19,7 @@ O caminho tem seis degraus, nesta ordem:
 |---|---|---|---|
 | 0 | **Correlação ensinada** | se você já corrigiu esse pedido, usa a skill que você escolheu | API Python ligada |
 | 0b | **Resposta guardada** | se você já mandou buscar isso na web, devolve o que ficou guardado, com a data | API Python ligada |
-| 1 | **Skill existente** | procura nas 299 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
+| 1 | **Skill existente** | procura nas 302 skills por palavra (nome, categoria, descrição, campos), preenche os parâmetros a partir da própria frase e executa | API Python ligada |
 | 2 | **Receita pronta** | se não achou skill, monta uma **skill local** a partir de 26 receitas e executa na hora | API Python ligada |
 | 3 | **Web** | busca no DuckDuckGo, na Wikipédia ou no YouTube, lê a primeira página e devolve fontes + trecho, marcando a fonte de cada um | só rede (`JARVIS_HOST_REDE=1`) — **sem token** |
 | 4 | **Explicação** | diz que não achou e mostra o que sabe fazer | — |
@@ -157,7 +157,7 @@ skill legal.article documentId=cdc, article=49
 ```
 
 O valor é convertido pelo tipo do campo (inteiro, decimal, sim/não, JSON para
-tipo composto). Há um teste que monta essa frase para **todas as 299 skills**,
+tipo composto). Há um teste que monta essa frase para **todas as 302 skills**,
 relê com o mesmo parser e valida no modelo Pydantic de cada uma — sem executar
 nada. É a prova de que nenhuma skill fica inalcançável.
 

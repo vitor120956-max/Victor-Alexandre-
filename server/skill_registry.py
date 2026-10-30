@@ -28,6 +28,8 @@ from .agency import (
 )
 from . import agenda as agenda_local
 from . import estudo as estudo_local
+from . import portatil as portatil_local
+from . import processos as processos_local
 from . import backup as backup_local
 from . import git as git_local
 from .documents import create_document, merge_pdfs, read_document
@@ -4117,7 +4119,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.63.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.64.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4892,6 +4894,22 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             ),
         }
 
+    def maquina_processos_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # O usuário viu "NVIDIA Container" aberto no Gerenciador de Tarefas. Isto
+        # lê a lista e explica cada processo; não fecha nada.
+        dados = processos_local.relatorio()
+        dados["nvidia"] = processos_local.nvidia()
+        return dados
+
+    def maquina_portatil_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # O que dá para levar no pendrive e o que nunca vai caber (driver, .NET...).
+        return portatil_local.catalogo()
+
+    def maquina_plano_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        dados = portatil_local.plano()
+        dados["resumo"] = portatil_local.resumo(dados)
+        return dados
+
     def estudo_baralhos_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         itens = estudo_local.baralhos()
         return {
@@ -5376,6 +5394,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("maquina.processos", "O que está rodando e o que não precisa", "Lista os processos do Windows por memória e explica cada um em três grupos: essencial (não mexa, e o que cai junto), driver (o caso do NVIDIA Container: não desenha nada, serve ao painel/ShadowPlay — fechar devolve RAM e não melhora imagem nem FPS) e sobra (atualizador, assistente, overlay de jogo, app de loja). Para cada sobra diz o que se perde, o comando para parar agora e como impedir de voltar no boot. Não fecha processo nenhum: só lê e explica.", "Máquina", EmptyInput, maquina_processos_handler, timeout_seconds=60),
+        SkillDefinition("maquina.portatil", "O que cabe no pendrive do JARVIS", "Catálogo de ferramentas que rodam do pendrive sem instalar (ADB+scrcpy, 7-Zip, SumatraPDF, Everything, Sysinternals, HWiNFO, CrystalDiskInfo, Tesseract, FFmpeg, Notepad++, KeePassXC, WinMerge, ImageMagick, HxD, VLC, Rufus, Ventoy, TestDisk), cada uma com licença, site oficial, tamanho e a skill do JARVIS que ela libera. Marca o que já está na pasta de ferramentas e lista à parte o que NÃO dá para levar — driver de vídeo, .NET, Visual C++, Npcap, antivírus — com o motivo técnico. Não baixa nada.", "Máquina", EmptyInput, maquina_portatil_handler, timeout_seconds=30),
+        SkillDefinition("maquina.plano", "Em que ordem baixar as ferramentas", "Diz o que falta no pendrive na ordem que destrava mais coisa primeiro (ADB+scrcpy antes de tudo, porque libera o celular; depois o que faz o PC caber em 4 GB), com o total acumulado em MB e o link oficial de cada uma. Só mede e ordena: baixar é sistema.baixar, que guarda em quarentena e calcula SHA-256.", "Máquina", EmptyInput, maquina_plano_handler, timeout_seconds=30),
         SkillDefinition("estudo.baralhos", "O que está para estudar", "Lista os baralhos com total de cartões, quantos venceram hoje e quantos são novos. Só lê: nada é agendado aqui.", "Estudo", EmptyInput, estudo_baralhos_handler, timeout_seconds=10),
         SkillDefinition("estudo.adicionar", "Virar material em cartões", "Transforma um resumo, um capítulo ou uma anotação em cartões de pergunta e resposta, sem modelo: reconhece definições (“X é Y”), verbetes (“Termo: definição”, “Termo — definição”) e título seguido do primeiro parágrafo. Diz quantas linhas foram ignoradas em vez de fingir que aproveitou tudo. Também aceita um cartão escrito à mão. Cartão repetido não entra duas vezes.", "Estudo", EstudoAdicionarInput, estudo_adicionar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("estudo.revisar", "O que revisar agora", "Devolve os cartões vencidos, do mais atrasado para o menos, com pergunta, resposta e há quantos dias venceram. É o laço de repetição espaçada: o cartão volta antes de ser esquecido.", "Estudo", EstudoRevisarInput, estudo_revisar_handler, timeout_seconds=15),

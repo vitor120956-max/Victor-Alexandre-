@@ -20,6 +20,7 @@ const pageNames: Record<string, string> = {
   '/estudio': 'Estúdio',
   '/direcao': 'Direção',
   '/estudo': 'Estudo',
+  '/maquina': 'Máquina',
   '/diagramas': 'Diagramas',
   '/carreira': 'Carreira',
   '/navegador': 'Navegador',

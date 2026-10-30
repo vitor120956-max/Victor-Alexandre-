@@ -10,9 +10,9 @@
 # Ou seja: se o aparelho nao aparece na USB, nao existe driver a instalar - e
 # insistir no Zadig e perder tempo.
 #
-# O QUE MUDOU NA 0.63.0 (tres correcoes, todas vindas de falha real em campo):
+# O QUE MUDOU NA 0.64.0 (tres correcoes, todas vindas de falha real em campo):
 #
-#   1. **Leitura confiavel.** A 0.63.0 usava uma consulta WMI so. Numa maquina de
+#   1. **Leitura confiavel.** A 0.64.0 usava uma consulta WMI so. Numa maquina de
 #      4 GB com Win10 1607 essa consulta as vezes volta VAZIA sem erro, e o teste
 #      entao dizia "falha de leitura" (codigo 3) e mandava repetir. Agora sao 3
 #      tentativas e, se ainda vier vazio, dois planos B (CIM e Get-PnpDevice).

@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.63.0.**
+**Versão atual: 0.64.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -68,7 +68,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **O plano vira botão:** depois de `sistema.instalar`, o cartão **“Plano pronto para executar”** mostra o comando exato, o risco e o SHA-256, com o botão **Executar este plano** — que só funciona depois de você marcar a caixa, e continua exigindo `JARVIS_HOST_INSTALAR=1`. A página **Skills** lista no topo os planos pendentes (`GET /api/host/planos`, renovado a cada 30 s) e diz qual variável ligar quando a trava está desligada. O código de uso único só sai para quem está na própria máquina. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
-**Instalar sem digitar token — só de dentro da máquina:** desde a 0.63.0 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
+**Instalar sem digitar token — só de dentro da máquina:** desde a 0.64.0 o token nem é pedido em `127.0.0.1` — o servidor preenche sozinho. `JARVIS_HOST_CONFIAR_LOCAL=1` deixa isso registrado no banner (e é o que `ligar-celular.bat` grava); `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` é a trava de quem quer o token de volta até na própria máquina. A API preenche o token de host sozinha quando a requisição vem da própria máquina (`127.0.0.1`); pedido de outra máquina da rede continua exigindo o token, e `JARVIS_HOST_INSTALAR=1`, o plano com comando e assinatura, o código de uso único e a confirmação da tela continuam valendo. Requisição `POST` com `Origin` de outro site é recusada (`403 ORIGEM_RECUSADA`), sempre. Em [`docs/SISTEMA.md`](docs/SISTEMA.md).
 
 **Git só de leitura:** `como está o git`, `o que mudou no git`, `últimos commits do git`, `qual o remoto do git` — `git.status`, `git.diff`, `git.log` e `git.remoto`. Quatro consultas com argumentos fixos, `shell=False`, `GIT_TERMINAL_PROMPT=0` e teto de 20 s; só aceita repositório dentro do projeto, da raiz de dados ou de `storage/repos`. **Não faz `commit`, `push`, `pull`, `checkout` nem `reset`** — nem como texto livre, porque não existe campo para linha de comando. Em [`docs/AGENDA-BACKUP-GIT.md`](docs/AGENDA-BACKUP-GIT.md).
 
@@ -546,7 +546,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **299 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **302 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -613,7 +613,7 @@ caminho sem risco (Termux + proot-distro, com `apt` e SSH) e o caminho nativo
 **Ligar em um clique:** duplo clique em **`ligar-celular.bat`**. Ele ajusta
 `JARVIS_HOST_REDE=1`, `JARVIS_HOST_CELULAR=1` e `JARVIS_HOST_CONFIAR_LOCAL=1` no
 `.env` — o último é o **modo dono** registrado no banner (numa outra máquina o
-token continua sendo pedido, e desde a 0.63.0 ele já não é pedido nem sem essa
+token continua sendo pedido, e desde a 0.64.0 ele já não é pedido nem sem essa
 linha). Troca a linha se ela já
 existir, sem duplicar chave, em UTF-8 sem BOM e com CRLF. Se o `.env` não
 existir, cria a partir do `.env.example`; se achar um `.env.txt` perdido (o Bloco
@@ -643,7 +643,7 @@ instalada e faz a coisa certa:
 
 Durante a atualização aparecem **porcentagem, MB, velocidade e tempo que falta**
 no download, e `X de Y arquivos` na cópia — mais o título da janela acompanhando.
-(Veio na 0.63.0; antes a tela ficava parada num cursor piscando.)
+(Veio na 0.64.0; antes a tela ficava parada num cursor piscando.)
 
 Feche a janela da API **antes** de rodar: arquivo aberto pela API pode não ser
 copiado. Nos dois casos ele avisa se existe uma pasta `dist\` de build antigo (a
@@ -667,7 +667,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.63.0", "skills": 291}`.
+`{"version": "0.64.0", "skills": 291}`.
 
 ## Verificações
 
@@ -755,7 +755,9 @@ server/
 ├── review.py                # achados, contagens, veredito e Markdown compartilhados
 ├── legal_corpus.py          # parser, índice e busca lexical
 ├── legal_data/              # oito normas, índice e atribuição
-├── skill_registry.py        # allowlist, Pydantic e 299 skills
+├── processos.py             # o que está rodando: veredito, comando e desfazer
+├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
+├── skill_registry.py        # allowlist, Pydantic e 302 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -776,6 +778,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Memória de agente é lexical: o roteador não entende paráfrase sem palavra-chave, a extração não faz correferência, o recall mede termo em comum e não verdade, e o esquecimento devolve plano em vez de apagar. Nenhum modelo, embedding ou banco de grafo é usado.
 - Acesso ao sistema é a única camada com efeito real: `sistema.baixar` grava e `sistema.executar` roda. Ambas exigem token de host, `confirmed` e, no caso da execução, `JARVIS_HOST_INSTALAR=1`. Rede desligada por padrão, endereço privado e laço local bloqueados inclusive via DNS, nenhuma assinatura digital verificada, nenhum privilégio elevado e nenhum shell livre.
 - Continuidade de plano é leitura: a camada sabe se o critério está marcado, não se foi cumprido; a decisão do portão é texto, não bloqueio de sessão; o bloco injetado é corte e contagem, não resumo por modelo; e nenhum hook é instalado.
+- Processos e pendrive são leitura: `maquina.processos` lê a lista do Windows e devolve comando e desfazer, sem fechar nada; `maquina.portatil` só mede a pasta de ferramentas e o catálogo é curado à mão — nenhum download, instalação ou verificação de hash acontece ali. Driver fica de fora de propósito: vira serviço no Windows e pede reinício.
 - Portabilidade é declarada, não testada: os treze formatos vêm do que cada ferramenta publica, a conversão devolve plano em vez de escrever arquivo, a deriva compara hash ou conteúdo colado e o manifesto não é submetido ao marketplace. Nenhum `convert.sh`, `install.sh` ou skill do catálogo upstream é executado.
 - Planos são limitados a 100 KB por arquivo; o hash bloqueia escritores obsoletos, mas o lock local não é coordenação distribuída entre servidores.
 - Análise reversa é estática e baseada em parsers próprios: não descompila, não executa, não extrai contêineres e não cobre formatos sem parser dedicado. Evidência não substitui laudo pericial ou atestado de malware.

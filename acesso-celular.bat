@@ -8,7 +8,7 @@ echo   Sem entrada nao se troca sistema operacional, nao se instala ROM e
 echo   nao se liga a depuracao. Este guia mostra o que cada caminho exige,
 echo   o que esta aberto e o que esta quebrado, e o que pedir ao tecnico.
 echo.
-echo   Versao: 0.63.0
+echo   Versao: 0.64.0
 echo.
 if not exist "acesso-celular.ps1" goto semps1
 pause

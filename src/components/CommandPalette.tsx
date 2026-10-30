@@ -22,6 +22,7 @@ import {
   Search,
   SwatchBook,
   Workflow,
+  Usb,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -68,6 +69,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     { id: 'office', label: 'Abrir escritório (Google Workspace)', group: 'Navegação', icon: Cloud, keywords: 'escritório escritorio google workspace gws drive gmail calendar sheets docs comando params dry-run paginação escopo oauth erro', run: () => navigate('/escritorio') },
     { id: 'navigator', label: 'Abrir navegador assistido', group: 'Navegação', icon: MousePointerClick, keywords: 'navegador browser snapshot alvo locator ref roteiro rodadas recibos handoff limite captcha ego', run: () => navigate('/navegador') },
     { id: 'taste', label: 'Abrir direção de arte', group: 'Navegação', icon: Palette, keywords: 'direção arte gosto taste slop tells copy linter júri manchete argumento', run: () => navigate('/direcao') },
+    { id: 'maquina', label: 'Abrir máquina: processos e pendrive', group: 'Navegação', icon: Usb, keywords: 'maquina processos gerenciador de tarefas nvidia container pendrive portatil driver ram memória', run: () => navigate('/maquina') },
     { id: 'estacao', label: 'Abrir estação do agente', group: 'Navegação', icon: Cpu, keywords: 'estação estacao agente permissão permissao allow ask deny aprovação aprovacao recibo recuperação queda agenda automação memória notas skills invisible dots', run: () => navigate('/estacao') },
     { id: 'skills', label: 'Explorar skills', group: 'Navegação', icon: Blocks, keywords: 'ferramentas modulos', run: () => navigate('/skills') },
   ], [exportBackup, navigate, openTaskModal, runAutomation, startFocus]);

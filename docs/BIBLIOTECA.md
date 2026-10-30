@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.63.0
+# Biblioteca e armazenamento — 0.64.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -259,9 +259,10 @@ Limites, sem enfeite:
 | Testes das habilidades de fora | **41** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
 | Testes do correio | **25** (`test_correio.py`, com `.eml` e `.mbox` montados no teste) |
 | Testes do estudo | **29** (`test_estudo.py`: geração de cartão, SM-2 e boletim, tudo com data fixa) |
+| Testes da máquina | **20** (`test_processos_portatil.py`: veredito de processo, NVIDIA Container, catálogo portátil e plano, com leitura de Windows trocada por lista falsa) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **2.927** |
-| Skills no registro | **299** (5 novas em `estudo.*`: baralhos, adicionar, revisar, responder e progresso — repetição espaçada com SM-2, sem modelo) |
+| Suíte da API | **2.947** |
+| Skills no registro | **302** (5 em `estudo.*`: baralhos, adicionar, revisar, responder e progresso; 3 novas em `maquina.*`: processos, portatil e plano — só leitura, nada é fechado nem baixado) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
 **O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina

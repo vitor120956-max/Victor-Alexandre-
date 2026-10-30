@@ -1,0 +1,573 @@
+/* Máquina — o que está rodando e o que vai no pendrive.
+   Regra: o comando é o herói. Nada de gráfico bonito que esconde a consequência
+   de fechar um processo. */
+
+.maquina-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.maquina-abas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.maquina-abas button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  text-align: left;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.maquina-abas button small {
+  flex-basis: 100%;
+  padding-left: 26px;
+  font-weight: 400;
+  font-size: 0.82rem;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-abas button:hover {
+  border-color: var(--accent, #b26a3c);
+}
+
+.maquina-abas button.ativo {
+  border-color: var(--accent, #b26a3c);
+  background: var(--surface-muted, #faf8f3);
+}
+
+.maquina-metricas {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.maquina-alerta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 12px;
+  background: var(--surface-muted, #faf8f3);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.maquina-alerta-erro {
+  border-color: #d8a6a0;
+  background: #fdf3f2;
+  color: #8a2f26;
+}
+
+.maquina-alerta code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.82rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.maquina-link {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.maquina-resumo {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent, #b26a3c);
+  background: var(--surface-muted, #faf8f3);
+  border-radius: 0 10px 10px 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.maquina-resumo-fraco {
+  border-left-color: var(--border, #e3e0d8);
+  color: var(--text-muted, #6b675e);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------- NVIDIA, em foco */
+
+.maquina-nvidia {
+  border-color: var(--accent, #b26a3c);
+  border-left-width: 4px;
+}
+
+.maquina-nvidia h2 {
+  margin: 4px 0 0;
+  font-size: 1.15rem;
+}
+
+.maquina-nvidia > p {
+  margin: 10px 0 14px;
+  line-height: 1.55;
+}
+
+.maquina-selo {
+  display: inline-block;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #b26a3c);
+  font-weight: 700;
+}
+
+.maquina-comandos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.maquina-comandos button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px dashed var(--border, #d9d4c8);
+  border-radius: 10px;
+  background: var(--surface-muted, #faf8f3);
+  color: inherit;
+  font: inherit;
+  cursor: copy;
+}
+
+.maquina-comandos button:hover {
+  border-color: var(--accent, #b26a3c);
+}
+
+.maquina-comandos span {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-comandos code,
+.maquina-codigo code,
+.maquina-inicio code,
+.maquina-volta code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ------------------------------------------------------------- grupos */
+
+.maquina-grupos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.maquina-grupo header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.maquina-grupo header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.maquina-grupo header p {
+  margin: 3px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-grupo header > strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-grupo ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.maquina-grupo-sobra {
+  border-left: 3px solid #4c8a5a;
+}
+
+.maquina-grupo-driver {
+  border-left: 3px solid #b26a3c;
+}
+
+.maquina-grupo-cuidado {
+  border-left: 3px solid #c9a227;
+}
+
+.maquina-grupo-essencial {
+  border-left: 3px solid #8a2f26;
+}
+
+.maquina-grupo-proprio {
+  border-left: 3px solid #4a6c8a;
+}
+
+.maquina-grupo-desconhecido {
+  border-left: 3px solid var(--border, #d9d4c8);
+}
+
+.maquina-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--surface-muted, #faf8f3);
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.maquina-linha:hover {
+  border-color: var(--border, #d9d4c8);
+}
+
+.maquina-linha svg {
+  flex: none;
+  color: var(--text-muted, #6b675e);
+  transition: transform 0.15s ease;
+}
+
+.maquina-grupo li.aberto .maquina-linha svg {
+  transform: rotate(180deg);
+}
+
+.maquina-linha-estatica {
+  cursor: default;
+  padding-left: 26px;
+}
+
+.maquina-linha .nome {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maquina-linha .mem {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-detalhe {
+  padding: 10px 12px 12px 32px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.maquina-detalhe p {
+  margin: 0 0 8px;
+}
+
+.maquina-detalhe b {
+  font-weight: 600;
+}
+
+.maquina-codigo {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px dashed var(--border, #d9d4c8);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+  cursor: copy;
+}
+
+.maquina-codigo:hover {
+  border-color: var(--accent, #b26a3c);
+}
+
+.maquina-volta {
+  color: var(--text-muted, #6b675e);
+}
+
+/* ----------------------------------------------------------- início */
+
+.maquina-inicio ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.maquina-inicio li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--surface-muted, #faf8f3);
+  font-size: 0.85rem;
+}
+
+.maquina-inicio li code {
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-inicio li small {
+  color: var(--text-muted, #6b675e);
+  font-size: 0.78rem;
+}
+
+/* ---------------------------------------------------------- pendrive */
+
+.maquina-plano header,
+.maquina-catalogo header,
+.maquina-nao header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.maquina-plano header h2,
+.maquina-catalogo header h2,
+.maquina-nao header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.maquina-plano header p,
+.maquina-catalogo header p,
+.maquina-nao header p {
+  margin: 4px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6b675e);
+  max-width: 60ch;
+}
+
+.maquina-etapas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.maquina-etapas li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted, #faf8f3);
+}
+
+.maquina-etapas .indice {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent, #b26a3c);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.maquina-etapas strong {
+  font-size: 0.9rem;
+}
+
+.maquina-etapas p {
+  margin: 2px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-etapas small {
+  font-size: 0.76rem;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-etapa-numeros {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.maquina-etapa-numeros a {
+  font-size: 0.78rem;
+  color: var(--accent, #b26a3c);
+}
+
+.maquina-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.maquina-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+
+.maquina-cartao.presente {
+  border-color: #4c8a5a;
+  background: #f6faf6;
+}
+
+.maquina-cartao header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  align-items: baseline;
+}
+
+.maquina-cartao header strong {
+  font-size: 0.9rem;
+}
+
+.maquina-cartao header span {
+  font-size: 0.76rem;
+  color: var(--text-muted, #6b675e);
+  white-space: nowrap;
+}
+
+.maquina-cartao p {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-cartao footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-cartao footer a {
+  margin-left: auto;
+  color: var(--accent, #b26a3c);
+}
+
+.maquina-cartao > small {
+  font-size: 0.74rem;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-tag {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #fdf3e6;
+  color: #8a5a26;
+}
+
+.maquina-nao ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.maquina-nao li {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted, #faf8f3);
+}
+
+.maquina-nao li svg {
+  flex: none;
+  margin-top: 2px;
+  color: #8a2f26;
+}
+
+.maquina-nao li strong {
+  font-size: 0.88rem;
+}
+
+.maquina-nao li p {
+  margin: 2px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 12px;
+  color: var(--text-muted, #6b675e);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 900px) {
+  .maquina-etapas li {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .maquina-etapa-numeros {
+    grid-column: 2;
+    align-items: flex-start;
+  }
+}

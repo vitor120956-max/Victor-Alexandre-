@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.63.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.64.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.63.0"` e `"skills": 288`.
+Esperado: `"version": "0.64.0"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.63.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.64.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.63.0` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.64.0` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -881,3 +881,101 @@ Linha por linha:
 | `npm run dev` | sobe a API (:8000) e a interface (:5173) |
 
 Depois, no navegador: <http://localhost:5173>.
+
+---
+
+## 13. Ferramentas portáteis — o que entra no pendrive e o que nunca entra
+
+Duas perguntas, uma resposta cada: **“tem como levar mais ferramenta no pendrive?”**
+tem, e **“tem coisa que está no PC e não no pendrive?”** tem — e a maior parte
+delas **não pode** ser levada, por um motivo técnico que não é preguiça.
+
+A página **Máquina** (menu lateral, ou `/maquina`) mostra as duas listas lidas da
+sua máquina:
+
+| Skill | O que devolve |
+|---|---|
+| `maquina.portatil` | os 18 portáteis do catálogo, marcando o que já está na pasta |
+| `maquina.plano` | a ordem de baixar, com MB acumulado e link oficial |
+| `maquina.processos` | o que está aberto agora, por grupo, com o comando e o desfazer |
+
+Nenhuma das três baixa, instala ou fecha nada. Baixar continua sendo
+`sistema.baixar` (quarentena + SHA-256) e `sistema.assinatura` (conferência).
+
+### 13.1 O catálogo portátil (18 itens, ≈ 454 MB)
+
+| Ferramenta | MB | Licença | Para que | Libera |
+|---|---|---|---|---|
+| ADB + scrcpy | 30 | Apache 2.0 | espelhar e mandar comando no Android | `acesso-celular`, `celular.*` |
+| 7-Zip (extraível) | 2 | LGPL | abrir `.7z`/`.rar`, zipar backup | `backup.*`, `files.*` |
+| SumatraPDF | 8 | AGPL | ler PDF sem instalar leitor | `biblioteca.*` |
+| Everything | 3 | freeware | achar arquivo no disco inteiro na hora | `files.buscar` |
+| Sysinternals | 12 | EULA Microsoft | Process Explorer, Autoruns | `sistema.*` |
+| CrystalDiskInfo | 6 | MIT | saúde do HD/SSD (SMART) | `sistema.disco` |
+| HWiNFO | 10 | freeware | temperatura, bateria, sensores | `estacao.*` |
+| Tesseract | 60 | Apache 2.0 | OCR de PDF e imagem | `biblioteca.ocr` |
+| FFmpeg | 90 | LGPL/GPL | cortar e converter áudio/vídeo | `video.*`, `legenda.*` |
+| Notepad++ | 6 | GPL | editar texto grande sem travar | — |
+| KeePassXC | 40 | GPL | cofre de senha local | — |
+| WinMerge | 12 | GPL | comparar duas versões de arquivo | `revisao.*` |
+| ImageMagick | 30 | ImageMagick License | converter e redimensionar imagem | `estudio.*` |
+| HxD | 3 | freeware | ver bytes de um arquivo | `reversa.*` |
+| VLC | 45 | GPL | tocar qualquer formato | — |
+| Rufus | 2 | GPL | gravar ISO em pendrive | `sistema.instalar` |
+| Ventoy | 70 | GPL | vários ISOs no mesmo pendrive | `sistema.instalar` |
+| TestDisk | 25 | GPL | recuperar partição e arquivo | `recuperar.*` |
+
+Só **Sysinternals (com detalhe), TestDisk, Rufus e Ventoy** pedem administrador —
+e pedem porque escrevem em disco bruto ou leem driver, não por descuido.
+
+A pasta procurada é `<projeto>/ferramentas` (e a raiz do projeto, como segunda
+tentativa). `maquina.portatil` marca `presente: true` quando acha o executável
+pelo nome — `scrcpy.exe`, `procexp*.exe`, `7z*.exe`.
+
+### 13.2 O que é do PC e **não** vai para o pendrive
+
+| Item | Por que não dá |
+|---|---|
+| Driver de vídeo (NVIDIA/AMD/Intel) | vira **serviço** no Windows e pede reinício. É ele que roda o NVIDIA Container |
+| .NET Framework / .NET Desktop Runtime | instala em `C:\Windows\Microsoft.NET`, registra na máquina; não existe “.NET portátil” |
+| Visual C++ Redistributable | DLL vai para `System32`/`WinSxS`; vários programas dependem da versão registrada |
+| Npcap / WinPcap | instala **driver de rede em modo kernel** e reinicia a placa |
+| Antivírus | precisa de serviço em kernel e atualização constante; dois antivírus brigam |
+| Office | licença e ativação são da máquina, não do pendrive |
+| Docker Desktop / WSL 2 | usa Hyper-V e serviço em kernel — ou o recurso do Windows está ligado, ou não roda |
+| Java (JRE) do sistema | o `.exe` é portátil, o **registro** de `JAVA_HOME` e as entradas do sistema não são |
+| Driver de impressora, Bluetooth, Wi-Fi | mesma regra: driver de dispositivo é do Windows, não do pendrive |
+
+Resumo que vale repetir: **ferramenta portátil** é um `.exe` que roda sozinho.
+**Driver** não é arquivo que se carrega, é instalação no sistema operacional.
+Por isso `maquina.portatil` devolve `portatil: true` em 18 itens e uma lista
+separada de 9 “não dá” — em vez de prometer os 27.
+
+### 13.3 Processos: por que o NVIDIA Container está aberto
+
+Ele não desenha nada. Quem desenha é o driver de vídeo, que continua
+funcionando com a janela fechada. O `nvcontainer.exe` serve ao **painel da
+NVIDIA**, ao **ShadowPlay** e à **checagem de atualização do driver**. Fechar:
+
+- devolve **60 a 150 MB** de RAM;
+- **não** aumenta FPS nem melhora imagem;
+- tira o painel da bandeja, a gravação do ShadowPlay e o aviso de driver novo.
+
+Parar agora e desfazer:
+
+```bat
+taskkill /IM nvcontainer.exe /F
+sc config NvContainerLocalSystem start= auto  &&  net start NvContainerLocalSystem
+```
+
+Para não voltar no boot sem desinstalar nada: **Serviços** → `NvContainerLocalSystem`
+→ Inicialização: **Manual**. O `nvdisplay.container` se recria sozinho — não
+vale a pena parar.
+
+O relatório separa os processos em cinco grupos, e só o grupo **sobra** é
+“pode fechar”: `essencial` (System, csrss, lsass, svchost, explorer, dwm…),
+`driver` (nvcontainer, nvsphelper64, nvtelemetrycontainer), `sobra`
+(GoogleCrashHandler, Steam Web Helper, SearchUI, OneDrive, GameBar, YourPhone),
+`cuidado` (Chrome, Edge, SearchIndexer, antivírus) e `proprio` (node, python).
+Processo que não está no catálogo entra em **não classificados** e recebe
+nenhum palpite — o JARVIS não manda fechar o que não sabe o que é.
