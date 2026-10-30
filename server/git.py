@@ -31,7 +31,7 @@ from typing import Any, Sequence
 
 from . import dados as dados_locais
 
-VERSAO = "0.62.7"
+VERSAO = "0.62.9"
 
 PROJETO = Path(__file__).resolve().parent.parent
 TIMEOUT = 20

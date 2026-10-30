@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.62.7 D:\JARVIS
+jarvis-nucleo-pessoal@0.62.9 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.62.7"` e `"skills": 288`.
+Esperado: `"version": "0.62.9"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.62.7 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.62.9 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.62.7` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.62.9` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)

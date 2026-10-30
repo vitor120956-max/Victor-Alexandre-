@@ -127,7 +127,7 @@ Fala '  Para quando o celular nao fala mais com o PC pela USB: as fotos que'
 Fala '  estao no cartao saem pelo leitor de cartao, que nao usa o conector.'
 Fala ''
 Fala '  O cartao e tratado como SOMENTE LEITURA: nada e apagado nem movido nele.'
-Fala '  Versao: 0.62.7'
+Fala '  Versao: 0.62.9'
 Fala ''
 Regua
 

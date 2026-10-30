@@ -1771,6 +1771,179 @@ ATALHOS_OTG = [
 ]
 
 
+def acesso() -> dict[str, Any]:
+    """O mapa do acesso: o que cada caminho exige, e o que sobrou.
+
+    A pergunta que este texto responde é a única que importa agora: *por onde se
+    entra neste aparelho?* Não é retórica — sem entrada não há troca de sistema
+    operacional, não há reset, não há nada. E as duas entradas normais de um
+    Android estão as duas quebradas neste aparelho:
+
+    - **toque** (digitalizador): morto, com toque fantasma;
+    - **dados na USB** (pinos D+/D- do micro-USB): mortos — carrega, mas não
+      enumera em nenhum ângulo, com cabos que passam dados em outro aparelho.
+
+    Daí a conclusão que este módulo entrega sem rodeio: **trocar o sistema
+    operacional também passa pela porta USB**, porque no Samsung não existe
+    instalação por cartão SD — o recovery de fábrica só aceita pacote assinado
+    pela Samsung. Odin/Heimdall (download mode) e TWRP são todos pela porta.
+
+    A boa notícia, e ela é real: **uma** solda reabre tudo. Com dados na porta, o
+    `scrcpy` devolve teclado e mouse pelo cabo — a tela quebrada deixa de ser
+    bloqueio — e o mesmo cabo serve para o Odin. O digitalizador vira opcional.
+    """
+    atalho = "acesso-celular.bat"
+    raiz = Path(__file__).resolve().parents[1]
+    return {
+        "executado": False,
+        "atalho": atalho,
+        "arquivo_presente": (raiz / atalho).is_file(),
+        "a_pergunta": "por onde se entra neste aparelho?",
+        "entradas": [
+            {
+                "via": "toque na tela",
+                "estado": "quebrada",
+                "prova": "toque fantasma: a tela acende e desenha, mas o toque dispara sozinho",
+                "serve_para": "Configurações, recovery de fábrica, TWRP",
+            },
+            {
+                "via": "dados na porta micro-USB",
+                "estado": "quebrada",
+                "prova": "60 s de pressão e inclinação e nada apareceu no Windows; cabos que passam dados no A34",
+                "serve_para": "adb, scrcpy, MTP, Odin, Heimdall, TWRP por USB, troca de sistema",
+            },
+            {
+                "via": "cartão microSD",
+                "estado": "aberta, mas não serve para instalar sistema",
+                "prova": "o leitor de cartão funciona (o Windows já o lista)",
+                "serve_para": "tirar arquivos; o recovery de fábrica da Samsung só aceita OTA assinada pela Samsung, não ROM de terceiro",
+            },
+            {
+                "via": "Wi-Fi / nuvem",
+                "estado": "fechada por desenho",
+                "prova": "adb sem fio exige Depuração USB já ligada, ligada por toque; flash de sistema não existe por rede",
+                "serve_para": "backup que já estava configurado antes (Google Fotos, WhatsApp)",
+            },
+        ],
+        "conclusao": (
+            "Trocar o sistema operacional passa pela porta USB. Não existe instalação "
+            "por cartão SD no Samsung, e o download mode (Odin) só existe pela porta. "
+            "Com os dados mortos, nenhuma ROM entra — nem stock, nem LineageOS. "
+            "O bloqueio é físico, e a solução também."
+        ),
+        "uma_solda_reabre_tudo": (
+            "Consertar o conector micro-USB devolve dados. Com dados na porta, o scrcpy "
+            "devolve teclado e mouse pelo cabo — a tela quebrada deixa de ser bloqueio — "
+            "e o mesmo cabo serve para o Odin. O digitalizador vira opcional."
+        ),
+        "ordem_depois_do_conserto": [
+            "ligar o celular e plugar no PC (com um cabo que já passou dados)",
+            "sonda-otg.bat: tem de aparecer VID_04E8 (aí o conector voltou de verdade)",
+            "teclado-pelo-pc.bat (scrcpy --otg): o mouse e o teclado do PC passam a operar o celular, mesmo com o vidro morto",
+            "nas Configurações, ligar Opções do desenvolvedor → Desbloqueio OEM → Depuração USB",
+            "Odin no PC + TWRP no aparelho (download mode: Volume Baixo + Home + Power, depois Volume Cima)",
+            "no TWRP, sem toque: usar `adb sideload` pelo cabo para instalar a ROM",
+            "LineageOS 18.1 (Android 11) tem build para o on7xelte/G610F; postmarketOS está em testing",
+            "depois da ROM, celular.espelhar deixa a tela numa janela do Windows — o uso vira o de um computador pequeno",
+        ],
+        "o_que_isso_nao_resolve": [
+            "não existe DeX neste modelo: o DeX começa no Galaxy S8 e exige USB-C com vídeo",
+            "o J7 Prime não tem saída de vídeo: a Samsung confirma que MHL não é suportado, então adaptador micro-USB → HDMI não funciona",
+            "se depois da solda continuar sem enumerar, o problema é o controlador USB na placa: aí é bancada, mais caro que o conector",
+        ],
+        "para_o_tecnico": [
+            "peça: conector de carga micro-USB do Galaxy J7 Prime (SM-G610 / on7xelte), com solda em bancada",
+            "diga que CARREGA mas não passa dados — não aceite teste só com carregador",
+            "exija o teste com um PC: plugar, abrir o Gerenciador de Dispositivos e ver se aparece algo",
+            "se aparecer algo e o driver não instalar, o conector está bom — o resto é software e é comigo",
+        ],
+    }
+
+
+def formatar() -> dict[str, Any]:
+    """Zerar o aparelho pelos BOTOES — o único caminho que sobrou.
+
+    O digitalizador morreu (toque fantasma) e a porta micro-USB perdeu os pinos de
+    dados: sai de jogo tudo o que depende de toque (Configurações) e tudo o que
+    depende de USB (adb, scrcpy, MTP). Sobra o recovery de fábrica da Samsung, que
+    se opera com Volume e Power.
+
+    A armadilha que este texto existe para evitar é o **FRP**: depois do reset o
+    Android exige a mesma conta Google que estava no aparelho. Com a tela sem
+    toque não dá para abrir Configurações e ver *qual* conta é — então a primeira
+    pergunta é essa, e a resposta "não sei" interrompe o processo.
+
+    Nada é executado: quem aperta os botões é a mão de quem está na frente do
+    aparelho. O PC só guia.
+    """
+    atalho = "formatar-celular.bat"
+    raiz = Path(__file__).resolve().parents[1]
+    return {
+        "executado": False,
+        "destrutivo": True,
+        "atalho": atalho,
+        "arquivo_presente": (raiz / atalho).is_file(),
+        "a_pergunta_que_decide": (
+            "Você sabe o e-mail E a senha da conta Google que está nesse celular? "
+            "Se a resposta for não, NÃO zerar: o Android pede essa mesma conta depois "
+            "do reset (FRP) e o aparelho para na tela de conta — nem com a tela "
+            "consertada ele volta, e o que estava dentro já foi apagado."
+        ),
+        "checklist": [
+            "bateria com pelo menos meia carga",
+            "cartão microSD fora, se quiser guardar o que está nele",
+            "senha da conta Google anotada ou decorada",
+            "senha da conta Samsung, se havia uma no aparelho",
+            "aceitar que o que está dentro não volta",
+        ],
+        "passos": [
+            "desligar: segurar o botão de ligar por 10 segundos",
+            "com o aparelho desligado, segurar JUNTOS Volume Cima + Home + Power e soltar os três no logo SAMSUNG",
+            "no menu, Volume Baixo desce, Volume Cima sobe, Power confirma",
+            "escolher “wipe data/factory reset” e confirmar com Power",
+            "descer até “Yes -- delete all user data” e confirmar com Power",
+            "escolher “Reboot system now” e confirmar com Power",
+            "primeira ligação demora 5 a 15 minutos: não tirar a bateria",
+            "na tela de conta, entrar com a mesma conta Google (é o FRP)",
+        ],
+        "teclas": {
+            "volume_baixo": "desce a lista",
+            "volume_cima": "sobe a lista",
+            "power": "confirma o item destacado",
+        },
+        "se_nao_entrar": [
+            "segurar Volume Cima e Home primeiro e só então o Power, mantendo os três por uns 8 segundos",
+            "soltar no instante em que o logo aparece (segurar demais reinicia)",
+            "se aparecer “No command” com o robô deitado: segurar Power e tocar Volume Cima uma vez",
+            "se ligar normal, desligar e tentar de novo",
+            "se o botão de Volume Cima estiver ruim, aí também é assistência",
+        ],
+        "o_que_nao_resolve": [
+            "o toque da tela continua morto (digitalizador é peça)",
+            "os dados da porta USB continuam mortos (segue só carregando)",
+            "o aparelho continua sem receber teclado, mouse ou PC",
+            "para passar das telas de boas-vindas e de conta é preciso entrada — e as três formas de entrada estão fora do ar",
+        ],
+        "virar_pc": (
+            "Não existe neste modelo. O Samsung DeX começa no Galaxy S8 e exige USB-C "
+            "com saída de vídeo; o J7 Prime é micro-USB de 2016 e nunca teve DeX. "
+            "Qualquer “modo PC” em Android (Termux com área de trabalho, Sentio, "
+            "Taskbar) precisa de entrada — mouse, teclado ou toque — e as três estão "
+            "quebradas neste aparelho."
+        ),
+        "ordem_que_funciona": (
+            "consertar o toque primeiro. Com a tela respondendo, o celular volta a ser "
+            "útil e o reset pode ser feito em Configurações, vendo antes qual conta "
+            "Google está lá."
+        ),
+        "depois": (
+            "sem toque e sem dados na USB, zerar não devolve o aparelho ao uso: ele para "
+            "nas telas de boas-vindas. O reset serve para deixar o aparelho limpo para "
+            "venda, doação ou conserto — não para transformá-lo em PC."
+        ),
+    }
+
+
 def cartao() -> dict[str, Any]:
     """As fotos saem pelo microSD quando o conector do celular morreu.
 

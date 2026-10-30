@@ -5,7 +5,7 @@ e **nenhum** `VID_04E8`; o "dispositivo portatil" era o pen drive. Depois o usua
 testou todos os cabos — dois deles passam dados em outro aparelho — e o J7 so
 carrega. A primeira versao do teste respondeu **codigo 3 (falha de leitura)**, que
 era bug meu: uma consulta WMI vazia por soluco virava "nao consegui ler". Estes
-testes travam as tres correcoes da 0.62.7.
+testes travam as tres correcoes da 0.62.9.
 """
 from __future__ import annotations
 

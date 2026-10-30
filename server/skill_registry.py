@@ -4090,7 +4090,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.62.7 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.62.9 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4102,6 +4102,16 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         # O PC como teclado e mouse do celular: sem OTG, sem mouse, sem comprar
         # nada. So mede o que existe e devolve o caminho — nada e executado.
         return celular.otg()
+
+    def celular_acesso_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # A pergunta que sobrou: por onde se entra? Sem entrada nao ha troca de
+        # sistema, nem reset, nem depuracao. So mede e explica.
+        return celular.acesso()
+
+    def celular_formatar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # Zerar e destrutivo: nada e executado aqui. O guia devolve o roteiro dos
+        # botoes, o aviso de FRP e o que o reset NAO resolve.
+        return celular.formatar()
 
     def celular_cartao_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # Conector sem pinos de dados = nenhum driver resolve. O cartao resolve
@@ -5242,6 +5252,26 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("pc.comando", "Comando pronto do PC", "Roda um comando de leitura da lista fechada (ipconfig, systeminfo, tasklist, ver, query user, disco, data, boot) e devolve a saída. O comando é escolhido por nome — não existe linha livre para injetar nada.", "PC", PcComandoInput, pc_comando_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("celular.status", "Estado do celular", "Mede o aparelho de verdade: roda `adb devices -l` (só leitura), diz se está autorizado, com depuração desligada ou sem cabo, e consulta a USB do Windows quando o adb não vê nada. Traz também onde estão `adb` e `scrcpy`. Nada é alterado no aparelho.", "Celular", EmptyInput, celular_status_handler, timeout_seconds=90),
         SkillDefinition("celular.otg", "PC como teclado e mouse do celular (sem OTG)", "Para quando o toque da tela morreu: o PC envia teclas e cliques pelo cabo USB com `scrcpy --otg`, e voce opera o Android sem encostar no vidro. Nao precisa de adaptador OTG nem de mouse. Traz os passos (destravar digitando o PIN, 7 toques em Numero da versao, ligar a Depuracao USB), os atalhos que o Android entende (Tab, setas, Enter, Esc) e o aviso do driver libusb no Windows. So leitura: nada e executado.", "Celular", EmptyInput, celular_otg_handler, timeout_seconds=30),
+        SkillDefinition(
+            "celular.acesso",
+            "Por onde se entra no celular: o mapa do acesso",
+            "A pergunta que decide tudo: por onde se entra neste aparelho? Lista as quatro vias (toque, dados na USB, cartao microSD, Wi-Fi/nuvem), o estado de cada uma e para que serve. Conclui sem rodeio que trocar o sistema operacional passa pela porta USB — no Samsung nao existe instalacao por cartao SD, e o download mode (Odin) so existe pela porta — entao com os dados mortos nenhuma ROM entra, nem stock nem LineageOS. Mostra que UMA solda reabre tudo: com dados na porta, o scrcpy devolve teclado e mouse pelo cabo (a tela quebrada deixa de ser bloqueio) e o mesmo cabo serve para o Odin, tornando o digitalizador opcional. Traz a ordem depois do conserto (sonda-otg, teclado-pelo-pc, Desbloqueio OEM, Odin, TWRP por adb sideload, LineageOS 18.1 para on7xelte) e o que dizer ao tecnico, inclusive que carga e dois pinos e dados sao outros dois.",
+            "Celular",
+            EmptyInput,
+            celular_acesso_handler,
+            timeout_seconds=30,
+        ),
+        SkillDefinition(
+            "celular.formatar",
+            "Zerar o celular pelos botoes (sem tela e sem cabo)",
+            "Para quando o toque morreu e a porta USB perdeu os dados: o unico caminho que sobra e o recovery de fabrica, que se opera com Volume e Power. Entrega o roteiro passo a passo (desligar, Volume Cima + Home + Power, wipe data/factory reset, Yes, Reboot) com pausa em cada etapa e o que fazer se os tres botoes nao entrarem. Antes de tudo, a pergunta que decide: a senha da conta Google que esta no aparelho, porque depois do reset o Android exige a mesma conta (FRP) e sem ela o celular para na tela de conta nem com a tela consertada. Diz sem rodeio o que o reset NAO resolve: o toque, os dados da USB e o fato de o J7 Prime nao ter DeX (DeX exige USB-C com video, do S8 em diante). Nada e executado: quem aperta os botoes e a mao.",
+            "Celular",
+            EmptyInput,
+            celular_formatar_handler,
+            side_effects=True,
+            requires_confirmation=True,
+            timeout_seconds=30,
+        ),
         SkillDefinition("celular.cartao", "Tirar as fotos do celular pelo cartao microSD (sem conector)", "Para quando o conector do celular perdeu os pinos de dados — testado em todos os angulos e com cabos que passam dados em outro aparelho, e o Windows nao ve nada. Nao ha driver que conserte pino, e sem dados na USB nao existe `scrcpy`, `adb` nem MTP. A saida de graca: o cartao microSD sai do aparelho, entra no leitor e as fotos vem para o PC com `resgatar-cartao.bat` (mostra o que vai copiar antes, progresso com velocidade e tempo restante, e pula o que ja existe). O cartao e tratado como somente leitura. Diz o limite sem rodeio: o que estava na memoria interna so sai com o conector funcionando.", "Celular", EmptyInput, celular_cartao_handler, timeout_seconds=30),
         SkillDefinition("celular.eventos", "O que passou na USB (histórico do Windows)", "Lê o log de eventos do Windows (canal System, sem precisar de administrador) e mostra o que o sistema registrou de USB/PnP nos últimos minutos — inclusive um aparelho que apareceu por menos de um segundo, que a vigia de 2 s pode não pegar. Diz se algum evento cita Samsung, VID_04E8 ou Android, e o que isso significa: com mau contato no conector, o aparelho pisca e some.", "Celular", CelularEventosInput, celular_eventos_handler, timeout_seconds=60),
         SkillDefinition("celular.rede", "Dispositivos na rede local e no Wi-Fi (celular sem cabo)", "Se o aparelho está conectado no Wi-Fi de casa, responde se dá para entrar nele e acessar pela rede sem cabo: varre a rede local (só leitura) e mostra o IP, o MAC, o nome e as portas abertas de cada dispositivo, marcando o que tem prefixo Samsung e o que tem a 5555 do adb sem fio. Diz sem rodeio que o Wi-Fi não substitui o cabo — o Android não abre porta nenhuma sem Depuração USB já ligada (ou sem `adb tcpip 5555` feito antes pelo cabo) — e que derrubar o Wi-Fi para o aparelho reconectar, ou cair a rede e voltar, não dá acesso a ele.", "Celular", EmptyInput, celular_rede_handler, timeout_seconds=60),
