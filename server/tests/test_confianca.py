@@ -375,7 +375,7 @@ def test_registry_tem_as_sete_skills_de_confianca() -> None:
     confianca = [item for item in itens if item["id"].startswith("confianca.")]
     assert len(confianca) == 7
     assert {item["category"] for item in confianca} == {"Confiança"}
-    assert len(itens) == 291
+    assert len(itens) == 292
 
 
 def test_endpoint_de_ficha_responde_no_formato_comum(client: TestClient) -> None:

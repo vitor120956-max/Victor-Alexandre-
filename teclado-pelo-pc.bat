@@ -11,7 +11,7 @@ echo.
 echo   Nao precisa de adaptador OTG nem de mouse novo: e o cabo que ja esta
 echo   ligado. Aqui o cursor do mouse do PC aparece na tela do celular.
 echo.
-echo   Versao deste arquivo: 0.62.6   (se o numero nao aparecer, este .bat
+echo   Versao deste arquivo: 0.62.7   (se o numero nao aparecer, este .bat
 echo   e antigo: rode atualizar.bat antes de tudo.)
 echo.
 pause

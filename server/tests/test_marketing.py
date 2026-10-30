@@ -468,8 +468,8 @@ def test_ad_catalog_has_three_platforms() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.62.6"
-    assert health["skills"] == 291
+    assert health["version"] == "0.62.7"
+    assert health["skills"] == 292
 
 
 def test_api_runs_every_marketing_skill(client: TestClient) -> None:

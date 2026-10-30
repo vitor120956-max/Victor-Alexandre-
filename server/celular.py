@@ -1771,6 +1771,51 @@ ATALHOS_OTG = [
 ]
 
 
+def cartao() -> dict[str, Any]:
+    """As fotos saem pelo microSD quando o conector do celular morreu.
+
+    Quando o teste de pressão não vê nada em nenhum ângulo, os pinos de dados do
+    conector estão perdidos: não há driver, nem `scrcpy`, nem `adb` que resolvam.
+    O caminho que não custa nada é o cartão: ele sai do aparelho, entra no leitor
+    (o mesmo que o Windows já lista) e as fotos vêm para o PC.
+
+    O limite honesto: o que estava na memória interna do celular só sai com o
+    conector funcionando. Isso está escrito no texto devolvido.
+    """
+    atalho = "resgatar-cartao.bat"
+    raiz = Path(__file__).resolve().parents[1]
+    return {
+        "executado": False,
+        "entrada": "cartao microSD + leitor de cartao (o conector do celular nao e usado)",
+        "atalho": atalho,
+        "arquivo_presente": (raiz / atalho).is_file(),
+        "comando": atalho,
+        "passos": [
+            "desligar o celular e tirar o cartao microSD (bandeja com pino de ejetar ou na lateral)",
+            "encaixar o cartao no adaptador SD e por no leitor de cartao do PC",
+            "duplo clique em resgatar-cartao.bat: ele acha o disco, mostra quantos arquivos e quanto espaco, e so copia depois de confirmar",
+            "as fotos vao para storage\\celular\\cartao-DATA, com progresso na tela (arquivos, MB, velocidade, tempo que falta)",
+            "rodar de novo nao duplica nada: arquivo com mesmo nome e mesmo tamanho e pulado",
+        ],
+        "so_leitura": "o cartao nao e alterado: nada e apagado, movido ou renomeado nele",
+        "o_que_vem": [
+            "DCIM (fotos e videos da camera, quando a camera grava no cartao)",
+            "Pictures, Download, Movies, Music, Documents",
+            "WhatsApp (midia), e tambem Android\\media\\com.whatsapp",
+        ],
+        "limite": (
+            "foto que estava na memoria interna do celular, e nao no cartao, continua "
+            "la: essa so sai com o conector funcionando (solda) ou por backup em nuvem "
+            "que ja tenha sido feito (photos.google.com)."
+        ),
+        "depois": (
+            "se as fotos vierem, o objetivo de recuperar as imagens esta cumprido sem "
+            "conserto. Se a pessoa precisar do WhatsApp do aparelho, ainda depende do "
+            "conector: o cartao tem a midia, nao o banco de mensagens."
+        ),
+    }
+
+
 def otg(*, rodar: Callable[[list[str]], tuple[int, str, str]] | None = None) -> dict[str, Any]:
     """O PC vira teclado e mouse do celular — sem OTG, sem mouse, sem comprar nada.
 
