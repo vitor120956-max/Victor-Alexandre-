@@ -30,7 +30,7 @@ from typing import Any
 from .review import common, finalize, finding
 from .submissao import SubmissaoError, ler_front_matter
 
-VERSAO = "0.62.3"
+VERSAO = "0.62.4"
 
 MAX_TEXTO = 1_800_000
 MAX_ARQUIVOS = 2_000

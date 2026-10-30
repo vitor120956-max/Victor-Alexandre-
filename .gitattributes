@@ -8,3 +8,4 @@ requirements.txt    -text
 requirements-dev.txt -text
 requirements-rapido.txt -text
 *.bat               -text
+*.ps1               -text
