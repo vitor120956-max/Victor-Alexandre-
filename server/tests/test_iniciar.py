@@ -112,6 +112,50 @@ def test_o_atalho_termina_com_pause_para_ler_o_erro():
     assert texto.count("pause") >= 4
 
 
+# ------------------------------------------------- consertar-arquivos.bat
+
+
+def test_o_conserto_existe_e_e_ascii_crlf():
+    bruto = (RAIZ / "consertar-arquivos.bat").read_bytes()
+    assert [b for b in bruto if b > 127] == []
+    assert bruto.count(b"\n") == bruto.count(b"\r\n")
+
+
+def test_o_conserto_explica_a_armadilha_do_maior_que():
+    """`D:\\JARVIS>atualizar.bat` zera o arquivo: é o que aconteceu."""
+    texto = (RAIZ / "consertar-arquivos.bat").read_text(encoding="ascii")
+    assert "ZERAR" in texto
+    assert "0 byte" in texto
+    assert "copiar so o comando" in texto.lower() or "copiar só o comando" in texto.lower()
+
+
+def test_o_conserto_acha_arquivo_vazio_antes_de_baixar():
+    texto = (RAIZ / "consertar-arquivos.bat").read_text(encoding="ascii")
+    assert "LSS 100" in texto
+    assert "VAZIO" in texto and "FALTA" in texto
+
+
+def test_o_conserto_preserva_dados_ao_copiar():
+    texto = (RAIZ / "consertar-arquivos.bat").read_text(encoding="ascii")
+    linha = next(l for l in texto.splitlines() if "robocopy" in l)
+    assert "/XF .env" in linha
+    for protegido in ("storage", ".venv", "node_modules", ".git"):
+        assert protegido in linha, protegido
+    assert "Remove-Item $d" in linha, "só a pasta temporária pode ser apagada"
+
+
+def test_o_conserto_confere_depois_de_copiar():
+    texto = (RAIZ / "consertar-arquivos.bat").read_text(encoding="ascii")
+    assert texto.count("LSS 100") >= 2, "tem que rechecar depois do download"
+    assert ":nao_deu" in texto
+
+
+def test_todo_bat_da_raiz_tem_conteudo():
+    """Arquivo de 0 byte é o sintoma do `>`; nenhum commit deve levar isso."""
+    vazios = [bat.name for bat in RAIZ.glob("*.bat") if bat.stat().st_size < 100]
+    assert vazios == []
+
+
 # ------------------------------------------------------- npm run dev
 
 

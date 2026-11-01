@@ -14,7 +14,7 @@
  * Código de saída: 0 quando não falta nada obrigatório, 1 quando falta.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statfsSync, accessSync, constants as fsConstants, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statfsSync, statSync, accessSync, constants as fsConstants, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { platform, release } from 'node:os';
 import { join } from 'node:path';
@@ -347,6 +347,35 @@ const WINDOWS_FS = new Map([
     }
   } catch (erro) {
     registrar('espaco', 'Espaço livre', 'aviso', `não consegui medir (${erro.code || erro.message})`);
+  }
+}
+
+// --------------------------------------------------------------------------
+// 6a. Atalhos da pasta: existem e não estão vazios
+//
+// Um arquivo de 0 byte é o sintoma de copiar a linha inteira do prompt
+// (`D:\JARVIS>atualizar.bat`): no cmd, o `>` redireciona a saída e zera o
+// arquivo de destino. O .bat continua ali e não faz nada.
+// --------------------------------------------------------------------------
+{
+  const atalhos = ['iniciar-jarvis.bat', 'atualizar.bat', 'iniciar.py'];
+  const vazios = [];
+  const faltando = [];
+  for (const nome of atalhos) {
+    const caminho = join(RAIZ, nome);
+    if (!existsSync(caminho)) faltando.push(nome);
+    else if (statSync(caminho).size < 100) vazios.push(nome);
+  }
+  if (vazios.length || faltando.length) {
+    registrar(
+      'atalhos',
+      'Atalhos da pasta',
+      'falha',
+      [...faltando.map((n) => `${n} ausente`), ...vazios.map((n) => `${n} com 0 byte`)].join(' · '),
+      'Rode consertar-arquivos.bat. Causa comum: copiar o "D:\JARVIS>" junto com o comando — o ">" zera o arquivo.',
+    );
+  } else {
+    registrar('atalhos', 'Atalhos da pasta', 'ok', 'iniciar-jarvis.bat, atualizar.bat e iniciar.py presentes');
   }
 }
 

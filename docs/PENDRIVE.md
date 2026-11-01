@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.66.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.67.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.66.0"` e `"skills": 288`.
+Esperado: `"version": "0.67.0"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.66.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.67.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.66.0` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.67.0` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -1021,7 +1021,7 @@ sumir, o `npm run dev` não cospe mais o erro cru do Windows — ele diz isto:
 
 ```text
   O JARVIS nao esta quebrado: falta a pasta node_modules.
-  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.66.0.
+  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.67.0.
 
   Opcao 1 - nao instalar nada e usar o JARVIS agora:
     .venv\Scripts\python.exe iniciar.py
@@ -1047,3 +1047,69 @@ surpresa.
 O `npm run checar` continua sendo o raio-X: ele mede Node, Python, bibliotecas,
 `.env`, chave, espaço, sistema de arquivos, `dist/`, Git e portas — e cada linha
 que falta vem com o comando que resolve.
+
+---
+
+## 15. O `>` do prompt apaga arquivo — e é assim que o `.bat` “para de fazer nada”
+
+A cena é esta, copiada da tela do usuário:
+
+```text
+D:\JARVIS>D:\JARVIS>atualizar.bat
+'D:\JARVIS' não é reconhecido como um comando interno
+```
+
+O erro não é do JARVIS: é do texto colado. O bloco copiado tinha o **prompt**
+(`D:\JARVIS>`) junto com o comando. No `cmd.exe` esse `>` não é enfeite — ele
+**redireciona a saída para um arquivo**, criando ou **zerando** o arquivo cujo
+nome vem depois.
+
+| o que foi colado | o que o cmd entendeu | resultado |
+|---|---|---|
+| `D:\JARVIS>atualizar.bat` | comando `D:\JARVIS`, saída para `atualizar.bat` | erro `'D:\JARVIS' não é reconhecido` **e `atualizar.bat` fica com 0 byte** |
+| `atualizar.bat` | executa o arquivo | funciona |
+
+Depois disso, digitar `atualizar.bat` “roda e não faz nada” — porque o arquivo
+está vazio. O mesmo vale para `iniciar-jarvis.bat`, e é por isso que os dois
+deixaram de responder na mesma sessão.
+
+### 15.1 A regra
+
+**Copie só o comando.** O `D:\JARVIS>` é do Windows, não faz parte de nada:
+
+```bat
+atualizar.bat
+```
+
+### 15.2 Como consertar sem digitar nada
+
+1. abra a pasta do JARVIS no **Explorador de Arquivos**;
+2. clique **duas vezes** em `consertar-arquivos.bat` (o atalho que confere
+   tamanho de arquivo, baixa o zip e copia só o que falta ou está vazio);
+3. depois clique **duas vezes** em `iniciar-jarvis.bat`.
+
+`consertar-arquivos.bat` nunca apaga nada seu: a cópia ignora `.env`, `storage`,
+`.venv`, `node_modules` e `.git`, igual ao `atualizar.bat`. Ele também serve de
+diagnóstico — mostra `ok`, `FALTA` ou `VAZIO` com o tamanho em bytes de cada
+arquivo principal.
+
+### 15.3 Se nem o Explorador resolver
+
+Baixe no navegador e descompacte **por cima** da pasta, mantendo `.env`,
+`storage` e `.venv`:
+
+<https://codeload.github.com/vitor120956-max/Victor-Alexandre-/zip/refs/heads/arena/f26cfa7a-victor-alexandre>
+
+### 15.4 Por que o pacote não consegue se proteger sozinho
+
+Um `.bat` zerado não tem como se reescrever: ele é o próprio arquivo que sumiu.
+Por isso a proteção é em três camadas:
+
+| camada | onde | o que faz |
+|---|---|---|
+| prevenção | `docs/PENDRIVE.md` §15 e o texto dentro de `consertar-arquivos.bat` | ensina que o `>` é redirecionamento |
+| detecção | `npm run checar` (item **Atalhos da pasta**) | acusa `0 byte` ou ausente antes de você perder tempo |
+| conserto | `consertar-arquivos.bat` | baixa e restaura só o que está faltando |
+
+E o teste `test_todo_bat_da_raiz_tem_conteudo` impede que um `.bat` vazio entre no
+repositório por acidente.
