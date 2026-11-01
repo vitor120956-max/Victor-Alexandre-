@@ -40,19 +40,20 @@ def _pasta_da_interface() -> Path | None:
     return None
 
 
-def _ja_esta_rodando(host: str, porta: int) -> bool:
-    """Já existe um JARVIS nessa porta? (evita confundir com 'porta ocupada')."""
-    import json  # noqa: PLC0415
-    from urllib.error import URLError  # noqa: PLC0415
-    from urllib.request import urlopen  # noqa: PLC0415
+def _situacao_da_porta(host: str, porta: int) -> dict:
+    """Quem está na porta: este JARVIS, outro JARVIS, outro programa ou ninguém.
 
-    alvo = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
-    try:
-        with urlopen(f"http://{alvo}:{porta}/api/health", timeout=2) as resposta:
-            dados = json.loads(resposta.read().decode("utf-8", "replace") or "{}")
-    except (URLError, OSError, ValueError):
-        return False
-    return dados.get("service") == "jarvis-python-api"
+    A lógica mora em `server/instancia.py` porque o `parar-jarvis.bat` também
+    precisa dela — e porque aqui ela era um booleano que não dizia a versão.
+    """
+    from server import instancia  # noqa: PLC0415
+
+    return instancia.avaliar(
+        instancia.ler_health(host, porta),
+        instancia.versao_da_pasta(RAIZ),
+        porta=porta,
+        ocupada=not _porta_livre(host, porta),
+    )
 
 
 def _porta_livre(host: str, porta: int) -> bool:
@@ -111,21 +112,18 @@ def principal() -> int:
         print(f"  {pip} install python-docx openpyxl python-pptx pypdf reportlab python-multipart", file=sys.stderr)
         return 1
 
-    if _ja_esta_rodando(args.host, args.porta):
+    situacao = _situacao_da_porta(args.host, args.porta)
+    if situacao["estado"] != "livre":
         print()
-        print(f"  Já existe uma API respondendo em http://127.0.0.1:{args.porta}")
-        print("  Não precisa subir outra: abra o endereço no navegador.")
+        print(f"  {situacao['titulo']}")
+        print(f"  {situacao['detalhe']}")
+        if situacao["o_que_fazer"]:
+            print()
+            for passo in situacao["o_que_fazer"]:
+                print(f"    - {passo}")
         print()
-        print("  Se essa outra for de uma versão antiga, feche a janela dela")
-        print("  (o X) e rode este comando de novo.")
-        return 0
-
-    if not _porta_livre(args.host, args.porta):
-        print()
-        print(f"  A porta {args.porta} está ocupada por outro programa (não é o JARVIS).")
-        print(f"  Suba em outra porta:  .venv\\Scripts\\python iniciar.py --porta {args.porta + 1}")
-        print("  Depois abra o endereço que aparecer aqui embaixo.")
-        return 1
+        # `outro_programa` não é o JARVIS: quem chamou precisa saber que não subiu.
+        return 0 if situacao["estado"].startswith("jarvis") else 1
 
     # A pasta da interface é procurada sem importar o servidor: importar
     # `server.app` executava `create_app()` no import, e a API subia duas vezes

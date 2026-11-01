@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.67.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.68.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.67.0"` e `"skills": 288`.
+Esperado: `"version": "0.68.0"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.67.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.68.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.67.0` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.68.0` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -1021,7 +1021,7 @@ sumir, o `npm run dev` não cospe mais o erro cru do Windows — ele diz isto:
 
 ```text
   O JARVIS nao esta quebrado: falta a pasta node_modules.
-  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.67.0.
+  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.68.0.
 
   Opcao 1 - nao instalar nada e usar o JARVIS agora:
     .venv\Scripts\python.exe iniciar.py
@@ -1113,3 +1113,64 @@ Por isso a proteção é em três camadas:
 
 E o teste `test_todo_bat_da_raiz_tem_conteudo` impede que um `.bat` vazio entre no
 repositório por acidente.
+
+---
+
+## 16. “Já existe uma API respondendo” — isso é boa notícia
+
+Quando o atalho encontra o JARVIS já no ar, ele não sobe outro. Antes ele dizia
+só isto:
+
+```text
+Já existe uma API respondendo em http://127.0.0.1:8000
+Não precisa subir outra: abra o endereço no navegador.
+```
+
+Verdadeiro, mas incompleto em dois pontos que custam tempo:
+
+1. **não dizia qual versão está rodando** — se você acabou de atualizar a pasta e
+   a janela antiga continua aberta, o navegador mostra o código **velho** e
+   parece que a atualização não pegou;
+2. **não dizia como fechar a janela antiga** quando ela sumiu da tela.
+
+Agora a mesma situação responde assim:
+
+```text
+  Já existe um JARVIS na porta 8000 — mas é de outra versão
+  Rodando: 0.62.6. Esta pasta: 0.68.0. O navegador mostraria o código antigo
+  e pareceria que a atualização não pegou.
+
+    - Feche a janela antiga no X (procure “JARVIS” na barra de tarefas)
+    - Se a janela sumiu: duplo clique em parar-jarvis.bat
+    - Depois rode iniciar-jarvis.bat de novo
+```
+
+### 16.1 Os quatro estados da porta
+
+| estado | quando | o que o JARVIS faz |
+|---|---|---|
+| **livre** | ninguém escuta | sobe normal |
+| **mesma versão** | `/api/health` diz o mesmo número do `package.json` | só manda abrir o navegador |
+| **outra versão** | números diferentes | explica e oferece `parar-jarvis.bat` |
+| **outro programa** | a porta responde, mas não é `jarvis-python-api` | **não toca** e sugere `--porta 8001` |
+
+### 16.2 `parar-jarvis.bat`
+
+Duplo clique. Ele:
+
+1. pergunta ao `/api/health` **quem** está na porta;
+2. só se a resposta for do próprio JARVIS, procura o PID com `netstat -ano` e
+   encerra com `taskkill /PID`;
+3. espera até 8 segundos e confirma que a porta ficou livre;
+4. se não conseguir, **não insiste** — mostra o caminho manual (Gerenciador de
+   Tarefas → aba Detalhes → `python` → Finalizar tarefa).
+
+Regra que não muda: **esse atalho nunca encerra um processo que não se identifica
+como JARVIS.** Porta ocupada por outro programa é assunto do outro programa.
+
+### 16.3 Por que não há skill para isso
+
+`maquina.*` já lê processo, mas encerrar a própria API por skill criaria um jeito
+de derrubar a interface a partir da interface. Aqui a decisão fica onde tem de
+ficar: no duplo clique de quem está na frente da máquina, com confirmação `[s/N]`
+e identidade conferida antes.

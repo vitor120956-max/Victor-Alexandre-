@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.67.0
+# Biblioteca e armazenamento — 0.68.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -262,6 +262,7 @@ Limites, sem enfeite:
 | Testes da máquina | **20** (`test_processos_portatil.py`: veredito de processo, NVIDIA Container, catálogo portátil e plano, com leitura de Windows trocada por lista falsa) |
 | Testes do debloat | **23** (`test_limpeza.py`: catálogo, análise pura com máquina falsa, plano com `rem` no que é cuidado, volta de serviço e tarefa) |
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
+| Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
 | Suíte da API | **2.967** |
 | Skills no registro | **304** (5 em `estudo.*`; 5 em `maquina.*`: processos, portatil, plano, debloat e limpar — só leitura, nada é fechado, baixado ou removido) |

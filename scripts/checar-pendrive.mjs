@@ -358,7 +358,7 @@ const WINDOWS_FS = new Map([
 // arquivo de destino. O .bat continua ali e não faz nada.
 // --------------------------------------------------------------------------
 {
-  const atalhos = ['iniciar-jarvis.bat', 'atualizar.bat', 'iniciar.py'];
+  const atalhos = ['iniciar-jarvis.bat', 'atualizar.bat', 'parar-jarvis.bat', 'iniciar.py'];
   const vazios = [];
   const faltando = [];
   for (const nome of atalhos) {
@@ -375,7 +375,7 @@ const WINDOWS_FS = new Map([
       'Rode consertar-arquivos.bat. Causa comum: copiar o "D:\JARVIS>" junto com o comando — o ">" zera o arquivo.',
     );
   } else {
-    registrar('atalhos', 'Atalhos da pasta', 'ok', 'iniciar-jarvis.bat, atualizar.bat e iniciar.py presentes');
+    registrar('atalhos', 'Atalhos da pasta', 'ok', 'iniciar-jarvis.bat, atualizar.bat, parar-jarvis.bat e iniciar.py presentes');
   }
 }
 
