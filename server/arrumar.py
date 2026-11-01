@@ -1,7 +1,7 @@
 """Os braços: arrumar a máquina em vez de dizer o que apertar.
 
 O pedido que gerou isto foi direto: *“eu não quero ter que fazer nada, por isso
-fiz o JARVIS com braços”*. Até a 0.71.0 o `maquina.debloat` diagnosticava e
+fiz o JARVIS com braços”*. Até a 0.72.0 o `maquina.debloat` diagnosticava e
 entregava um `.bat` para o usuário ler, salvar e rodar como administrador. Isso é
 relatório, não braço.
 
@@ -147,6 +147,113 @@ def _causa_da_falha(saida: str) -> str:
     if any(p in texto for p in ("não está em execução", "not running", "inativo")):
         return "parado"
     return "outro"
+
+
+# ---------------------------------------------------------------------------
+# Elevação: o JARVIS pede ao Windows, o Windows pergunta a você
+# ---------------------------------------------------------------------------
+
+NOME_BAT_ELEVAR = "subir-como-admin.bat"
+
+BAT_ELEVAR = (
+    "@echo off\r\n"
+    "chcp 65001 >nul\r\n"
+    'cd /d "%~dp0.."\r\n'
+    "title JARVIS - subir como administrador\r\n"
+    "echo.\r\n"
+    "echo   Fechando a instancia atual e subindo de novo, agora elevada.\r\n"
+    "echo   A tela some por alguns segundos e volta sozinha.\r\n"
+    "echo.\r\n"
+    "timeout /t 4 /nobreak >nul\r\n"
+    'if exist ".venv\\Scripts\\python.exe" goto tem_venv\r\n'
+    "python -m server.instancia --parar --sim\r\n"
+    "goto subir\r\n"
+    ":tem_venv\r\n"
+    '".venv\\Scripts\\python.exe" -m server.instancia --parar --sim\r\n'
+    ":subir\r\n"
+    "timeout /t 2 /nobreak >nul\r\n"
+    'start "" "iniciar-jarvis.bat"\r\n'
+    "exit /b 0\r\n"
+)
+
+
+def _shell_execute_runas(alvo: Path) -> int:
+    """Pede ao Windows para abrir o `.bat` elevado — e espera a resposta do UAC.
+
+    Não há como pular o aviso: quem diz “sim” é você. O que o programa pode fazer
+    é **pedir** em vez de obrigar você a achar o arquivo, clicar com o botão
+    direito e escolher a opção — e é isso que este caminho faz.
+    """
+    import ctypes  # noqa: PLC0415
+
+    retorno = ctypes.windll.shell32.ShellExecuteW(  # type: ignore[attr-defined]
+        None, "runas", "cmd.exe", f'/c "{alvo}"', None, 1
+    )
+    return int(retorno or 0)
+
+
+def pedir_administrador(
+    *,
+    projeto: Path | None = None,
+    executar: Callable[[Path], int] | None = None,
+) -> dict[str, Any]:
+    """Reabre o JARVIS elevado, com um clique no aviso do Windows.
+
+    Devolve sempre um dicionário explicando o que aconteceu: `ja_elevado`,
+    `pedido`, `aceito` e `motivo`. Nunca diz “feito” quando o usuário recusou o
+    UAC — recusa é `aceito: False` com o motivo escrito.
+    """
+    if platform.system() != "Windows":
+        return {
+            "pedido": False,
+            "ja_elevado": None,
+            "aceito": False,
+            "motivo": "Pedir administrador é do Windows; aqui não se aplica.",
+        }
+    if elevado():
+        return {
+            "pedido": False,
+            "ja_elevado": True,
+            "aceito": True,
+            "motivo": "O JARVIS já está como administrador — não há o que pedir.",
+        }
+
+    raiz = projeto or Path(__file__).resolve().parents[1]
+    pasta = raiz / "storage"
+    pasta.mkdir(parents=True, exist_ok=True)
+    script = pasta / NOME_BAT_ELEVAR
+    script.write_bytes(BAT_ELEVAR.encode("ascii"))
+
+    codigo = (executar or _shell_execute_runas)(script)
+    aceito = codigo > 32  # ShellExecute devolve >32 quando conseguiu abrir
+    if aceito:
+        motivo = (
+            "O Windows pediu permissão e você aceitou. A tela cai por alguns segundos "
+            "e volta sozinha, já como administrador."
+        )
+    elif codigo == 5:
+        motivo = (
+            "O Windows perguntou e você clicou Não. Nada foi reiniciado — e nada foi "
+            "alterado na máquina."
+        )
+    else:
+        motivo = (
+            f"O Windows não abriu o pedido de permissão (código {codigo}). O aviso do "
+            "UAC pode estar desligado por política; nesse caso, abra o arrumar-pc.bat "
+            "com o botão direito → Executar como administrador."
+        )
+    return {
+        "pedido": True,
+        "ja_elevado": False,
+        "aceito": aceito,
+        "script": str(script),
+        "retorno": codigo,
+        "motivo": motivo,
+        "aviso": (
+            "Enquanto a janela nova sobe, esta página não responde. Recarregue em "
+            "10 segundos — o diário e o instantâneo continuam em storage/limpezas/."
+        ),
+    }
 
 
 MOTIVO_DA_CAUSA = {

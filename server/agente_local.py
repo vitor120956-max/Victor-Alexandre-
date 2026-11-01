@@ -1897,6 +1897,14 @@ _RE_MAQUINA_SEM_PONTO = re.compile(
 )
 _RE_MAQUINA_OUSADO = re.compile(r"\bousad[oa]s?\b|\bmodo (?:agressivo|completo)\b", re.I)
 
+# "reinicia como administrador", "roda o jarvis como admin", "pede permissao de
+# administrador": é o único caminho para as 13 ações que exigem elevação.
+_RE_ADMIN_PALAVRA = re.compile(r"\b(?:administrador|admin)\b", re.I)
+_RE_ADMIN_VERBO = re.compile(
+    r"\b(?:reinic\w*|reabr\w*|abr\w*|rod\w*|execut\w*|sub\w*|elev\w*|ped[ei]\w*)\b", re.I
+)
+_RE_FAZER_A_LIMPEZA = re.compile(r"\b(?:arrum\w*|limp\w*|faxin\w*)\b", re.I)
+
 
 def _pedido_direto_de_maquina(termo: str) -> dict[str, Any] | None:
     """Limpar a máquina — com as escolhas ditas **na própria frase**.
@@ -1913,6 +1921,19 @@ def _pedido_direto_de_maquina(termo: str) -> dict[str, Any] | None:
     texto = normalizar(termo)
     if not texto:
         return None
+
+    # Pedido de elevação vem antes: “roda como administrador” não é limpeza.
+    if (
+        _RE_ADMIN_PALAVRA.search(texto)
+        and _RE_ADMIN_VERBO.search(texto)
+        and not _RE_FAZER_A_LIMPEZA.search(texto)
+    ):
+        return {
+            "skill_id": "maquina.administrador",
+            "nome": "Reabrir o JARVIS como administrador",
+            "parametros": {},
+            "confirma": True,
+        }
 
     if _RE_DESFAZER_LIMPEZA.search(texto):
         return {
@@ -2710,6 +2731,10 @@ def formatar_resultado(resultado: Any) -> str:
     if especial is not None:
         return especial
 
+    especial = _formatar_elevacao(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_braco(resultado)
     if especial is not None:
         return especial
@@ -2773,6 +2798,26 @@ def formatar_resultado(resultado: Any) -> str:
         partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
     texto = "\n\n".join(partes)
     return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+def _formatar_elevacao(resultado: dict[str, Any]) -> str | None:
+    """`maquina.administrador` em duas linhas: o que houve e o que esperar."""
+    if "ja_elevado" not in resultado or "pedido" not in resultado:
+        return None
+    linhas: list[str] = []
+    if resultado.get("ja_elevado") is True:
+        linhas.append("Já estou como administrador — não havia o que pedir.")
+    elif resultado.get("aceito"):
+        linhas.append("Pedido enviado — no aviso do Windows, clique **Sim**.")
+    else:
+        linhas.append("Não reabri como administrador.")
+    motivo = resultado.get("motivo")
+    if isinstance(motivo, str) and motivo.strip():
+        linhas.append(motivo.strip())
+    aviso = resultado.get("aviso")
+    if isinstance(aviso, str) and aviso.strip() and resultado.get("aceito"):
+        linhas.append(aviso.strip())
+    return "\n".join(linhas[:LIMITE_RESPOSTA])
 
 
 def _formatar_braco(resultado: dict[str, Any]) -> str | None:

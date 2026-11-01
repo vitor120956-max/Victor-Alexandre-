@@ -110,9 +110,9 @@ e fingir uma lista vazia seria pior que dizer “não se aplica”.
 
 ---
 
-## 9. Os braços: `maquina.arrumar` (0.71.0)
+## 9. Os braços: `maquina.arrumar` (0.72.0)
 
-Até a 0.71.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
+Até a 0.72.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
 salvava e rodava como administrador. Isso é relatório, não braço. O pedido foi
 literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS com braços”*.
 
@@ -125,7 +125,7 @@ Agora existe **um comando que executa**:
 | duplo clique para voltar | `desfazer-limpeza.bat` |
 | chat/skill | `maquina.arrumar` e `maquina.desfazer` |
 
-**O que dizer no chat** (0.71.0: as escolhas da frase chegam como parâmetro, em vez
+**O que dizer no chat** (0.72.0: as escolhas da frase chegam como parâmetro, em vez
 de serem engolidas):
 
 | frase | o que acontece |
@@ -186,7 +186,7 @@ indo para o debloat, que só lê.
 O relatório lista nominalmente o que ficou `sem_volta` — em vez de dizer
 “desfeito” e esconder que a lixeira não volta.
 
-E antes de remover qualquer coisa, a 0.71.0 grava **duas** coisas: o instantâneo do
+E antes de remover qualquer coisa, a 0.72.0 grava **duas** coisas: o instantâneo do
 estado (`instantaneo-*.json`, 3 KB) e, quando a Proteção do Sistema permite, um ponto
 de restauração do Windows — o único jeito de voltar driver, serviço e registro de uma
 vez (`Win+R` → `rstrui`). Detalhe em §10.3.
@@ -196,7 +196,7 @@ atualização, lixeira, Otimização de Entrega) e `ESPACO_OUSADO` (só `hiberfi
 
 ---
 
-## 10. Por que cada item proibido é proibido — e o backup que resolve (0.71.0)
+## 10. Por que cada item proibido é proibido — e o backup que resolve (0.72.0)
 
 A pergunta foi: *“não entendi por que ele não pode mexer nessas coisas; uma ideia
 boa é ele fazer um backup na nuvem antes de remover”*.
@@ -275,7 +275,7 @@ WinSxS, Windows.old, `C:\Windows\Installer`, Prefetch, driver e essencial.
 
 ---
 
-## 11. Quando falha — e quando parece que travou (0.71.0)
+## 11. Quando falha — e quando parece que travou (0.72.0)
 
 Em 01/11/2026 o primeiro uso real rodou assim: **3 feitas, 13 falhas**. O resumo
 dizia *“13 falharam — normalmente falta de administrador; o diário diz qual”*, e a
@@ -322,3 +322,35 @@ está aberta”). E existe **Cancelar** de verdade: o pedido é abortado no nave
 O que **não** existe: barra de porcentagem da limpeza. O trabalho é uma fila de
 comandos do Windows, e cada comando só informa sucesso ou falha no fim — uma barra
 enchendo ali seria animação, não medição.
+
+---
+
+## 12. Administrador: por que o JARVIS não resolve sozinho (e o que ele faz)
+
+Desativar **tarefa agendada** (`schtasks /Change`) e **serviço** (`sc config`) é
+ação que o Windows só aceita de processo elevado. Fechar processo e apagar cache
+do próprio usuário, não. Foi por isso que o primeiro uso real deu 3 ações certas e
+13 falhas de “acesso negado”, todas do mesmo motivo.
+
+**O que não existe:** um programa se tornar administrador sozinho. O controle de
+conta de usuário (UAC) é justamente a barreira contra isso — quem clica **Sim** é
+você, na tela. Qualquer programa que dissesse “eu me elevo sem te perguntar”
+estaria explorando uma falha do Windows.
+
+**O que passou a existir (0.72.0):**
+
+| onde | o que acontece |
+|---|---|
+| tela `/maquina` → aba **Limpeza** | quando o plano diz `elevado: false`, aparece **Reabrir como administrador** — um clique, e o Windows pergunta |
+| chat | `reinicia como administrador` (skill `maquina.administrador`) |
+| `arrumar-pc.bat` e `desfazer-limpeza.bat` | **se elevam sozinhos**: duplo clique basta, sem botão direito. Se você recusar o UAC, seguem sem elevação e dizem o que vai falhar |
+| recusa | nada é reiniciado, nada é alterado — e o relatório diz “você clicou Não” em vez de fingir sucesso |
+
+O mecanismo: o JARVIS escreve `storage/subir-como-admin.bat` (ASCII/CRLF) e chama
+`ShellExecuteW(..., "runas", ...)`. Esse auxiliar espera 4 s (para a resposta do
+pedido sair), encerra a instância atual com `server.instancia --parar --sim` e sobe
+`iniciar-jarvis.bat` elevado — que já liga `JARVIS_HOST_ARRUMAR=1`.
+
+**O que isso não muda:** ele continua sem tocar em driver, essencial, WinSxS,
+Windows.old, `C:\Windows\Installer` ou Prefetch. Elevação é permissão, não
+permissividade.

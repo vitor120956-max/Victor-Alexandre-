@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.71.0", "skills": 306, "confiarLocal": true }
+GET /api/health  →  { "version": "0.72.0", "skills": 306, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)
@@ -142,7 +142,7 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 }
 ```
 
-## As doze skills (e as três de `maquina.*`)
+## As doze skills (e as oito de `maquina.*`)
 
 | Rota | Efeito | O que devolve |
 |---|---|---|
@@ -165,8 +165,9 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 | `maquina.limpar` | leitura | o texto do `debloat.bat` e do `restaurar-windows.bat` — você lê e roda |
 | `maquina.arrumar` | **executa** | fecha sobras, remove app de loja sem uso, desativa tarefa e serviço, limpa cache — com instantâneo, ponto de restauração, diário e desfazer; `ousado: true` inclui só o `cuidado` que tem volta |
 | `maquina.desfazer` | **executa** | reverte o último diário: religa serviço e tarefa, reinstala app |
+| `maquina.administrador` | **executa** | abre o aviso de permissão do Windows (UAC) e reabre a API elevada — o que faz as tarefas e serviços da limpeza passarem |
 
-As sete `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: cinco delas só leem e explicam, e **duas executam** (`maquina.arrumar` e `maquina.desfazer`) — com trava `JARVIS_HOST_ARRUMAR=1`, confirmação, diário e só o veredito “sobra”. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md).
+As oito `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: cinco delas só leem e explicam, e **três executam** (`maquina.arrumar`, `maquina.desfazer` e `maquina.administrador`) — as duas primeiras com trava `JARVIS_HOST_ARRUMAR=1`, confirmação, diário e só o veredito “sobra”; a terceira só abre o aviso de permissão do Windows, e quem autoriza é você. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md).
 
 Leitura e efeito nunca dividem a mesma skill. `sistema.rede` não baixa, `sistema.instalar` não executa: quem escreve e quem executa são skills separadas, para que a fronteira apareça no catálogo e no `requiresConfirmation` da API.
 

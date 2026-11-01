@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "306 skills" in texto
+    assert "307 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 306 skills, uma por uma
+# ------------------------------------- cobertura: as 307 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 306 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 307 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2759,3 +2759,16 @@ def test_plano_sem_execucao_continua_no_formato_generico():
     })
     assert "Dá para arrumar" in texto
     assert "Não feitas" not in texto
+
+
+def test_pedido_de_administrador_vai_para_a_skill_de_elevacao() -> None:
+    """“reinicia como administrador” não pode cair na limpeza."""
+    from server.agente_local import _pedido_direto_de_maquina
+
+    for frase in ("reinicia como administrador", "roda o jarvis como admin", "abre como administrador"):
+        pedido = _pedido_direto_de_maquina(frase)
+        assert pedido["skill_id"] == "maquina.administrador", frase
+        assert pedido["confirma"] is True, frase
+    # Com verbo de limpeza na frase, continua sendo a limpeza (que já pede admin
+    # sozinha quando precisa).
+    assert _pedido_direto_de_maquina("arruma o pc como administrador")["skill_id"] == "maquina.arrumar"

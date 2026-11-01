@@ -242,7 +242,7 @@ def test_a_variavel_de_ambiente_e_traduzida_para_powershell():
 
 
 def test_as_skills_de_leitura_da_maquina_nao_tem_efeito():
-    """As de leitura nunca mexem; quem executa é `arrumar`/`desfazer` (0.71.0)."""
+    """As de leitura nunca mexem; quem executa é `arrumar`/`desfazer` (0.72.0)."""
     from server.skill_registry import build_registry
 
     registro = build_registry(RAIZ)

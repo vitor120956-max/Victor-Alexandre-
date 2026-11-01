@@ -1,7 +1,7 @@
 """Os braços: o JARVIS arruma a máquina em vez de mandar você apertar.
 
 O pedido foi literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS
-com braços”*. Até a 0.71.0 ele diagnosticava e entregava um `.bat` — relatório.
+com braços”*. Até a 0.72.0 ele diagnosticava e entregava um `.bat` — relatório.
 Agora `maquina.arrumar` executa.
 
 O que estes testes travam, e por quê:
@@ -553,3 +553,89 @@ def test_plano_vazio_nao_inventa_aviso_de_admin(monkeypatch):
     plano = arrumar.planejar()
     assert plano["precisam_admin"] == 0
     assert plano["aviso_admin"] == ""
+
+
+# ------------------------------------------------------------------- elevação
+# O JARVIS não pode virar administrador sozinho: o UAC é do usuário. Ele pode
+# PEDIR — e é isso que passa a existir aqui.
+
+def test_pedir_administrador_fora_do_windows_nao_pede_nada():
+    pedido = arrumar.pedir_administrador(executar=lambda _alvo: (_ for _ in ()).throw(AssertionError("não devia chamar")))
+    assert pedido["pedido"] is False
+    assert pedido["ja_elevado"] is None
+    assert pedido["aceito"] is False
+    assert "Windows" in pedido["motivo"]
+
+
+def test_quem_ja_e_administrador_nao_reabre(monkeypatch, tmp_path):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: True)
+    pedido = arrumar.pedir_administrador(
+        projeto=tmp_path,
+        executar=lambda _alvo: (_ for _ in ()).throw(AssertionError("não devia pedir")),
+    )
+    assert pedido["ja_elevado"] is True and pedido["pedido"] is False
+    assert not (tmp_path / "storage" / arrumar.NOME_BAT_ELEVAR).exists()
+
+
+def test_pedir_administrador_escreve_o_auxiliar_ascii_e_espera_a_api_morrer(monkeypatch, tmp_path):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: False)
+    pedido = arrumar.pedir_administrador(projeto=tmp_path, executar=lambda _alvo: 42)
+    assert pedido["pedido"] is True and pedido["aceito"] is True
+    bruto = (tmp_path / "storage" / arrumar.NOME_BAT_ELEVAR).read_bytes()
+    assert [b for b in bruto if b > 127] == []          # ASCII: o console antigo embaralha acento
+    assert bruto.count(b"\n") == bruto.count(b"\r\n")   # CRLF: .bat com LF quebra no cmd
+    texto = bruto.decode("ascii")
+    # Para a instância antiga (senão a porta 8000 fica presa) e só então sobe.
+    assert "-m server.instancia --parar --sim" in texto
+    assert texto.index("--parar") < texto.index('start "" "iniciar-jarvis.bat"')
+    # E espera: quem está respondendo o pedido é a API que vai morrer.
+    assert texto.index("timeout /t 4") < texto.index("--parar")
+    assert 'cd /d "%~dp0.."' in texto  # o auxiliar mora em storage/
+
+
+def test_recusa_no_uac_nao_vira_sucesso(monkeypatch, tmp_path):
+    """Clicar “Não” no Windows tem que aparecer como recusa, não como feito."""
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: False)
+    pedido = arrumar.pedir_administrador(projeto=tmp_path, executar=lambda _alvo: 5)
+    assert pedido["aceito"] is False
+    assert "Não" in pedido["motivo"]
+    assert "Nada foi reiniciado" in pedido["motivo"]
+
+
+def test_codigo_estranho_explica_o_plano_b(monkeypatch, tmp_path):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: False)
+    pedido = arrumar.pedir_administrador(projeto=tmp_path, executar=lambda _alvo: 31)
+    assert pedido["aceito"] is False
+    assert "arrumar-pc.bat" in pedido["motivo"]
+    assert "31" in pedido["motivo"]
+
+
+def test_a_skill_de_administrador_existe_com_confirmacao():
+    from pathlib import Path as _Path
+
+    from server.skill_registry import build_registry
+
+    reg = build_registry(_Path("."))
+    skill = reg.get("maquina.administrador")
+    assert skill.side_effects is True
+    assert skill.requires_confirmation is True
+
+
+def test_os_dois_bats_se_elevam_sozinhos():
+    """Duplo clique basta: sem `net session` o usuário teria que achar o menu."""
+    for nome in ("arrumar-pc.bat", "desfazer-limpeza.bat"):
+        bruto = (RAIZ / nome).read_bytes()
+        assert [b for b in bruto if b > 127] == [], nome
+        assert bruto.count(b"\n") == bruto.count(b"\r\n"), nome
+        texto = bruto.decode("ascii")
+        assert "net session" in texto, nome
+        assert "-Verb RunAs" in texto, nome
+        assert "%errorlevel" not in texto, nome  # errorlevel sem %%, não i
+        assert "goto ja_admin" in texto and ":ja_admin" in texto, nome
+    # O .bat da limpeza continua pedindo o plano antes de aplicar, agora elevado.
+    texto = (RAIZ / "arrumar-pc.bat").read_text(encoding="ascii")
+    assert texto.index("net session") < texto.index("%PYEXE% -m server.arrumar ")

@@ -540,7 +540,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ].slice(-120));
       const sinal = iniciarPedido(pendente.pedido);
       setProcessing('python');
-      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.71.0).
+      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.72.0).
       void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true, sinal)
         .then((resultado) => {
           setProcessing(null);

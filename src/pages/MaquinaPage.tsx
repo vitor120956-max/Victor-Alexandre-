@@ -7,6 +7,7 @@ import {
   HardDriveDownload,
   ListTree,
   RefreshCw,
+  ShieldCheck,
   ShieldQuestion,
   Sparkles,
   Undo2,
@@ -139,7 +140,7 @@ type AcaoFeita = {
   saida?: string;
   ganho?: string;
   desfazer?: string;
-  /** 0.71.0: a causa curta (“admin”, “sumiu”…) e a frase pronta. */
+  /** 0.72.0: a causa curta (“admin”, “sumiu”…) e a frase pronta. */
   causa?: string;
   motivo?: string;
 };
@@ -160,7 +161,7 @@ type ResultadoArrumar = {
   ponto_de_restauracao?: { criado?: boolean; motivo?: string };
   como_voltar_tudo?: string;
   sem_volta?: string[];
-  // 0.71.0: o "por que falhou" vem nomeado, em vez de "o diário diz qual".
+  // 0.72.0: o "por que falhou" vem nomeado, em vez de "o diário diz qual".
   falhas_por_causa?: Record<string, number>;
   nao_feitas?: { nome?: string; tipo?: string; comando?: string; motivo?: string; causa?: string; saida?: string }[];
   como_resolver?: string;
@@ -202,6 +203,10 @@ export function MaquinaPage() {
   const [aberto, setAberto] = useState<string>('');
   // Plano (sem executar) só para saber, antes do clique, se falta administrador.
   const [planoArrumar, setPlanoArrumar] = useState<ResultadoArrumar | null>(null);
+  // Pedido de elevação: o JARVIS não pode virar administrador sozinho (o UAC é
+  // seu), mas pode abrir o aviso do Windows em vez de te mandar achar o .bat.
+  const [elevando, setElevando] = useState(false);
+  const [resultadoElevar, setResultadoElevar] = useState<{ motivo?: string; aceito?: boolean } | null>(null);
 
   const carregarProcessos = useCallback(async () => {
     const resposta: SkillExecution = await executeSkill('maquina.processos', {});
@@ -271,6 +276,29 @@ export function MaquinaPage() {
       pushToast('Copiado', rotulo, 'success');
     } catch {
       pushToast('Copie à mão', texto, 'info');
+    }
+  };
+
+  const pedirAdministrador = async () => {
+    setElevando(true);
+    setErro('');
+    try {
+      const resposta = await executeSkill('maquina.administrador', {}, { confirmed: true });
+      const dados = (resposta.result ?? {}) as { motivo?: string; aceito?: boolean };
+      setResultadoElevar(dados);
+      if (!resposta.ok) {
+        setErro(resposta.error?.message ?? 'O Windows não abriu o pedido de permissão.');
+        return;
+      }
+      pushToast(
+        dados.aceito ? 'Pedido enviado ao Windows' : 'Não reabri como administrador',
+        dados.motivo ?? '',
+        dados.aceito ? 'info' : 'warning',
+      );
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : 'Não consegui falar com a API.');
+    } finally {
+      setElevando(false);
     }
   };
 
@@ -675,7 +703,13 @@ export function MaquinaPage() {
                   essencial nunca entram.
                 </p>
                 {planoArrumar?.aviso_admin && (
-                  <p className="maquina-aviso-admin">{planoArrumar.aviso_admin}</p>
+                  <div className="maquina-aviso-admin">
+                    <p>{planoArrumar.aviso_admin}</p>
+                    <button className="button" onClick={() => void pedirAdministrador()} disabled={elevando || !backendOnline}>
+                      <ShieldCheck size={15} /> {elevando ? 'Pedindo ao Windows…' : 'Reabrir como administrador'}
+                    </button>
+                    {resultadoElevar?.motivo && <small>{resultadoElevar.motivo}</small>}
+                  </div>
                 )}
                 <label className="maquina-ousado">
                   <input type="checkbox" checked={ousado} onChange={(evento) => setOusado(evento.target.checked)} />
