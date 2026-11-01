@@ -35,11 +35,21 @@ if defined PYEXE goto tem_python
 goto sem_python
 
 :tem_python
+echo   Quer incluir tambem o "modo ousado"? Ele pega o que tem VOLTA:
+echo     Xbox, Teams, Search, Superfetch e hibernacao.
+echo   O que nao tem volta continua fora: WinSxS, Windows.old, Installer, Prefetch.
+echo     Digite O para ousado, ou so Enter para o modo normal.
+echo.
+choice /C NO /N /M "  Normal (N) ou ousado (O)? "
+set OUSADO=
+if errorlevel 2 set OUSADO=--ousado
+echo.
+
 REM A trava vale para este processo apenas: fora daqui, o JARVIS continua
 REM so olhando a maquina. E o duplo clique + o "sim" abaixo que autorizam.
 set JARVIS_HOST_ARRUMAR=1
 
-%PYEXE% -m server.arrumar
+%PYEXE% -m server.arrumar %OUSADO%
 if errorlevel 1 goto falhou
 
 echo.
@@ -48,7 +58,7 @@ echo   Quer que eu execute agora? Digite S e Enter. Qualquer outra
 echo   tecla cancela sem mexer em nada.
 echo.
 pause
-%PYEXE% -m server.arrumar --aplicar --sim
+%PYEXE% -m server.arrumar --aplicar --sim %OUSADO%
 if errorlevel 1 goto falhou
 echo.
 echo   Pronto. Se alguma linha falhou, quase sempre e falta de

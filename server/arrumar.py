@@ -1,7 +1,7 @@
 """Os braços: arrumar a máquina em vez de dizer o que apertar.
 
 O pedido que gerou isto foi direto: *“eu não quero ter que fazer nada, por isso
-fiz o JARVIS com braços”*. Até a 0.69.0 o `maquina.debloat` diagnosticava e
+fiz o JARVIS com braços”*. Até a 0.70.0 o `maquina.debloat` diagnosticava e
 entregava um `.bat` para o usuário ler, salvar e rodar como administrador. Isso é
 relatório, não braço.
 
@@ -53,9 +53,15 @@ CRIACAO_SEM_JANELA = 0x08000000
 VEREDITO_EXECUTAVEL = "sobra"
 
 # Limpeza de disco que pode rodar sozinha: só o que é lixo por definição.
-# WinSxS, hibernação e "Windows.old" ficam de fora — os três são "cuidado" no
-# catálogo e mexem em recurso do sistema (DISM, energia, versão anterior).
 ESPACO_SEGURO = {"temp-usuario", "temp-windows", "update-cache", "lixeira", "delivery"}
+
+# No "modo ousado" entra o que é reversível com uma linha. `hiberfil.sys` volta
+# com `powercfg /h on`. O que **não** volta fica fora dos dois modos:
+#   - WinSxS (DISM /ResetBase)   -> apaga versão antiga de componente para sempre;
+#   - Windows.old               -> a versão anterior do Windows deixa de existir;
+#   - C:\Windows\Installer      -> é o cache de desinstalação dos MSI;
+#   - Prefetch                  -> deixa o programa abrir mais rápido.
+ESPACO_OUSADO = {"hiberfil"}
 
 
 class ArrumarError(ValueError):
@@ -133,11 +139,12 @@ def _de_processos() -> list[dict[str, Any]]:
     return itens
 
 
-def _de_apps() -> list[dict[str, Any]]:
+def _de_apps(ousado: bool = False) -> list[dict[str, Any]]:
     dados = limpeza_local.analisar_apps(limpeza_local.medir_apps())
+    aceitos = {VEREDITO_EXECUTAVEL} | ({"cuidado"} if ousado else set())
     itens = []
     for app in dados["apps"]:
-        if app["veredito"] != VEREDITO_EXECUTAVEL:
+        if app["veredito"] not in aceitos:
             continue
         itens.append(
             _item("app", app["id"], app["nome"], app["comando"], app["desfazer"],
@@ -146,29 +153,32 @@ def _de_apps() -> list[dict[str, Any]]:
     return itens
 
 
-def _de_tarefas() -> list[dict[str, Any]]:
+def _de_tarefas(ousado: bool = False) -> list[dict[str, Any]]:
     dados = limpeza_local.analisar_tarefas(limpeza_local.medir_tarefas())
+    aceitos = {VEREDITO_EXECUTAVEL} | ({"cuidado"} if ousado else set())
     return [
         _item("tarefa", t["tarefa"].rsplit("\\", 1)[-1], t["nome"], t["comando"], t["desfazer"])
         for t in dados
-        if t["veredito"] == VEREDITO_EXECUTAVEL
+        if t["veredito"] in aceitos
     ]
 
 
-def _de_servicos() -> list[dict[str, Any]]:
+def _de_servicos(ousado: bool = False) -> list[dict[str, Any]]:
     dados = limpeza_local.analisar_servicos(limpeza_local.medir_servicos())
+    aceitos = {VEREDITO_EXECUTAVEL} | ({"cuidado"} if ousado else set())
     return [
         _item("servico", s["servico"], s["nome"], s["comando"], s["desfazer"])
         for s in dados
-        if s["veredito"] == VEREDITO_EXECUTAVEL
+        if s["veredito"] in aceitos
     ]
 
 
-def _de_espaco() -> list[dict[str, Any]]:
+def _de_espaco(ousado: bool = False) -> list[dict[str, Any]]:
     dados = limpeza_local.analisar_espaco(limpeza_local.medir_pastas(medir=True))
+    permitidos = ESPACO_SEGURO | (ESPACO_OUSADO if ousado else set())
     itens = []
     for item in dados:
-        if item["id"] not in ESPACO_SEGURO:
+        if item["id"] not in permitidos:
             continue
         if not item.get("comando"):
             continue
@@ -178,7 +188,7 @@ def _de_espaco() -> list[dict[str, Any]]:
 
 
 def planejar(*, processos: bool = True, apps: bool = True, tarefas: bool = True,
-             servicos: bool = True, espaco: bool = True) -> dict[str, Any]:
+             servicos: bool = True, espaco: bool = True, ousado: bool = False) -> dict[str, Any]:
     """Lê a máquina e monta a lista do que seria feito. Não executa nada."""
     sistema = platform.system()
     if sistema != "Windows":
@@ -194,13 +204,13 @@ def planejar(*, processos: bool = True, apps: bool = True, tarefas: bool = True,
     if processos:
         itens += _de_processos()
     if apps:
-        itens += _de_apps()
+        itens += _de_apps(ousado)
     if tarefas:
-        itens += _de_tarefas()
+        itens += _de_tarefas(ousado)
     if servicos:
-        itens += _de_servicos()
+        itens += _de_servicos(ousado)
     if espaco:
-        itens += _de_espaco()
+        itens += _de_espaco(ousado)
     por_tipo: dict[str, int] = {}
     for item in itens:
         por_tipo[item["tipo"]] = por_tipo.get(item["tipo"], 0) + 1
@@ -211,9 +221,12 @@ def planejar(*, processos: bool = True, apps: bool = True, tarefas: bool = True,
         "total": len(itens),
         "por_tipo": por_tipo,
         "resumo": _resumo_plano(itens),
+        "ousado": ousado,
         "regra": (
-            "Só entra aqui o que é 'sobra'. Driver, essencial e o que depende do "
-            "seu uso ficam de fora, mesmo que estejam ocupando memória."
+            "Sem o modo ousado, só entra o que é 'sobra'. Com ele, entra também o "
+            "'cuidado' que tem volta (Xbox, Teams, Search, Superfetch, hibernação). "
+            "O que não tem volta — WinSxS, Windows.old, Installer, Prefetch, driver "
+            "e essencial — fica de fora nos dois modos."
         ),
     }
 
@@ -255,6 +268,115 @@ def _gravar_diario(registro: dict[str, Any], raiz: Path | None = None) -> str:
     return str(caminho)
 
 
+# ---------------------------------------------------------------------------
+# Instantâneo: a foto de antes (a ideia do backup, no tamanho certo)
+# ---------------------------------------------------------------------------
+#
+# Backup "na nuvem" do Windows inteiro não resolve — driver e componente de
+# sistema não são dados, e baixar 20 GB de volta é pior que desfazer com uma
+# linha. O que resolve de verdade são duas coisas baratas:
+#
+#   1. **instantâneo** (KB, aqui embaixo): a lista do que estava instalado,
+#      ligado e ativo antes da limpeza. É o que permite reinstalar pela Store e
+#      saber o estado original de cada serviço;
+#   2. **ponto de restauração** (o do próprio Windows): religa driver, serviço e
+#      registro. Ocupa 1 a 2 GB **no disco local** e é o único mecanismo que o
+#      Windows tem para voltar o sistema inteiro.
+#
+# O instantâneo vai para `storage/limpezas/instantaneo-<data>.json` — pequeno o
+# bastante para caber num Drive, num pen drive ou num anexo, e grande o
+# suficiente para reconstruir o estado.
+
+
+def instantaneo() -> dict[str, Any]:
+    """Foto do estado atual: apps de loja, serviços e tarefas com seus modos."""
+    if platform.system() != "Windows":
+        return {"sistema": platform.system(), "lido": False, "motivo": "Instantâneo é do Windows."}
+    apps = []
+    for pacote in limpeza_local.medir_apps():
+        nome = str(pacote.get("Name") or "").strip()
+        if nome:
+            apps.append({"nome": nome, "completo": pacote.get("PackageFullName") or ""})
+    servicos = limpeza_local.medir_servicos()
+    tarefas = limpeza_local.medir_tarefas()
+    return {
+        "sistema": platform.system(),
+        "lido": True,
+        "quando": datetime.now().isoformat(timespec="seconds"),
+        "versao": _versao_jarvis(),
+        "apps": apps,
+        "servicos": servicos,
+        "tarefas": tarefas,
+        "resumo": f"{len(apps)} app(s), {len(servicos)} serviço(s), {len(tarefas)} tarefa(s).",
+    }
+
+
+def _versao_jarvis() -> str:
+    try:
+        dados = json.loads((Path(__file__).resolve().parent.parent / "package.json").read_text(encoding="utf-8"))
+        return str(dados.get("version") or "?")
+    except (OSError, ValueError):
+        return "?"
+
+
+def gravar_instantaneo(foto: dict[str, Any] | None = None, raiz: Path | None = None) -> str | None:
+    """Grava a foto em `storage/limpezas/instantaneo-<data>.json`. Devolve o caminho."""
+    dados = foto if foto is not None else instantaneo()
+    if not dados.get("lido"):
+        return None
+    pasta = _pasta_diario(raiz)
+    pasta.mkdir(parents=True, exist_ok=True)
+    marca = datetime.now().strftime("%Y%m%d-%H%M%S")
+    caminho = pasta / f"instantaneo-{marca}.json"
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(caminho)
+
+
+PONTO_SCRIPT = (
+    "Checkpoint-Computer -Description 'JARVIS antes da limpeza' "
+    "-RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop; 'criado'"
+)
+
+
+def ponto_de_restauracao(rodar_ps: Callable[[str], tuple[int, str]] | None = None) -> dict[str, Any]:
+    """Cria um ponto de restauração do Windows (o 'backup' que realmente volta).
+
+    Não bloqueia a limpeza quando falha: em muitas máquinas a Proteção do Sistema
+    está desligada, e aí o certo é dizer isso e seguir — com o instantâneo no
+    lugar. Criar ponto exige administrador.
+    """
+    if platform.system() != "Windows":
+        return {"criado": False, "motivo": "Ponto de restauração é do Windows."}
+    executor = rodar_ps or (lambda script: _ps(script))
+    codigo, saida = executor(PONTO_SCRIPT)
+    if codigo == 0 and "criado" in (saida or "").lower():
+        return {"criado": True, "motivo": ""}
+    return {
+        "criado": False,
+        "motivo": (
+            "Não consegui criar o ponto de restauração. Causa comum: a Proteção do "
+            "Sistema está desligada, ou a janela não está como administrador. "
+            "O instantâneo da lista de apps/serviços/tarefas foi gravado de qualquer forma. "
+            f"Resposta do Windows: {(saida or '').strip()[:200]}"
+        ),
+    }
+
+
+def _ps(script: str, timeout: int = 300) -> tuple[int, str]:
+    """PowerShell fixo do módulo — nunca texto do usuário."""
+    try:
+        concluido = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            creationflags=CRIACAO_SEM_JANELA if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 1, str(exc)
+    return concluido.returncode, ((concluido.stdout or "") + (concluido.stderr or "")).strip()
+
+
 def _processo_ainda_e_o_mesmo(item: dict[str, Any]) -> bool:
     """O PID continua sendo o processo que o plano viu? (PID reciclado é comum)"""
     from . import processos as processos_local  # noqa: PLC0415
@@ -279,6 +401,8 @@ def executar(
     raiz_diario: Path | None = None,
     rodar: Callable[[str], tuple[int, str]] | None = None,
     agora: datetime | None = None,
+    ponto: bool | Callable[[], dict[str, Any]] | None = None,
+    foto: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Executa o plano de sobras. Exige a trava ligada e confirmação explícita."""
     from . import sistema as sistema_mod  # noqa: PLC0415
@@ -302,6 +426,25 @@ def executar(
     if not dados.get("lido"):
         return {**dados, "executado": False, "acoes": []}
 
+    # 1) foto de antes — barata e sempre possível. Se falhar (PowerShell fora do
+    #    ar, política de execução, disco cheio), a limpeza continua: perder a
+    #    foto é ruim, não limpar por causa dela é pior.
+    try:
+        instantaneo_gravado = gravar_instantaneo(foto, raiz_diario)
+    except (OSError, ValueError, RuntimeError):
+        instantaneo_gravado = None
+
+    # 2) ponto de restauração — o "backup" que o Windows sabe restaurar.
+    #    Falhar aqui não cancela: a máquina pode ter a Proteção desligada.
+    if ponto is None or ponto is True:
+        resultado_ponto = ponto_de_restauracao()
+    elif callable(ponto):
+        resultado_ponto = ponto()
+    elif ponto is False:
+        resultado_ponto = {"criado": False, "motivo": "Desligado para esta execução."}
+    else:
+        resultado_ponto = {"criado": False, "motivo": "Opção não reconhecida."}
+
     executor = rodar or (lambda comando: rodar_comando(comando))
     acoes: list[dict[str, Any]] = []
     for item in dados.get("itens", []):
@@ -319,6 +462,8 @@ def executar(
     registro = {
         "quando": (agora or datetime.now()).isoformat(timespec="seconds"),
         "sistema": platform.system(),
+        "instantaneo": instantaneo_gravado,
+        "ponto_de_restauracao": resultado_ponto,
         "acoes": acoes,
         "resumo": _resumo_execucao(acoes),
     }
@@ -330,6 +475,15 @@ def executar(
         "falhas": sum(1 for a in acoes if not a["ok"]),
         "resumo": registro["resumo"],
         "diario": caminho,
+        "instantaneo": instantaneo_gravado,
+        "ponto_de_restauracao": resultado_ponto,
+        "como_voltar_tudo": (
+            "Ponto de restauração: tecle Win+R, digite rstrui e escolha o ponto "
+            "'JARVIS antes da limpeza'. O instantâneo lista o que reinstalar pela Store."
+        ) if resultado_ponto.get("criado") else (
+            "O ponto de restauração não foi criado. O instantâneo lista os apps, "
+            "serviços e tarefas como estavam; maquina.desfazer reverte o que tem volta."
+        ),
         "desfazer": "maquina.desfazer reverte app, tarefa e serviço do último diário.",
     }
 
@@ -430,6 +584,8 @@ def _cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--aplicar", action="store_true", help="Executar, não só planejar.")
     parser.add_argument("--desfazer", action="store_true", help="Reverter o último diário.")
     parser.add_argument("--sim", action="store_true", help="Não pedir confirmação (só em script).")
+    parser.add_argument("--ousado", action="store_true", help="Incluir o 'cuidado' que tem volta (Xbox, Teams, Search, hibernação).")
+    parser.add_argument("--sem-ponto", action="store_true", help="Não tentar criar ponto de restauração.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -441,7 +597,7 @@ def _cli(argv: list[str] | None = None) -> int:
         return 1
 
     if not args.desfazer:
-        plano = planejar()
+        plano = planejar(ousado=args.ousado)
         if not plano.get("lido"):
             print(f"  {plano.get('motivo')}")
             return 1
@@ -469,13 +625,25 @@ def _cli(argv: list[str] | None = None) -> int:
         resultado = (
             desfazer(autorizacao=token, confirmado=True)
             if args.desfazer
-            else executar(autorizacao=token, plano=planejar(), confirmado=True)
+            else executar(
+                autorizacao=token,
+                plano=planejar(ousado=args.ousado),
+                confirmado=True,
+                ponto=False if args.sem_ponto else None,
+            )
         )
     except ArrumarError as exc:
         print(f"  {exc}")
         return 1
     print()
     print(f"  {resultado.get('resumo')}")
+    if resultado.get("instantaneo"):
+        print(f"  Instantâneo: {resultado['instantaneo']}")
+    ponto = resultado.get("ponto_de_restauracao") or {}
+    if ponto.get("criado"):
+        print("  Ponto de restauração criado: rstrui (Win+R) volta tudo.")
+    elif ponto.get("motivo"):
+        print(f"  Ponto de restauração: {ponto['motivo'][:120]}")
     if resultado.get("diario"):
         print(f"  Diário: {resultado['diario']}")
     print()

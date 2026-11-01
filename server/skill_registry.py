@@ -456,6 +456,10 @@ class ArrumarInput(BaseModel):
     servicos: bool = Field(default=True, title="Desativar serviços sem uso")
     espaco: bool = Field(default=True, title="Limpar cache e lixeira")
     planejar_apenas: bool = Field(default=False, title="Só mostrar o plano, sem executar")
+    ousado: bool = Field(default=False, title="Modo ousado (o 'cuidado' que tem volta)", json_schema_extra={
+        "description": "Inclui Xbox, Teams, Search, Superfetch e hibernação — todos reversíveis. WinSxS, Windows.old, Installer e Prefetch continuam fora."
+    })
+    ponto_de_restauracao: bool = Field(default=True, title="Criar ponto de restauração antes")
 
 
 class DesfazerInput(BaseModel):
@@ -4137,7 +4141,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.69.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.70.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4922,6 +4926,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             tarefas=entrada.tarefas,
             servicos=entrada.servicos,
             espaco=entrada.espaco,
+            ousado=entrada.ousado,
         )
         if dry_run or entrada.planejar_apenas:
             return {**plano, "executado": False, "motivo": "Só o plano: nada foi mexido."}
@@ -4929,6 +4934,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             autorizacao=entrada.autorizacao,
             plano=plano,
             confirmado=True,  # a API já exigiu `confirmed` antes de chegar aqui
+            ponto=entrada.ponto_de_restauracao,
         )
         return {**resultado, "plano_resumo": plano.get("resumo", "")}
 

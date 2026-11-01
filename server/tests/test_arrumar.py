@@ -1,7 +1,7 @@
 """Os braços: o JARVIS arruma a máquina em vez de mandar você apertar.
 
 O pedido foi literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS
-com braços”*. Até a 0.69.0 ele diagnosticava e entregava um `.bat` — relatório.
+com braços”*. Até a 0.70.0 ele diagnosticava e entregava um `.bat` — relatório.
 Agora `maquina.arrumar` executa.
 
 O que estes testes travam, e por quê:
@@ -49,9 +49,9 @@ def test_o_plano_so_tem_sobras(monkeypatch):
     """O catálogo tem 35 apps; só os de veredito 'sobra' podem virar comando."""
     monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
     monkeypatch.setattr(arrumar, "_de_processos", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_tarefas", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_servicos", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_espaco", lambda: [])
+    monkeypatch.setattr(arrumar, "_de_tarefas", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_servicos", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_espaco", lambda ousado=False: [])
     monkeypatch.setattr(
         arrumar.limpeza_local,
         "analisar_apps",
@@ -83,10 +83,10 @@ def test_o_espaco_automatico_nao_inclui_winsxs_hibernacao_nem_windows_old():
 def test_o_resumo_do_plano_conta_por_tipo(monkeypatch):
     monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
     monkeypatch.setattr(arrumar, "_de_processos", lambda: [arrumar._item("processo", "1:9", "Steam Web Helper", "taskkill /PID 9 /F", "", "320 MB")])
-    monkeypatch.setattr(arrumar, "_de_apps", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_tarefas", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_servicos", lambda: [])
-    monkeypatch.setattr(arrumar, "_de_espaco", lambda: [])
+    monkeypatch.setattr(arrumar, "_de_apps", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_tarefas", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_servicos", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_espaco", lambda ousado=False: [])
     plano = arrumar.planejar()
     assert "processo" in plano["resumo"]
 
@@ -228,6 +228,121 @@ def test_plano_vazio_nao_grava_diario_mentiroso(ambiente_ligado, tmp_path):
     assert list(tmp_path.glob("*.json")) == []
 
 
+# ------------------------------------------------ foto de antes + ponto
+
+
+def test_o_instantaneo_guarda_apps_servicos_e_tarefas(monkeypatch, tmp_path):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_apps",
+                        lambda: [{"Name": "Microsoft.BingWeather_8wekyb3d8bbwe", "PackageFullName": "full"}])
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_servicos",
+                        lambda: {"DiagTrack": {"estado": "Running", "inicio": "Auto"}})
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_tarefas",
+                        lambda: {r"\Microsoft\Windows\Autochk\Proxy": "Ready"})
+    foto = arrumar.instantaneo()
+    assert foto["lido"] is True
+    assert foto["apps"][0]["nome"].startswith("Microsoft.BingWeather")
+    assert foto["servicos"]["DiagTrack"]["inicio"] == "Auto"
+    assert "app" in foto["resumo"]
+
+    caminho = arrumar.gravar_instantaneo(foto, raiz=tmp_path)
+    assert caminho and Path(caminho).is_file()
+    salvo = json.loads(Path(caminho).read_text(encoding="utf-8"))
+    assert salvo["tarefas"][r"\Microsoft\Windows\Autochk\Proxy"] == "Ready"
+
+
+def test_o_instantaneo_e_pequeno_nao_e_backup_do_windows(monkeypatch, tmp_path):
+    """O ponto é ser KB: lista de estado, não cópia de 20 GB."""
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_apps", lambda: [])
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_servicos", lambda: {})
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_tarefas", lambda: {})
+    caminho = arrumar.gravar_instantaneo(raiz=tmp_path)
+    assert Path(caminho).stat().st_size < 4096
+
+
+def test_fora_do_windows_o_instantaneo_e_o_ponto_dizem_por_que():
+    assert arrumar.instantaneo()["lido"] is False
+    assert arrumar.ponto_de_restauracao()["criado"] is False
+    assert "Windows" in arrumar.ponto_de_restauracao()["motivo"]
+
+
+def test_ponto_de_restauracao_relata_falha_sem_derrubar(monkeypatch):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    resultado = arrumar.ponto_de_restauracao(lambda script: (1, "Proteção do Sistema desligada"))
+    assert resultado["criado"] is False
+    assert "Proteção do Sistema" in resultado["motivo"]
+    assert "instantâneo" in resultado["motivo"]
+
+
+def test_ponto_de_restauracao_confirma_quando_o_windows_diz_criado(monkeypatch):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    resultado = arrumar.ponto_de_restauracao(lambda script: (0, "criado"))
+    assert resultado["criado"] is True
+
+
+def test_executar_grava_instantaneo_e_ponto_no_diario(ambiente_ligado, tmp_path):
+    plano = _plano_falso([arrumar._item("app", "bing", "MSN Tempo", "cmd-app", "volta")])
+    resultado = arrumar.executar(
+        autorizacao="token", plano=plano, confirmado=True,
+        rodar=_executor_falso(), raiz_diario=tmp_path,
+        ponto=lambda: {"criado": True, "motivo": ""},
+        foto={"lido": True, "apps": [{"nome": "X"}], "servicos": {}, "tarefas": {}, "resumo": "1 app"},
+    )
+    assert Path(resultado["instantaneo"]).is_file()
+    assert resultado["ponto_de_restauracao"]["criado"] is True
+    assert "rstrui" in resultado["como_voltar_tudo"]
+    diario = json.loads(Path(resultado["diario"]).read_text(encoding="utf-8"))
+    assert diario["ponto_de_restauracao"]["criado"] is True
+    assert diario["instantaneo"] == resultado["instantaneo"]
+
+
+def test_sem_ponto_o_relatorio_aponta_o_instantaneo(ambiente_ligado, tmp_path):
+    plano = _plano_falso([arrumar._item("app", "x", "App", "cmd", "volta")])
+    resultado = arrumar.executar(
+        autorizacao="token", plano=plano, confirmado=True, rodar=_executor_falso(),
+        raiz_diario=tmp_path, ponto=False, foto={"lido": True, "apps": [], "servicos": {}, "tarefas": []},
+    )
+    assert resultado["ponto_de_restauracao"]["criado"] is False
+    assert "maquina.desfazer" in resultado["como_voltar_tudo"]
+
+
+# ---------------------------------------------------------------- modo ousado
+
+
+def test_modo_ousado_traz_o_cuidado_que_tem_volta(monkeypatch):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "_de_processos", lambda: [])
+    monkeypatch.setattr(arrumar, "_de_tarefas", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_servicos", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_espaco", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar.limpeza_local, "medir_apps", lambda: [])
+    monkeypatch.setattr(
+        arrumar.limpeza_local, "analisar_apps",
+        lambda _p: {"apps": [
+            {"id": "xbox", "nome": "Xbox", "veredito": "cuidado", "pacote": "P", "comando": "c", "desfazer": "d", "tamanho_estimado_mb": 260},
+            {"id": "store", "nome": "Store", "veredito": "essencial", "pacote": "S", "comando": "c2", "desfazer": "", "tamanho_estimado_mb": 90},
+        ]},
+    )
+    assert [i["nome"] for i in arrumar.planejar(ousado=False)["itens"]] == []
+    assert [i["nome"] for i in arrumar.planejar(ousado=True)["itens"]] == ["Xbox"]
+
+
+def test_hibernacao_entra_so_no_ousado_e_winsxs_nunca():
+    assert "hiberfil" in arrumar.ESPACO_OUSADO
+    assert "hiberfil" not in arrumar.ESPACO_SEGURO
+    para_nunca = {"win-sxs", "windows-old", "winsxs-manual", "prefetch"}
+    assert para_nunca.isdisjoint(arrumar.ESPACO_SEGURO | arrumar.ESPACO_OUSADO)
+
+
+def test_o_plano_marca_quando_e_ousado():
+    from server import arrumar as mod
+
+    plano = mod.planejar(ousado=True)
+    if plano.get("lido"):
+        assert plano["ousado"] is True
+
+
 # --------------------------------------------------------------- desfazer
 
 
@@ -303,7 +418,7 @@ def test_arrumar_pc_bat_liga_a_trava_so_para_ele():
 
 def test_arrumar_pc_bat_pede_confirmacao_antes_de_aplicar():
     texto = (RAIZ / "arrumar-pc.bat").read_bytes().decode("ascii")
-    i_plano = texto.index("%PYEXE% -m server.arrumar\r\n")
+    i_plano = texto.index("%PYEXE% -m server.arrumar ")
     i_pausa = texto.index("pause", i_plano)
     i_aplicar = texto.index("--aplicar --sim")
     assert i_plano < i_pausa < i_aplicar, "o plano tem que vir antes do sim"

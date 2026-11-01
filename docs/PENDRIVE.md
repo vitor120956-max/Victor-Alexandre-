@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.69.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.70.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -635,7 +635,7 @@ npm run build:embutido
 
 - **Não recarrega ao editar.** Mudou código React? Precisa de `npm run build:embutido` — que exige Node.
 - **Sem testes web.** `npx vitest` continua exigindo `npm install`.
-- **Mesmas 288 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
+- **Mesmas 306 skills.** O modo sem Node muda só como a tela é entregue; toda a lógica roda em Python.
 
 ---
 
@@ -691,7 +691,7 @@ Não existe chave grátis da OpenAI — site que oferece isso está revendendo c
 
 O passo a passo de cada um, com o que digitar em cada campo e o aviso de privacidade (o plano gratuito do Google usa suas conversas para treinar; o do Groq não), está em [`CONFIGURAR-IA.md`](CONFIGURAR-IA.md) §0.
 
-**Chave não é obrigatória.** Sem chave nenhuma, as 288 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
+**Chave não é obrigatória.** Sem chave nenhuma, as 306 skills locais, a legislação, os documentos, a memória e as tarefas funcionam; fica de fora só o chat aberto. E existe a rota sem limite: rodar o modelo **na própria máquina** com `llama.cpp` ou `KoboldCpp` (o Ollama não instala no Windows 10 1607 — ele pede 22H2) e apontar com `.venv\Scripts\python configurar-chave.py --local`. Nesse modo nada sai da máquina. O que cabe em cada quantidade de RAM está na tabela do mesmo §0.
 
 Com a chave em mãos, o teste rápido é:
 
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.69.0"` e `"skills": 288`.
+Esperado: `"version": "0.70.0"` e `"skills": 306`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.69.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.60.5 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.69.0` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.70.0` e `306`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -1021,7 +1021,7 @@ sumir, o `npm run dev` não cospe mais o erro cru do Windows — ele diz isto:
 
 ```text
   O JARVIS nao esta quebrado: falta a pasta node_modules.
-  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.69.0.
+  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.70.0.
 
   Opcao 1 - nao instalar nada e usar o JARVIS agora:
     .venv\Scripts\python.exe iniciar.py
@@ -1137,7 +1137,7 @@ Agora a mesma situação responde assim:
 
 ```text
   Já existe um JARVIS na porta 8000 — mas é de outra versão
-  Rodando: 0.62.6. Esta pasta: 0.69.0. O navegador mostraria o código antigo
+  Rodando: 0.62.6. Esta pasta: 0.70.0. O navegador mostraria o código antigo
   e pareceria que a atualização não pegou.
 
     - Feche a janela antiga no X (procure “JARVIS” na barra de tarefas)

@@ -152,6 +152,9 @@ type ResultadoArrumar = {
   total?: number;
   desfeito?: boolean;
   numero?: number;
+  instantaneo?: string;
+  ponto_de_restauracao?: { criado?: boolean; motivo?: string };
+  como_voltar_tudo?: string;
   sem_volta?: string[];
 };
 
@@ -182,6 +185,7 @@ export function MaquinaPage() {
   const [plano, setPlano] = useState<Plano | null>(null);
   const [limpeza, setLimpeza] = useState<Debloat | null>(null);
   const [arrumando, setArrumando] = useState(false);
+  const [ousado, setOusado] = useState(false);
   const [arrumado, setArrumado] = useState<ResultadoArrumar | null>(null);
   const [aberto, setAberto] = useState<string>('');
 
@@ -249,7 +253,7 @@ export function MaquinaPage() {
     try {
       const resposta = await executeSkill(
         desfazer ? 'maquina.desfazer' : 'maquina.arrumar',
-        {},
+        desfazer ? {} : { ousado, ponto_de_restauracao: true },
         { confirmed: true },
       );
       if (!resposta.ok) {
@@ -639,9 +643,17 @@ export function MaquinaPage() {
                 <p>
                   Isto não gera script: o JARVIS executa a limpeza agora — fecha processo de sobra,
                   remove app de loja sem uso, desativa tarefa de telemetria e serviço inútil, limpa
-                  cache e lixeira. Só o que é <b>sobra</b>; driver e essencial nunca entram. Cada ação
-                  fica no diário com o caminho de volta.
+                  cache e lixeira. Antes, ele grava a <b>foto do que existe</b> (apps, serviços e
+                  tarefas) e tenta criar um <b>ponto de restauração</b> do Windows. Driver e
+                  essencial nunca entram.
                 </p>
+                <label className="maquina-ousado">
+                  <input type="checkbox" checked={ousado} onChange={(evento) => setOusado(evento.target.checked)} />
+                  <span>
+                    <b>Modo ousado</b> — inclui o que tem volta: Xbox, Teams, Search, Superfetch e
+                    hibernação. WinSxS, Windows.old, Installer e Prefetch continuam fora.
+                  </span>
+                </label>
               </div>
               <div className="maquina-braco-botoes">
                 <button className="button button-primary" onClick={() => void arrumar(false)} disabled={arrumando || !backendOnline}>
@@ -656,6 +668,14 @@ export function MaquinaPage() {
             {arrumado && (
               <div className="maquina-braco-resultado">
                 <p className="maquina-braco-resumo">{arrumado.resumo}</p>
+                {arrumado.instantaneo && (
+                  <small className="maquina-nota">Foto de antes: <code>{arrumado.instantaneo}</code></small>
+                )}
+                <small className="maquina-nota">
+                  {arrumado.ponto_de_restauracao?.criado
+                    ? 'Ponto de restauração criado — Win+R, rstrui, escolha “JARVIS antes da limpeza”.'
+                    : arrumado.ponto_de_restauracao?.motivo ?? ''}
+                </small>
                 {arrumado.diario && <small className="maquina-nota">Diário: <code>{arrumado.diario}</code></small>}
                 {lista<AcaoFeita>(arrumado.acoes).length > 0 && (
                   <ul>

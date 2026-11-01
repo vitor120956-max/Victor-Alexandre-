@@ -110,9 +110,9 @@ e fingir uma lista vazia seria pior que dizer “não se aplica”.
 
 ---
 
-## 9. Os braços: `maquina.arrumar` (0.69.0)
+## 9. Os braços: `maquina.arrumar` (0.70.0)
 
-Até a 0.69.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
+Até a 0.70.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
 salvava e rodava como administrador. Isso é relatório, não braço. O pedido foi
 literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS com braços”*.
 
@@ -134,12 +134,14 @@ Agora existe **um comando que executa**:
 | tarefa | `schtasks /Change /DISABLE` nas tarefas de telemetria | as existentes |
 | serviço | `sc config … start= disabled` nos serviços sem uso | os existentes |
 | espaço | `%LOCALAPPDATA%\Temp`, `C:\Windows\Temp`, cache de atualização, Otimização de Entrega, lixeira | os que existirem |
+| espaço, **só no ousado** | `powercfg /h off` (hibernação, `hiberfil.sys`) | se existir |
 
 ### 9.2 O que ele **nunca** executa
 
 - **driver** — o NVIDIA Container continua de fora (é `cuidado`);
 - **essencial** — Store, `winget`, Segurança, VCLibs/UI.Xaml, Calculadora, Fotos, Captura, Spooler, Wi-Fi, áudio, horário;
-- **cuidado** — Xbox/Game Bar, Teams, Vínculo com o Telefone, Superfetch, Search, **WinSxS**, **hibernação**, **Windows.old**;
+- **cuidado** — Xbox/Game Bar, Teams, Vínculo com o Telefone, Superfetch, Search, Otimização de Entrega — **a menos que o modo ousado esteja ligado**, e então só o que tem volta declarada (§10.5);
+- **WinSxS**, **Windows.old**, **hibernação** fora do ousado — nunca entram no plano normal;
 - **`C:\Windows\Installer`** e **`Prefetch`** — marcados como essenciais no catálogo, sem comando;
 - **processo por PID velho** — antes de matar, confere se aquele PID ainda é o mesmo processo **e** continua classificado como sobra. PID reciclado é comum no Windows, e matar por número antigo fecha programa alheio.
 
@@ -165,3 +167,90 @@ Agora existe **um comando que executa**:
 
 O relatório lista nominalmente o que ficou `sem_volta` — em vez de dizer
 “desfeito” e esconder que a lixeira não volta.
+
+E antes de remover qualquer coisa, a 0.70.0 grava **duas** coisas: o instantâneo do
+estado (`instantaneo-*.json`, 3 KB) e, quando a Proteção do Sistema permite, um ponto
+de restauração do Windows — o único jeito de voltar driver, serviço e registro de uma
+vez (`Win+R` → `rstrui`). Detalhe em §10.3.
+
+No código, as duas listas que separam isso são `ESPACO_SEGURO` (temp, cache de
+atualização, lixeira, Otimização de Entrega) e `ESPACO_OUSADO` (só `hiberfil`).
+
+---
+
+## 10. Por que cada item proibido é proibido — e o backup que resolve (0.70.0)
+
+A pergunta foi: *“não entendi por que ele não pode mexer nessas coisas; uma ideia
+boa é ele fazer um backup na nuvem antes de remover”*.
+
+A resposta tem duas partes: **backup não resolve tudo**, e **o que backup resolve
+o JARVIS passou a fazer**.
+
+### 10.1 Backup não salva o que quebra na hora
+
+| item | o que quebra **nos 5 minutos seguintes** | backup ajuda? |
+|---|---|---|
+| **Spooler** | nenhuma impressora funciona, inclusive “imprimir em PDF” | não: o problema é o intervalo até restaurar |
+| **áudio (Audiosrv)** | a máquina fica muda | não |
+| **Wi-Fi (WlanSvc)** | sem rede — e sem rede **não há nuvem para restaurar** | **péssimo**: o backup depende da conexão que você acabou de perder |
+| **horário (W32Time)** | hora erra → certificado de site falha → quase todo HTTPS quebra | não |
+| **Microsoft Store / winget** | é **o caminho de volta** de tudo o resto | não: você apagaria a própria ferramenta de restaurar |
+| **VCLibs / UI.Xaml** | quebra apps que **não estão na lista** | não: é dependência compartilhada |
+| **driver NVIDIA** | perde painel/ShadowPlay; volta com reinício | não é dado — reinstala-se do site |
+
+Nenhum desses é “arquivo que a gente guarda”: são serviços e bibliotecas que o
+Windows usa o tempo todo. Backup não evita o estrago — só documenta.
+
+### 10.2 Backup não faz sentido para os “grandes”
+
+| item | o que é de verdade | por que backup é a ferramenta errada |
+|---|---|---|
+| **WinSxS** | cópia de componentes que o Windows mantém para poder atualizar | 5–10 GB; o certo é `DISM /StartComponentCleanup`, que apaga **só a versão antiga** e mantém o sistema atualizável. Copiar 8 GB para depois devolver não é limpeza |
+| **Windows.old** | a versão anterior do Windows | some sozinha em 10 dias; copiar significa **não** limpar |
+| **`C:\Windows\Installer`** | cache de desinstalação dos MSI | 1–3 GB, **sem volta útil**: os MSI referenciam caminho absoluto — um zip disso não reinstala nada |
+| **Prefetch** | índice que deixa o programa abrir rápido | ganho de **MB**; o custo é boot mais lento. Não vale nem o backup |
+
+### 10.3 O que o JARVIS passou a fazer antes de qualquer remoção
+
+Duas coisas, e nenhuma delas é “mandar 20 GB para a nuvem”:
+
+**1. Instantâneo do estado — KB, sempre**
+
+`storage/limpezas/instantaneo-AAAAMMDD-HHMMSS.json` com a lista de apps de loja
+(nome e `PackageFullName`), o estado de cada serviço (rodando/parado e modo de
+início) e o estado de cada tarefa. É pequeno o bastante para caber num Drive, num
+pendrive ou num anexo — e é o que permite **reinstalar pela Store** e saber como
+cada serviço estava antes.
+
+**2. Ponto de restauração do Windows — 1 a 2 GB, no disco local**
+
+`Checkpoint-Computer` antes da limpeza. É o único mecanismo que o Windows tem para
+voltar **driver, serviço e registro**. Para voltar tudo: `Win+R` → `rstrui` →
+escolher “JARVIS antes da limpeza”.
+
+Se a Proteção do Sistema estiver desligada (comum), o ponto falha — e o JARVIS
+**diz isso no relatório** em vez de fingir que salvou, e segue com o instantâneo.
+
+### 10.4 Sobre “nuvem”
+
+O JARVIS não manda nada para fora por conta própria: não há chave, não há API, e
+o módulo não faz upload. O instantâneo fica em `storage/limpezas/` — se você quiser
+na nuvem, é `drive.*` (já existe no projeto) apontando para esse arquivo de 3 KB.
+Mandar o Windows inteiro para a nuvem seria lento, caro e pior que o `rstrui`.
+
+### 10.5 Modo ousado — o controle que você pediu
+
+O que **tem volta** deixou de ser proibido e virou escolha:
+
+| entra no modo ousado | volta como |
+|---|---|
+| Xbox / Game Bar | Store |
+| Teams (consumidor) | painel de programas |
+| Windows Search (indexador) | `sc config WSearch start= auto` |
+| Superfetch (SysMain) | `sc config SysMain start= auto` |
+| Otimização de Entrega | `sc config DoSvc start= auto` |
+| hibernação (`hiberfil.sys`) | `powercfg /h on` |
+
+Liga na tela (checkbox **“Modo ousado”**), no `.bat` (tecla **O**) ou na skill
+(`ousado: true`). O que **não** tem volta continua fora **nos dois modos**:
+WinSxS, Windows.old, `C:\Windows\Installer`, Prefetch, driver e essencial.

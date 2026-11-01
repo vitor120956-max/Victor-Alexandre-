@@ -764,3 +764,26 @@
   font-size: 0.76rem;
   text-align: right;
 }
+
+.maquina-ousado {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border, #d9d4c8);
+  border-radius: 10px;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6b675e);
+  cursor: pointer;
+}
+
+.maquina-ousado input {
+  margin-top: 2px;
+  accent-color: var(--accent, #b26a3c);
+}
+
+.maquina-ousado b {
+  color: var(--text, #2b2925);
+}
