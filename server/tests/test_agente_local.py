@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "307 skills" in texto
+    assert "310 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 307 skills, uma por uma
+# ------------------------------------- cobertura: as 310 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 307 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 310 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2772,3 +2772,18 @@ def test_pedido_de_administrador_vai_para_a_skill_de_elevacao() -> None:
     # Com verbo de limpeza na frase, continua sendo a limpeza (que já pede admin
     # sozinha quando precisa).
     assert _pedido_direto_de_maquina("arruma o pc como administrador")["skill_id"] == "maquina.arrumar"
+
+
+def test_pedido_de_conserto_vai_para_as_skills_de_conserto() -> None:
+    """“por que deu erro” é sobre este programa; “deu erro no site” não."""
+    from server.agente_local import _pedido_direto_de_conserto
+
+    assert _pedido_direto_de_conserto("por que deu erro")["skill_id"] == "conserto.diagnosticar"
+    assert _pedido_direto_de_conserto("o que quebrou no jarvis")["skill_id"] == "conserto.diagnosticar"
+    assert _pedido_direto_de_conserto("me dá o dossiê do erro")["skill_id"] == "conserto.dossie"
+    assert _pedido_direto_de_conserto("conserta o erro")["skill_id"] == "conserto.propor"
+    assert _pedido_direto_de_conserto("conserta o erro")["confirma"] is True
+    # Assunto de fora continua indo para a busca normal — não é traceback.
+    assert _pedido_direto_de_conserto("deu erro no site que abri") is None
+    assert _pedido_direto_de_conserto("erro 500 no site do banco") is None
+    assert _pedido_direto_de_conserto("arruma o pc") is None

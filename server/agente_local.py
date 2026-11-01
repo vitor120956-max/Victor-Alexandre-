@@ -1906,6 +1906,71 @@ _RE_ADMIN_VERBO = re.compile(
 _RE_FAZER_A_LIMPEZA = re.compile(r"\b(?:arrum\w*|limp\w*|faxin\w*)\b", re.I)
 
 
+_RE_CONSERTO_ALVO = re.compile(r"\b(?:erro|falh\w*|quebr\w*|traceback|exce[çc][ãa]o|bug)\b", re.I)
+_RE_CONSERTO_DOSSIE = re.compile(r"\b(?:dossi[eê]|material|o que (?:eu )?preciso saber|para eu corrigir)\b", re.I)
+_RE_CONSERTO_PROPOR = re.compile(r"\b(?:conserta\w*|corrig\w*|corrij\w*|gera\w* o patch|faz o patch|prop[õo]e\w*)\b", re.I)
+# Sinal de que a conversa é sobre **este** programa, não sobre o mundo.
+_RE_CONSERTO_DO_JARVIS = re.compile(
+    r"\b(?:traceback|jarvis|skill|python|fun[çc][ãa]o|c[óo]digo|programa|servidor|api"
+    r"|ultimo erro|[úu]ltimo erro|di[áa]rio|log)\b",
+    re.I,
+)
+# Verbo/nome de diagnóstico: sem um destes, “deu erro” é assunto de outra coisa.
+_RE_CONSERTO_VERBO = re.compile(
+    r"\b(?:por que|porque|o que|qual|como|ajuda\w*|diagnostica\w*|explica\w*|mostra\w*|ver|veja"
+    r"|dossi[eê]|conserta\w*|corrig\w*|onde)\b",
+    re.I,
+)
+# Assunto de fora: aí a resposta é buscar, não ler traceback.
+_RE_CONSERTO_ASSUNTO_DE_FORA = re.compile(
+    r"\b(?:site|p[áa]gina|celular|internet|wifi|wi-fi|impressora|jogo|v[íi]deo|youtube"
+    r"|netflix|whatsapp|instagram|banco|pix|windows update)\b",
+    re.I,
+)
+
+
+def _pedido_direto_de_conserto(termo: str) -> dict[str, Any] | None:
+    """“por que deu erro”, “monta o dossiê” e “conserta” — o laço do conserto.
+
+    Só casa quando a frase fala de erro **e** tem verbo de diagnóstico: “deu erro
+    no site que abri” continua indo para a busca normal, porque ali não há
+    traceback para ler.
+    """
+    texto = normalizar(termo)
+    if not texto or not _RE_CONSERTO_ALVO.search(texto):
+        return None
+    if not _RE_CONSERTO_VERBO.search(texto):
+        return None
+    if _RE_CONSERTO_ASSUNTO_DE_FORA.search(texto):
+        return None
+    # Assunto do JARVIS, ou um pedido curto e direto sobre o erro ("conserta o
+    # erro", "me dá o dossiê"). O resto continua indo para a busca normal.
+    curto = len(texto.split()) <= 6
+    if not (_RE_CONSERTO_DO_JARVIS.search(texto) or _RE_CONSERTO_PROPOR.search(texto)
+            or _RE_CONSERTO_DOSSIE.search(texto) or curto):
+        return None
+    if _RE_CONSERTO_PROPOR.search(texto):
+        return {
+            "skill_id": "conserto.propor",
+            "nome": "Propor o patch do erro",
+            "parametros": {},
+            "confirma": True,
+        }
+    if _RE_CONSERTO_DOSSIE.search(texto):
+        return {
+            "skill_id": "conserto.dossie",
+            "nome": "O dossiê para corrigir de primeira",
+            "parametros": {},
+            "confirma": False,
+        }
+    return {
+        "skill_id": "conserto.diagnosticar",
+        "nome": "Onde quebrou e por quê",
+        "parametros": {},
+        "confirma": False,
+    }
+
+
 def _pedido_direto_de_maquina(termo: str) -> dict[str, Any] | None:
     """Limpar a máquina — com as escolhas ditas **na própria frase**.
 
@@ -2731,6 +2796,10 @@ def formatar_resultado(resultado: Any) -> str:
     if especial is not None:
         return especial
 
+    especial = _formatar_conserto(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_elevacao(resultado)
     if especial is not None:
         return especial
@@ -2798,6 +2867,60 @@ def formatar_resultado(resultado: Any) -> str:
         partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
     texto = "\n\n".join(partes)
     return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+def _formatar_conserto(resultado: dict[str, Any]) -> str | None:
+    """Diagnóstico, dossiê e proposta de patch em texto de gente, no chat."""
+    # Proposta de patch
+    if "proposto" in resultado:
+        if not resultado.get("proposto"):
+            texto = ["Não gerei patch: " + str(resultado.get("motivo") or "sem motivo informado.")]
+            if resultado.get("dossie"):
+                texto.append("")
+                texto.append(str(resultado["dossie"]))
+            return "\n".join(texto)[:LIMITE_RESPOSTA]
+        risco = resultado.get("risco") or {}
+        guardas = resultado.get("guardas") or {}
+        linhas = [
+            f"Patch proposto para: {', '.join(resultado.get('arquivos') or []) or '?'}",
+            f"Risco: {risco.get('nivel', '?')} ({risco.get('pontos', '?')} pontos)",
+            "Guardas violadas: " + (", ".join(guardas.get("violadas") or []) or "nenhuma"),
+            "",
+            str(resultado.get("diff") or "")[:4_000],
+            "",
+            str(resultado.get("proximo") or ""),
+        ]
+        return "\n".join(linhas).strip()[:LIMITE_RESPOSTA]
+
+    # Dossiê puro
+    if isinstance(resultado.get("texto"), str) and "Dossiê de conserto" in resultado["texto"]:
+        return resultado["texto"]
+
+    # Diagnóstico
+    if "excecao" in resultado and "causa" in resultado:
+        if not resultado.get("lido"):
+            return str(resultado.get("motivo") or "Não há erro para diagnosticar.")
+        linhas = [
+            f"{resultado['excecao'].get('tipo')}: {resultado['excecao'].get('mensagem')}",
+        ]
+        onde = resultado.get("onde") or {}
+        if onde:
+            linhas.append(f"Em `{onde.get('arquivo')}` linha {onde.get('linha')} (função `{onde.get('funcao')}`).")
+        causa = resultado.get("causa") or {}
+        linhas.append(f"Causa ({causa.get('codigo')}): {causa.get('significa')}.")
+        linhas.append(f"Costuma resolver: {causa.get('o_que_fazer')}")
+        teste = resultado.get("teste") or {}
+        if teste.get("arquivo"):
+            linhas.append(f"Teste do módulo: `{teste['arquivo']}` ({teste.get('testes', 0)} testes).")
+        if teste.get("aviso"):
+            linhas.append(teste["aviso"])
+        focos = [item for item in resultado.get("trecho") or [] if item.get("foco")]
+        if focos:
+            linhas.append(f"Linha: `{focos[0]['texto'].strip()[:200]}`")
+        if resultado.get("proximo"):
+            linhas.append(str(resultado["proximo"]))
+        return "\n".join(linhas)[:LIMITE_RESPOSTA]
+    return None
 
 
 def _formatar_elevacao(resultado: dict[str, Any]) -> str | None:
@@ -3761,6 +3884,10 @@ async def _resolver(
     # 0b8b. Braços da máquina: arrumar (e o "ousado"/"só o plano" da frase) e desfazer.
     if direto is None:
         direto = _pedido_direto_de_maquina(termo)
+
+    # 0b8c. Conserto: o erro que aconteceu vira diagnóstico, dossiê ou proposta.
+    if direto is None:
+        direto = _pedido_direto_de_conserto(termo)
 
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:

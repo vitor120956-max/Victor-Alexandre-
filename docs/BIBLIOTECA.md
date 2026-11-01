@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.72.0
+# Biblioteca e armazenamento — 0.73.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -262,11 +262,12 @@ Limites, sem enfeite:
 | Testes da máquina | **20** (`test_processos_portatil.py`: veredito de processo, NVIDIA Container, catálogo portátil e plano, com leitura de Windows trocada por lista falsa) |
 | Testes do debloat | **23** (`test_limpeza.py`: catálogo, análise pura com máquina falsa, plano com `rem` no que é cuidado, volta de serviço e tarefa) |
 | Testes dos braços | **48** (`test_arrumar.py`: só sobra executa, PID reciclado é pulado, as quatro travas, diário e desfazer com o que não volta, instantâneo < 4 KB, ponto de restauração que falha sem derrubar a limpeza, **modo ousado** que traz só o reversível, elevação que respeita a recusa do UAC e os dois `.bat` que se elevam sozinhos) |
+| Testes do conserto | **31** (`test_conserto.py`: diário podado, quadro certo entre stdlib e projeto, 12 causas por regra, dossiê com docstring e guardas, proposta sem chave recusada, diff validado pela régua de evolução, e o app registrando a falha sem vazar detalhe pelo HTTP) |
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.059** |
-| Skills no registro | **307** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`) |
+| Suíte da API | **3.090** |
+| Skills no registro | **310** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
 **O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina

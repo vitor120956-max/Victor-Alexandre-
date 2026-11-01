@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.72.0.**
+**Versão atual: 0.73.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -563,7 +563,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **307 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **310 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -684,7 +684,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.72.0", "skills": 306}`.
+`{"version": "0.73.0", "skills": 310}`.
 
 ## Verificações
 
@@ -775,7 +775,7 @@ server/
 ├── processos.py             # o que está rodando: veredito, comando e desfazer
 ├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
 ├── limpeza.py               # debloat: app de loja, tarefa, serviço e cache — só gera plano
-├── skill_registry.py        # allowlist, Pydantic e 307 skills
+├── skill_registry.py        # allowlist, Pydantic e 310 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto
@@ -796,6 +796,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Memória de agente é lexical: o roteador não entende paráfrase sem palavra-chave, a extração não faz correferência, o recall mede termo em comum e não verdade, e o esquecimento devolve plano em vez de apagar. Nenhum modelo, embedding ou banco de grafo é usado.
 - Acesso ao sistema é a única camada com efeito real: `sistema.baixar` grava e `sistema.executar` roda. Ambas exigem token de host, `confirmed` e, no caso da execução, `JARVIS_HOST_INSTALAR=1`. Rede desligada por padrão, endereço privado e laço local bloqueados inclusive via DNS, nenhuma assinatura digital verificada, nenhum privilégio elevado e nenhum shell livre.
 - Continuidade de plano é leitura: a camada sabe se o critério está marcado, não se foi cumprido; a decisão do portão é texto, não bloqueio de sessão; o bloco injetado é corte e contagem, não resumo por modelo; e nenhum hook é instalado.
+- O conserto é o único laço que olha para o próprio código, e ele para onde deve: o erro real vira linha em `storage/erros.jsonl` (o HTTP continua sem detalhe interno), `conserto.diagnosticar` diz arquivo/linha/causa por regra escrita, `conserto.dossie` monta o material — e só com chave de IA `conserto.propor` gera um diff, que passa pela régua do `evoluir.*` antes de qualquer coisa. Nada é escrito pelo diagnóstico nem pela proposta; quem ensaia é `evoluir.ensaiar` (suíte real numa cópia) e quem aplica é `evoluir.promover`, com token e backup. Sem chave, ele recusa em vez de inventar correção.
 - O progresso do chat é medido, não animado: a bolha mostra a skill que está rodando, o tempo decorrido e o `timeout_seconds` real do servidor; aos 40% do limite fica âmbar e no limite avisa que pode estar travado. Cancelar aborta o pedido no navegador (`AbortController`), e o que já rodou continua no diário. Não há barra de porcentagem da limpeza porque cada comando do Windows só responde no fim — uma barra ali seria enfeite.
 - O relatório dos braços traduz a falha em causa (`admin`, `sumiu`, `tempo`, `pulado`) e já diz o próximo passo. O aviso de elevação vem **antes** de executar (`elevado`, `precisam_admin`, `aviso_admin` no plano): sem administrador, tarefa, serviço e app de loja falham com “acesso negado”.
 - Debloat tem dois lados: `maquina.debloat` e `maquina.limpar` só leem e geram texto; **`maquina.arrumar` executa** a limpeza das sobras (com `JARVIS_HOST_ARRUMAR=1`, confirmação, instantâneo do estado, ponto de restauração e diário em `storage/limpezas/`) e **`maquina.desfazer`** reverte o último diário. Driver e essencial nunca são tocados; o “cuidado” só entra com `ousado` ligado, e o que não tem volta — WinSxS, Windows.old, `C:\Windows\Installer`, Prefetch — continua fora nos dois modos; processo só é encerrado se o PID ainda for o mesmo. No chat a escolha vem da frase (“só o plano”, “modo ousado”, “sem ponto”) por palavra-chave, não por entendimento: com outras palavras vale o padrão da skill, e a confirmação mostra o que vai ser usado.

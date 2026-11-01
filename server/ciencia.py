@@ -15,7 +15,7 @@ from typing import Any
 
 from .review import common, finalize, finding
 
-VERSAO = "0.72.0"
+VERSAO = "0.73.0"
 
 MAX_TEXTO = 120_000
 

@@ -29,6 +29,7 @@ from .agency import (
 from . import agenda as agenda_local
 from . import estudo as estudo_local
 from . import portatil as portatil_local
+from . import conserto as conserto_local
 from . import limpeza as limpeza_local
 from . import arrumar as arrumar_local
 from . import processos as processos_local
@@ -460,6 +461,24 @@ class ArrumarInput(BaseModel):
         "description": "Inclui Xbox, Teams, Search, Superfetch e hibernação — todos reversíveis. WinSxS, Windows.old, Installer e Prefetch continuam fora."
     })
     ponto_de_restauracao: bool = Field(default=True, title="Criar ponto de restauração antes")
+
+
+class ConsertoErroInput(BaseModel):
+    erro: str = Field(
+        default="",
+        title="Erro (opcional)",
+        max_length=20_000,
+        json_schema_extra={"format": "textarea", "description": "Cole o traceback. Em branco, ele lê o último erro interno do diário (storage/erros.jsonl)."},
+    )
+
+
+class ConsertoProporInput(BaseModel):
+    autorizacao: str = Field(default="", max_length=200, title="Token de host", json_schema_extra={
+        "description": "Preenchido sozinho quando o pedido vem desta máquina (modo dono)."
+    })
+    erro: str = Field(default="", title="Erro (opcional)", max_length=20_000, json_schema_extra={
+        "format": "textarea", "description": "Cole o traceback, ou deixe em branco para usar o último erro do diário."
+    })
 
 
 class DesfazerInput(BaseModel):
@@ -4142,7 +4161,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.72.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.73.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4939,6 +4958,18 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         )
         return {**resultado, "plano_resumo": plano.get("resumo", "")}
 
+    def conserto_diagnosticar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        entrada = data  # ConsertoErroInput
+        return conserto_local.diagnosticar(erro=entrada.erro)
+
+    def conserto_dossie_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        entrada = data  # ConsertoErroInput
+        return conserto_local.dossie(erro=entrada.erro)
+
+    def conserto_propor_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        entrada = data  # ConsertoProporInput
+        return conserto_local.propor(erro=entrada.erro, autorizacao=entrada.autorizacao)
+
     def maquina_administrador_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # O JARVIS não pode se tornar administrador sozinho: o UAC é do usuário.
         # O que ele faz é PEDIR — abre o aviso do Windows e reabre a API elevada.
@@ -5477,6 +5508,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("maquina.arrumar", "Arrumar a máquina agora", "Os braços. Em vez de entregar um .bat para você ler e rodar, executa a limpeza das sobras: fecha processo inútil (devolve RAM), remove app de loja sem uso, desativa tarefa de telemetria e serviço que ninguém usa, limpa cache e lixeira. Só o veredito 'sobra' é tocado — driver (NVIDIA Container), essencial (Store, VCLibs, Segurança) e o que depende do seu uso (Xbox, WinSxS, hibernação) nunca entram. Antes de encerrar um processo confere se o PID ainda é o mesmo; grava cada ação com comando e desfazer em storage/limpezas/. Exige JARVIS_HOST_ARRUMAR=1 e confirmação.", "Máquina", ArrumarInput, maquina_arrumar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("maquina.desfazer", "Desfazer a última limpeza", "Relê o último diário de `maquina.arrumar` e reverte o que tem volta: religa serviço e tarefa no modo original e reinstala app de loja pela Store. Processo fechado e cache apagado não voltam — o relatório diz exatamente o que ficou sem retorno. Exige confirmação.", "Máquina", DesfazerInput, maquina_desfazer_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("conserto.diagnosticar", "Onde quebrou e por quê", "Lê o último erro interno do diário (`storage/erros.jsonl`) — ou um traceback que você cole — e diz o arquivo, a linha, a função, o trecho do código em volta, a causa classificada por regra (permissão, arquivo ausente, chave ausente, codificação, rede, timeout…) e se aquele módulo tem teste. Não escreve nada e não chama modelo: é leitura pura sobre o erro que já aconteceu.", "Conserto", ConsertoErroInput, conserto_diagnosticar_handler, timeout_seconds=20),
+        SkillDefinition("conserto.dossie", "O dossiê para corrigir de primeira", "Junta o erro, o trecho do código com número de linha, a docstring que diz para que o módulo serve, o teste existente e as guardas do projeto num texto único. É o que faz a correção sair em uma tentativa em vez de dez — para você, para mim ou para um modelo. Só lê e monta texto.", "Conserto", ConsertoErroInput, conserto_dossie_handler, timeout_seconds=20),
+        SkillDefinition("conserto.propor", "Propor o patch do erro", "Pede a um modelo (o mesmo provedor de `JARVIS_AI_API_KEY`) um diff unificado a partir do dossiê, e devolve o diff já passando pela régua do `evoluir.*`: o diff aplica, qual o risco e quais guardas ele viola. Não escreve nada no código — quem ensaia é `evoluir.ensaiar` (numa cópia, rodando a suíte real) e quem aplica é `evoluir.promover`, com token. Sem chave, recusa em vez de inventar correção.", "Conserto", ConsertoProporInput, conserto_propor_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),
         SkillDefinition("maquina.administrador", "Reabrir o JARVIS como administrador", "Desativar tarefa agendada e serviço exige administrador — sem isso, 13 de 16 ações da limpeza falham com “acesso negado”. Esta skill abre o aviso de permissão do Windows (UAC) e, se você clicar Sim, fecha a instância atual e sobe de novo elevada, já com os braços ligados. Não existe como pular o aviso: quem autoriza é você, na tela. Se você clicar Não, nada é reiniciado e nada é alterado.", "Máquina", EmptyInput, maquina_administrador_handler, side_effects=True, requires_confirmation=True, timeout_seconds=90),
         SkillDefinition("maquina.debloat", "O que dá para tirar do Windows sem quebrar nada", "Lê os apps de loja instalados, os serviços, as tarefas agendadas e as pastas de cache do Windows e cruza com um catálogo curado. Classifica cada item em três vereditos — sobra (sai sem perda), cuidado (depende de como você usa o PC) e fica (tirar quebra algo: Store, VCLibs, Segurança, Spooler, Wi-Fi, horário) — com o comando, o que se perde e como desfazer. Separa o que é do Windows de fábrica do que é programa que você instalou (Google Drive, Office, WebView2 não são bloat). Nada é removido: só lê e explica.", "Máquina", EmptyInput, maquina_debloat_handler, timeout_seconds=180),
         SkillDefinition("maquina.limpar", "O script de limpeza, para ler antes de rodar", "Devolve o arquivo .bat com uma linha por comando — apps de loja sem uso, tarefas de telemetria, serviços que ninguém usa e cache do Windows — mais o restaurar-windows.bat que devolve tudo. O que é “cuidado” vem comentado com rem, para você decidir. Só gera texto: executar é você, como administrador. Não existe skill que rode este script.", "Máquina", EmptyInput, maquina_limpar_handler, timeout_seconds=180),

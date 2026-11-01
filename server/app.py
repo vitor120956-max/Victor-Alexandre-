@@ -6,6 +6,7 @@ import os
 import threading
 import tempfile
 import time
+import traceback
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import conserto
 from . import dados as dados_locais
 from .agente_local import (
     RECEITAS,
@@ -197,7 +199,7 @@ def _autorizacao_do_dono(
 ) -> tuple[dict[str, Any], bool]:
     """Modo dono: completa o token de host e o plano quando o pedido é daqui.
 
-    A regra mora em `sistema.confiar_no_pedido`: desde a 0.72.0 vale para a
+    A regra mora em `sistema.confiar_no_pedido`: desde a 0.73.0 vale para a
     própria máquina por padrão, e `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o
     pedido de token até em 127.0.0.1. Requisição de outra máquina nunca preenche.
     """
@@ -285,7 +287,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.72.0",
+        version="0.73.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -383,7 +385,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.72.0",
+            "version": "0.73.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             # Respondido por origem: o front esconde o campo de token quando é True.
@@ -418,8 +420,20 @@ def create_app(
         except SkillError as exc:
             return {"ok": False, "error": {"code": "SKILL_ERROR", "message": str(exc)}}
         except Exception as exc:
-            # Detalhes de infraestrutura e entradas do usuário não vazam na resposta.
+            # Detalhes de infraestrutura e entradas do usuário não vazam na resposta
+            # HTTP — mas ficam no diário local (`storage/erros.jsonl`), que é o que
+            # permite `conserto.diagnosticar` saber onde quebrou sem você copiar
+            # traceback do terminal.
             print(f"Skill {skill_id} falhou com {type(exc).__name__}")
+            try:
+                conserto.anotar(
+                    tipo=type(exc).__name__,
+                    mensagem=str(exc),
+                    rastro="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+                    skill=skill_id,
+                )
+            except Exception:  # o diário nunca derruba o pedido
+                pass
             return {"ok": False, "error": {"code": "INTERNAL_ERROR", "message": "A skill falhou. Nenhum detalhe interno foi exposto."}}
         resposta = {
             "ok": True,
