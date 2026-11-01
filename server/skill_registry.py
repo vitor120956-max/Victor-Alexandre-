@@ -30,6 +30,7 @@ from . import agenda as agenda_local
 from . import estudo as estudo_local
 from . import portatil as portatil_local
 from . import limpeza as limpeza_local
+from . import arrumar as arrumar_local
 from . import processos as processos_local
 from . import backup as backup_local
 from . import git as git_local
@@ -442,6 +443,22 @@ class FileImportInput(BaseModel):
         description="Ex.: importados. Vazio usa a raiz da área isolada.",
     )
     sobrescrever: bool = Field(default=False, title="Permitir sobrescrever")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
+class ArrumarInput(BaseModel):
+    autorizacao: str = Field(default="", max_length=200, title="Token de host", json_schema_extra={
+        "description": "Preenchido sozinho quando o pedido vem desta máquina (modo dono)."
+    })
+    processos: bool = Field(default=True, title="Fechar processos de sobra")
+    apps: bool = Field(default=True, title="Remover apps de loja sem uso")
+    tarefas: bool = Field(default=True, title="Desativar tarefas de telemetria")
+    servicos: bool = Field(default=True, title="Desativar serviços sem uso")
+    espaco: bool = Field(default=True, title="Limpar cache e lixeira")
+    planejar_apenas: bool = Field(default=False, title="Só mostrar o plano, sem executar")
+
+
+class DesfazerInput(BaseModel):
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
@@ -4120,7 +4137,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.68.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.69.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4895,6 +4912,32 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             ),
         }
 
+    def maquina_arrumar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        # Os braços: em vez de devolver um .bat para o usuário rodar, executa as
+        # sobras e grava o diário com o caminho de volta.
+        entrada = data  # ArrumarInput
+        plano = arrumar_local.planejar(
+            processos=entrada.processos,
+            apps=entrada.apps,
+            tarefas=entrada.tarefas,
+            servicos=entrada.servicos,
+            espaco=entrada.espaco,
+        )
+        if dry_run or entrada.planejar_apenas:
+            return {**plano, "executado": False, "motivo": "Só o plano: nada foi mexido."}
+        resultado = arrumar_local.executar(
+            autorizacao=entrada.autorizacao,
+            plano=plano,
+            confirmado=True,  # a API já exigiu `confirmed` antes de chegar aqui
+        )
+        return {**resultado, "plano_resumo": plano.get("resumo", "")}
+
+    def maquina_desfazer_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return arrumar_local.desfazer(
+            autorizacao=getattr(data, "autorizacao", ""),
+            confirmado=True,
+        )
+
     def maquina_debloat_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # Lê a máquina e devolve o diagnóstico + o texto do .bat. Nada roda aqui.
         return limpeza_local.relatorio()
@@ -5420,6 +5463,8 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("maquina.arrumar", "Arrumar a máquina agora", "Os braços. Em vez de entregar um .bat para você ler e rodar, executa a limpeza das sobras: fecha processo inútil (devolve RAM), remove app de loja sem uso, desativa tarefa de telemetria e serviço que ninguém usa, limpa cache e lixeira. Só o veredito 'sobra' é tocado — driver (NVIDIA Container), essencial (Store, VCLibs, Segurança) e o que depende do seu uso (Xbox, WinSxS, hibernação) nunca entram. Antes de encerrar um processo confere se o PID ainda é o mesmo; grava cada ação com comando e desfazer em storage/limpezas/. Exige JARVIS_HOST_ARRUMAR=1 e confirmação.", "Máquina", ArrumarInput, maquina_arrumar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("maquina.desfazer", "Desfazer a última limpeza", "Relê o último diário de `maquina.arrumar` e reverte o que tem volta: religa serviço e tarefa no modo original e reinstala app de loja pela Store. Processo fechado e cache apagado não voltam — o relatório diz exatamente o que ficou sem retorno. Exige confirmação.", "Máquina", DesfazerInput, maquina_desfazer_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("maquina.debloat", "O que dá para tirar do Windows sem quebrar nada", "Lê os apps de loja instalados, os serviços, as tarefas agendadas e as pastas de cache do Windows e cruza com um catálogo curado. Classifica cada item em três vereditos — sobra (sai sem perda), cuidado (depende de como você usa o PC) e fica (tirar quebra algo: Store, VCLibs, Segurança, Spooler, Wi-Fi, horário) — com o comando, o que se perde e como desfazer. Separa o que é do Windows de fábrica do que é programa que você instalou (Google Drive, Office, WebView2 não são bloat). Nada é removido: só lê e explica.", "Máquina", EmptyInput, maquina_debloat_handler, timeout_seconds=180),
         SkillDefinition("maquina.limpar", "O script de limpeza, para ler antes de rodar", "Devolve o arquivo .bat com uma linha por comando — apps de loja sem uso, tarefas de telemetria, serviços que ninguém usa e cache do Windows — mais o restaurar-windows.bat que devolve tudo. O que é “cuidado” vem comentado com rem, para você decidir. Só gera texto: executar é você, como administrador. Não existe skill que rode este script.", "Máquina", EmptyInput, maquina_limpar_handler, timeout_seconds=180),
         SkillDefinition("maquina.processos", "O que está rodando e o que não precisa", "Lista os processos do Windows por memória e explica cada um em três grupos: essencial (não mexa, e o que cai junto), driver (o caso do NVIDIA Container: não desenha nada, serve ao painel/ShadowPlay — fechar devolve RAM e não melhora imagem nem FPS) e sobra (atualizador, assistente, overlay de jogo, app de loja). Para cada sobra diz o que se perde, o comando para parar agora e como impedir de voltar no boot. Não fecha processo nenhum: só lê e explica.", "Máquina", EmptyInput, maquina_processos_handler, timeout_seconds=60),

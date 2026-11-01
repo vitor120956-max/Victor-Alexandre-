@@ -241,12 +241,16 @@ def test_a_variavel_de_ambiente_e_traduzida_para_powershell():
 # ----------------------------------------------------------------- registro
 
 
-def test_as_cinco_skills_da_maquina_estao_no_registro_sem_efeito():
+def test_as_skills_de_leitura_da_maquina_nao_tem_efeito():
+    """As de leitura nunca mexem; quem executa é `arrumar`/`desfazer` (0.69.0)."""
     from server.skill_registry import build_registry
 
     registro = build_registry(RAIZ)
+    leitura = {"maquina.processos", "maquina.portatil", "maquina.plano",
+               "maquina.debloat", "maquina.limpar"}
     ids = {s["id"] for s in registro.list() if s["category"] == "Máquina"}
-    assert ids == {"maquina.processos", "maquina.portatil", "maquina.plano",
-                   "maquina.debloat", "maquina.limpar"}
-    for identificador in ids:
+    assert leitura <= ids
+    for identificador in leitura:
         assert registro.get(identificador).side_effects is False, identificador
+    for identificador in ("maquina.arrumar", "maquina.desfazer"):
+        assert registro.get(identificador).side_effects is True, identificador

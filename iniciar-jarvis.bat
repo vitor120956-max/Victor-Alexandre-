@@ -3,6 +3,11 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - iniciar
 setlocal enabledelayedexpansion
+REM Bracos ligados: o JARVIS pode ARRUMAR esta maquina quando voce mandar
+REM (maquina.arrumar / arrumar-pc.bat). Ele continua sem tocar em driver,
+REM essencial nem no que depende do seu uso. Desligue com JARVIS_HOST_ARRUMAR=0
+REM no .env se preferir so diagnostico.
+if not defined JARVIS_HOST_ARRUMAR set JARVIS_HOST_ARRUMAR=1
 
 echo.
 echo   JARVIS - iniciar

@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.68.0", "skills": 288, "confiarLocal": true }
+GET /api/health  →  { "version": "0.69.0", "skills": 288, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)
@@ -163,8 +163,10 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 | `maquina.plano` | leitura | ordem de download com MB acumulado — nada é baixado |
 | `maquina.debloat` | leitura | apps de loja, tarefas, serviços e caches por veredito — nada é removido |
 | `maquina.limpar` | leitura | o texto do `debloat.bat` e do `restaurar-windows.bat` — você lê e roda |
+| `maquina.arrumar` | **executa** | fecha sobras, remove app de loja sem uso, desativa tarefa e serviço, limpa cache — com diário e desfazer |
+| `maquina.desfazer` | **executa** | reverte o último diário: religa serviço e tarefa, reinstala app |
 
-As três `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: `sistema.*` mexe na máquina (baixa, instala, executa), `maquina.*` só lê e explica. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md).
+As sete `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: cinco delas só leem e explicam, e **duas executam** (`maquina.arrumar` e `maquina.desfazer`) — com trava `JARVIS_HOST_ARRUMAR=1`, confirmação, diário e só o veredito “sobra”. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md).
 
 Leitura e efeito nunca dividem a mesma skill. `sistema.rede` não baixa, `sistema.instalar` não executa: quem escreve e quem executa são skills separadas, para que a fronteira apareça no catálogo e no `requiresConfirmation` da API.
 

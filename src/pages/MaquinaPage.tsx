@@ -9,6 +9,8 @@ import {
   RefreshCw,
   ShieldQuestion,
   Sparkles,
+  Undo2,
+  Zap,
   Trash2,
   Usb,
   Wrench,
@@ -128,6 +130,31 @@ type Plano = {
   onde?: { caminho?: string; removivel?: boolean };
 };
 
+type AcaoFeita = {
+  id?: string;
+  tipo?: string;
+  nome?: string;
+  ok?: boolean;
+  saida?: string;
+  ganho?: string;
+  desfazer?: string;
+};
+
+type ResultadoArrumar = {
+  executado?: boolean;
+  resumo?: string;
+  feitas?: number;
+  falhas?: number;
+  diario?: string;
+  acoes?: AcaoFeita[];
+  lido?: boolean;
+  motivo?: string;
+  total?: number;
+  desfeito?: boolean;
+  numero?: number;
+  sem_volta?: string[];
+};
+
 const ORDEM: Veredito[] = ['sobra', 'driver', 'cuidado', 'essencial', 'proprio'];
 
 const EXPLICACAO: Record<Veredito, string> = {
@@ -154,6 +181,8 @@ export function MaquinaPage() {
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
   const [limpeza, setLimpeza] = useState<Debloat | null>(null);
+  const [arrumando, setArrumando] = useState(false);
+  const [arrumado, setArrumado] = useState<ResultadoArrumar | null>(null);
   const [aberto, setAberto] = useState<string>('');
 
   const carregarProcessos = useCallback(async () => {
@@ -211,6 +240,34 @@ export function MaquinaPage() {
       pushToast('Copiado', rotulo, 'success');
     } catch {
       pushToast('Copie à mão', texto, 'info');
+    }
+  };
+
+  const arrumar = async (desfazer = false) => {
+    setArrumando(true);
+    setErro('');
+    try {
+      const resposta = await executeSkill(
+        desfazer ? 'maquina.desfazer' : 'maquina.arrumar',
+        {},
+        { confirmed: true },
+      );
+      if (!resposta.ok) {
+        setErro(resposta.error?.message ?? 'O JARVIS recusou arrumar.');
+        return;
+      }
+      const resultado = (resposta.result ?? {}) as ResultadoArrumar;
+      setArrumado(resultado);
+      pushToast(
+        desfazer ? 'Desfazer' : 'Arrumado',
+        resultado.resumo ?? 'Feito.',
+        'success',
+      );
+      if (!desfazer) void carregarLimpeza();
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : 'Não consegui falar com a API.');
+    } finally {
+      setArrumando(false);
     }
   };
 
@@ -573,6 +630,52 @@ export function MaquinaPage() {
               <small>{naoClassificados.length} app fora do catálogo</small>
             </div>
           </div>
+
+          <section className="panel maquina-braco">
+            <header>
+              <div>
+                <span className="maquina-selo">os braços</span>
+                <h2>Não quero apertar nada</h2>
+                <p>
+                  Isto não gera script: o JARVIS executa a limpeza agora — fecha processo de sobra,
+                  remove app de loja sem uso, desativa tarefa de telemetria e serviço inútil, limpa
+                  cache e lixeira. Só o que é <b>sobra</b>; driver e essencial nunca entram. Cada ação
+                  fica no diário com o caminho de volta.
+                </p>
+              </div>
+              <div className="maquina-braco-botoes">
+                <button className="button button-primary" onClick={() => void arrumar(false)} disabled={arrumando || !backendOnline}>
+                  <Zap size={16} /> {arrumando ? 'Arrumando…' : 'Arrumar agora'}
+                </button>
+                <button className="button" onClick={() => void arrumar(true)} disabled={arrumando || !backendOnline}>
+                  <Undo2 size={16} /> Desfazer a última
+                </button>
+              </div>
+            </header>
+
+            {arrumado && (
+              <div className="maquina-braco-resultado">
+                <p className="maquina-braco-resumo">{arrumado.resumo}</p>
+                {arrumado.diario && <small className="maquina-nota">Diário: <code>{arrumado.diario}</code></small>}
+                {lista<AcaoFeita>(arrumado.acoes).length > 0 && (
+                  <ul>
+                    {lista<AcaoFeita>(arrumado.acoes).map((acao) => (
+                      <li key={acao.id ?? acao.nome} className={acao.ok ? 'ok' : 'falhou'}>
+                        <b>{acao.ok ? '✓' : '✕'}</b>
+                        <span>{acao.nome}</span>
+                        <small>{acao.ok ? acao.ganho || acao.tipo : acao.saida}</small>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {lista<string>(arrumado.sem_volta).length > 0 && (
+                  <p className="maquina-nota">
+                    Sem volta (não têm como voltar): {lista<string>(arrumado.sem_volta).join(', ')}.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
 
           {limpeza?.plano?.resumo && <p className="maquina-resumo">{limpeza.plano.resumo}</p>}
 

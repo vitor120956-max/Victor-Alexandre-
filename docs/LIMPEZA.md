@@ -107,3 +107,61 @@ e fingir uma lista vazia seria pior que dizer “não se aplica”.
   serviço e tarefa, e o resumo conta o que sai;
 - travas: `subprocess.run` aparece uma vez só, sem `shell=True` nem `os.system`,
   fora do Windows explica, e medir pasta é opt-in (WinSxS leva minutos).
+
+---
+
+## 9. Os braços: `maquina.arrumar` (0.69.0)
+
+Até a 0.69.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
+salvava e rodava como administrador. Isso é relatório, não braço. O pedido foi
+literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS com braços”*.
+
+Agora existe **um comando que executa**:
+
+| onde | como |
+|---|---|
+| tela `/maquina` → aba **Limpeza** | botão **“Arrumar agora”** (e **“Desfazer a última”**) |
+| duplo clique | `arrumar-pc.bat` → mostra o plano, pede `S`, executa |
+| duplo clique para voltar | `desfazer-limpeza.bat` |
+| chat/skill | `maquina.arrumar` e `maquina.desfazer` |
+
+### 9.1 O que ele executa
+
+| tipo | ação | quantos |
+|---|---|---|
+| processo | `taskkill /PID` nas sobras (Steam Web Helper, SearchUI, OneDrive…) | os que existirem agora |
+| app de loja | `Get-AppxPackage … Remove-AppxPackage` no que é **sobra** | os instalados |
+| tarefa | `schtasks /Change /DISABLE` nas tarefas de telemetria | as existentes |
+| serviço | `sc config … start= disabled` nos serviços sem uso | os existentes |
+| espaço | `%LOCALAPPDATA%\Temp`, `C:\Windows\Temp`, cache de atualização, Otimização de Entrega, lixeira | os que existirem |
+
+### 9.2 O que ele **nunca** executa
+
+- **driver** — o NVIDIA Container continua de fora (é `cuidado`);
+- **essencial** — Store, `winget`, Segurança, VCLibs/UI.Xaml, Calculadora, Fotos, Captura, Spooler, Wi-Fi, áudio, horário;
+- **cuidado** — Xbox/Game Bar, Teams, Vínculo com o Telefone, Superfetch, Search, **WinSxS**, **hibernação**, **Windows.old**;
+- **`C:\Windows\Installer`** e **`Prefetch`** — marcados como essenciais no catálogo, sem comando;
+- **processo por PID velho** — antes de matar, confere se aquele PID ainda é o mesmo processo **e** continua classificado como sobra. PID reciclado é comum no Windows, e matar por número antigo fecha programa alheio.
+
+### 9.3 As quatro travas
+
+1. `JARVIS_HOST_ARRUMAR=1` — o `iniciar-jarvis.bat` liga; o `.env` desliga;
+2. **token de host** — preenchido sozinho quando o pedido vem desta máquina;
+3. **confirmação** — o botão envia `confirmed: true`; a API recusa sem isso;
+4. **diário** — cada ação bem-sucedida grava comando, saída e comando de volta em
+   `storage/limpezas/limpeza-AAAAMMDD-HHMMSS.json`.
+
+### 9.4 Desfazer, com honestidade
+
+`desfazer()` relê o **último diário** e reverte o que tem volta:
+
+| ação | volta? |
+|---|---|
+| serviço desativado | **sim** — `sc config … start= auto` (ou `manual`, o tipo original) |
+| tarefa desativada | **sim** — `schtasks /Change /ENABLE` |
+| app de loja removido | **sim** — pela Microsoft Store (o diário traz o comando) |
+| processo fechado | **não** — ele abre de novo quando precisar |
+| cache e lixeira | **não** — eram lixo por definição |
+
+O relatório lista nominalmente o que ficou `sem_volta` — em vez de dizer
+“desfeito” e esconder que a lixeira não volta.

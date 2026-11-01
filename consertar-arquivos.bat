@@ -22,7 +22,7 @@ echo   Conferindo os arquivos principais...
 echo.
 
 set RUINS=
-for %%F in (iniciar-jarvis.bat atualizar.bat parar-jarvis.bat consertar-arquivos.bat iniciar.py package.json web-dist\index.html) do (
+for %%F in (iniciar-jarvis.bat atualizar.bat parar-jarvis.bat arrumar-pc.bat desfazer-limpeza.bat consertar-arquivos.bat iniciar.py package.json web-dist\index.html) do (
   if not exist "%%F" (
     echo     FALTA    %%F
     set RUINS=1

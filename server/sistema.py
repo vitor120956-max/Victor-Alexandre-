@@ -45,7 +45,7 @@ from urllib.request import Request, urlopen
 from . import busca_web, tokens
 from .review import common, finalize, finding
 
-VERSAO = "0.68.0"
+VERSAO = "0.69.0"
 
 PROJETO = Path(__file__).resolve().parent.parent
 STORAGE = PROJETO / "storage"
@@ -189,6 +189,15 @@ def _autorizado(autorizacao: str) -> tuple[bool, str]:
         automatico_local=True,
         trava_local=exigir_token_local(),
     )
+
+
+def autorizado(autorizacao: str) -> tuple[bool, str]:
+    """Versão pública de `_autorizado` para camadas que também pedem prova de acesso.
+
+    `arrumar.py` (os braços) usa esta função em vez de repetir a comparação de
+    token — e em vez de importar a privada de outro módulo.
+    """
+    return _autorizado(autorizacao)
 
 
 def confiar_local() -> bool:
