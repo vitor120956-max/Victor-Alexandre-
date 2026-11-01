@@ -98,7 +98,9 @@ marcadas como essenciais, **com o campo de comando vazio**.
 
 ## Testes
 
-- `pytest server/tests` → **2.970 passed** (`test_limpeza.py`: 23).
+- `pytest server/tests` → **2.954 passed** (`test_limpeza.py`: 23; os outros 7 são pulados
+  por dependerem de ferramenta opcional — o número publicado antes, 2.970, era a
+  contagem de testes coletados, não de testes que passaram).
 - Os 23 travam: todo app do catálogo com nome e explicação; Store/VCLibs/
   Segurança/`winget` como essenciais; NVIDIA como cuidado; Prefetch e Installer
   essenciais **sem comando**; app instalado virando ficha; desconhecido sem

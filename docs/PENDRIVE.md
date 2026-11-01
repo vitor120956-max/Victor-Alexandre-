@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.65.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.66.0 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,9 +727,9 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.65.0"` e `"skills": 288`.
+Esperado: `"version": "0.66.0"` e `"skills": 288`.
 
-O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.65.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
+O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.66.0 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
 ---
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.65.0` e `288`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.66.0` e `288`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -979,3 +979,71 @@ O relatório separa os processos em cinco grupos, e só o grupo **sobra** é
 `cuidado` (Chrome, Edge, SearchIndexer, antivírus) e `proprio` (node, python).
 Processo que não está no catálogo entra em **não classificados** e recebe
 nenhum palpite — o JARVIS não manda fechar o que não sabe o que é.
+
+---
+
+## 14. “concurrently não é reconhecido” e “not a git repository”
+
+Duas mensagens que parecem defeito e não são. As duas aparecem na primeira
+execução de uma pasta que veio do **zip**, não do `git clone`:
+
+```text
+D:\JARVIS>git pull
+fatal: not a git repository (or any of the parent directories): .git
+
+D:\JARVIS>npm run dev
+'concurrently' não é reconhecido como um comando interno
+```
+
+| mensagem | o que significa | o que resolve |
+|---|---|---|
+| `not a git repository` | a pasta foi extraída de um zip; não tem `.git` | `atualizar.bat` — ele detecta isso e baixa o zip novo, preservando `.env`, `storage`, `.venv` e `node_modules` |
+| `concurrently não é reconhecido` | falta a pasta `node_modules` (o `npm install` nunca rodou aqui) | **não precisa de npm**: `iniciar-jarvis.bat` sobe tudo com Python |
+
+### 14.1 O atalho `iniciar-jarvis.bat`
+
+Duplo clique. Ele faz, dizendo cada passo:
+
+1. cria `.venv` se não existir (procura `py -3` e, se não houver, `python`);
+2. confere se `uvicorn`, `fastapi` e `dotenv` importam; se não, roda
+   `pip install -r requirements.txt` mostrando o progresso do próprio pip;
+3. sobe `iniciar.py` e **espera a API responder** antes de abrir o navegador —
+   abrir antes mostraria “não foi possível acessar” e pareceria defeito.
+
+Ele não chama git, não roda `npm install` e não precisa de administrador. A
+interface vem compilada em `web-dist/`, então **Node não é necessário para usar**
+o JARVIS — só para editar o React.
+
+### 14.2 Quando você *quer* mexer no código da interface
+
+Aí sim: `npm install` (≈ 140 MB, uma vez) e `npm run dev`. Se `node_modules`
+sumir, o `npm run dev` não cospe mais o erro cru do Windows — ele diz isto:
+
+```text
+  O JARVIS nao esta quebrado: falta a pasta node_modules.
+  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.66.0.
+
+  Opcao 1 - nao instalar nada e usar o JARVIS agora:
+    .venv\Scripts\python.exe iniciar.py
+
+  Opcao 2 - trabalhar no codigo da interface (precisa do Node):
+    npm install
+    npm run dev
+```
+
+Quem gera isso é `scripts/dev.mjs`, chamado pelo `npm run dev`. Ele **não
+instala nada por conta própria** — baixar 140 MB sem pedir não é atalho, é
+surpresa.
+
+### 14.3 Ordem recomendada numa pasta nova
+
+| passo | comando | precisa de quê |
+|---|---|---|
+| 1 | duplo clique em `atualizar.bat` (só se a pasta estiver velha) | internet |
+| 2 | duplo clique em `iniciar-jarvis.bat` | Python 3.11+ |
+| 3 | abrir <http://127.0.0.1:8000> | — |
+| 4 (opcional) | `npm install` + `npm run dev` | Node 22+ |
+
+O `npm run checar` continua sendo o raio-X: ele mede Node, Python, bibliotecas,
+`.env`, chave, espaço, sistema de arquivos, `dist/`, Git e portas — e cada linha
+que falta vem com o comando que resolve.

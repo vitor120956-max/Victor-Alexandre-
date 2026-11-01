@@ -119,7 +119,9 @@ echo   Pronto. Agora:
 echo     1^) feche a janela da API no X (nao digite nada no terminal dela)
 echo     2^) se a interface ainda pedir token, rode ligar-celular.bat uma vez:
 echo        ele liga o modo dono e o token deixa de ser pedido nesta maquina
-echo     3^) rode:  .venv\Scripts\python iniciar.py
+echo     3^) rode:  iniciar-jarvis.bat   (cria o .venv e instala o que faltar)
+echo        se o seu ja esta pronto, o mesmo atalho sobe: .venv\Scripts\python iniciar.py
+echo        nao precisa de Node nem de npm install para usar o JARVIS.
 echo     4^) abra http://127.0.0.1:8000/api/health e confira version e skills
 echo.
 echo   Se aparecer alguma variavel nova em .env.example, copie a linha

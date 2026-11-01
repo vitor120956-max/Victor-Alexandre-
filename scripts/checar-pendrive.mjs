@@ -179,10 +179,16 @@ let pythonEscolhido = null;
       'Bibliotecas do Node',
       'aviso',
       'node_modules ausente — a interface embutida em web-dist/ cobre o uso normal',
-      'Para desenvolver a interface: npm install. Para só usar: py iniciar.py (não precisa de Node).',
+      'Para só usar: duplo clique em iniciar-jarvis.bat (ou py iniciar.py) — não precisa de Node. Para editar a interface: npm install.',
     );
   } else {
-    registrar('deps-node', 'Bibliotecas do Node', 'falha', 'node_modules ausente ou incompleto', 'Rode: npm install');
+    registrar(
+      'deps-node',
+      'Bibliotecas do Node',
+      'falha',
+      'node_modules ausente ou incompleto',
+      'Rode: npm install — ou use iniciar-jarvis.bat, que não precisa de Node',
+    );
   }
 }
 
@@ -192,7 +198,13 @@ let pythonEscolhido = null;
 {
   const caminhoEnv = join(RAIZ, '.env');
   if (!existsSync(caminhoEnv)) {
-    registrar('env', 'Arquivo .env', 'falha', 'não existe', 'Copie o exemplo: cp .env.example .env (Windows: copy .env.example .env)');
+    registrar(
+      'env',
+      'Arquivo .env',
+      'falha',
+      'não existe',
+      'Copie o exemplo: copy .env.example .env — a chave de IA é opcional, o JARVIS sobe sem ela',
+    );
   } else {
     registrar('env', 'Arquivo .env', 'ok', 'presente');
     const texto = readFileSync(caminhoEnv, 'utf-8');
