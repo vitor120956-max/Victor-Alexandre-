@@ -2710,6 +2710,10 @@ def formatar_resultado(resultado: Any) -> str:
     if especial is not None:
         return especial
 
+    especial = _formatar_braco(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_app_do_drive(resultado)
     if especial is not None:
         return especial
@@ -2769,6 +2773,67 @@ def formatar_resultado(resultado: Any) -> str:
         partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
     texto = "\n\n".join(partes)
     return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+def _formatar_braco(resultado: dict[str, Any]) -> str | None:
+    """O relatório dos braços (`maquina.arrumar`/`desfazer`) em texto de gente.
+
+    Sem isso o chat despejava `- feitas: 3, - falhas: 13` e o usuário tinha que
+    abrir um JSON para descobrir o motivo. Aqui a causa vem nomeada, com o que
+    fazer; e o que não é escalar (lista de ações, contagem por causa) **não**
+    aparece como dicionário cru.
+    """
+    if "feitas" not in resultado or "acoes" not in resultado:
+        if "desfeito" not in resultado:
+            return None
+    linhas: list[str] = []
+    resumo = resultado.get("resumo")
+    if isinstance(resumo, str) and resumo.strip():
+        linhas.append(resumo.strip())
+
+    # A causa já vem contada no resumo (é ele que o usuário lê primeiro); repetir
+    # aqui seria dizer duas vezes a mesma frase.
+    nao_feitas = resultado.get("nao_feitas")
+    if isinstance(nao_feitas, list) and nao_feitas:
+        amostra = [item for item in nao_feitas[:6] if isinstance(item, dict)]
+        if amostra:
+            nomes_falhos = ", ".join(str(item.get("nome") or item.get("tipo") or "?") for item in amostra)
+            resto = len(nao_feitas) - len(amostra)
+            linhas.append(
+                "Não feitas: " + nomes_falhos + (f" e mais {resto}." if resto > 0 else ".")
+            )
+
+    resolver = resultado.get("como_resolver")
+    if isinstance(resolver, str) and resolver.strip():
+        # Só entra se o resumo ainda não disse o próximo passo.
+        ja_dito = isinstance(resumo, str) and "arrumar-pc.bat" in resumo and "arrumar-pc.bat" in resolver
+        if not ja_dito:
+            linhas.append(resolver.strip())
+
+    for chave, rotulo in (("instantaneo", "Instantâneo"), ("diario", "Diário")):
+        valor = resultado.get(chave)
+        if isinstance(valor, str) and valor.strip():
+            linhas.append(f"{rotulo}: {valor.strip()}")
+
+    ponto = resultado.get("ponto_de_restauracao")
+    if isinstance(ponto, dict):
+        if ponto.get("criado"):
+            linhas.append("Ponto de restauração: criado (Win+R → rstrui → “JARVIS antes da limpeza”).")
+        elif ponto.get("motivo"):
+            linhas.append(f"Ponto de restauração: não criado — {ponto['motivo']}")
+
+    voltar = resultado.get("como_voltar_tudo")
+    if isinstance(voltar, str) and voltar.strip() and not ponto:
+        linhas.append(voltar.strip())
+
+    sem_volta = resultado.get("sem_volta")
+    if isinstance(sem_volta, list) and sem_volta:
+        linhas.append("Sem volta: " + ", ".join(str(item) for item in sem_volta) + ".")
+
+    if not linhas:
+        return None
+    texto = "\n".join(f"- {linha}" if indice else linha for indice, linha in enumerate(linhas))
+    return texto[:LIMITE_RESPOSTA]
 
 
 # ------------------------------------------------------- agenda, backup e git

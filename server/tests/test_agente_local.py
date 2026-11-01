@@ -2700,3 +2700,62 @@ def test_formatar_backup_mostra_aviso_do_disco() -> None:
     )
     assert "7 arquivo(s)" in texto
     assert "mesmo disco" in texto
+
+
+# ------------------------------------- o relatório dos braços em texto de gente
+
+def test_relatorio_da_limpeza_diz_por_que_falhou():
+    """O caso de 01/11: 3 feitas, 13 falhas, e a resposta só mandava abrir o JSON."""
+    from server.agente_local import formatar_resultado
+
+    texto = formatar_resultado({
+        "executado": True,
+        "feitas": 3,
+        "falhas": 13,
+        "acoes": [{"nome": "Steam Web Helper", "ok": True}],
+        "falhas_por_causa": {"admin": 13},
+        "nao_feitas": [{"nome": f"Tarefa {i}", "tipo": "tarefa", "causa": "admin"} for i in range(13)],
+        "como_resolver": "13 precisam de administrador: abra o arrumar-pc.bat como administrador.",
+        "resumo": "Arrumado: 3 de 16 ações. 13 falharam: 13 por falta de administrador. "
+                  "Para resolver: botão direito no arrumar-pc.bat → “Executar como administrador”.",
+        "diario": r"D:\JARVIS\storage\limpezas\limpeza.json",
+        "ponto_de_restauracao": {"criado": False, "motivo": "Proteção do Sistema desligada."},
+    })
+    assert "13 por falta de administrador" in texto
+    assert "Não feitas: Tarefa 0" in texto and "mais 7" in texto
+    assert "Proteção do Sistema desligada" in texto
+    assert "Diário:" in texto
+    # Nada de despejar a lista como dicionário Python no chat.
+    assert "{'nome'" not in texto and "[{" not in texto
+    # O resumo já dizia o próximo passo: o `como_resolver` não repete.
+    assert texto.count("arrumar-pc.bat") == 1
+
+
+def test_relatorio_da_limpeza_mostra_o_proximo_passo_quando_o_resumo_nao_diz():
+    from server.agente_local import formatar_resultado
+
+    texto = formatar_resultado({
+        "executado": True,
+        "feitas": 0,
+        "falhas": 2,
+        "acoes": [],
+        "nao_feitas": [{"nome": "A", "tipo": "servico"}, {"nome": "B", "tipo": "tarefa"}],
+        "como_resolver": "Abra o arrumar-pc.bat com o botão direito → Executar como administrador.",
+        "resumo": "Nenhuma das 2 ações funcionou.",
+    })
+    assert "Nenhuma das 2 ações" in texto
+    assert "Executar como administrador" in texto
+
+
+def test_plano_sem_execucao_continua_no_formato_generico():
+    """Plano não é relatório de braço: não tem `acoes` nem `feitas`."""
+    from server.agente_local import formatar_resultado
+
+    texto = formatar_resultado({
+        "lido": True,
+        "total": 16,
+        "resumo": "Dá para arrumar 1 processo(s) de sobra, 9 tarefa(s).",
+        "ousado": False,
+    })
+    assert "Dá para arrumar" in texto
+    assert "Não feitas" not in texto

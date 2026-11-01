@@ -6,7 +6,7 @@ echo   JARVIS - teste de cabo, porta e conector do celular
 echo.
 echo   Responde: quando eu plugo o celular, o Windows muda em alguma coisa?
 echo   Se nao mudar, nao e driver (o Zadig so lista o que aparece).
-echo   Versao: 0.70.1
+echo   Versao: 0.71.0
 echo.
 echo   Antes de comecar:
 echo     - feche o Gerenciador de Dispositivos e janelas do Explorer abertas

@@ -787,3 +787,6 @@
 .maquina-ousado b {
   color: var(--text, #2b2925);
 }
+
+/* 0.71.0 — aviso antes de executar: sem elevação, tarefa/serviço/app falham. */
+.maquina-aviso-admin { margin: 10px 0 4px; padding: 9px 11px; border: 1px solid rgba(230,187,112,.28); border-radius: 8px; background: rgba(230,187,112,.05); color: var(--warning, #e6bb70); font-size: 8.5px; line-height: 1.6; }

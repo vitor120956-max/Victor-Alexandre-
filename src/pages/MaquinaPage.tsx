@@ -134,10 +134,14 @@ type AcaoFeita = {
   id?: string;
   tipo?: string;
   nome?: string;
+  comando?: string;
   ok?: boolean;
   saida?: string;
   ganho?: string;
   desfazer?: string;
+  /** 0.71.0: a causa curta (“admin”, “sumiu”…) e a frase pronta. */
+  causa?: string;
+  motivo?: string;
 };
 
 type ResultadoArrumar = {
@@ -156,6 +160,14 @@ type ResultadoArrumar = {
   ponto_de_restauracao?: { criado?: boolean; motivo?: string };
   como_voltar_tudo?: string;
   sem_volta?: string[];
+  // 0.71.0: o "por que falhou" vem nomeado, em vez de "o diário diz qual".
+  falhas_por_causa?: Record<string, number>;
+  nao_feitas?: { nome?: string; tipo?: string; comando?: string; motivo?: string; causa?: string; saida?: string }[];
+  como_resolver?: string;
+  elevado?: boolean | null;
+  precisam_admin?: number;
+  aviso_admin?: string;
+  ousado?: boolean;
 };
 
 const ORDEM: Veredito[] = ['sobra', 'driver', 'cuidado', 'essencial', 'proprio'];
@@ -188,6 +200,8 @@ export function MaquinaPage() {
   const [ousado, setOusado] = useState(false);
   const [arrumado, setArrumado] = useState<ResultadoArrumar | null>(null);
   const [aberto, setAberto] = useState<string>('');
+  // Plano (sem executar) só para saber, antes do clique, se falta administrador.
+  const [planoArrumar, setPlanoArrumar] = useState<ResultadoArrumar | null>(null);
 
   const carregarProcessos = useCallback(async () => {
     const resposta: SkillExecution = await executeSkill('maquina.processos', {});
@@ -219,6 +233,16 @@ export function MaquinaPage() {
     setLimpeza((resposta.result ?? {}) as Debloat);
   }, [executeSkill]);
 
+  /**
+   * O plano dos braços, medido sem executar. É o que permite dizer **antes** do
+   * clique: “esta janela não está elevada; 13 de 16 vão falhar” — o aviso que
+   * faltou em 01/11/2026.
+   */
+  const carregarPlanoArrumar = useCallback(async () => {
+    const resposta: SkillExecution = await executeSkill('maquina.arrumar', { planejar_apenas: true }, { dryRun: true });
+    if (resposta.ok) setPlanoArrumar((resposta.result ?? {}) as ResultadoArrumar);
+  }, [executeSkill]);
+
   const recarregar = useCallback(async () => {
     if (!backendOnline) return;
     setBusy(true);
@@ -226,13 +250,16 @@ export function MaquinaPage() {
     try {
       if (painel === 'processos') await carregarProcessos();
       else if (painel === 'pendrive') await carregarPendrive();
-      else await carregarLimpeza();
+      else {
+        await carregarLimpeza();
+        await carregarPlanoArrumar();
+      }
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Não consegui falar com a API.');
     } finally {
       setBusy(false);
     }
-  }, [backendOnline, carregarLimpeza, carregarPendrive, carregarProcessos, painel]);
+  }, [backendOnline, carregarLimpeza, carregarPlanoArrumar, carregarPendrive, carregarProcessos, painel]);
 
   useEffect(() => {
     void recarregar();
@@ -647,6 +674,9 @@ export function MaquinaPage() {
                   tarefas) e tenta criar um <b>ponto de restauração</b> do Windows. Driver e
                   essencial nunca entram.
                 </p>
+                {planoArrumar?.aviso_admin && (
+                  <p className="maquina-aviso-admin">{planoArrumar.aviso_admin}</p>
+                )}
                 <label className="maquina-ousado">
                   <input type="checkbox" checked={ousado} onChange={(evento) => setOusado(evento.target.checked)} />
                   <span>
@@ -679,15 +709,20 @@ export function MaquinaPage() {
                 {arrumado.diario && <small className="maquina-nota">Diário: <code>{arrumado.diario}</code></small>}
                 {lista<AcaoFeita>(arrumado.acoes).length > 0 && (
                   <ul>
-                    {lista<AcaoFeita>(arrumado.acoes).map((acao) => (
-                      <li key={acao.id ?? acao.nome} className={acao.ok ? 'ok' : 'falhou'}>
-                        <b>{acao.ok ? '✓' : '✕'}</b>
-                        <span>{acao.nome}</span>
-                        <small>{acao.ok ? acao.ganho || acao.tipo : acao.saida}</small>
-                      </li>
-                    ))}
+                    {lista<AcaoFeita>(arrumado.acoes).map((acao) => {
+                      const falta = lista<NonNullable<ResultadoArrumar['nao_feitas']>[number]>(arrumado.nao_feitas)
+                        .find((item) => item.nome === acao.nome && item.comando === acao.comando);
+                      return (
+                        <li key={acao.id ?? acao.nome} className={acao.ok ? 'ok' : 'falhou'}>
+                          <b>{acao.ok ? '✓' : '✕'}</b>
+                          <span>{acao.nome}</span>
+                          <small>{acao.ok ? acao.ganho || acao.tipo : falta?.motivo ?? acao.saida}</small>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
+                {arrumado.como_resolver && <p className="maquina-nota">{arrumado.como_resolver}</p>}
                 {lista<string>(arrumado.sem_volta).length > 0 && (
                   <p className="maquina-nota">
                     Sem volta (não têm como voltar): {lista<string>(arrumado.sem_volta).join(', ')}.

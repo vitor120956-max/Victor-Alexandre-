@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.70.1
+# Biblioteca e armazenamento — 0.71.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -255,17 +255,17 @@ Limites, sem enfeite:
 | Testes da legenda | **19** (HTML do YouTube montado no teste, sem rede) |
 | Testes de armazenamento | **7** |
 | Testes do Google Drive | **88** (34 em `test_drive_setup.py`, 10 em `test_mover_dados.py`, 17 em `test_dados.py`, 27 em `test_agente_local.py`) |
-| Testes do agente local | **198** (7 novos na 0.70.1: a frase “arruma o pc”, o “modo ousado” que chega como parâmetro, o “só o plano” que não pede confirmação, o “sem ponto”, o desfazer e o texto que **não** vira braço) |
+| Testes do agente local | **201** (10 na 0.71.0: a frase “arruma o pc”, o “modo ousado” que chega como parâmetro, o “só o plano” que não pede confirmação, o “sem ponto”, o desfazer, o texto que **não** vira braço e o relatório de falhas em texto de gente) |
 | Testes das habilidades de fora | **41** (`test_habilidades.py` e `test_github.py`, com baixador e API falsos) |
 | Testes do correio | **25** (`test_correio.py`, com `.eml` e `.mbox` montados no teste) |
 | Testes do estudo | **29** (`test_estudo.py`: geração de cartão, SM-2 e boletim, tudo com data fixa) |
 | Testes da máquina | **20** (`test_processos_portatil.py`: veredito de processo, NVIDIA Container, catálogo portátil e plano, com leitura de Windows trocada por lista falsa) |
 | Testes do debloat | **23** (`test_limpeza.py`: catálogo, análise pura com máquina falsa, plano com `rem` no que é cuidado, volta de serviço e tarefa) |
-| Testes dos braços | **34** (`test_arrumar.py`: só sobra executa, PID reciclado é pulado, as quatro travas, diário e desfazer com o que não volta, instantâneo < 4 KB, ponto de restauração que falha sem derrubar a limpeza e **modo ousado** que traz só o reversível) |
+| Testes dos braços | **41** (`test_arrumar.py`: só sobra executa, PID reciclado é pulado, as quatro travas, diário e desfazer com o que não volta, instantâneo < 4 KB, ponto de restauração que falha sem derrubar a limpeza e **modo ousado** que traz só o reversível) |
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.042** |
+| Suíte da API | **3.051** |
 | Skills no registro | **306** (5 em `estudo.*`; 7 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e duas executam com trava e diário — `arrumar` e `desfazer`) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

@@ -629,6 +629,17 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .typing-bubble > i:nth-child(2) { animation-delay: .15s; }
 .typing-bubble > i:nth-child(3) { animation-delay: .3s; }
 .typing-bubble > span { margin-left: 6px; color: var(--muted); font-size: 8px; }
+/* O tempo e o rótulo ficam empilhados ao lado dos pontos: a bolha cresce, mas
+   cabe na largura da conversa. */
+.typing-bubble { flex-wrap: wrap; }
+.typing-texto { display: flex; flex-direction: column; gap: 2px; margin-left: 6px; min-width: 0; }
+.typing-rotulo { color: var(--text-soft); font-size: 8.5px; }
+.typing-tempo { color: var(--muted); font-family: var(--mono); font-size: 8px; }
+.typing-tempo.typing-demorando { color: var(--warning); }
+.typing-tempo.typing-estourou { color: var(--danger, #e07a7a); }
+.typing-aviso { flex-basis: 100%; margin-left: 6px; color: var(--muted); font-size: 7.5px; line-height: 1.5; }
+.typing-cancelar { margin-left: auto; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-family: var(--mono); font-size: 7px; background: transparent; }
+.typing-cancelar:hover { border-color: rgba(224,122,122,.4); color: #e07a7a; }
 .backend-refresh { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-family: var(--mono); font-size: 7px; white-space: nowrap; }
 .backend-refresh:hover { border-color: rgba(var(--accent-rgb), .2); color: var(--accent); }
 .python-offline-note { display: flex; align-items: center; gap: 9px; margin-top: 13px; padding: 10px 13px; border: 1px solid rgba(230,187,112,.12); border-radius: 9px; background: rgba(230,187,112,.025); color: var(--warning); }

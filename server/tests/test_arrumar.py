@@ -1,7 +1,7 @@
 """Os braços: o JARVIS arruma a máquina em vez de mandar você apertar.
 
 O pedido foi literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS
-com braços”*. Até a 0.70.1 ele diagnosticava e entregava um `.bat` — relatório.
+com braços”*. Até a 0.71.0 ele diagnosticava e entregava um `.bat` — relatório.
 Agora `maquina.arrumar` executa.
 
 O que estes testes travam, e por quê:
@@ -446,3 +446,110 @@ def test_o_modulo_nunca_executa_comando_fora_da_windows():
     """Fora do Windows a função recusa — em vez de rodar `cmd /c` num Linux."""
     with pytest.raises(arrumar.ArrumarError):
         arrumar.rodar_comando("del /q *")
+
+
+# ------------------------------------------- por que falhou (o caso de 01/11)
+
+def test_causa_traduz_a_saida_do_windows():
+    """O usuário recebeu “13 falharam — o diário diz qual”. O motivo era um só."""
+    assert arrumar._causa_da_falha("ERRO: Acesso negado.") == "admin"
+    assert arrumar._causa_da_falha("Access is denied.") == "admin"
+    assert arrumar._causa_da_falha("O sistema não pôde encontrar o caminho especificado.") == "sumiu"
+    assert arrumar._causa_da_falha("The system cannot find the file specified.") == "sumiu"
+    assert arrumar._causa_da_falha("timeout ao rodar") == "tempo"
+    assert arrumar._causa_da_falha("O serviço não está em execução.") == "parado"
+    assert arrumar._causa_da_falha("algo estranho") == "outro"
+    assert arrumar._causa_da_falha("") == "outro"
+
+
+def test_falha_de_admin_vem_nomeada_no_relatorio(ambiente_ligado, tmp_path):
+    """13 falhas por acesso negado saem contadas, com o que fazer em seguida."""
+    plano = _plano_falso([
+        arrumar._item("tarefa", "a", "Tarefa A", "schtasks /Change /TN a /DISABLE", "volta"),
+        arrumar._item("servico", "b", "Serviço B", "sc config b start= disabled", "volta"),
+        arrumar._item("espaco", "temp", "Temp", "cmd /c del /q x", ""),
+    ])
+    resultado = arrumar.executar(
+        autorizacao="token", plano=plano, confirmado=True, raiz_diario=tmp_path,
+        rodar=lambda comando: (0, "ok") if comando.startswith("cmd /c") else (1, "ERRO: Acesso negado."),
+    )
+    assert resultado["feitas"] == 1 and resultado["falhas"] == 2
+    assert resultado["falhas_por_causa"] == {"admin": 2}
+    assert [item["tipo"] for item in resultado["nao_feitas"]] == ["tarefa", "servico"]
+    assert all(item["causa"] == "admin" for item in resultado["nao_feitas"])
+    assert "Executar como administrador" in resultado["como_resolver"]
+    assert "2 por falta de administrador" in resultado["resumo"]
+    # Nada de "veja o diário": a resposta já diz o motivo e o próximo passo.
+    assert "o diário diz qual" not in resultado["resumo"]
+
+
+def test_o_diario_guarda_a_causa_de_cada_falha(ambiente_ligado, tmp_path):
+    plano = _plano_falso([
+        arrumar._item("tarefa", "a", "Tarefa A", "schtasks /Change /TN a /DISABLE", "volta"),
+    ])
+    resultado = arrumar.executar(
+        autorizacao="token", plano=plano, confirmado=True, raiz_diario=tmp_path,
+        rodar=lambda _comando: (1, "Acesso negado"),
+    )
+    salvo = json.loads(Path(resultado["diario"]).read_text(encoding="utf-8"))
+    assert salvo["acoes"][0]["causa"] == "admin"
+    assert "administrador" in salvo["acoes"][0]["motivo"]
+    assert salvo["resumo"] == resultado["resumo"]
+
+
+def test_tudo_falhou_diz_que_nada_funcionou_e_por_que(ambiente_ligado, tmp_path):
+    plano = _plano_falso([
+        arrumar._item("servico", "a", "A", "sc config a start= disabled", "volta"),
+        arrumar._item("tarefa", "b", "B", "schtasks /Change /TN b /DISABLE", "volta"),
+    ])
+    resultado = arrumar.executar(
+        autorizacao="token", plano=plano, confirmado=True, raiz_diario=tmp_path,
+        rodar=lambda _comando: (5, "Acesso negado"),
+    )
+    assert resultado["feitas"] == 0
+    assert resultado["resumo"].startswith("Nenhuma das 2 ações funcionou.")
+    assert "2 por falta de administrador" in resultado["resumo"]
+    assert resultado["nao_feitas"] and resultado["nao_feitas"][0]["motivo"]
+
+
+def test_o_plano_avisa_antes_que_sem_admin_nao_vai_dar(monkeypatch):
+    """O aviso chegou tarde da outra vez: agora vem no plano, antes de executar."""
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: False)
+    monkeypatch.setattr(arrumar, "_de_processos", lambda: [])
+    monkeypatch.setattr(arrumar, "_de_apps", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_espaco", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_tarefas", lambda ousado=False: [
+        arrumar._item("tarefa", "a", "A", "schtasks /Change /TN a /DISABLE", "volta"),
+    ])
+    monkeypatch.setattr(arrumar, "_de_servicos", lambda ousado=False: [
+        arrumar._item("servico", "b", "B", "sc config b start= disabled", "volta"),
+    ])
+    plano = arrumar.planejar()
+    assert plano["elevado"] is False
+    assert plano["precisam_admin"] == 2
+    assert "não está como administrador" in plano["aviso_admin"]
+    assert "arrumar-pc.bat" in plano["aviso_admin"]
+
+    # Elevado, o aviso some — não é texto fixo.
+    monkeypatch.setattr(arrumar, "elevado", lambda: True)
+    elevado = arrumar.planejar()
+    assert elevado["elevado"] is True
+    assert elevado["aviso_admin"] == ""
+
+    # Fora do Windows não há o que avisar (e `elevado()` devolve None).
+    monkeypatch.setattr(arrumar, "elevado", lambda: None)
+    assert arrumar.planejar()["aviso_admin"] == ""
+
+
+def test_plano_vazio_nao_inventa_aviso_de_admin(monkeypatch):
+    monkeypatch.setattr(arrumar.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(arrumar, "elevado", lambda: False)
+    monkeypatch.setattr(arrumar, "_de_processos", lambda: [])
+    monkeypatch.setattr(arrumar, "_de_apps", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_tarefas", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_servicos", lambda ousado=False: [])
+    monkeypatch.setattr(arrumar, "_de_espaco", lambda ousado=False: [])
+    plano = arrumar.planejar()
+    assert plano["precisam_admin"] == 0
+    assert plano["aviso_admin"] == ""

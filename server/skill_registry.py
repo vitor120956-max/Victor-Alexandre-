@@ -2435,6 +2435,7 @@ class SkillDefinition:
             "sideEffects": self.side_effects,
             "dryRunSupported": self.dry_run_supported,
             "requiresConfirmation": self.requires_confirmation,
+            "timeoutSeconds": self.timeout_seconds,
             "runtime": "python",
         }
 
@@ -4141,7 +4142,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.70.1 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.71.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()

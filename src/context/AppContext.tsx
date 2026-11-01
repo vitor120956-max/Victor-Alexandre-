@@ -4,7 +4,8 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { autorizacaoParaConfirmar } from '../lib/confirmacao';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente } from '../lib/agenteResposta';
 import { formatPythonChatResult } from '../lib/skillResults';
@@ -68,6 +69,8 @@ interface AppContextValue {
   pythonSkills: PythonSkill[];
   aiStatus: AIStatus;
   processing: 'ai' | 'python' | null;
+  etapa: Etapa | null;
+  cancelarProcessamento: () => void;
   refreshBackend: () => Promise<boolean>;
   executeSkill: (skillId: string, parameters: Record<string, unknown>, options?: { dryRun?: boolean; confirmed?: boolean }) => Promise<SkillExecution>;
   taskModalOpen: boolean;
@@ -134,6 +137,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [pythonSkills, setPythonSkills] = useState<PythonSkill[]>([]);
   const [aiStatus, setAIStatus] = useState<AIStatus>(initialAIStatus);
   const [processing, setProcessing] = useState<'ai' | 'python' | null>(null);
+  // O que está rodando agora, desde quando e com que limite: é isso que a bolha
+  // do chat mostra em vez de três pontinhos sem informação.
+  const [etapa, setEtapa] = useState<Etapa | null>(null);
+  // Um pedido por vez: guardar o controlador permite cancelar de verdade.
+  const cancelamento = useRef<AbortController | null>(null);
   // Token de host fica só na memória desta aba: não é persistido e não entra no backup.
   const [hostToken, setHostToken] = useState('');
   // Último pedido que o agente não resolveu: é ele que a correção ensina.
@@ -151,6 +159,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setToasts((current) => [...current.slice(-2), { id, title, description, tone }]);
     window.setTimeout(() => dismissToast(id), 4500);
   }, [dismissToast]);
+
+  /**
+   * Marca o começo de um pedido: liga a bolha, guarda o rótulo/limite e deixa um
+   * controlador para cancelar. Sem isso a tela só tinha três pontinhos girando.
+   */
+  const iniciarPedido = useCallback((texto: string, limiteSegundos?: number, rotulo?: string) => {
+    const deduzido = rotuloDoPedido(texto);
+    cancelamento.current?.abort();
+    cancelamento.current = new AbortController();
+    setEtapa({
+      rotulo: rotulo ?? deduzido.rotulo,
+      limiteSegundos: limiteSegundos ?? deduzido.limiteSegundos,
+      desde: Date.now(),
+    });
+    return cancelamento.current.signal;
+  }, []);
+
+  const cancelarProcessamento = useCallback(() => {
+    cancelamento.current?.abort();
+    cancelamento.current = null;
+    setProcessing(null);
+    setEtapa(null);
+  }, []);
+
+  // Quando o pedido termina (por qualquer caminho), a etapa some junto — assim
+  // os ~15 `setProcessing(null)` que já existiam não precisam ser reescritos.
+  useEffect(() => {
+    if (!processing) setEtapa(null);
+  }, [processing]);
 
   const logActivity = useCallback((title: string, detail: string, kind: Activity['kind']) => {
     const activity: Activity = {
@@ -288,7 +325,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     options: { dryRun?: boolean; confirmed?: boolean } = {},
   ): Promise<SkillExecution> => {
     try {
-      const response = await executePythonSkill(skillId, parameters, options);
+      const response = await executePythonSkill(skillId, parameters, {
+        ...options,
+        signal: cancelamento.current?.signal,
+      });
       if (response.ok) {
         logActivity('Skill Python executada', `${skillId}${options.dryRun ? ' · simulação' : ''}`, 'system');
       } else {
@@ -475,6 +515,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [automations, buildSummary, desktopNotification, exportBackup, logActivity, pushToast, setAutomations, setMessages, setTasks, startFocus]);
 
   const responderComIA = useCallback((texto: string) => {
+    iniciarPedido(texto, 120, 'Consultando a IA externa');
     setProcessing('ai');
     const history = messages.slice(-12).map((message) => ({ role: message.role, content: message.content }));
     const context = preferences.shareContextWithAI ? {
@@ -485,7 +526,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((response) => appendJarvisMessage(response.content, 'ai'))
       .catch((error: unknown) => appendJarvisMessage(`Não consegui concluir pela IA externa: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nOs comandos locais continuam disponíveis; diga “ajuda” para ver exemplos.`))
       .finally(() => setProcessing(null));
-  }, [appendJarvisMessage, messages, notes, preferences.shareContextWithAI, tasks]);
+  }, [appendJarvisMessage, iniciarPedido, messages, notes, preferences.shareContextWithAI, tasks]);
 
   const sendMessage = useCallback((rawText: string) => {
     const text = rawText.trim();
@@ -497,16 +538,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...current,
         { id: createId('message'), role: 'user' as const, content: text, timestamp: new Date().toISOString() },
       ].slice(-120));
+      const sinal = iniciarPedido(pendente.pedido);
       setProcessing('python');
-      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.70.1).
-      void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true)
+      // O texto da confirmação ("sim, pode") NÃO é token (bug da 0.71.0).
+      void requestAgenteLocal(pendente.pedido, autorizacaoParaConfirmar(modoDono, hostToken), true, sinal)
         .then((resultado) => {
           setProcessing(null);
           appendJarvisMessage(montarRespostaAgente(resultado), 'python');
         })
         .catch((error: unknown) => {
           setProcessing(null);
-          appendJarvisMessage(`Não consegui confirmar: ${error instanceof Error ? error.message : 'falha desconhecida'}.`);
+          appendJarvisMessage(
+            error instanceof ApiError && error.code === 'CANCELADO'
+              ? 'Cancelado. O que já tinha rodado ficou no diário — `maquina.desfazer` reverte.'
+              : `Não consegui confirmar: ${error instanceof Error ? error.message : 'falha desconhecida'}.`,
+          );
         });
       return;
     }
@@ -535,8 +581,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else if (backendOnline) {
         // Sem IA configurada quem responde é o agente local: ele procura a
         // skill, preenche os campos, cria skill de receita ou busca na web.
+        const sinal = iniciarPedido(text);
         setProcessing('python');
-        void requestAgenteLocal(text, hostToken)
+        void requestAgenteLocal(text, hostToken, false, sinal)
           .then((resultado) => {
             setProcessing(null);
             if (resultado.acao === 'nada' || resultado.acao === 'sugerir') {
@@ -556,6 +603,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           })
           .catch((error: unknown) => {
             setProcessing(null);
+            if (error instanceof ApiError && error.code === 'CANCELADO') {
+              appendJarvisMessage('Cancelado a seu pedido. Nenhuma ação nova foi executada.');
+              return;
+            }
             appendJarvisMessage(`O agente local não conseguiu responder: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nDiga “ajuda” para ver os comandos que funcionam sem modelo.`);
           });
       } else {
@@ -612,6 +663,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         case 'random:pick': skillId = 'random.pick'; parameters = { entries: intent.entries, count: intent.count }; break;
         default: skillId = 'system.status';
       }
+      const skillPedida = pythonSkills.find((skill) => skill.id === skillId);
+      iniciarPedido(text, skillPedida?.timeoutSeconds, skillPedida ? `Executando ${skillPedida.name}` : undefined);
       setProcessing('python');
       void executeSkill(skillId, parameters, intent.type === 'files:organize' ? { dryRun: true } : undefined)
         .then((response) => {
@@ -960,7 +1013,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     appendJarvisMessage(reply);
-  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, modoDono, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills.length, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
+  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, modoDono, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills, iniciarPedido, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     if (patch.notifications && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
@@ -1105,6 +1158,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pythonSkills,
     aiStatus,
     processing,
+    etapa,
+    cancelarProcessamento,
     refreshBackend,
     executeSkill,
     taskModalOpen,

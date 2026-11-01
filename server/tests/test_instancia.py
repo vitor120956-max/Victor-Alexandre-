@@ -37,60 +37,60 @@ from server import instancia
 RAIZ = Path(__file__).resolve().parents[2]
 BAT = RAIZ / "parar-jarvis.bat"
 
-SAUDAVEL = {"service": "jarvis-python-api", "version": "0.70.1", "skills": 304}
+SAUDAVEL = {"service": "jarvis-python-api", "version": "0.71.0", "skills": 304}
 
 
 # ------------------------------------------------------------------ decisão
 
 
 def test_porta_livre_nao_tem_o_que_fazer():
-    situacao = instancia.avaliar(None, "0.70.1", porta=8000, ocupada=False)
+    situacao = instancia.avaliar(None, "0.71.0", porta=8000, ocupada=False)
     assert situacao["estado"] == "livre"
     assert situacao["o_que_fazer"] == []
 
 
 def test_mesma_versao_e_so_abrir_o_navegador():
-    situacao = instancia.avaliar(SAUDAVEL, "0.70.1", porta=8000, ocupada=True)
+    situacao = instancia.avaliar(SAUDAVEL, "0.71.0", porta=8000, ocupada=True)
     assert situacao["estado"] == "jarvis_mesma"
-    assert situacao["versao_rodando"] == "0.70.1"
+    assert situacao["versao_rodando"] == "0.71.0"
     assert "http://127.0.0.1:8000" in situacao["o_que_fazer"][0]
 
 
 def test_versao_diferente_avisa_que_o_navegador_mostraria_codigo_velho():
     situacao = instancia.avaliar(SAUDAVEL, "0.62.6", porta=8000, ocupada=True)
     assert situacao["estado"] == "jarvis_antiga"
-    assert "0.70.1" in situacao["detalhe"] and "0.62.6" in situacao["detalhe"]
+    assert "0.71.0" in situacao["detalhe"] and "0.62.6" in situacao["detalhe"]
     assert "código antigo" in situacao["detalhe"]
     juntas = " ".join(situacao["o_que_fazer"])
     assert "parar-jarvis.bat" in juntas
 
 
 def test_comparacao_de_versao_e_exata():
-    """`0.6.8` não é `0.70.1` — e 0.70.1 não é 0.70.1-rc1."""
-    for rodando, pasta in (("0.6.8", "0.70.1"), ("0.70.1", "0.70.1-rc1"), ("0.70.1", None)):
+    """`0.6.8` não é `0.71.0` — e 0.71.0 não é 0.71.0-rc1."""
+    for rodando, pasta in (("0.6.8", "0.71.0"), ("0.71.0", "0.71.0-rc1"), ("0.71.0", None)):
         situacao = instancia.avaliar({"service": "jarvis-python-api", "version": rodando}, pasta, porta=8000, ocupada=True)
         assert situacao["estado"] == "jarvis_antiga", (rodando, pasta)
 
 
 def test_outro_servico_na_porta_nao_e_o_jarvis():
-    situacao = instancia.avaliar({"service": "nginx", "version": "1.2"}, "0.70.1", porta=8000, ocupada=True)
+    situacao = instancia.avaliar({"service": "nginx", "version": "1.2"}, "0.71.0", porta=8000, ocupada=True)
     assert situacao["estado"] == "outro_programa"
     assert "nginx" in situacao["detalhe"]
     assert any("não encerre" in passo.lower() for passo in situacao["o_que_fazer"])
 
 
 def test_porta_ocupada_sem_health_tambem_e_outro_programa():
-    situacao = instancia.avaliar(None, "0.70.1", porta=8000, ocupada=True)
+    situacao = instancia.avaliar(None, "0.71.0", porta=8000, ocupada=True)
     assert situacao["estado"] == "outro_programa"
     assert any("--porta 8001" in passo for passo in situacao["o_que_fazer"])
 
 
 def test_todo_estado_que_nao_e_livre_diz_o_que_fazer():
     casos = [
-        instancia.avaliar(SAUDAVEL, "0.70.1", porta=8000, ocupada=True),
+        instancia.avaliar(SAUDAVEL, "0.71.0", porta=8000, ocupada=True),
         instancia.avaliar(SAUDAVEL, "0.1.0", porta=8000, ocupada=True),
-        instancia.avaliar({"service": "x"}, "0.70.1", porta=8000, ocupada=True),
-        instancia.avaliar(None, "0.70.1", porta=8000, ocupada=True),
+        instancia.avaliar({"service": "x"}, "0.71.0", porta=8000, ocupada=True),
+        instancia.avaliar(None, "0.71.0", porta=8000, ocupada=True),
     ]
     for situacao in casos:
         assert situacao["o_que_fazer"], situacao["estado"]
@@ -100,7 +100,7 @@ def test_todo_estado_que_nao_e_livre_diz_o_que_fazer():
 def test_resumo_mostra_as_duas_versoes():
     situacao = instancia.avaliar(SAUDAVEL, "0.62.6", porta=8000, ocupada=True)
     texto = instancia.resumo(situacao)
-    assert "0.70.1" in texto and "0.62.6" in texto
+    assert "0.71.0" in texto and "0.62.6" in texto
 
 
 # ------------------------------------------------------------------ netstat

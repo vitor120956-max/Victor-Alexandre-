@@ -3,10 +3,14 @@ import { ArrowUp, Expand, Mic, Sparkles, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useSpeechInput } from '../hooks/useSpeechInput';
+import { useNow } from '../hooks/useNow';
+import { avisoDaSituacao, formatarDecorrido, situacao } from '../lib/progresso';
 import { classNames } from '../lib/utils';
 
 export function ChatPanel({ full = false }: { full?: boolean }) {
-  const { messages, sendMessage, clearMessages, pushToast, processing, backendOnline, aiStatus, preferences } = useApp();
+  const { messages, sendMessage, clearMessages, pushToast, processing, etapa, cancelarProcessamento, backendOnline, aiStatus, preferences } = useApp();
+  // O relógio só corre enquanto há pedido: parado, não consome render.
+  const agora = useNow(processing ? 1000 : 60_000);
   const [input, setInput] = useState('');
   const messageEndRef = useRef<HTMLDivElement>(null);
   const voice = useSpeechInput();
@@ -65,7 +69,23 @@ export function ChatPanel({ full = false }: { full?: boolean }) {
         {processing && (
           <div className="message message-jarvis processing-message">
             <span className="message-avatar"><Sparkles size={13} /></span>
-            <div className="typing-bubble"><i /><i /><i /><span>{processing === 'ai' ? 'Consultando a IA externa...' : 'Executando skill Python...'}</span></div>
+            <div className="typing-bubble">
+              <i /><i /><i />
+              <div className="typing-texto">
+                <span className="typing-rotulo">{etapa?.rotulo ?? (processing === 'ai' ? 'Consultando a IA externa...' : 'Executando skill Python...')}</span>
+                {etapa && (
+                  <span className={`typing-tempo typing-${situacao(agora.getTime() - etapa.desde, etapa.limiteSegundos)}`}>
+                    {formatarDecorrido(agora.getTime() - etapa.desde)} de {etapa.limiteSegundos}s
+                  </span>
+                )}
+                {etapa && (
+                  <span className="typing-aviso">{avisoDaSituacao(agora.getTime() - etapa.desde, etapa.limiteSegundos)}</span>
+                )}
+              </div>
+              <button type="button" className="typing-cancelar" onClick={cancelarProcessamento} title="Cancelar este pedido (nada do que já rodou é desfeito)">
+                Cancelar
+              </button>
+            </div>
           </div>
         )}
         <div ref={messageEndRef} />

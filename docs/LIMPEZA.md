@@ -110,9 +110,9 @@ e fingir uma lista vazia seria pior que dizer “não se aplica”.
 
 ---
 
-## 9. Os braços: `maquina.arrumar` (0.70.1)
+## 9. Os braços: `maquina.arrumar` (0.71.0)
 
-Até a 0.70.1 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
+Até a 0.71.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
 salvava e rodava como administrador. Isso é relatório, não braço. O pedido foi
 literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS com braços”*.
 
@@ -125,7 +125,7 @@ Agora existe **um comando que executa**:
 | duplo clique para voltar | `desfazer-limpeza.bat` |
 | chat/skill | `maquina.arrumar` e `maquina.desfazer` |
 
-**O que dizer no chat** (0.70.1: as escolhas da frase chegam como parâmetro, em vez
+**O que dizer no chat** (0.71.0: as escolhas da frase chegam como parâmetro, em vez
 de serem engolidas):
 
 | frase | o que acontece |
@@ -186,7 +186,7 @@ indo para o debloat, que só lê.
 O relatório lista nominalmente o que ficou `sem_volta` — em vez de dizer
 “desfeito” e esconder que a lixeira não volta.
 
-E antes de remover qualquer coisa, a 0.70.1 grava **duas** coisas: o instantâneo do
+E antes de remover qualquer coisa, a 0.71.0 grava **duas** coisas: o instantâneo do
 estado (`instantaneo-*.json`, 3 KB) e, quando a Proteção do Sistema permite, um ponto
 de restauração do Windows — o único jeito de voltar driver, serviço e registro de uma
 vez (`Win+R` → `rstrui`). Detalhe em §10.3.
@@ -196,7 +196,7 @@ atualização, lixeira, Otimização de Entrega) e `ESPACO_OUSADO` (só `hiberfi
 
 ---
 
-## 10. Por que cada item proibido é proibido — e o backup que resolve (0.70.1)
+## 10. Por que cada item proibido é proibido — e o backup que resolve (0.71.0)
 
 A pergunta foi: *“não entendi por que ele não pode mexer nessas coisas; uma ideia
 boa é ele fazer um backup na nuvem antes de remover”*.
@@ -272,3 +272,53 @@ O que **tem volta** deixou de ser proibido e virou escolha:
 Liga na tela (checkbox **“Modo ousado”**), no `.bat` (tecla **O**) ou na skill
 (`ousado: true`). O que **não** tem volta continua fora **nos dois modos**:
 WinSxS, Windows.old, `C:\Windows\Installer`, Prefetch, driver e essencial.
+
+---
+
+## 11. Quando falha — e quando parece que travou (0.71.0)
+
+Em 01/11/2026 o primeiro uso real rodou assim: **3 feitas, 13 falhas**. O resumo
+dizia *“13 falharam — normalmente falta de administrador; o diário diz qual”*, e a
+tela ficava com três pontinhos animados sem tempo, sem dizer o que estava rodando
+e sem dizer se tinha travado. Duas coisas foram corrigidas.
+
+### 11.1 Por que falhou, com o próximo passo
+
+Cada ação que falha agora leva `causa` e `motivo` traduzidos, e o resultado do
+braço leva `falhas_por_causa`, `nao_feitas` e `como_resolver`:
+
+| causa | o que significa | o que fazer |
+|---|---|---|
+| `admin` | “acesso negado” — a janela da API não está elevada | botão direito no `arrumar-pc.bat` → **Executar como administrador** |
+| `sumiu` | o item já não existia (o Windows mudou sozinho) | nada |
+| `tempo` | o comando estourou o tempo | tentar de novo; a saída fica no diário |
+| `pulado` | o PID mudou entre a leitura e o `taskkill` | nada: era a trava fazendo o trabalho |
+| `parado` | já estava parado | nada |
+| `outro` | recusa por outro motivo | a saída do Windows, item por item, no diário |
+
+E o aviso vem **antes**: `planejar()` devolve `elevado`, `precisam_admin` e
+`aviso_admin`. Sem elevação, o plano já diz “13 de 16 vão falhar com acesso
+negado”. A aba **Limpeza** mostra esse aviso antes do clique (ela pede o plano com
+`planejar_apenas`, sem executar nada).
+
+No chat, o relatório deixa de despejar `- falhas_por_causa: {'admin': 13}` e passa
+a ser texto: o resumo com a causa, os nomes que não foram feitos, o próximo passo,
+o instantâneo, o diário e o estado do ponto de restauração.
+
+### 11.2 Saber que está trabalhando — sem inventar progresso
+
+A bolha do chat agora mostra três coisas que são **medidas**, não decorativas:
+
+- **o que** está rodando (“Arrumando a máquina (limpeza)”, ou o nome da skill);
+- **há quanto tempo** (`00:42`), atualizado a cada segundo;
+- **o limite** daquela skill — o mesmo `timeout_seconds` que o servidor usa em
+  `asyncio.wait_for` (300 s para `maquina.arrumar`, 180 s para `desfazer`).
+
+Aos 40% do limite a linha fica âmbar (“Ainda rodando — pode cancelar sem estragar
+nada”); no limite, vermelha (“Passou do limite: confira se a janela da API ainda
+está aberta”). E existe **Cancelar** de verdade: o pedido é abortado no navegador
+(`AbortController`) e a resposta diz que o que já rodou está no diário.
+
+O que **não** existe: barra de porcentagem da limpeza. O trabalho é uma fila de
+comandos do Windows, e cada comando só informa sucesso ou falha no fim — uma barra
+enchendo ali seria animação, não medição.

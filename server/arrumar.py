@@ -1,7 +1,7 @@
 """Os braços: arrumar a máquina em vez de dizer o que apertar.
 
 O pedido que gerou isto foi direto: *“eu não quero ter que fazer nada, por isso
-fiz o JARVIS com braços”*. Até a 0.70.1 o `maquina.debloat` diagnosticava e
+fiz o JARVIS com braços”*. Até a 0.71.0 o `maquina.debloat` diagnosticava e
 entregava um `.bat` para o usuário ler, salvar e rodar como administrador. Isso é
 relatório, não braço.
 
@@ -95,6 +95,68 @@ def ligado() -> bool:
     import os  # noqa: PLC0415
 
     return os.environ.get(AMBIENTE, "0").strip() == "1"
+
+
+def elevado() -> bool | None:
+    """A API está rodando como administrador?
+
+    `True`/`False` no Windows; `None` quando não dá para saber (fora dele). Serve
+    para avisar **antes**: desativar tarefa (`schtasks /Change`) e serviço
+    (`sc config`) exige elevação, e sem ela o plano termina em 13 falhas iguais —
+    que foi exatamente o que aconteceu em 01/11/2026 e virou “o JARVIS não
+    funcionou”, quando o certo era “a janela não estava elevada”.
+    """
+    if platform.system() != "Windows":
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
+    except (AttributeError, OSError, TypeError):
+        return None
+
+
+# Tipos de ação que o Windows só deixa fazer com elevação. Processo (taskkill do
+# próprio usuário) e cache (arquivo do próprio usuário) não entram nesta lista.
+TIPOS_QUE_PEDEM_ADMIN = {"tarefa", "servico", "app"}
+
+
+def _causa_da_falha(saida: str) -> str:
+    """Traduz a saída do Windows numa causa curta, para dizer o que fazer.
+
+    Sem isso o relatório dizia “13 falharam — o diário diz qual”, e o usuário
+    tinha que abrir um JSON para descobrir que era só falta de administrador.
+    """
+    texto = (saida or "").lower()
+    if any(p in texto for p in (
+        "acesso negado", "access is denied", "access denied", "erro 5", "error 5",
+        "requires elevation", "solicita eleva", "5 (0x5)", "negado",
+    )):
+        return "admin"
+    sumiu = (
+        ("encontr" in texto or "existe" in texto or "no such" in texto)
+        and any(p in texto for p in ("não", "nao", "cannot", "could not", "does not"))
+    )
+    if sumiu or any(p in texto for p in (
+        "cannot find", "does not exist", "no such", "já existe", "already exists",
+        "não existe", "nao existe", "não foi encontrado",
+    )):
+        return "sumiu"
+    if any(p in texto for p in ("timeout", "tempo limite", "timed out", "demorou")):
+        return "tempo"
+    if any(p in texto for p in ("não está em execução", "not running", "inativo")):
+        return "parado"
+    return "outro"
+
+
+MOTIVO_DA_CAUSA = {
+    "admin": "falta de administrador — a API não está elevada",
+    "sumiu": "o item já não existe na máquina (alguém removeu antes)",
+    "tempo": "o comando passou do tempo e foi interrompido",
+    "parado": "já estava parado; não havia o que desativar",
+    "pulado": "pulado: o processo saiu ou o PID mudou antes da ação",
+    "outro": "o Windows recusou por outro motivo — a saída está no diário",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +276,10 @@ def planejar(*, processos: bool = True, apps: bool = True, tarefas: bool = True,
     por_tipo: dict[str, int] = {}
     for item in itens:
         por_tipo[item["tipo"]] = por_tipo.get(item["tipo"], 0) + 1
+    # O aviso vem antes, não depois: 13 de 16 falharam em 01/11/2026 só porque a
+    # janela da API não estava elevada, e o plano não dizia isso.
+    precisa = sum(1 for item in itens if item["tipo"] in TIPOS_QUE_PEDEM_ADMIN)
+    esta_elevado = elevado()
     return {
         "sistema": sistema,
         "lido": True,
@@ -222,6 +288,19 @@ def planejar(*, processos: bool = True, apps: bool = True, tarefas: bool = True,
         "por_tipo": por_tipo,
         "resumo": _resumo_plano(itens),
         "ousado": ousado,
+        "elevado": esta_elevado,
+        "precisam_admin": precisa,
+        "aviso_admin": (
+            ""
+            if esta_elevado is not False or precisa == 0
+            else (
+                f"Atenção: esta janela não está como administrador. {precisa} de "
+                f"{len(itens)} ação(ões) — tarefas, serviços e apps de loja — vão falhar "
+                "com “acesso negado”. Processo e cache funcionam assim mesmo. Para fazer "
+                "tudo: feche a API e abra o arrumar-pc.bat com o botão direito → "
+                "“Executar como administrador”."
+            )
+        ),
         "regra": (
             "Sem o modo ousado, só entra o que é 'sobra'. Com ele, entra também o "
             "'cuidado' que tem volta (Xbox, Teams, Search, Superfetch, hibernação). "
@@ -450,18 +529,19 @@ def executar(
     for item in dados.get("itens", []):
         if item.get("tipo") == "processo":
             if not _processo_ainda_e_o_mesmo(item):
-                acoes.append({**item, "ok": False, "saida": "pulado: o processo já saiu ou o PID mudou"})
+                acoes.append(_acao(item, False, "pulado: o processo já saiu ou o PID mudou"))
                 continue
         try:
             codigo, saida = executor(item["comando"])
         except ArrumarError as exc:
-            acoes.append({**item, "ok": False, "saida": str(exc)})
+            acoes.append(_acao(item, False, str(exc)))
             continue
-        acoes.append({**item, "ok": codigo == 0, "saida": saida})
+        acoes.append(_acao(item, codigo == 0, saida))
 
     registro = {
         "quando": (agora or datetime.now()).isoformat(timespec="seconds"),
         "sistema": platform.system(),
+        "elevado": elevado(),
         "instantaneo": instantaneo_gravado,
         "ponto_de_restauracao": resultado_ponto,
         "acoes": acoes,
@@ -473,6 +553,14 @@ def executar(
         "acoes": acoes,
         "feitas": sum(1 for a in acoes if a["ok"]),
         "falhas": sum(1 for a in acoes if not a["ok"]),
+        "falhas_por_causa": _contar_causas(acoes),
+        "nao_feitas": [
+            {"nome": a.get("nome"), "tipo": a.get("tipo"), "comando": a.get("comando"),
+             "motivo": a.get("motivo"), "causa": a.get("causa"), "saida": (a.get("saida") or "")[:300]}
+            for a in acoes if not a["ok"]
+        ],
+        "elevado": elevado(),
+        "como_resolver": _como_resolver(acoes),
         "resumo": registro["resumo"],
         "diario": caminho,
         "instantaneo": instantaneo_gravado,
@@ -488,24 +576,94 @@ def executar(
     }
 
 
+def _acao(item: dict[str, Any], ok: bool, saida: str) -> dict[str, Any]:
+    """A ação com o motivo da falha já traduzido — não só a saída crua."""
+    acao = {**item, "ok": ok, "saida": saida}
+    if not ok:
+        causa = _causa_da_falha(saida)
+        if (saida or "").lower().startswith("pulado"):
+            causa = "pulado"
+        acao["causa"] = causa
+        acao["motivo"] = MOTIVO_DA_CAUSA.get(causa, MOTIVO_DA_CAUSA["outro"])
+    return acao
+
+
+def _contar_causas(acoes: list[dict[str, Any]]) -> dict[str, int]:
+    contagem: dict[str, int] = {}
+    for acao in acoes:
+        if acao.get("ok"):
+            continue
+        causa = str(acao.get("causa") or "outro")
+        contagem[causa] = contagem.get(causa, 0) + 1
+    return contagem
+
+
+def _como_resolver(acoes: list[dict[str, Any]]) -> str:
+    """Uma frase acionável por causa — o que fazer depois de ver a falha."""
+    causas = _contar_causas(acoes)
+    if not causas:
+        return "Nada a resolver: todas as ações funcionaram."
+    partes: list[str] = []
+    if causas.get("admin"):
+        partes.append(
+            f"{causas['admin']} precisam de administrador: feche esta janela e abra o "
+            "arrumar-pc.bat com o botão direito → “Executar como administrador”. "
+            "Nada do que falhou ficou pela metade."
+        )
+    if causas.get("sumiu"):
+        partes.append("O que já não existia não precisa de ação: é o Windows tendo mudado sozinho.")
+    if causas.get("tempo"):
+        partes.append("O que estourou o tempo pode ser tentado de novo; o diário tem a saída.")
+    if causas.get("pulado"):
+        partes.append(
+            "O processo pulado saiu (ou o PID mudou) entre a leitura e o comando — "
+            "era isso que a checagem de identidade devia fazer."
+        )
+    if causas.get("parado"):
+        partes.append("O que já estava parado não precisava ser desativado.")
+    if causas.get("outro"):
+        partes.append("Para os demais, a saída do Windows está no diário, item por item.")
+    return " ".join(partes)
+
+
 def _resumo_execucao(acoes: list[dict[str, Any]]) -> str:
+    """Uma frase que serve para decidir o próximo passo.
+
+    Antes, 13 falhas viravam “normalmente falta de administrador; o diário diz
+    qual”. Isso jogava no usuário a tarefa de abrir um JSON. Agora a causa vem
+    contada: “13 falharam por falta de administrador”.
+    """
     if not acoes:
         return "Não havia nada para arrumar."
     feitas = [a for a in acoes if a["ok"]]
     falhas = [a for a in acoes if not a["ok"]]
-    if not feitas:
-        return f"Nenhuma das {len(acoes)} ações funcionou. Veja o diário para o motivo de cada uma."
     ram = sum(
         int(str(a.get("ganho") or "0").split()[0] or 0)
         for a in feitas if a["tipo"] == "processo" and a.get("ganho")
     )
-    partes = [f"Arrumado: {len(feitas)} de {len(acoes)} ações."]
-    if ram:
-        partes.append(f"Devolveu cerca de {ram} MB de RAM fechando processos de sobra.")
+    if not feitas:
+        partes = [f"Nenhuma das {len(acoes)} ações funcionou."]
+    else:
+        partes = [f"Arrumado: {len(feitas)} de {len(acoes)} ações."]
+        if ram:
+            partes.append(f"Devolveu cerca de {ram} MB de RAM fechando processos de sobra.")
     if falhas:
-        partes.append(
-            f"{len(falhas)} falharam — normalmente falta de administrador; o diário diz qual."
-        )
+        causas = _contar_causas(acoes)
+        nomes = {
+            "admin": "por falta de administrador",
+            "sumiu": "porque o item já não existia",
+            "tempo": "por tempo esgotado",
+            "pulado": "puladas de propósito (o PID mudou)",
+            "parado": "por já estarem paradas",
+            "outro": "por outros motivos",
+        }
+        detalhe = ", ".join(f"{quantidade} {nomes.get(causa, causa)}" for causa, quantidade in causas.items())
+        partes.append(f"{len(falhas)} falharam: {detalhe}.")
+        if causas.get("admin"):
+            partes.append(
+                "Para resolver as de administrador: botão direito no arrumar-pc.bat → "
+                "“Executar como administrador”."
+            )
     return " ".join(partes)
 
 

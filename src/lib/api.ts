@@ -67,6 +67,8 @@ export interface PythonSkill {
   sideEffects: boolean;
   dryRunSupported: boolean;
   requiresConfirmation: boolean;
+  /** Limite do servidor em segundos — é o número que a bolha do chat mostra. */
+  timeoutSeconds?: number;
 }
 
 export function normalizeSkillParameters(skill: PythonSkill, parameters: Record<string, unknown>): Record<string, unknown> {
@@ -223,7 +225,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: isForm ? { ...init?.headers } : { 'Content-Type': 'application/json', ...init?.headers },
     });
-  } catch {
+  } catch (erro) {
+    // Abortado é diferente de API fora do ar: quem cancelou foi o usuário (ou o
+    // prazo). Dizer "API offline" aqui mandaria ele reiniciar o servidor à toa.
+    if (erro instanceof DOMException && erro.name === 'AbortError') {
+      throw new ApiError('Pedido cancelado. Nada foi concluído — e o que já tinha rodado está no diário.', 0, 'CANCELADO');
+    }
     throw new ApiError('A API Python não está acessível. Verifique se o servidor está em execução.', 0, 'API_OFFLINE');
   }
   const payload = await response.json().catch(() => null) as {
@@ -260,11 +267,12 @@ export async function listarPlanosPendentes(): Promise<PlanosPendentes> {
 export async function executePythonSkill(
   skillId: string,
   parameters: Record<string, unknown>,
-  options: { dryRun?: boolean; confirmed?: boolean } = {},
+  options: { dryRun?: boolean; confirmed?: boolean; signal?: AbortSignal } = {},
 ): Promise<SkillExecution> {
   return apiFetch<SkillExecution>(`/api/skills/${encodeURIComponent(skillId)}/execute`, {
     method: 'POST',
     body: JSON.stringify({ parameters, dryRun: options.dryRun ?? false, confirmed: options.confirmed ?? false }),
+    signal: options.signal,
   });
 }
 
@@ -368,10 +376,15 @@ export async function requestAgenteLocal(
   pedido: string,
   autorizacao: string,
   confirmar = false,
+  sinal?: AbortSignal,
 ): Promise<AgenteResultado> {
   const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado; error?: { message?: string } }>(
     '/api/agente/executar',
-    { method: 'POST', body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true, confirmar }) },
+    {
+      method: 'POST',
+      body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true, confirmar }),
+      signal: sinal,
+    },
   );
   if (!resposta.ok || !resposta.result) throw new ApiError(resposta.error?.message ?? 'O agente local recusou o pedido.', 200, 'AGENTE_ERROR');
   return resposta.result;
