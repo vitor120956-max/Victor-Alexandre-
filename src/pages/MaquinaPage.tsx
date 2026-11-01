@@ -8,7 +8,10 @@ import {
   ListTree,
   RefreshCw,
   ShieldQuestion,
+  Sparkles,
+  Trash2,
   Usb,
+  Wrench,
 } from 'lucide-react';
 import type { SkillExecution } from '../lib/api';
 import { useApp } from '../context/AppContext';
@@ -77,6 +80,45 @@ type Catalogo = {
   regra?: string;
 };
 
+type ItemLimpeza = {
+  id?: string;
+  pacote?: string;
+  nome: string;
+  servico?: string;
+  tarefa?: string;
+  veredito: 'sobra' | 'cuidado' | 'essencial';
+  o_que_e: string;
+  se_remover?: string;
+  se_parar?: string;
+  tamanho_estimado_mb?: number;
+  tamanho_mb?: number | null;
+  ganho?: string;
+  estado?: string;
+  comando: string;
+  desfazer: string;
+};
+
+type Debloat = {
+  lido?: boolean;
+  motivo?: string;
+  apps?: { apps?: ItemLimpeza[]; sobras?: number; estimado_sobra_mb?: number; nao_classificados?: string[]; nao_classificados_total?: number } | ItemLimpeza[];
+  servicos?: ItemLimpeza[];
+  tarefas?: ItemLimpeza[];
+  espaco?: ItemLimpeza[];
+  rotulos?: Record<string, string>;
+  plano?: {
+    script?: string;
+    restaurar?: string;
+    resumo?: string;
+    linhas_comando?: number;
+    aviso?: string;
+    apps?: string[];
+    tarefas?: string[];
+    servicos?: string[];
+    espaco?: string[];
+  };
+};
+
 type Plano = {
   etapas?: Ferramenta & { acumulado_mb?: number; baixar_de?: string }[];
   tamanho_total_mb?: number;
@@ -105,12 +147,13 @@ const mb = (valor: unknown) => {
 
 export function MaquinaPage() {
   const { backendOnline, executeSkill, pushToast } = useApp();
-  const [painel, setPainel] = useState<'processos' | 'pendrive'>('processos');
+  const [painel, setPainel] = useState<'processos' | 'pendrive' | 'limpeza'>('processos');
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState('');
   const [relatorio, setRelatorio] = useState<Relatorio | null>(null);
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
+  const [limpeza, setLimpeza] = useState<Debloat | null>(null);
   const [aberto, setAberto] = useState<string>('');
 
   const carregarProcessos = useCallback(async () => {
@@ -134,19 +177,29 @@ export function MaquinaPage() {
     if (!lista.ok) setErro(lista.error?.message ?? 'O catálogo do pendrive falhou.');
   }, [executeSkill]);
 
+  const carregarLimpeza = useCallback(async () => {
+    const resposta: SkillExecution = await executeSkill('maquina.debloat', {});
+    if (!resposta.ok) {
+      setErro(resposta.error?.message ?? 'A leitura de limpeza falhou.');
+      return;
+    }
+    setLimpeza((resposta.result ?? {}) as Debloat);
+  }, [executeSkill]);
+
   const recarregar = useCallback(async () => {
     if (!backendOnline) return;
     setBusy(true);
     setErro('');
     try {
       if (painel === 'processos') await carregarProcessos();
-      else await carregarPendrive();
+      else if (painel === 'pendrive') await carregarPendrive();
+      else await carregarLimpeza();
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Não consegui falar com a API.');
     } finally {
       setBusy(false);
     }
-  }, [backendOnline, carregarPendrive, carregarProcessos, painel]);
+  }, [backendOnline, carregarLimpeza, carregarPendrive, carregarProcessos, painel]);
 
   useEffect(() => {
     void recarregar();
@@ -160,6 +213,27 @@ export function MaquinaPage() {
       pushToast('Copie à mão', texto, 'info');
     }
   };
+
+  const salvar = (texto: string, arquivo: string) => {
+    const blob = new Blob([texto], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = arquivo;
+    link.click();
+    URL.revokeObjectURL(url);
+    pushToast('Arquivo salvo', arquivo, 'success');
+  };
+
+  const appsDebloat = Array.isArray(limpeza?.apps) ? limpeza.apps : (limpeza?.apps?.apps ?? []);
+  const sobras = Array.isArray(limpeza?.apps) ? 0 : num(limpeza?.apps?.sobras);
+  const mbSobra = Array.isArray(limpeza?.apps) ? 0 : num(limpeza?.apps?.estimado_sobra_mb);
+  const naoClassificados = Array.isArray(limpeza?.apps) ? [] : lista<string>(limpeza?.apps?.nao_classificados);
+  const servicosLimpeza = lista<ItemLimpeza>(limpeza?.servicos);
+  const tarefasLimpeza = lista<ItemLimpeza>(limpeza?.tarefas);
+  const espacoLimpeza = lista<ItemLimpeza>(limpeza?.espaco);
+  const script = limpeza?.plano?.script ?? '';
+  const restaurarScript = limpeza?.plano?.restaurar ?? '';
 
   const nvidia = relatorio?.nvidia;
   const grupos = relatorio?.grupos ?? {};
@@ -188,6 +262,10 @@ export function MaquinaPage() {
         <button className={painel === 'pendrive' ? 'ativo' : ''} onClick={() => setPainel('pendrive')}>
           <Usb size={16} /> Pendrive
           <small>portátil de verdade × o que é do PC</small>
+        </button>
+        <button className={painel === 'limpeza' ? 'ativo' : ''} onClick={() => setPainel('limpeza')}>
+          <Trash2 size={16} /> Limpeza
+          <small>o que sai do Windows sem quebrar nada</small>
         </button>
       </div>
 
@@ -461,6 +539,150 @@ export function MaquinaPage() {
                 </li>
               ))}
             </ul>
+          </section>
+        </>
+      )}
+
+      {painel === 'limpeza' && (
+        <>
+          {limpeza && limpeza.lido === false && (
+            <div className="maquina-alerta">
+              <AlertTriangle size={16} /> {limpeza.motivo ?? 'Esta leitura é do Windows.'}
+            </div>
+          )}
+
+          <div className="metric-grid maquina-metricas">
+            <div className="metric-card">
+              <span className="metric-icon"><Trash2 size={18} /></span>
+              <div><strong>{sobras}</strong><span>Apps de loja sem uso</span></div>
+              <small>~{mbSobra} MB estimados</small>
+            </div>
+            <div className="metric-card">
+              <span className="metric-icon"><Wrench size={18} /></span>
+              <div><strong>{tarefasLimpeza.filter((i) => i.veredito === 'sobra').length}</strong><span>Tarefas de telemetria</span></div>
+              <small>{tarefasLimpeza.length} do catálogo nesta máquina</small>
+            </div>
+            <div className="metric-card">
+              <span className="metric-icon"><Cpu size={18} /></span>
+              <div><strong>{servicosLimpeza.filter((i) => i.veredito === 'sobra').length}</strong><span>Serviços sem uso</span></div>
+              <small>todos voltam com um comando</small>
+            </div>
+            <div className="metric-card">
+              <span className="metric-icon"><HardDriveDownload size={18} /></span>
+              <div><strong>{espacoLimpeza.filter((i) => i.veredito !== 'essencial').length}</strong><span>Caches a limpar</span></div>
+              <small>{naoClassificados.length} app fora do catálogo</small>
+            </div>
+          </div>
+
+          {limpeza?.plano?.resumo && <p className="maquina-resumo">{limpeza.plano.resumo}</p>}
+
+          <section className="panel maquina-script">
+            <header>
+              <div>
+                <h2>O script, para você ler antes</h2>
+                <p>{limpeza?.plano?.aviso ?? 'Uma linha por comando. Nada roda daqui: você salva, lê e roda como administrador.'}</p>
+              </div>
+              <div className="maquina-script-botoes">
+                <button className="button" onClick={() => void copiar(script, 'Script de limpeza')} disabled={!script}>
+                  Copiar script
+                </button>
+                <button className="button button-primary" onClick={() => salvar(script, 'debloat.bat')} disabled={!script}>
+                  Salvar debloat.bat
+                </button>
+                <button className="button" onClick={() => salvar(restaurarScript, 'restaurar-windows.bat')} disabled={!restaurarScript}>
+                  Salvar restaurar.bat
+                </button>
+              </div>
+            </header>
+            <pre className="maquina-pre">{script || 'Sem script: nada do catálogo foi encontrado nesta máquina.'}</pre>
+            <p className="maquina-nota">
+              O que é <b>cuidado</b> já vem comentado com <code>rem</code>: descomente só o que você não usa.
+              O <code>restaurar-windows.bat</code> religa serviço e tarefa e mostra o comando de volta de cada app.
+            </p>
+          </section>
+
+          {[
+            { titulo: 'Apps de loja', itens: appsDebloat, dica: 'Sai inteiro pelo próprio Windows; a loja reinstala.' },
+            { titulo: 'Tarefas agendadas', itens: tarefasLimpeza, dica: 'Telemetria e manutenção que ninguém pediu.' },
+            { titulo: 'Serviços', itens: servicosLimpeza, dica: 'Só os sem uso viram comando; o NVIDIA Container fica comentado.' },
+            { titulo: 'Espaço em disco', itens: espacoLimpeza, dica: 'Mede o que existe; nunca promete número que não mediu.' },
+          ].map(({ titulo, itens, dica }) => (
+            itens.length === 0 ? null : (
+              <section key={titulo} className="panel maquina-grupo">
+                <header>
+                  <div>
+                    <h2>{titulo}</h2>
+                    <p>{dica}</p>
+                  </div>
+                  <strong>{itens.length}</strong>
+                </header>
+                <ul>
+                  {itens.map((item) => {
+                    const id = `limpeza:${item.id ?? item.pacote ?? item.nome}`;
+                    const expandido = aberto === id;
+                    return (
+                      <li key={id} className={expandido ? 'aberto' : ''}>
+                        <button
+                          className={`maquina-linha maquina-veredito-${item.veredito}`}
+                          onClick={() => setAberto(expandido ? '' : id)}
+                          aria-expanded={expandido}
+                        >
+                          <ChevronDown size={15} />
+                          <span className="nome">{item.nome}</span>
+                          <span className={`maquina-veredito maquina-veredito-${item.veredito}`}>{item.veredito}</span>
+                          <span className="mem">
+                            {item.tamanho_mb != null ? mb(item.tamanho_mb)
+                              : item.tamanho_estimado_mb ? `~${item.tamanho_estimado_mb} MB`
+                                : item.ganho ?? ''}
+                          </span>
+                        </button>
+                        {expandido && (
+                          <div className="maquina-detalhe">
+                            <p>{item.o_que_e}</p>
+                            {item.se_remover && <p><b>Se remover:</b> {item.se_remover}</p>}
+                            {item.se_parar && <p><b>Se parar:</b> {item.se_parar}</p>}
+                            {item.estado && <p className="maquina-volta"><b>Agora:</b> {item.estado}</p>}
+                            {item.comando && (
+                              <button className="maquina-codigo" onClick={() => void copiar(item.comando, item.nome)}>
+                                <code>{item.comando}</code>
+                              </button>
+                            )}
+                            {item.desfazer && <p className="maquina-volta"><b>Desfazer:</b> <code>{item.desfazer}</code></p>}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )
+          ))}
+
+          {naoClassificados.length > 0 && (
+            <section className="panel maquina-grupo maquina-grupo-desconhecido">
+              <header>
+                <div>
+                  <h2>Apps fora do catálogo</h2>
+                  <p>Podem ser seus. Não classifico o que não conheço — e não mando remover.</p>
+                </div>
+                <strong>{naoClassificados.length}</strong>
+              </header>
+              <ul>
+                {naoClassificados.slice(0, 40).map((nome) => (
+                  <li key={nome}><div className="maquina-linha maquina-linha-estatica"><span className="nome">{nome}</span></div></li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="panel maquina-regra">
+            <header><Sparkles size={16} /> <h2>O que este plano nunca toca</h2></header>
+            <p>
+              Microsoft Store, instalador do <code>winget</code>, Segurança do Windows, runtime VCLibs/UI.Xaml,
+              Calculadora, Fotos, Ferramenta de Captura, fila de impressão, Wi-Fi, áudio, horário e a pasta
+              <code>C:\Windows\Installer</code>. Tirar qualquer um deles não libera espaço de verdade e quebra
+              alguma coisa que você usa todo dia.
+            </p>
           </section>
         </>
       )}

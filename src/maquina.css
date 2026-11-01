@@ -571,3 +571,114 @@
     align-items: flex-start;
   }
 }
+
+/* ---------------------------------------------------------- limpeza */
+
+.maquina-script header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.maquina-script header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.maquina-script header p {
+  margin: 4px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6b675e);
+  max-width: 62ch;
+}
+
+.maquina-script-botoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.maquina-pre {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 10px;
+  background: #1f1d1a;
+  color: #ece7dc;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.maquina-nota {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-nota code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.maquina-veredito {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maquina-veredito-sobra {
+  background: #e7f3e9;
+  color: #2f6b3c;
+}
+
+.maquina-veredito-cuidado {
+  background: #fdf3e6;
+  color: #8a5a26;
+}
+
+.maquina-veredito-essencial {
+  background: #f7e7e5;
+  color: #8a2f26;
+}
+
+.maquina-regra header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.maquina-regra h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.maquina-regra p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted, #6b675e);
+}
+
+.maquina-regra code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.07);
+}

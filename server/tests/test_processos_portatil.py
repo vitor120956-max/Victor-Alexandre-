@@ -203,6 +203,6 @@ def test_as_tres_skills_estao_no_registro_e_nao_tem_efeito():
 
     registro = build_registry(RAIZ)
     ids = {s["id"] for s in registro.list() if s["category"] == "Máquina"}
-    assert ids == {"maquina.processos", "maquina.portatil", "maquina.plano"}
-    for identificador in ids:
+    assert {"maquina.processos", "maquina.portatil", "maquina.plano"} <= ids
+    for identificador in ("maquina.processos", "maquina.portatil", "maquina.plano"):
         assert registro.get(identificador).side_effects is False, identificador

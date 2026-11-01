@@ -29,6 +29,7 @@ from .agency import (
 from . import agenda as agenda_local
 from . import estudo as estudo_local
 from . import portatil as portatil_local
+from . import limpeza as limpeza_local
 from . import processos as processos_local
 from . import backup as backup_local
 from . import git as git_local
@@ -4119,7 +4120,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.64.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.65.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4894,6 +4895,31 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             ),
         }
 
+    def maquina_debloat_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # Lê a máquina e devolve o diagnóstico + o texto do .bat. Nada roda aqui.
+        return limpeza_local.relatorio()
+
+    def maquina_limpar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # Só o plano, com o script pronto para salvar e o caminho de volta.
+        dados = limpeza_local.relatorio()
+        if not dados.get("lido"):
+            return dados
+        plano = dados["plano"]
+        return {
+            "script": plano["script"],
+            "restaurar": plano["restaurar"],
+            "resumo": plano["resumo"],
+            "linhas_comando": plano["linhas_comando"],
+            "apps": plano["apps"],
+            "apps_opcionais": plano["apps_opcionais"],
+            "tarefas": plano["tarefas"],
+            "servicos": plano["servicos"],
+            "servicos_opcionais": plano["servicos_opcionais"],
+            "espaco": plano["espaco"],
+            "espaco_opcional": plano["espaco_opcional"],
+            "aviso": plano["aviso"],
+        }
+
     def maquina_processos_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # O usuário viu "NVIDIA Container" aberto no Gerenciador de Tarefas. Isto
         # lê a lista e explica cada processo; não fecha nada.
@@ -5394,6 +5420,8 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.ler", "Ler arquivo do repositório", "Mostra o texto de um arquivo de dentro do repositório baixado, recusando caminho fora da pasta e arquivo binário.", "Repositórios", ReposLerInput, repos_ler_handler, timeout_seconds=20),
         SkillDefinition("repos.executar", "Executar no repositório", "Roda um comando do repositório com interpretador da lista fechada (`python`, `node`, `npm`, `npx`, `make`), sem shell, preso à pasta do projeto, com tempo limite e ambiente sem token.", "Repositórios", ReposExecutarInput, repos_executar_handler, side_effects=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
+        SkillDefinition("maquina.debloat", "O que dá para tirar do Windows sem quebrar nada", "Lê os apps de loja instalados, os serviços, as tarefas agendadas e as pastas de cache do Windows e cruza com um catálogo curado. Classifica cada item em três vereditos — sobra (sai sem perda), cuidado (depende de como você usa o PC) e fica (tirar quebra algo: Store, VCLibs, Segurança, Spooler, Wi-Fi, horário) — com o comando, o que se perde e como desfazer. Separa o que é do Windows de fábrica do que é programa que você instalou (Google Drive, Office, WebView2 não são bloat). Nada é removido: só lê e explica.", "Máquina", EmptyInput, maquina_debloat_handler, timeout_seconds=180),
+        SkillDefinition("maquina.limpar", "O script de limpeza, para ler antes de rodar", "Devolve o arquivo .bat com uma linha por comando — apps de loja sem uso, tarefas de telemetria, serviços que ninguém usa e cache do Windows — mais o restaurar-windows.bat que devolve tudo. O que é “cuidado” vem comentado com rem, para você decidir. Só gera texto: executar é você, como administrador. Não existe skill que rode este script.", "Máquina", EmptyInput, maquina_limpar_handler, timeout_seconds=180),
         SkillDefinition("maquina.processos", "O que está rodando e o que não precisa", "Lista os processos do Windows por memória e explica cada um em três grupos: essencial (não mexa, e o que cai junto), driver (o caso do NVIDIA Container: não desenha nada, serve ao painel/ShadowPlay — fechar devolve RAM e não melhora imagem nem FPS) e sobra (atualizador, assistente, overlay de jogo, app de loja). Para cada sobra diz o que se perde, o comando para parar agora e como impedir de voltar no boot. Não fecha processo nenhum: só lê e explica.", "Máquina", EmptyInput, maquina_processos_handler, timeout_seconds=60),
         SkillDefinition("maquina.portatil", "O que cabe no pendrive do JARVIS", "Catálogo de ferramentas que rodam do pendrive sem instalar (ADB+scrcpy, 7-Zip, SumatraPDF, Everything, Sysinternals, HWiNFO, CrystalDiskInfo, Tesseract, FFmpeg, Notepad++, KeePassXC, WinMerge, ImageMagick, HxD, VLC, Rufus, Ventoy, TestDisk), cada uma com licença, site oficial, tamanho e a skill do JARVIS que ela libera. Marca o que já está na pasta de ferramentas e lista à parte o que NÃO dá para levar — driver de vídeo, .NET, Visual C++, Npcap, antivírus — com o motivo técnico. Não baixa nada.", "Máquina", EmptyInput, maquina_portatil_handler, timeout_seconds=30),
         SkillDefinition("maquina.plano", "Em que ordem baixar as ferramentas", "Diz o que falta no pendrive na ordem que destrava mais coisa primeiro (ADB+scrcpy antes de tudo, porque libera o celular; depois o que faz o PC caber em 4 GB), com o total acumulado em MB e o link oficial de cada uma. Só mede e ordena: baixar é sistema.baixar, que guarda em quarentena e calcula SHA-256.", "Máquina", EmptyInput, maquina_plano_handler, timeout_seconds=30),
