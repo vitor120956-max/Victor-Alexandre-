@@ -110,9 +110,9 @@ e fingir uma lista vazia seria pior que dizer “não se aplica”.
 
 ---
 
-## 9. Os braços: `maquina.arrumar` (0.70.0)
+## 9. Os braços: `maquina.arrumar` (0.70.1)
 
-Até a 0.70.0 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
+Até a 0.70.1 esta camada **diagnosticava** e entregava um `.bat` — o usuário lia,
 salvava e rodava como administrador. Isso é relatório, não braço. O pedido foi
 literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS com braços”*.
 
@@ -124,6 +124,24 @@ Agora existe **um comando que executa**:
 | duplo clique | `arrumar-pc.bat` → mostra o plano, pede `S`, executa |
 | duplo clique para voltar | `desfazer-limpeza.bat` |
 | chat/skill | `maquina.arrumar` e `maquina.desfazer` |
+
+**O que dizer no chat** (0.70.1: as escolhas da frase chegam como parâmetro, em vez
+de serem engolidas):
+
+| frase | o que acontece |
+|---|---|
+| `arruma o pc` | pede confirmação e executa o plano normal |
+| `arruma o pc só o plano` | mostra o plano e **não** pede confirmação — nada é mexido |
+| `o que dá para limpar do windows` | mesma coisa: só o plano |
+| `arruma o pc no modo ousado` | inclui o `cuidado` reversível (Xbox, Teams, Search, Superfetch, hibernação) |
+| `arruma o pc sem ponto de restauração` | pula o ponto e mantém o instantâneo |
+| `arruma o pc ousado e só o plano` | as duas escolhas juntas |
+| `desfaz a última limpeza` / `volta tudo como era` | reverte o último diário |
+| `me manda o script da limpeza` | continua sendo texto (`maquina.limpar`) — script não é braço |
+
+O que não é dito na frase fica no padrão da skill: **ponto de restauração ligado**,
+modo normal, todas as cinco frentes. E “o que dá para tirar do Windows” continua
+indo para o debloat, que só lê.
 
 ### 9.1 O que ele executa
 
@@ -168,7 +186,7 @@ Agora existe **um comando que executa**:
 O relatório lista nominalmente o que ficou `sem_volta` — em vez de dizer
 “desfeito” e esconder que a lixeira não volta.
 
-E antes de remover qualquer coisa, a 0.70.0 grava **duas** coisas: o instantâneo do
+E antes de remover qualquer coisa, a 0.70.1 grava **duas** coisas: o instantâneo do
 estado (`instantaneo-*.json`, 3 KB) e, quando a Proteção do Sistema permite, um ponto
 de restauração do Windows — o único jeito de voltar driver, serviço e registro de uma
 vez (`Win+R` → `rstrui`). Detalhe em §10.3.
@@ -178,7 +196,7 @@ atualização, lixeira, Otimização de Entrega) e `ESPACO_OUSADO` (só `hiberfi
 
 ---
 
-## 10. Por que cada item proibido é proibido — e o backup que resolve (0.70.0)
+## 10. Por que cada item proibido é proibido — e o backup que resolve (0.70.1)
 
 A pergunta foi: *“não entendi por que ele não pode mexer nessas coisas; uma ideia
 boa é ele fazer um backup na nuvem antes de remover”*.

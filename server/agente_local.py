@@ -1867,6 +1867,84 @@ def _pedido_direto_de_pc(termo: str) -> dict[str, Any] | None:
     return None
 
 
+_RE_MAQUINA_VERBO = re.compile(
+    r"\b(?:arrum\w*|limpa\w*|limp[eo]\w*|faxin\w*)\b"
+    r"|\bliber\w*\s+(?:espa[cç]o|mem[óo]ria)\b"
+    r"|\b(?:espa[cç]o|mem[óo]ria)\b[^.]{0,30}\bliber\w*",
+    re.I,
+)
+_RE_MAQUINA_ALVO = re.compile(
+    r"\b(?:pc|computador|m[áa]quina|windows|notebook|laptop|sobras?|sujeira|lixo|lixeira"
+    r"|tempor[áa]rios?|cache|espa[cç]o)\b",
+    re.I,
+)
+# "desfaz a limpeza" / "volta tudo como era": o braço de voltar, não o de limpar.
+_RE_DESFAZER_LIMPEZA = re.compile(
+    r"\b(?:desfaz\w*|desfa[çc]a|reverte\w*|volta\w*)\b[^.]{0,40}"
+    r"\b(?:limpeza|limpar|arruma[çc][aã]o|arrumar)\b"
+    r"|\bvolta (?:tudo )?(?:como|ao que) (?:era|estava)\b",
+    re.I,
+)
+_RE_MAQUINA_SO_PLANO = re.compile(
+    r"\bs[óo] o plano\b|\bsem (?:mexer|executar|aplicar|remover)\b"
+    r"|\b(?:planeja\w*|mostra\w* o plano|ver o plano|quais? (?:seriam|v[ãa]o))\b"
+    r"|\bo que (?:d[áa]|da) para (?:limpar|tirar|liberar)\b|\bquanto (?:de )?(?:espa[cç]o|mem[óo]ria)\b",
+    re.I,
+)
+_RE_MAQUINA_SEM_PONTO = re.compile(
+    r"\bsem (?:ponto|backup|restaura\w*)\b|\bn[ãa]o (?:cria|crie|faz|fa[çc]a) (?:o )?ponto\b",
+    re.I,
+)
+_RE_MAQUINA_OUSADO = re.compile(r"\bousad[oa]s?\b|\bmodo (?:agressivo|completo)\b", re.I)
+
+
+def _pedido_direto_de_maquina(termo: str) -> dict[str, Any] | None:
+    """Limpar a máquina — com as escolhas ditas **na própria frase**.
+
+    Antes, “arruma o pc no modo ousado” caía no arrumar normal e o “ousado” era
+    engolido: o usuário pedia uma coisa e recebia outra, sem aviso. As três
+    escolhas que mudam o que acontece (ousado, só o plano, sem ponto) são lidas
+    aqui e viram parâmetros — as mesmas do formulário da skill.
+
+    Fora do escopo de propósito: “script da limpeza” continua indo para
+    `maquina.limpar`, e “o que dá para tirar do Windows” continua no debloat —
+    texto é texto, braço é braço.
+    """
+    texto = normalizar(termo)
+    if not texto:
+        return None
+
+    if _RE_DESFAZER_LIMPEZA.search(texto):
+        return {
+            "skill_id": "maquina.desfazer",
+            "nome": "Desfazer a última limpeza",
+            "parametros": {},
+            "confirma": True,
+        }
+
+    if re.search(r"\b(?:script|\.bat|lista de comandos|arquivo de texto)\b", texto) and "arruma" not in texto:
+        return None
+    if not (_RE_MAQUINA_VERBO.search(texto) and _RE_MAQUINA_ALVO.search(texto)):
+        return None
+
+    parametros: dict[str, Any] = {}
+    if _RE_MAQUINA_OUSADO.search(texto):
+        parametros["ousado"] = True
+    if _RE_MAQUINA_SO_PLANO.search(texto):
+        parametros["planejar_apenas"] = True
+    if _RE_MAQUINA_SEM_PONTO.search(texto):
+        parametros["ponto_de_restauracao"] = False
+
+    so_plano = bool(parametros.get("planejar_apenas"))
+    return {
+        "skill_id": "maquina.arrumar",
+        "nome": "Só o plano da limpeza" if so_plano else "Arrumar a máquina agora",
+        "parametros": parametros,
+        # Só o plano não muda nada: não há o que confirmar.
+        "confirma": not so_plano,
+    }
+
+
 def _pedido_direto_de_instalador(termo: str) -> dict[str, Any] | None:
     """Onde guardar, se roda no PC e o download do instalador para a pasta escolhida."""
     texto = (termo or "").strip()
@@ -3569,6 +3647,10 @@ async def _resolver(
     # 0b8. PC: abrir programa, abrir arquivo e comandos prontos.
     if direto is None:
         direto = _pedido_direto_de_pc(termo)
+
+    # 0b8b. Braços da máquina: arrumar (e o "ousado"/"só o plano" da frase) e desfazer.
+    if direto is None:
+        direto = _pedido_direto_de_maquina(termo)
 
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:

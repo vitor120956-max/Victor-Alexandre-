@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.70.0.**
+**Versão atual: 0.70.1.**
 
 ## O que ele faz sem chave de IA
 
@@ -684,7 +684,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.70.0", "skills": 306}`.
+`{"version": "0.70.1", "skills": 306}`.
 
 ## Verificações
 
@@ -796,7 +796,7 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 - Memória de agente é lexical: o roteador não entende paráfrase sem palavra-chave, a extração não faz correferência, o recall mede termo em comum e não verdade, e o esquecimento devolve plano em vez de apagar. Nenhum modelo, embedding ou banco de grafo é usado.
 - Acesso ao sistema é a única camada com efeito real: `sistema.baixar` grava e `sistema.executar` roda. Ambas exigem token de host, `confirmed` e, no caso da execução, `JARVIS_HOST_INSTALAR=1`. Rede desligada por padrão, endereço privado e laço local bloqueados inclusive via DNS, nenhuma assinatura digital verificada, nenhum privilégio elevado e nenhum shell livre.
 - Continuidade de plano é leitura: a camada sabe se o critério está marcado, não se foi cumprido; a decisão do portão é texto, não bloqueio de sessão; o bloco injetado é corte e contagem, não resumo por modelo; e nenhum hook é instalado.
-- Debloat tem dois lados: `maquina.debloat` e `maquina.limpar` só leem e geram texto; **`maquina.arrumar` executa** a limpeza das sobras (com `JARVIS_HOST_ARRUMAR=1`, confirmação e diário em `storage/limpezas/`) e **`maquina.desfazer`** reverte o último diário. Driver, essencial e “cuidado” nunca são tocados; processo só é encerrado se o PID ainda for o mesmo; `C:\Windows\Installer`, `Prefetch`, WinSxS e hibernação ficam de fora de propósito.
+- Debloat tem dois lados: `maquina.debloat` e `maquina.limpar` só leem e geram texto; **`maquina.arrumar` executa** a limpeza das sobras (com `JARVIS_HOST_ARRUMAR=1`, confirmação, instantâneo do estado, ponto de restauração e diário em `storage/limpezas/`) e **`maquina.desfazer`** reverte o último diário. Driver e essencial nunca são tocados; o “cuidado” só entra com `ousado` ligado, e o que não tem volta — WinSxS, Windows.old, `C:\Windows\Installer`, Prefetch — continua fora nos dois modos; processo só é encerrado se o PID ainda for o mesmo. No chat a escolha vem da frase (“só o plano”, “modo ousado”, “sem ponto”) por palavra-chave, não por entendimento: com outras palavras vale o padrão da skill, e a confirmação mostra o que vai ser usado.
 - Processos e pendrive são leitura: `maquina.processos` lê a lista do Windows e devolve comando e desfazer, sem fechar nada; `maquina.portatil` só mede a pasta de ferramentas e o catálogo é curado à mão — nenhum download, instalação ou verificação de hash acontece ali. Driver fica de fora de propósito: vira serviço no Windows e pede reinício.
 - Portabilidade é declarada, não testada: os treze formatos vêm do que cada ferramenta publica, a conversão devolve plano em vez de escrever arquivo, a deriva compara hash ou conteúdo colado e o manifesto não é submetido ao marketplace. Nenhum `convert.sh`, `install.sh` ou skill do catálogo upstream é executado.
 - Planos são limitados a 100 KB por arquivo; o hash bloqueia escritores obsoletos, mas o lock local não é coordenação distribuída entre servidores.

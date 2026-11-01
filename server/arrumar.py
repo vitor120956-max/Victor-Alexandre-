@@ -1,7 +1,7 @@
 """Os braços: arrumar a máquina em vez de dizer o que apertar.
 
 O pedido que gerou isto foi direto: *“eu não quero ter que fazer nada, por isso
-fiz o JARVIS com braços”*. Até a 0.70.0 o `maquina.debloat` diagnosticava e
+fiz o JARVIS com braços”*. Até a 0.70.1 o `maquina.debloat` diagnosticava e
 entregava um `.bat` para o usuário ler, salvar e rodar como administrador. Isso é
 relatório, não braço.
 

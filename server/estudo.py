@@ -37,7 +37,7 @@ from typing import Any
 
 from . import dados as dados_locais
 
-VERSAO = "0.70.0"
+VERSAO = "0.70.1"
 
 ARQUIVO = "estudo.json"
 MAX_BARALHOS = 60

@@ -2268,6 +2268,112 @@ def test_abrir_gmail_nao_vira_programa() -> None:
     assert _pedido_direto_de_pc("abre o drive") is None
 
 
+def test_pedido_de_arrumar_a_maquina() -> None:
+    from server.agente_local import _pedido_direto_de_maquina
+
+    pedido = _pedido_direto_de_maquina("arruma o pc")
+    assert pedido["skill_id"] == "maquina.arrumar"
+    assert pedido["confirma"] is True
+    # Sem adjetivo na frase, o formulário vai com os padrões: nada de "ousado".
+    assert pedido["parametros"] == {}
+    assert _pedido_direto_de_maquina("limpa as sobras do pc")["skill_id"] == "maquina.arrumar"
+    assert _pedido_direto_de_maquina("limpa a lixeira")["skill_id"] == "maquina.arrumar"
+
+
+def test_modo_ousado_dito_na_frase_chega_no_parametro() -> None:
+    """Era o buraco: “no modo ousado” caía no arrumar normal e era engolido."""
+    from server.agente_local import _pedido_direto_de_maquina
+
+    pedido = _pedido_direto_de_maquina("arruma o pc no modo ousado")
+    assert pedido["skill_id"] == "maquina.arrumar"
+    assert pedido["parametros"] == {"ousado": True}
+    assert pedido["confirma"] is True
+
+
+def test_so_o_plano_nao_pede_confirmacao() -> None:
+    from server.agente_local import _pedido_direto_de_maquina
+
+    for frase in (
+        "arruma o pc só o plano",
+        "o que dá para limpar do windows",
+        "quanto de espaço dá para liberar",
+    ):
+        pedido = _pedido_direto_de_maquina(frase)
+        assert pedido["parametros"]["planejar_apenas"] is True, frase
+        # Nada muda: perguntar “sim, pode” para um plano seria confirmação falsa.
+        assert pedido["confirma"] is False, frase
+    assert _pedido_direto_de_maquina("arruma o pc ousado e só o plano")["parametros"] == {
+        "ousado": True,
+        "planejar_apenas": True,
+    }
+
+
+def test_sem_ponto_desliga_o_ponto_de_restauracao() -> None:
+    from server.agente_local import _pedido_direto_de_maquina
+
+    assert _pedido_direto_de_maquina("arruma o pc sem ponto de restauração")["parametros"] == {
+        "ponto_de_restauracao": False
+    }
+    assert _pedido_direto_de_maquina("arruma o pc sem backup antes")["parametros"] == {
+        "ponto_de_restauracao": False
+    }
+    # Dizer "ponto" não é dizer "sem ponto".
+    assert "ponto_de_restauracao" not in _pedido_direto_de_maquina("arruma o pc e cria o ponto")["parametros"]
+
+
+def test_desfazer_a_limpeza_vai_para_o_braco_de_voltar() -> None:
+    from server.agente_local import _pedido_direto_de_maquina
+
+    for frase in ("desfaz a última limpeza", "volta tudo como era"):
+        pedido = _pedido_direto_de_maquina(frase)
+        assert pedido["skill_id"] == "maquina.desfazer", frase
+        assert pedido["confirma"] is True, frase
+
+
+def test_texto_e_diagnostico_nao_viram_braco() -> None:
+    """“Script da limpeza” é `maquina.limpar` (texto) e “o que tirar” é o debloat."""
+    from server.agente_local import _pedido_direto_de_maquina
+
+    assert _pedido_direto_de_maquina("me manda o script da limpeza") is None
+    assert _pedido_direto_de_maquina("o que dá para tirar do windows") is None
+    assert _pedido_direto_de_maquina("limpa o teclado") is None
+    assert _pedido_direto_de_maquina("abre o bloco de notas") is None
+
+
+def test_chat_do_arrumar_pede_confirmacao_e_leva_o_ousado(tmp_path: Path) -> None:
+    """O caminho inteiro: frase → skill → parâmetro, sem executar nada."""
+    from server.agente_local import atender
+    from server.skill_registry import build_registry
+
+    reg = build_registry(tmp_path)
+
+    async def run() -> None:
+        resultado = await atender(
+            "arruma o pc no modo ousado",
+            registry=reg,
+            raiz=tmp_path,
+            criar=False,
+            consultar_web=False,
+        )
+        assert resultado["acao"] == "confirmar"
+        assert resultado["skill"]["id"] == "maquina.arrumar"
+        assert resultado["parametros"] == {"ousado": True}
+
+        plano = await atender(
+            "arruma o pc só o plano",
+            registry=reg,
+            raiz=tmp_path,
+            criar=False,
+            consultar_web=False,
+        )
+        # Fora do Windows a leitura diz “nada a fazer”; o importante é que não
+        # houve confirmação nem execução de limpeza.
+        assert plano["acao"] != "confirmar"
+        assert plano["parametros"]["planejar_apenas"] is True
+
+    asyncio.run(run())
+
+
 def test_formatar_programas_do_pc() -> None:
     texto = formatar_resultado(
         {
