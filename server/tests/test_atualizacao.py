@@ -99,6 +99,13 @@ def test_arquivo_pesado_ou_de_log_nao_entra(projeto: Path):
     assert "server/antigo.pyc" not in arquivos
 
 
+def test_cache_de_build_do_typescript_nao_entra(projeto: Path):
+    """`tsconfig.tsbuildinfo` não é versionado: se entrasse, toda cópia ficaria
+    “divergente” por causa de um arquivo que muda a cada `tsc -b`."""
+    (projeto / "tsconfig.tsbuildinfo").write_text("{}", encoding="utf-8")
+    assert "tsconfig.tsbuildinfo" not in atualizacao.gerar_manifesto(raiz=projeto)["arquivos"]
+
+
 def test_gerenciado_recusa_caminho_perigoso():
     assert atualizacao.gerenciado(Path("server/app.py"))
     assert not atualizacao.gerenciado(Path("../fora.py"))

@@ -82,7 +82,10 @@ PASTAS_IGNORADAS = {
 ARQUIVOS_IGNORADOS = {
     NOME_MANIFESTO, ".env", ".env.local", ".DS_Store", "Thumbs.db",
 }
-SUFIXOS_IGNORADOS = (".pyc", ".pyo", ".log", ".tmp", ".swp")
+# Cache de build do TypeScript: muda a cada `tsc -b` e não é código. Se entrasse,
+# a cópia do usuário apareceria sempre “divergente” por causa de um arquivo que
+# ninguém edita à mão.
+SUFIXOS_IGNORADOS = (".pyc", ".pyo", ".log", ".tmp", ".swp", ".tsbuildinfo")
 
 MAX_ARQUIVO = 12 * 1024 * 1024  # o maior arquivo do projeto é bem menor
 MAX_ARQUIVOS = 5_000

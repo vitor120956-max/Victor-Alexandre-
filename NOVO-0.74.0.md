@@ -56,6 +56,12 @@ manifesto *antes* de entrar no palco. Se não confere, é recusado e o palco fic
 marcado como não confiável — e `aplicar` se recusa a rodar. Palco pela metade é o
 jeito mais fácil de ficar com metade de cada versão no disco.
 
+**Um defeito que a própria conferência achou:** a primeira versão do manifesto
+incluía `tsconfig.tsbuildinfo` — cache do `tsc -b`, que o `.gitignore` exclui e
+que muda a cada compilação. Nenhum usuário tem esse arquivo igual ao publicado,
+então todo mundo apareceria “com arquivo divergente” para sempre. O sufixo entrou
+na lista de ignorados e há teste fixando isso.
+
 **Prova de que não sai da pasta:** o `aplicar` recusa caminho com `..`, caminho
 absoluto ou arquivo fora do que o manifesto gerencia. Um `pronto.json` forjado não
 escreve fora do projeto (tem teste para isso).
@@ -137,7 +143,7 @@ token — não é o padrão, e não deveria ser.
 ## 7. Números desta versão
 
 - **+4 skills** → 314 no registro;
-- **+30 testes** (`server/tests/test_atualizacao.py`) → **3.120 passed, 7 skipped**;
+- **+31 testes** (`server/tests/test_atualizacao.py`) → **3.121 passed, 7 skipped**;
 - `vitest` → 128; `tsc -b` limpo; `build:embutido` ok; `checar-pendrive.mjs` ok;
 - `manifest.json`: **464 arquivos, ~56 KB**, gerado **depois** do bump — se for
   gerado antes, ele hasheia a versão velha e passa a mentir.

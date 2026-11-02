@@ -1,6 +1,6 @@
 {
  "versao": "0.74.0",
- "gerado": "2026-11-02T00:41:38+00:00",
+ "gerado": "2026-11-02T00:45:16+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -219,8 +219,8 @@
    "bytes": 5238
   },
   "NOVO-0.74.0.md": {
-   "sha256": "93e7672e989513465fe9640c02254a9f81bb08bf63ccf4742ceeebfe9917895b",
-   "bytes": 7369
+   "sha256": "8ecbbb9b1bb5fce8507b36842b4d4cbef24d7fff6c7b64a2382cc1853c23f10a",
+   "bytes": 7753
   },
   "README.md": {
    "sha256": "d2215642c8fffa6616e11f57ead49fde719792140efda236703eb55397214c6c",
@@ -291,7 +291,7 @@
    "bytes": 6015
   },
   "docs/BIBLIOTECA.md": {
-   "sha256": "b902fe1b4df42b785196361f64a904785e4582336552165f51500fdd2425fcd4",
+   "sha256": "262f9af99daa183b75f0119616f16e92aedc69fb551845ae775ad102a1c5a77f",
    "bytes": 12873
   },
   "docs/CARREIRA.md": {
@@ -683,8 +683,8 @@
    "bytes": 37004
   },
   "server/atualizacao.py": {
-   "sha256": "fbdbd5c7521ffb1a827e4657d669b8542eef32bbc10b06b7670b0aafb660f4bc",
-   "bytes": 23631
+   "sha256": "e30801a0b98d7ad60d6fd0de1cd5f0a7930d379b1151241bda806b9a2ead4658",
+   "bytes": 23844
   },
   "server/backup.py": {
    "sha256": "9252d6c339b8f0fef7df446f8a65382e6c70f99b3eadf422ec04b5af29b845b5",
@@ -991,8 +991,8 @@
    "bytes": 30484
   },
   "server/tests/test_atualizacao.py": {
-   "sha256": "9dc0644c3ac7547099ae2a957920b375dfed9a40f4e3ce119ecaf8bad736b6e7",
-   "bytes": 15655
+   "sha256": "8156dceb1675329202684b9658b2b165caed19736e14644ad65b0575ab86aa6b",
+   "bytes": 16047
   },
   "server/tests/test_atualizador.py": {
    "sha256": "ced0b248e2adbdbf7444d2016ccad8b1d29df70165d06b5809a51bc93e9f53df",
@@ -1765,10 +1765,6 @@
   "tsconfig.json": {
    "sha256": "2c668a42ef4262d68c5206eb5a9698eafd5da480d8887c0698e03be0ac4a3031",
    "bytes": 601
-  },
-  "tsconfig.tsbuildinfo": {
-   "sha256": "d7670fd8c3babef64adb65b66e4cd4504c041fe079d618d8e4f645bfe472b68a",
-   "bytes": 2647
   },
   "usar-drive.bat": {
    "sha256": "05f3b9a6e94d062ab995c67b2644dd00e76f283ff60ce4cba37c5233937a1a9e",
