@@ -19,6 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import atualizacao as atualizacao_local
 from . import conserto
 from . import dados as dados_locais
 from .agente_local import (
@@ -123,6 +124,34 @@ class EstacaoAutomacaoRequest(BaseModel):
     minutos: int = Field(default=10, ge=1, le=60)
 
 
+def _avisar_versao_nova(parar: threading.Event) -> threading.Thread:
+    """Uma checagem só, ao subir — e só se a checagem automática estiver ligada.
+
+    Baixa apenas o `manifest.json` (~56 KB) e compara hash por hash. O aviso
+    também aparece no topo da tela; aqui é para quem olha o terminal e para o
+    caso de a tela estar fechada. Nada é baixado nem aplicado: só o aviso.
+    """
+
+    def laco() -> None:
+        if parar.wait(8) or not atualizacao_local.ligado():
+            return
+        try:
+            dados = atualizacao_local.verificar()
+        except Exception:  # noqa: BLE001 - sem rede, segue sem aviso
+            return
+        if not dados.get("disponivel"):
+            return
+        print(
+            f"JARVIS atualizacao: versao {dados.get('remota')} disponivel "
+            f"({dados.get('a_baixar')} arquivo(s), {dados.get('bytes')} bytes, "
+            f"a sua e {dados.get('local')}). Abra a tela ou rode atualizar.bat."
+        )
+
+    thread = threading.Thread(target=laco, daemon=True, name="atualizacao-aviso")
+    thread.start()
+    return thread
+
+
 def _estacao_lifespan(runtime: EstacaoRuntime):
     @asynccontextmanager
     async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
@@ -138,6 +167,7 @@ def _estacao_lifespan(runtime: EstacaoRuntime):
 
         thread = threading.Thread(target=laco, daemon=True, name="estacao-agenda")
         thread.start()
+        _avisar_versao_nova(parar)
         try:
             yield
         finally:
@@ -199,7 +229,7 @@ def _autorizacao_do_dono(
 ) -> tuple[dict[str, Any], bool]:
     """Modo dono: completa o token de host e o plano quando o pedido é daqui.
 
-    A regra mora em `sistema.confiar_no_pedido`: desde a 0.73.0 vale para a
+    A regra mora em `sistema.confiar_no_pedido`: desde a 0.74.0 vale para a
     própria máquina por padrão, e `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o
     pedido de token até em 127.0.0.1. Requisição de outra máquina nunca preenche.
     """
@@ -287,7 +317,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.73.0",
+        version="0.74.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -385,7 +415,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.73.0",
+            "version": "0.74.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             # Respondido por origem: o front esconde o campo de token quando é True.

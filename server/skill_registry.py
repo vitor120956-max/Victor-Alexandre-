@@ -29,6 +29,7 @@ from .agency import (
 from . import agenda as agenda_local
 from . import estudo as estudo_local
 from . import portatil as portatil_local
+from . import atualizacao as atualizacao_local
 from . import conserto as conserto_local
 from . import limpeza as limpeza_local
 from . import arrumar as arrumar_local
@@ -461,6 +462,19 @@ class ArrumarInput(BaseModel):
         "description": "Inclui Xbox, Teams, Search, Superfetch e hibernação — todos reversíveis. WinSxS, Windows.old, Installer e Prefetch continuam fora."
     })
     ponto_de_restauracao: bool = Field(default=True, title="Criar ponto de restauração antes")
+
+
+class AtualizacaoVerificarInput(BaseModel):
+    forcar: bool = Field(default=True, title="Checar mesmo com a checagem automática desligada")
+
+
+class AtualizacaoAplicarInput(BaseModel):
+    autorizacao: str = Field(default="", max_length=200, title="Token de host", json_schema_extra={
+        "description": "Preenchido sozinho quando o pedido vem desta máquina (modo dono)."
+    })
+    versao: str = Field(default="", title="Versão (opcional)", max_length=40, json_schema_extra={
+        "description": "Em branco, aplica o palco mais recente."
+    })
 
 
 class ConsertoErroInput(BaseModel):
@@ -4161,7 +4175,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             raise SkillError(str(exc)) from exc
 
     def celular_status_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
-        # Antes da 0.73.0 isto só olhava a pasta das ferramentas e respondia
+        # Antes da 0.74.0 isto só olhava a pasta das ferramentas e respondia
         # "Tudo pronto" com o celular sem cabo. Agora mede de verdade.
         try:
             medido = celular.estado()
@@ -4958,6 +4972,21 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         )
         return {**resultado, "plano_resumo": plano.get("resumo", "")}
 
+    def atualizacao_estado_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return atualizacao_local.estado()
+
+    def atualizacao_verificar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        entrada = data  # AtualizacaoVerificarInput
+        return atualizacao_local.verificar(forcar=entrada.forcar)
+
+    def atualizacao_preparar_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # Baixa só o que mudou, para um palco. Nada do que roda é tocado.
+        return atualizacao_local.preparar()
+
+    def atualizacao_aplicar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        entrada = data  # AtualizacaoAplicarInput
+        return atualizacao_local.aplicar(versao=entrada.versao, confirmado=True)
+
     def conserto_diagnosticar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         entrada = data  # ConsertoErroInput
         return conserto_local.diagnosticar(erro=entrada.erro)
@@ -5508,6 +5537,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("repos.remover", "Remover repositório", "Apaga a pasta baixada em `storage/repos` e tira do índice; nada fora dessa pasta é tocado.", "Repositórios", ReposRemoverInput, repos_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("maquina.arrumar", "Arrumar a máquina agora", "Os braços. Em vez de entregar um .bat para você ler e rodar, executa a limpeza das sobras: fecha processo inútil (devolve RAM), remove app de loja sem uso, desativa tarefa de telemetria e serviço que ninguém usa, limpa cache e lixeira. Só o veredito 'sobra' é tocado — driver (NVIDIA Container), essencial (Store, VCLibs, Segurança) e o que depende do seu uso (Xbox, WinSxS, hibernação) nunca entram. Antes de encerrar um processo confere se o PID ainda é o mesmo; grava cada ação com comando e desfazer em storage/limpezas/. Exige JARVIS_HOST_ARRUMAR=1 e confirmação.", "Máquina", ArrumarInput, maquina_arrumar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("maquina.desfazer", "Desfazer a última limpeza", "Relê o último diário de `maquina.arrumar` e reverte o que tem volta: religa serviço e tarefa no modo original e reinstala app de loja pela Store. Processo fechado e cache apagado não voltam — o relatório diz exatamente o que ficou sem retorno. Exige confirmação.", "Máquina", DesfazerInput, maquina_desfazer_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
+        SkillDefinition("atualizacao.estado", "Há versão nova?", "Lê o registro da última checagem e do último palco: sua versão, a versão remota vista, quantos arquivos faltavam e quais pacotes já estão baixados e conferidos em `storage/atualizacao/`. Não acessa a rede — para checar agora, `atualizacao.verificar`.", "Atualização", EmptyInput, atualizacao_estado_handler, timeout_seconds=10),
+        SkillDefinition("atualizacao.verificar", "Checar atualização (só o manifesto)", "Baixa **apenas o `manifest.json`** (~56 KB) do GitHub, calcula o sha256 dos arquivos locais e diz o que mudou — arquivo por arquivo, com tamanho. Em vez de comparar versão por número, compara conteúdo: dois arquivos iguais não voltam. Não baixa o código e não altera nada; grava só a data da checagem em `storage/atualizacao/estado.json`.", "Atualização", AtualizacaoVerificarInput, atualizacao_verificar_handler, timeout_seconds=120),
+        SkillDefinition("atualizacao.preparar", "Baixar só o que mudou", "Baixa cada arquivo alterado (não o zip inteiro) para `storage/atualizacao/<versão>/`, conferindo o sha256 de cada um contra o manifesto. Arquivo que não confere é recusado — nada é aplicado. Numa versão típica são poucos arquivos e centenas de KB em vez de 3,5 MB.", "Atualização", EmptyInput, atualizacao_preparar_handler, side_effects=True, dry_run_supported=False, requires_confirmation=True, timeout_seconds=600),
+        SkillDefinition("atualizacao.aplicar", "Aplicar e reiniciar", "Copia o palco conferido por cima do projeto, guardando cada arquivo substituído em `storage/atualizacao/backup-<data>/`. Exige confirmação e um palco sem falhas. Depois de aplicar, a API precisa reiniciar — o código novo está no disco, mas o processo em memória continua o antigo.", "Atualização", AtualizacaoAplicarInput, atualizacao_aplicar_handler, side_effects=True, dry_run_supported=False, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("conserto.diagnosticar", "Onde quebrou e por quê", "Lê o último erro interno do diário (`storage/erros.jsonl`) — ou um traceback que você cole — e diz o arquivo, a linha, a função, o trecho do código em volta, a causa classificada por regra (permissão, arquivo ausente, chave ausente, codificação, rede, timeout…) e se aquele módulo tem teste. Não escreve nada e não chama modelo: é leitura pura sobre o erro que já aconteceu.", "Conserto", ConsertoErroInput, conserto_diagnosticar_handler, timeout_seconds=20),
         SkillDefinition("conserto.dossie", "O dossiê para corrigir de primeira", "Junta o erro, o trecho do código com número de linha, a docstring que diz para que o módulo serve, o teste existente e as guardas do projeto num texto único. É o que faz a correção sair em uma tentativa em vez de dez — para você, para mim ou para um modelo. Só lê e monta texto.", "Conserto", ConsertoErroInput, conserto_dossie_handler, timeout_seconds=20),
         SkillDefinition("conserto.propor", "Propor o patch do erro", "Pede a um modelo (o mesmo provedor de `JARVIS_AI_API_KEY`) um diff unificado a partir do dossiê, e devolve o diff já passando pela régua do `evoluir.*`: o diff aplica, qual o risco e quais guardas ele viola. Não escreve nada no código — quem ensaia é `evoluir.ensaiar` (numa cópia, rodando a suíte real) e quem aplica é `evoluir.promover`, com token. Sem chave, recusa em vez de inventar correção.", "Conserto", ConsertoProporInput, conserto_propor_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),

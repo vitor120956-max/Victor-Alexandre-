@@ -59,11 +59,47 @@ if not errorlevel 1 echo   ATENCAO: as dependencias Python mudaram - veja o fim 
 goto terminou
 
 REM ===========================================================================
-REM  Sem Git (instalado pelo zip): baixa o zip e copia por cima, preservando
-REM  .env, storage, .venv e node_modules
+REM  Sem Git (instalado pelo zip). 0.74.0: primeiro tenta o caminho DELTA, que
+REM  baixa so o manifest.json (56 KB) e so os arquivos que mudaram. Se falhar por
+REM  qualquer motivo (rede, .venv ausente, arquivo estranho), cai no zip inteiro
+REM  abaixo - que continua sendo o plano B, nao o unico plano.
 REM ===========================================================================
 :semgit
 echo   Esta pasta nao e um repositorio Git (instalacao pelo zip).
+echo.
+if not exist ".venv\Scripts\python.exe" goto delta_indisponivel
+echo   [delta] Vendo o que mudou (baixa so o manifesto, uns 56 KB)...
+".venv\Scripts\python.exe" -m server.atualizacao --verificar
+if errorlevel 3 goto ja_atualizado
+if errorlevel 1 goto delta_falhou
+echo.
+echo   [delta] Baixando so os arquivos alterados...
+".venv\Scripts\python.exe" -m server.atualizacao --preparar
+if errorlevel 3 goto ja_atualizado
+if errorlevel 1 goto delta_falhou
+echo.
+echo   [delta] Aplicando (com backup do que for substituido)...
+".venv\Scripts\python.exe" -m server.atualizacao --aplicar --sim
+if errorlevel 1 goto delta_falhou
+echo.
+echo   [delta] Pronto, sem zip e sem copiar a pasta inteira.
+goto copiou
+
+:delta_indisponivel
+echo   [delta] Sem .venv nesta pasta: vou pelo zip inteiro.
+goto zip_inteiro
+
+:ja_atualizado
+echo.
+echo   Ja esta na ultima versao. Nada a baixar, nada a copiar.
+goto checar_dist
+
+:delta_falhou
+echo.
+echo   [delta] Nao deu. Vou pelo zip inteiro - e o mesmo resultado, so mais lento.
+echo.
+
+:zip_inteiro
 echo   Vou baixar a versao atual do GitHub e copiar por cima.
 echo.
 echo   Ficam intocados: .env, storage, .venv e node_modules.

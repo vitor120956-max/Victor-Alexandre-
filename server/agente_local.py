@@ -1929,6 +1929,65 @@ _RE_CONSERTO_ASSUNTO_DE_FORA = re.compile(
 )
 
 
+_RE_ATUALIZAR_ASSUNTO = re.compile(
+    r"\b(?:atualiza\w*|atualizad[oa]|vers[ãa]o|versao|novidade|update|melhorias|mudou|mudan[çc]as)\b",
+    re.I,
+)
+_RE_ATUALIZAR_BAIXAR = re.compile(
+    r"\b(?:baixa\w*|baixe|puxa\w*|puxe|transfer\w*)\b", re.I
+)
+_RE_ATUALIZAR_APLICAR = re.compile(
+    r"\b(?:aplica\w*|aplique|instala\w*|instale|j[áa] baixou|pode (?:aplicar|instalar|subir))\b", re.I
+)
+# "atualizar o Windows" — e o PC, o celular, o app de fora — não é o JARVIS.
+_RE_ATUALIZAR_DE_FORA = re.compile(
+    r"\b(?:windows|sistema|celular|telefone|android|driver|placa|navegador|chrome|firefox"
+    r"|whatsapp|office|word|excel|jogo|steam)\b",
+    re.I,
+)
+
+
+def _pedido_direto_de_atualizacao(termo: str) -> dict[str, Any] | None:
+    """“tem versão nova”, “atualiza o jarvis”, “baixa só o que mudou”, “aplica”.
+
+    Três ações diferentes, e a diferença importa: ver custa 56 KB e não muda nada;
+    baixar ocupa alguns KB no palco; aplicar troca arquivo e pede reinício.
+    """
+    texto = normalizar(termo)
+    if not texto or not _RE_ATUALIZAR_ASSUNTO.search(texto):
+        return None
+    if _RE_ATUALIZAR_DE_FORA.search(texto):
+        return None
+    if _RE_ATUALIZAR_APLICAR.search(texto):
+        return {
+            "skill_id": "atualizacao.aplicar",
+            "nome": "Aplicar e reiniciar",
+            "parametros": {},
+            "confirma": True,
+        }
+    if _RE_ATUALIZAR_BAIXAR.search(texto):
+        return {
+            "skill_id": "atualizacao.preparar",
+            "nome": "Baixar só o que mudou",
+            "parametros": {},
+            "confirma": True,
+        }
+    # "atualiza o jarvis" (verbo sem objeto de download) também é pedido de ação.
+    if re.search(r"\batualiza\w*\s+(?:o\s+)?jarvis\b", texto):
+        return {
+            "skill_id": "atualizacao.preparar",
+            "nome": "Baixar só o que mudou",
+            "parametros": {},
+            "confirma": True,
+        }
+    return {
+        "skill_id": "atualizacao.verificar",
+        "nome": "Checar atualização (só o manifesto)",
+        "parametros": {"forcar": True},
+        "confirma": False,
+    }
+
+
 def _pedido_direto_de_conserto(termo: str) -> dict[str, Any] | None:
     """“por que deu erro”, “monta o dossiê” e “conserta” — o laço do conserto.
 
@@ -2796,6 +2855,10 @@ def formatar_resultado(resultado: Any) -> str:
     if especial is not None:
         return especial
 
+    especial = _formatar_atualizacao(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_conserto(resultado)
     if especial is not None:
         return especial
@@ -2867,6 +2930,58 @@ def formatar_resultado(resultado: Any) -> str:
         partes.append(json.dumps(resultado, ensure_ascii=False, indent=2))
     texto = "\n\n".join(partes)
     return texto[:LIMITE_RESPOSTA] + ("…" if len(texto) > LIMITE_RESPOSTA else "")
+
+
+def _formatar_atualizacao(resultado: dict[str, Any]) -> str | None:
+    """Checagem, palco e aplicação da atualização delta — em texto curto."""
+    if not ({"disponivel", "palcos_prontos", "checou", "preparado", "aplicado"} & set(resultado)):
+        return None
+    if resultado.get("aplicado"):
+        linhas = [
+            f"Atualização {resultado.get('versao', '')} aplicada no disco.",
+            f"{len(resultado.get('substituidos') or [])} arquivo(s) substituído(s), "
+            f"{len(resultado.get('adicionados') or [])} novo(s).",
+        ]
+        if resultado.get("backup"):
+            linhas.append(f"Backup do que saiu: `{resultado['backup']}`")
+        if resultado.get("reiniciar"):
+            linhas.append(str(resultado["reiniciar"]))
+        return "\n".join(linhas)[:LIMITE_RESPOSTA]
+    if resultado.get("falhas"):
+        linhas = ["O download não fechou — o palco não é confiável:"]
+        for falha in (resultado.get("falhas") or [])[:5]:
+            linhas.append(f"- {falha.get('caminho')}: {falha.get('motivo')}")
+        linhas.append("Use o `atualizar.bat`, que baixa o zip inteiro e preserva o que é seu.")
+        return "\n".join(linhas)[:LIMITE_RESPOSTA]
+    if "preparado" in resultado:
+        if resultado.get("preparado"):
+            return (
+                f"{resultado.get('resumo', '')}\n"
+                f"Versão {resultado.get('remota', '')} pronta em `{resultado.get('palco', '')}`.\n"
+                "Para valer: `aplica a atualização` (ou o botão da tela) e depois reiniciar a API."
+            )
+        return str(resultado.get("motivo") or resultado.get("resumo") or "Nada a baixar.")
+    if "checou" in resultado:
+        if not resultado.get("checou"):
+            return str(resultado.get("motivo") or "Não consegui checar.") + (
+                f"\n{resultado.get('plano_b')}" if resultado.get("plano_b") else ""
+            )
+        linhas = [str(resultado.get("resumo") or "")]
+        if resultado.get("disponivel"):
+            linhas.append(f"Local {resultado.get('local')} → remota {resultado.get('remota')}.")
+            linhas.append(f"{resultado.get('a_baixar')} de {resultado.get('total_remoto')} arquivos, "
+                          f"{resultado.get('bytes', 0) // 1024} KB (o zip inteiro tem ~3,5 MB).")
+            linhas.append("Para baixar só isso: `atualiza o jarvis`.")
+        return "\n".join(linhas)[:LIMITE_RESPOSTA]
+    # estado
+    return "\n".join([
+        f"Versão local: {resultado.get('local', '?')}" + (
+            f" · remota vista: {resultado.get('remota')}" if resultado.get("remota") else ""
+        ),
+        "Checagem automática: " + ("ligada" if resultado.get("ligado") else "desligada (JARVIS_ATUALIZACAO=1 liga)"),
+        f"Última checagem: {resultado.get('ultima_checagem') or 'nunca'}",
+        "Palco pronto: " + (", ".join(resultado.get("palcos_prontos") or []) or "nenhum"),
+    ])
 
 
 def _formatar_conserto(resultado: dict[str, Any]) -> str | None:
@@ -3888,6 +4003,10 @@ async def _resolver(
     # 0b8c. Conserto: o erro que aconteceu vira diagnóstico, dossiê ou proposta.
     if direto is None:
         direto = _pedido_direto_de_conserto(termo)
+
+    # 0b8d. Atualização delta: ver, baixar só o que mudou, aplicar.
+    if direto is None:
+        direto = _pedido_direto_de_atualizacao(termo)
 
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:

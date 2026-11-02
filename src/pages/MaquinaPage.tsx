@@ -140,7 +140,7 @@ type AcaoFeita = {
   saida?: string;
   ganho?: string;
   desfazer?: string;
-  /** 0.73.0: a causa curta (“admin”, “sumiu”…) e a frase pronta. */
+  /** 0.74.0: a causa curta (“admin”, “sumiu”…) e a frase pronta. */
   causa?: string;
   motivo?: string;
 };
@@ -161,7 +161,7 @@ type ResultadoArrumar = {
   ponto_de_restauracao?: { criado?: boolean; motivo?: string };
   como_voltar_tudo?: string;
   sem_volta?: string[];
-  // 0.73.0: o "por que falhou" vem nomeado, em vez de "o diário diz qual".
+  // 0.74.0: o "por que falhou" vem nomeado, em vez de "o diário diz qual".
   falhas_por_causa?: Record<string, number>;
   nao_feitas?: { nome?: string; tipo?: string; comando?: string; motivo?: string; causa?: string; saida?: string }[];
   como_resolver?: string;

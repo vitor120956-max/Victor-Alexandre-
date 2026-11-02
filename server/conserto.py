@@ -45,7 +45,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.73.0"
+VERSAO = "0.74.0"
 
 MAX_ERRO = 20_000
 MAX_TRECHO = 9

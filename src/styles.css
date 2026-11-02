@@ -1149,3 +1149,29 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* 0.74.0 — aviso de versão nova (atualização delta) */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 13px;
+  margin: 0 0 13px;
+  border: 1px solid rgba(var(--accent-rgb), .28);
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), .08);
+  color: var(--text-soft);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.update-banner > span { flex: 1; min-width: 0; }
+.update-banner b { color: var(--accent-soft); font-weight: 700; }
+.update-banner code { font-family: var(--mono); font-size: 10px; color: var(--accent-soft); }
+.update-banner .button { flex: 0 0 auto; min-height: 30px; padding: 0 11px; }
+.update-banner.button, .update-banner .button-primary { color: var(--accent-ink); }
+.update-banner-pronto { border-color: var(--line-strong); background: var(--surface-soft); }
+
+@media (max-width: 720px) {
+  .update-banner { flex-wrap: wrap; }
+  .update-banner > span { flex: 1 1 100%; }
+}

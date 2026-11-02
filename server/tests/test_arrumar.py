@@ -1,7 +1,7 @@
 """Os braços: o JARVIS arruma a máquina em vez de mandar você apertar.
 
 O pedido foi literal: *“eu não quero ter que fazer nada, por isso fiz o JARVIS
-com braços”*. Até a 0.73.0 ele diagnosticava e entregava um `.bat` — relatório.
+com braços”*. Até a 0.74.0 ele diagnosticava e entregava um `.bat` — relatório.
 Agora `maquina.arrumar` executa.
 
 O que estes testes travam, e por quê:

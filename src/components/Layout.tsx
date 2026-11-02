@@ -5,6 +5,7 @@ import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 import { TaskModal } from './TaskModal';
 import { ToastStack } from './ToastStack';
+import { UpdateBanner } from './UpdateBanner';
 
 export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,7 +33,10 @@ export function Layout() {
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <div className="app-main">
         <Topbar onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
-        <main className="page-container"><Outlet /></main>
+        <main className="page-container">
+          <UpdateBanner />
+          <Outlet />
+        </main>
       </div>
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
       <TaskModal />

@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.73.0", "skills": 310, "confiarLocal": true }
+GET /api/health  →  { "version": "0.74.0", "skills": 314, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)
@@ -167,7 +167,7 @@ da própria máquina. De fora, a resposta diz que existe plano, mas omite
 | `maquina.desfazer` | **executa** | reverte o último diário: religa serviço e tarefa, reinstala app |
 | `maquina.administrador` | **executa** | abre o aviso de permissão do Windows (UAC) e reabre a API elevada — o que faz as tarefas e serviços da limpeza passarem |
 
-As oito `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: cinco delas só leem e explicam, e **três executam** (`maquina.arrumar`, `maquina.desfazer` e `maquina.administrador`) — as duas primeiras com trava `JARVIS_HOST_ARRUMAR=1`, confirmação, diário e só o veredito “sobra”; a terceira só abre o aviso de permissão do Windows, e quem autoriza é você. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md); o laço de conserto (erro → diagnóstico → dossiê → proposta → ensaio) tem o dele: [`CONSERTO.md`](CONSERTO.md).
+As oito `maquina.*` ficam aqui porque respondem à mesma pergunta do Sistema — “o que é do computador” — mas são de outra natureza: cinco delas só leem e explicam, e **três executam** (`maquina.arrumar`, `maquina.desfazer` e `maquina.administrador`) — as duas primeiras com trava `JARVIS_HOST_ARRUMAR=1`, confirmação, diário e só o veredito “sobra”; a terceira só abre o aviso de permissão do Windows, e quem autoriza é você. Detalhe em [`PENDRIVE.md`](PENDRIVE.md#13-ferramentas-portáteis--o-que-entra-no-pendrive-e-o-que-nunca-entra). O debloat tem documento próprio: [`LIMPEZA.md`](LIMPEZA.md); o laço de conserto (erro → diagnóstico → dossiê → proposta → ensaio) tem o dele: [`CONSERTO.md`](CONSERTO.md); e a atualização delta (manifesto, hash por arquivo, palco e backup) está em [`ATUALIZACAO.md`](ATUALIZACAO.md) — aqui ela aparece só porque muda o arquivo do Sistema na máquina.
 
 Leitura e efeito nunca dividem a mesma skill. `sistema.rede` não baixa, `sistema.instalar` não executa: quem escreve e quem executa são skills separadas, para que a fronteira apareça no catálogo e no `requiresConfirmation` da API.
 

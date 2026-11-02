@@ -92,7 +92,12 @@ echo           a pasta web-dist de novo.
 echo.
 
 :tem_interface
+REM 0.74.0: a checagem de versao nova liga junto com a API. Ela baixa so o
+REM manifest.json (uns 56 KB) uma vez ao subir e avisa no terminal e no topo da
+REM tela. Baixar e aplicar continuam sendo a sua decisao.
+set JARVIS_ATUALIZACAO=1
 echo   [3/3] Subindo o JARVIS. O navegador abre sozinho quando a API responder.
+echo         Versao nova? ele avisa sozinho - nao precisa procurar.
 echo         Para parar: feche esta janela no X.
 echo.
 start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "for($i=0;$i -lt 120;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/health' -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process 'http://127.0.0.1:8000'; break } } catch {}; Start-Sleep -Milliseconds 500 }"
