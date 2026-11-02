@@ -1,6 +1,6 @@
 {
  "versao": "0.74.0",
- "gerado": "2026-11-02T00:33:31+00:00",
+ "gerado": "2026-11-02T00:41:38+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -219,7 +219,7 @@
    "bytes": 5238
   },
   "NOVO-0.74.0.md": {
-   "sha256": "3fd6c76a3b1d9a7769a028ec8b14439469418dc56406ca6830d4df7227dfb28b",
+   "sha256": "93e7672e989513465fe9640c02254a9f81bb08bf63ccf4742ceeebfe9917895b",
    "bytes": 7369
   },
   "README.md": {
@@ -291,7 +291,7 @@
    "bytes": 6015
   },
   "docs/BIBLIOTECA.md": {
-   "sha256": "c4991682934469043def284f334f313f62c194fbf6a8e52d5a73837e6d57a0b4",
+   "sha256": "b902fe1b4df42b785196361f64a904785e4582336552165f51500fdd2425fcd4",
    "bytes": 12873
   },
   "docs/CARREIRA.md": {
@@ -683,8 +683,8 @@
    "bytes": 37004
   },
   "server/atualizacao.py": {
-   "sha256": "9629a5e08137b767674271ae22cae24284ef4411f3df3c2e49f1b92a3231ef53",
-   "bytes": 22892
+   "sha256": "fbdbd5c7521ffb1a827e4657d669b8542eef32bbc10b06b7670b0aafb660f4bc",
+   "bytes": 23631
   },
   "server/backup.py": {
    "sha256": "9252d6c339b8f0fef7df446f8a65382e6c70f99b3eadf422ec04b5af29b845b5",
@@ -991,8 +991,8 @@
    "bytes": 30484
   },
   "server/tests/test_atualizacao.py": {
-   "sha256": "e2b71a1b63d5cb75fd1a223f6519bbd44928aa8e649f87a6655f995e5445afd6",
-   "bytes": 15238
+   "sha256": "9dc0644c3ac7547099ae2a957920b375dfed9a40f4e3ce119ecaf8bad736b6e7",
+   "bytes": 15655
   },
   "server/tests/test_atualizador.py": {
    "sha256": "ced0b248e2adbdbf7444d2016ccad8b1d29df70165d06b5809a51bc93e9f53df",
@@ -1371,8 +1371,8 @@
    "bytes": 3108
   },
   "src/components/UpdateBanner.tsx": {
-   "sha256": "f566724c7168b45c7c99b41fb23b784cded43c653817023a27f7797fedd14729",
-   "bytes": 4268
+   "sha256": "1c4f8549ddd58646754c1e062176d201e643fa44c4250cac84b6edf2b61dfd72",
+   "bytes": 4564
   },
   "src/confianca.css": {
    "sha256": "8f4a37efbe44c4eb8c7ba5177514ea1cca25d5be7ac32aec0ea83759d3190311",
@@ -1838,13 +1838,13 @@
    "sha256": "bced561d991e3f81c150c08e71f7fa849fcbff523560f6059245f2edce19b600",
    "bytes": 5620
   },
-  "web-dist/assets/index-DsldWX6F.js": {
-   "sha256": "a25140fd81525c27966839d7fb3f1e2b3d1813ebf91d3a572eb256e2fe71976b",
-   "bytes": 1226319
-  },
   "web-dist/assets/index-DwgLlUTs.css": {
    "sha256": "537e0b2acb5871f87c171862612291fbd16fee9ca44e2da549621b0b9b052040",
    "bytes": 307262
+  },
+  "web-dist/assets/index-OVIU1b_O.js": {
+   "sha256": "a188d4aea321c0a8fe489692390d46122f488eaa4d4c5ab7fc0eb6861566e766",
+   "bytes": 1226525
   },
   "web-dist/assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2": {
    "sha256": "c268b459a9329e59fecf39a17618efd44c71735532048d60b12aab76a8c14914",
@@ -1871,7 +1871,7 @@
    "bytes": 266
   },
   "web-dist/index.html": {
-   "sha256": "cfb79eae3b54ef543febd96c73ce59c1c1ac0c235d09f38ee4b34ce91d839b68",
+   "sha256": "22f64eaa77f897e9f48ef648262e41226193e66e8e76a28cb4e7be0c9c597aa4",
    "bytes": 645
   }
  }

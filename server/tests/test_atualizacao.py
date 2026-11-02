@@ -170,6 +170,13 @@ def test_ja_na_ultima_nao_inventa_atualizacao(dados: Path, projeto: Path):
     assert "última" in resultado["resumo"]
 
 
+def test_o_resumo_nao_finge_versao_nova_quando_a_versao_e_a_mesma():
+    """Editar um arquivo à mão não pode virar “versão nova: X (a sua é X)”."""
+    assert "Versão nova: 0.75.0" in atualizacao._resumo("0.74.0", "0.75.0", 2, 2_048)
+    assert "Mesma versão (0.74.0)" in atualizacao._resumo("0.74.0", "0.74.0", 1, 100)
+    assert "diferente(s) do publicado" in atualizacao._resumo("0.74.0", "", 1, 100)
+
+
 def test_falha_de_rede_nao_derruba_e_aponta_o_plano_b(dados: Path, projeto: Path):
     def sem_rede(_url: str) -> bytes:
         raise OSError("sem rota para o host")

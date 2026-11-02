@@ -137,7 +137,7 @@ token — não é o padrão, e não deveria ser.
 ## 7. Números desta versão
 
 - **+4 skills** → 314 no registro;
-- **+29 testes** (`server/tests/test_atualizacao.py`) → **3.119 passed, 7 skipped**;
+- **+30 testes** (`server/tests/test_atualizacao.py`) → **3.120 passed, 7 skipped**;
 - `vitest` → 128; `tsc -b` limpo; `build:embutido` ok; `checar-pendrive.mjs` ok;
 - `manifest.json`: **464 arquivos, ~56 KB**, gerado **depois** do bump — se for
   gerado antes, ele hasheia a versão velha e passa a mentir.

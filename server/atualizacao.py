@@ -353,13 +353,7 @@ def verificar(
         "bytes": diferenca["bytes"],
         "extras": diferenca["extras"][:50],
         "ms": round((time.perf_counter() - inicio) * 1000, 1),
-        "resumo": (
-            f"Versão nova: {versao_remota} (a sua é {versao_local}). "
-            f"{len(diferenca['baixar'])} arquivo(s), {_mb(diferenca['bytes'])} — "
-            f"em vez do zip inteiro."
-            if mudou
-            else f"Já está na última: {versao_local}."
-        ),
+        "resumo": _resumo(versao_local, versao_remota, len(diferenca["baixar"]), diferenca["bytes"]) if mudou else f"Já está na última: {versao_local}.",
     }
     salvo = dict(estado(raiz))
     salvo.update({
@@ -371,6 +365,26 @@ def verificar(
     })
     _gravar_estado(salvo, raiz)
     return resultado
+
+
+def _resumo(versao_local: str, versao_remota: str, quantos: int, bytes_: int) -> str:
+    """A frase do aviso — e ela não pode mentir sobre a versão.
+
+    Se o número da versão é o mesmo mas o conteúdo diverge (arquivo editado à
+    mão, cópia antiga com um arquivo novo), dizer “versão nova: 0.74.0 (a sua é
+    0.74.0)” confunde. Aí a frase é sobre arquivos, não sobre versão.
+    """
+    if versao_remota and versao_remota != versao_local:
+        return (
+            f"Versão nova: {versao_remota} (a sua é {versao_local}). "
+            f"{quantos} arquivo(s), {_mb(bytes_)} — em vez do zip inteiro."
+        )
+    if not versao_remota:
+        return f"{quantos} arquivo(s) diferente(s) do publicado: {_mb(bytes_)}."
+    return (
+        f"Mesma versão ({versao_local}), {quantos} arquivo(s) diferente(s) do "
+        f"publicado: {_mb(bytes_)}."
+    )
 
 
 def _mb(bytes_: int) -> str:

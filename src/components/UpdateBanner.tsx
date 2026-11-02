@@ -97,12 +97,21 @@ export function UpdateBanner() {
   if (!checagem?.disponivel) return null;
 
   const kb = Math.max(1, Math.round(Number(checagem.bytes || 0) / 1024));
+  const mesmaVersao = !checagem.remota || checagem.remota === checagem.local;
   return (
     <div className="update-banner">
       <Download size={15} />
       <span>
-        <b>Versão {checagem.remota}</b> disponível (a sua é {checagem.local}): {checagem.a_baixar} arquivo(s),{' '}
-        {kb} KB — só o que mudou, em vez do zip de 3,5 MB.
+        {mesmaVersao ? (
+          <>
+            <b>{checagem.a_baixar} arquivo(s)</b> diferente(s) do publicado em {checagem.local}: {kb} KB.
+          </>
+        ) : (
+          <>
+            <b>Versão {checagem.remota}</b> disponível (a sua é {checagem.local}): {checagem.a_baixar}{' '}
+            arquivo(s), {kb} KB — só o que mudou, em vez do zip de 3,5 MB.
+          </>
+        )}
         {preparo?.preparado && ' Baixado e conferido. Falta aplicar e reiniciar.'}
       </span>
       {!preparo?.preparado ? (

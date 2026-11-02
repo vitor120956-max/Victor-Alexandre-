@@ -263,11 +263,11 @@ Limites, sem enfeite:
 | Testes do debloat | **23** (`test_limpeza.py`: catálogo, análise pura com máquina falsa, plano com `rem` no que é cuidado, volta de serviço e tarefa) |
 | Testes dos braços | **48** (`test_arrumar.py`: só sobra executa, PID reciclado é pulado, as quatro travas, diário e desfazer com o que não volta, instantâneo < 4 KB, ponto de restauração que falha sem derrubar a limpeza, **modo ousado** que traz só o reversível, elevação que respeita a recusa do UAC e os dois `.bat` que se elevam sozinhos) |
 | Testes do conserto | **31** (`test_conserto.py`: diário podado, quadro certo entre stdlib e projeto, 12 causas por regra, dossiê com docstring e guardas, proposta sem chave recusada, diff validado pela régua de evolução, e o app registrando a falha sem vazar detalhe pelo HTTP) |
-| Testes da atualização | **29** (`test_atualizacao.py`: manifesto sem `.env`/`storage`, comparação por hash que não marca igual como alterado, palco que recusa `sha256` errado, aplicar que exige confirmação, guarda de backup e recusa de `../`, e o roteamento das frases no chat) |
+| Testes da atualização | **30** (`test_atualizacao.py`: manifesto sem `.env`/`storage`, comparação por hash que não marca igual como alterado, palco que recusa `sha256` errado, aplicar que exige confirmação, guarda de backup e recusa de `../`, e o roteamento das frases no chat) |
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.119** |
+| Suíte da API | **3.120** |
 | Skills no registro | **314** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
