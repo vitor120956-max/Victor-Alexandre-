@@ -557,7 +557,7 @@ def test_configurador_liga_o_modo_dono():
     assert depois["JARVIS_HOST_CONFIAR_LOCAL"] == "JARVIS_HOST_CONFIAR_LOCAL=1"
 
 
-# --- o caminho exato do bug de 0.74.0 ---------------------------------------
+# --- o caminho exato do bug de 0.75.0 ---------------------------------------
 
 def test_preparar_com_token_acentuado_recusa_com_explicacao(ligado, monkeypatch):
     """`hmac.compare_digest` levanta TypeError com acento; aqui vira mensagem."""
@@ -926,7 +926,7 @@ def test_status_com_usb_generico_nao_culpa_a_depuracao():
     )
     assert "não é o celular" in resultado["titulo"]
     assert "nenhum é o celular" in resultado["proximo_passo"]
-    assert "eu comparo" in resultado["proximo_passo"]  # 0.74.0: sem pedir anotação
+    assert "eu comparo" in resultado["proximo_passo"]  # 0.75.0: sem pedir anotação
     assert "VID" not in resultado["titulo"]
 
 
@@ -1071,7 +1071,7 @@ def test_status_mostra_a_lista_com_vid_no_chat(monkeypatch):
     assert "celular" in resultado["resposta"]
 
 
-# --- 0.74.0: a porta viu algo / a lista não mudou ---------------------------
+# --- 0.75.0: a porta viu algo / a lista não mudou ---------------------------
 
 DESCONHECIDO = {
     "status": "Error",
@@ -1247,7 +1247,7 @@ def test_comparacao_avisa_quando_o_celular_apareceu(raiz):
     assert "O celular apareceu na USB" in comparacao["frase"]
 
 
-# --- 0.74.0: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
+# --- 0.75.0: a rede local responde "dá para acessar pelo Wi-Fi?" -------------
 
 ARP_WINDOWS = """
 Interface: 192.168.0.10 --- 0x6
@@ -1342,7 +1342,7 @@ def test_a_skill_de_rede_esta_no_registro(tmp_path):
     assert getattr(definicao, "requires_confirmation", False) is False
 
 
-# --- 0.74.0: o que apareceu na varredura de casa -----------------------------
+# --- 0.75.0: o que apareceu na varredura de casa -----------------------------
 
 ARP_DA_CASA = """
 Interface: 192.168.15.8 --- 0x4
@@ -1357,7 +1357,7 @@ Interface: 192.168.15.8 --- 0x4
 
 
 def test_broadcast_e_endereco_de_rede_nao_sao_dispositivos():
-    """A 0.74.0 listava `192.168.15.255` como "dispositivo que respondeu"."""
+    """A 0.75.0 listava `192.168.15.255` como "dispositivo que respondeu"."""
     assert C._endereco_de_dispositivo("192.168.15.22", "8c:77:12:dd:ee:ff") is True
     assert C._endereco_de_dispositivo("192.168.15.255", "ff:ff:ff:ff:ff:ff") is False
     assert C._endereco_de_dispositivo("192.168.15.0", "01:00:5e:00:00:fb") is False
@@ -1412,7 +1412,7 @@ def test_a_frase_dos_aparelhos_na_rede_chega_na_skill(tmp_path):
     assert pesquisar("status do celular", entradas)[0]["entrada"].skill_id == "celular.status"
 
 
-# --- 0.74.0: o A34 provou a porta; o J7 não apareceu -------------------------
+# --- 0.75.0: o A34 provou a porta; o J7 não apareceu -------------------------
 
 A34 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R58M9\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-A346B"
 J7 = "OK\tUSB\tUSB Composite Device\tUSB\\VID_04E8&PID_6860\\R28M1\tSamsung Electronics Co., Ltd.\tCM_PROB_NONE\tSM-G610M"
@@ -1509,7 +1509,7 @@ def test_a_memoria_da_porta_aparece_tambem_quando_ha_dispositivo_generico(ligado
     assert "porta já viu um Samsung" in resposta["proximo_passo"]
 
 
-# --- 0.74.0: histórico do Windows e vigia atenta -----------------------------
+# --- 0.75.0: histórico do Windows e vigia atenta -----------------------------
 
 EVENTOS = (
     "09:27:26\t400\tMicrosoft-Windows-Kernel-PnP\tDevice USB\\ROOT_HUB\\1 was configured\n"
@@ -1575,7 +1575,7 @@ def _ps1() -> str:
 
 
 def test_vigia_atenta_usa_modo_evento_e_nao_intervalo_curto():
-    """A 0.74.0 pedia 400 ms, mas a consulta levava 4,7 s: o modo atento nao existia."""
+    """A 0.75.0 pedia 400 ms, mas a consulta levava 4,7 s: o modo atento nao existia."""
     from pathlib import Path as _Path
 
     raiz = _Path(__file__).resolve().parents[2]
@@ -1621,7 +1621,7 @@ def test_vigia_grava_log_e_diz_onde():
     assert "storage\\celular" in ps1
 
 
-# --- 0.74.0: o ruido do leitor de cartao escondia o que interessava ----------
+# --- 0.75.0: o ruido do leitor de cartao escondia o que interessava ----------
 
 def test_vigia_atenta_filtra_o_que_nao_e_aparelho():
     """Um leitor de cartao gera 5 linhas por evento; o celular e o que importa."""
@@ -1657,7 +1657,7 @@ def test_sinal_de_vida_nao_diz_que_nada_mudou_quando_algo_mudou():
     assert "Nesta sessao: {0} evento(s) de USB, {1} de aparelho" in ps1
 
 
-# --- 0.74.0: a porta que oscila ---------------------------------------------
+# --- 0.75.0: a porta que oscila ---------------------------------------------
 
 def test_vigia_detecta_dispositivo_que_fica_entrando_e_saindo():
     """O leitor de cartao entrou 5 vezes na sessao: isso e a porta, nao o celular."""
@@ -1685,7 +1685,7 @@ def test_oscilacao_conta_nos_dois_modos():
     assert ps1.count("Contar-Entrada $item") == 2  # evento e consulta
 
 
-# --- 0.74.0: o celular aparece por MTP (WPD) e fala portugues ---------------
+# --- 0.75.0: o celular aparece por MTP (WPD) e fala portugues ---------------
 
 WPD_PT = {
     "status": "OK",
@@ -1739,7 +1739,7 @@ def test_o_plano_com_mtp_manda_usar_mouse_otg_quando_o_toque_morre():
     assert "Depuração USB" in comandos
 
 
-# --- 0.74.0: o PC como teclado (sem OTG, sem mouse) -------------------------
+# --- 0.75.0: o PC como teclado (sem OTG, sem mouse) -------------------------
 
 def test_otg_lista_os_passos_mesmo_sem_scrcpy(ligado):
     """Sem scrcpy instalado ainda dá para explicar o caminho."""
@@ -1791,7 +1791,7 @@ def test_o_bat_do_teclado_existe_e_nao_tem_acento():
     texto = bruto.decode("utf-8")
     assert "--otg" in texto
     assert "chcp 65001" in texto
-    # 0.74.0: o passo antigo mandava puxar a barra de notificacao no celular —
+    # 0.75.0: o passo antigo mandava puxar a barra de notificacao no celular —
     # impossivel com a tela sem toque. Agora o .bat diz o contrario.
     assert "NAO precisa mexer na tela" in texto
     assert "puxe a barra" not in texto
@@ -2039,7 +2039,7 @@ def test_o_bat_da_sonda_oferece_o_modo_de_espera_so_quando_nao_acha():
     assert "set /p RESP=" in texto
 
 
-# --------------------------------------------------------------- cartão (0.74.0)
+# --------------------------------------------------------------- cartão (0.75.0)
 
 
 def test_cartao_aponta_o_resgate_e_os_passos(ligado):

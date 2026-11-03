@@ -604,7 +604,7 @@ def test_rota_lista_receitas_sem_skill_criada(tmp_path):
 def test_doc_descreve_o_agente_local():
     raiz = Path(__file__).resolve().parents[2]
     texto = (raiz / "docs" / "AGENTE-LOCAL.md").read_text(encoding="utf-8")
-    assert "314 skills" in texto
+    assert "315 skills" in texto
     assert "escreve código novo" in texto
     assert "storage/agente-local/skills.json" in texto
     assert "minhas skills locais" in texto
@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 314 skills, uma por uma
+# ------------------------------------- cobertura: as 315 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -858,7 +858,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 314 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 315 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem
@@ -2787,3 +2787,58 @@ def test_pedido_de_conserto_vai_para_as_skills_de_conserto() -> None:
     assert _pedido_direto_de_conserto("deu erro no site que abri") is None
     assert _pedido_direto_de_conserto("erro 500 no site do banco") is None
     assert _pedido_direto_de_conserto("arruma o pc") is None
+
+
+def test_modelo_local_pelas_frases_do_chat():
+    """“dá para rodar a IA sem chave?” tem de virar estado, não busca na web."""
+    from server.agente_local import _pedido_direto_de_ia_local
+
+    # Pergunta: só olha, não mexe em arquivo.
+    pergunta = _pedido_direto_de_ia_local("posso rodar a ia local no pendrive?")
+    assert pergunta["skill_id"] == "ia.local"
+    assert pergunta["parametros"]["acao"] == "estado"
+    assert pergunta["confirma"] is False
+    assert _pedido_direto_de_ia_local("qual modelo local eu tenho?")["parametros"]["acao"] == "estado"
+    assert _pedido_direto_de_ia_local("o que é gguf")["parametros"]["acao"] == "estado"
+
+    # Ação: pede confirmação, porque escreve arquivo.
+    baixar = _pedido_direto_de_ia_local("baixa o modelo local para mim")
+    assert baixar["parametros"]["acao"] == "baixar"
+    assert baixar["confirma"] is True
+    ligar = _pedido_direto_de_ia_local("liga o modelo local")
+    assert ligar["parametros"]["acao"] == "ligar"
+    assert ligar["confirma"] is True
+    desligar = _pedido_direto_de_ia_local("desliga o modelo local")
+    assert desligar["parametros"]["acao"] == "desligar"
+    assert desligar["confirma"] is True
+
+    # Fora do assunto: não sequestra a frase.
+    assert _pedido_direto_de_ia_local("desliga o pc") is None
+    assert _pedido_direto_de_ia_local("liga o ventilador") is None
+    assert _pedido_direto_de_ia_local("atualiza o jarvis") is None
+    assert _pedido_direto_de_ia_local("qual a previsão do tempo") is None
+
+
+def test_resposta_do_modelo_local_no_chat_mostra_o_proximo_passo():
+    from server.agente_local import _formatar_ia_local
+
+    sem_modelo = {
+        "local": True,
+        "modelos": [],
+        "resumo": "Modelo local configurado em http://127.0.0.1:8080/v1, mas não há arquivo .gguf.",
+    }
+    texto = _formatar_ia_local(sem_modelo)
+    assert "não há arquivo .gguf" in texto
+
+    ligado = {
+        "ligado": True,
+        "porta_aberta": False,
+        "resumo": "Configuração escrita (x.gguf em 127.0.0.1), mas nada está escutando.",
+        "reiniciar": "Feche a API no X e rode iniciar-jarvis.bat.",
+    }
+    texto = _formatar_ia_local(ligado)
+    assert "nada está escutando" in texto
+    assert "iniciar-jarvis.bat" in texto
+
+    # Resultado de outra skill não é formatado como modelo local.
+    assert _formatar_ia_local({"aplicado": True}) is None

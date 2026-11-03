@@ -127,7 +127,7 @@ class EstacaoAutomacaoRequest(BaseModel):
 def _avisar_versao_nova(parar: threading.Event) -> threading.Thread:
     """Uma checagem só, ao subir — e só se a checagem automática estiver ligada.
 
-    Baixa apenas o `manifest.json` (~56 KB) e compara hash por hash. O aviso
+    Baixa apenas o `manifest.json` (~57 KB) e compara hash por hash. O aviso
     também aparece no topo da tela; aqui é para quem olha o terminal e para o
     caso de a tela estar fechada. Nada é baixado nem aplicado: só o aviso.
     """
@@ -317,7 +317,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.74.0",
+        version="0.75.0",
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -415,7 +415,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.74.0",
+            "version": "0.75.0",
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             # Respondido por origem: o front esconde o campo de token quando é True.

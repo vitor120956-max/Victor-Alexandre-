@@ -1150,7 +1150,7 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 
-/* 0.74.0 — aviso de versão nova (atualização delta) */
+/* 0.75.0 — aviso de versão nova (atualização delta) */
 .update-banner {
   display: flex;
   align-items: center;

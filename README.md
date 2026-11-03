@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.74.0.**
+**Versão atual: 0.75.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,7 +44,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 314, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido, o JARVIS procura a skill certa nas 315, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Correio sem entrar na conta:** exporte sua caixa (Takeout ou “Baixar mensagem” do Gmail) e ponha em `storage/correio`: `filtra meus e-mails por importância` classifica por regra determinística — **intimação/processo** (100), **fatura/boleto** (85, +10 se vence em até 7 dias), **governo** (75), **segurança** (70), **pessoal** (45), **newsletter** (5) — e ordena; `analisa meus e-mails enviados` mede o seu estilo (saudação, fecho, assinatura, tamanho, listas); `escreve um e-mail para a Ana sobre o relatório: enviar planilha; pedir retorno` monta o rascunho nesse estilo. **Não marca como lido e não envia.** Para o JARVIS ler a caixa *por programa* seria preciso OAuth; mas, com você já logado no navegador do seu PC, ele abre o Gmail pela tela (`mesa.*`, com a sua autorização) e `abre o gmail com as faturas` devolve a busca já filtrada para a sua sessão — sem chave e sem nada sair da máquina. Em [`docs/CORREIO.md`](docs/CORREIO.md).
 
@@ -101,9 +101,9 @@ fazer qualquer coisa, rode **`consertar-arquivos.bat`**: copiar o `D:\JARVIS>` d
 prompt junto com o comando faz o `>` **zerar** o arquivo. Em
 [`docs/PENDRIVE.md`](docs/PENDRIVE.md) §14 e §15.
 
-**Atualização que baixa só o que mudou (0.74.0).** Em vez de 3,5 MB e 464 arquivos
+**Atualização que baixa só o que mudou (0.75.0).** Em vez de 3,5 MB e 472 arquivos
 a cada versão, o `atualizar.bat` agora começa pelo caminho delta: baixa **apenas o
-`manifest.json`** (~56 KB), compara o `sha256` arquivo por arquivo e puxa só os que
+`manifest.json`** (~57 KB), compara o `sha256` arquivo por arquivo e puxa só os que
 divergem — numa versão típica, uns poucos arquivos e centenas de KB (**~1% do
 zip**). Cada arquivo baixado é conferido contra o hash antes de entrar no palco em
 `storage/atualizacao/<versão>/`; palco com falha não aplica. Aplicar guarda o que
@@ -118,6 +118,20 @@ com **Baixar só o que mudou** e **Aplicar e reiniciar**. No chat: “tem versã
 nova?” só checa, “atualiza o jarvis” baixa, “aplica a atualização” aplica — e
 “atualizar o Windows” **não** cai aqui. Em
 [`docs/ATUALIZACAO.md`](docs/ATUALIZACAO.md).
+
+**IA local sem chave, dentro do pendrive (0.75.0).** Até a 0.74.0 o servidor pedia
+`JARVIS_AI_API_KEY` **até para `127.0.0.1`** — e isso reprovava justamente quem
+queria rodar tudo do pendrive, sem conta em lugar nenhum. Agora endereço desta
+máquina (`127.0.0.1`, `localhost`, `[::1]`, `0.0.0.0`, `host.docker.internal`) é
+aceito sem chave, e o cabeçalho `Authorization` só vai quando há chave. A skill
+**`ia.local`** confere o que existe em `storage/modelo-local`, baixa um `.gguf`
+(conferindo espaço e um limite de tamanho antes de gastar dados) e escreve as três
+linhas no `.env`, sempre com cópia do antigo — `desligar` devolve como era. No
+chat: “posso rodar a ia local no pendrive?”, “baixa o modelo local”, “liga o modelo
+local”. O `modelo-local.ps1` mostra progresso de verdade no download de 1–2 GB e
+espera a porta do `llama-server` responder. O que é honesto saber: **pendrive não
+é memória** — o `.gguf` é lido do disco e carregado na RAM a cada resposta; o
+programa roda do pendrive, o cálculo não. Em [`docs/IA-LOCAL.md`](docs/IA-LOCAL.md).
 
 ### Em desenvolvimento
 
@@ -581,7 +595,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **314 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **315 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -702,7 +716,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.74.0", "skills": 314}`.
+`{"version": "0.75.0", "skills": 315}`.
 
 ## Verificações
 
@@ -793,7 +807,7 @@ server/
 ├── processos.py             # o que está rodando: veredito, comando e desfazer
 ├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
 ├── limpeza.py               # debloat: app de loja, tarefa, serviço e cache — só gera plano
-├── skill_registry.py        # allowlist, Pydantic e 314 skills
+├── skill_registry.py        # allowlist, Pydantic e 315 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

@@ -36,7 +36,7 @@ from typing import Any
 
 from . import dados as dados_locais
 
-VERSAO = "0.74.0"
+VERSAO = "0.75.0"
 
 ARQUIVO = "agenda.json"
 MAX_ITENS = 2_000

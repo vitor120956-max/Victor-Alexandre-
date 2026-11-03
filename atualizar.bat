@@ -59,7 +59,7 @@ if not errorlevel 1 echo   ATENCAO: as dependencias Python mudaram - veja o fim 
 goto terminou
 
 REM ===========================================================================
-REM  Sem Git (instalado pelo zip). 0.74.0: primeiro tenta o caminho DELTA, que
+REM  Sem Git (instalado pelo zip). 0.75.0: primeiro tenta o caminho DELTA, que
 REM  baixa so o manifest.json (56 KB) e so os arquivos que mudaram. Se falhar por
 REM  qualquer motivo (rede, .venv ausente, arquivo estranho), cai no zip inteiro
 REM  abaixo - que continua sendo o plano B, nao o unico plano.

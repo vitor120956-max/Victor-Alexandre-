@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.parse import urlsplit
 from typing import Any, Protocol
 
 import httpx
@@ -31,23 +32,40 @@ class AIProvider(Protocol):
     async def generate(self, request: AIRequest) -> str: ...
 
 
+def e_local(url: str) -> bool:
+    """O endereço é desta máquina? Então é modelo local, não provedor de nuvem.
+
+    Modelo local (llama.cpp, Ollama, LM Studio) não tem chave: exigir uma era o
+    que impedia de usar o `.venv` do pendrive sem conta em lugar nenhum.
+    """
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in {"127.0.0.1", "localhost", "::1", "0.0.0.0", "host.docker.internal"}
+
+
 class OpenAICompatibleProvider:
     def __init__(self) -> None:
         self.api_key = os.getenv("JARVIS_AI_API_KEY", "").strip()
         self.base_url = os.getenv("JARVIS_AI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
         self.model = os.getenv("JARVIS_AI_MODEL", "gpt-4o-mini").strip()
-        self.provider_name = os.getenv("JARVIS_AI_PROVIDER", "OpenAI-compatible").strip()
+        self.local = e_local(self.base_url)
+        padrao = "Modelo local (llama.cpp/Ollama)" if self.local else "OpenAI-compatible"
+        self.provider_name = os.getenv("JARVIS_AI_PROVIDER", padrao).strip() or padrao
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key and self.model and self.base_url)
+        # Local dispensa chave; remoto, não: sem chave o pedido só tomaria 401.
+        return bool(self.model and self.base_url and (self.api_key or self.local))
 
     def status(self) -> dict[str, Any]:
         return {
             "configured": self.configured,
             "provider": self.provider_name,
             "model": self.model if self.configured else None,
-            "external": True,
+            "external": not self.local,
+            "local": self.local,
         }
 
     async def generate(self, request: AIRequest) -> str:
@@ -77,7 +95,9 @@ class OpenAICompatibleProvider:
             messages.append({"role": "assistant" if item.role == "jarvis" else "user", "content": item.content})
         messages.append({"role": "user", "content": request.message})
 
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         payload = {"model": self.model, "messages": messages, "temperature": 0.3, "max_tokens": request.max_tokens}
         # Geração longa precisa de mais tempo que uma resposta de conversa.
         limite = 45.0 if request.max_tokens <= 800 else 150.0

@@ -61,3 +61,79 @@ def test_provider_errors_do_not_include_response_or_key(monkeypatch: pytest.Monk
     assert "401" in str(error.value)
     assert "test-key" not in str(error.value)
     assert "choices" not in str(error.value)
+
+
+# ------------------------------------------------- modelo local (offline)
+
+def test_modelo_local_sem_chave_fica_configurado(monkeypatch: pytest.MonkeyPatch):
+    """Pendrive sem conta: llama.cpp em 127.0.0.1 não tem chave — e funciona."""
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.delenv("JARVIS_AI_PROVIDER", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "qwen2.5-1.5b-instruct-q4_k_m.gguf")
+    provedor = OpenAICompatibleProvider()
+    assert provedor.configured is True
+    status = provedor.status()
+    assert status["local"] is True
+    assert status["external"] is False
+    assert "local" in status["provider"].lower()
+
+
+def test_servidor_remoto_sem_chave_continua_desconfigurado(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "llama-3.3-70b-versatile")
+    provedor = OpenAICompatibleProvider()
+    assert provedor.configured is False
+    assert provedor.status()["local"] is False
+
+
+def test_sem_modelo_nao_adianta_ser_local(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "http://localhost:8080/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "")
+    assert OpenAICompatibleProvider().configured is False
+
+
+def test_local_nao_manda_cabecalho_de_autorizacao_vazio(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-local")
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeClient)
+
+    provedor = OpenAICompatibleProvider()
+    asyncio.run(provedor.generate(AIRequest(message="oi")))
+    assert FakeClient.last is not None
+    cabecalhos = FakeClient.last.calls[0]["headers"]
+    assert "Authorization" not in cabecalhos
+    assert cabecalhos["Content-Type"] == "application/json"
+
+
+def test_remoto_com_chave_manda_autorizacao(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("JARVIS_AI_API_KEY", "gsk_de_teste")
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "llama-3.3-70b-versatile")
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeClient)
+
+    provedor = OpenAICompatibleProvider()
+    asyncio.run(provedor.generate(AIRequest(message="oi")))
+    assert FakeClient.last is not None
+    assert FakeClient.last.calls[0]["headers"]["Authorization"] == "Bearer gsk_de_teste"
+
+
+@pytest.mark.parametrize(
+    "url, esperado",
+    [
+        ("http://127.0.0.1:8080/v1", True),
+        ("http://localhost:11434/v1", True),
+        ("http://[::1]:8080/v1", True),
+        ("https://127.0.0.1:8080/v1", True),
+        ("https://api.groq.com/openai/v1", False),
+        ("http://192.168.0.10:8080/v1", False),  # outro PC da rede não é "local"
+        ("nao e url", False),
+    ],
+)
+def test_e_local_reconhece_so_o_endereco_da_propria_maquina(url: str, esperado: bool):
+    from server.ai import e_local
+
+    assert e_local(url) is esperado

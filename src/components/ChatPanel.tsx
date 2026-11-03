@@ -47,7 +47,7 @@ export function ChatPanel({ full = false }: { full?: boolean }) {
       <header className="chat-header">
         <div className="chat-identity">
           <span className="assistant-avatar"><Sparkles size={17} /></span>
-          <div><strong>Conversa</strong><span><i /> {!backendOnline ? 'Modo navegador' : aiStatus.configured && preferences.aiEnabled ? `${aiStatus.provider} + skills` : 'Skills locais + Python'}</span></div>
+          <div><strong>Conversa</strong><span><i /> {!backendOnline ? 'Modo navegador' : aiStatus.configured && preferences.aiEnabled ? `${aiStatus.provider}${aiStatus.local ? ' (offline)' : ''} + skills` : 'Skills locais + Python'}</span></div>
         </div>
         {full ? (
           <button className="icon-button" onClick={clearMessages} disabled={Boolean(processing)} aria-label="Limpar conversa" title="Limpar conversa"><Trash2 size={17} /></button>

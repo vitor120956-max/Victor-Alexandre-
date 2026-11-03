@@ -1950,7 +1950,7 @@ _RE_ATUALIZAR_DE_FORA = re.compile(
 def _pedido_direto_de_atualizacao(termo: str) -> dict[str, Any] | None:
     """“tem versão nova”, “atualiza o jarvis”, “baixa só o que mudou”, “aplica”.
 
-    Três ações diferentes, e a diferença importa: ver custa 56 KB e não muda nada;
+    Três ações diferentes, e a diferença importa: ver custa 57 KB e não muda nada;
     baixar ocupa alguns KB no palco; aplicar troca arquivo e pede reinício.
     """
     texto = normalizar(termo)
@@ -1984,6 +1984,61 @@ def _pedido_direto_de_atualizacao(termo: str) -> dict[str, Any] | None:
         "skill_id": "atualizacao.verificar",
         "nome": "Checar atualização (só o manifesto)",
         "parametros": {"forcar": True},
+        "confirma": False,
+    }
+
+
+_RE_IA_LOCAL_ASSUNTO = re.compile(
+    r"\b(?:modelo local|ia local|intelig[êe]ncia local|c[ée]rebro local|llama(?:\.cpp|-server)?"
+    r"|gguf|ia offline|ia sem chave|rodar a ia (?:aqui|sem))\b",
+    re.I,
+)
+_RE_IA_LOCAL_BAIXAR = re.compile(r"\b(?:baixa\w*|baixe|puxa\w*|puxe|traz|traga|baixar)\b", re.I)
+_RE_IA_LOCAL_LIGAR = re.compile(r"\b(?:liga\w*|ligue|ativa\w*|ative|aponta\w*|use)\b", re.I)
+_RE_IA_LOCAL_DESLIGAR = re.compile(r"\b(?:desliga\w*|desligue|desativa\w*|desative|volta\w*|volte)\b", re.I)
+# "desliga o PC", "liga o ventilador": a frase não é sobre a IA, mesmo que cite modelo.
+_RE_IA_LOCAL_DE_FORA = re.compile(
+    r"\b(?:pc|computador|monitor|ventilador|ar[- ]condicionado|luz|tv|televis[ãa]o)\b", re.I
+)
+
+
+def _pedido_direto_de_ia_local(termo: str) -> dict[str, Any] | None:
+    """“dá para rodar a IA sem chave?”, “baixa o modelo local”, “liga o modelo”.
+
+    A pergunta é estado (não muda nada); baixar e ligar mexem em arquivo e por
+    isso pedem confirmação. `desligar` existe para o caminho de volta — sem ele,
+    “experimentar o modelo local” seria decisão sem retorno.
+    """
+    texto = normalizar(termo)
+    if not texto or not _RE_IA_LOCAL_ASSUNTO.search(texto):
+        return None
+    if _RE_IA_LOCAL_DE_FORA.search(texto):
+        return None
+    if _RE_IA_LOCAL_DESLIGAR.search(texto):
+        return {
+            "skill_id": "ia.local",
+            "nome": "Rodar a IA sem chave (modelo local)",
+            "parametros": {"acao": "desligar"},
+            "confirma": True,
+        }
+    if _RE_IA_LOCAL_BAIXAR.search(texto):
+        return {
+            "skill_id": "ia.local",
+            "nome": "Rodar a IA sem chave (modelo local)",
+            "parametros": {"acao": "baixar"},
+            "confirma": True,
+        }
+    if _RE_IA_LOCAL_LIGAR.search(texto):
+        return {
+            "skill_id": "ia.local",
+            "nome": "Rodar a IA sem chave (modelo local)",
+            "parametros": {"acao": "ligar"},
+            "confirma": True,
+        }
+    return {
+        "skill_id": "ia.local",
+        "nome": "Rodar a IA sem chave (modelo local)",
+        "parametros": {"acao": "estado"},
         "confirma": False,
     }
 
@@ -2859,6 +2914,10 @@ def formatar_resultado(resultado: Any) -> str:
     if especial is not None:
         return especial
 
+    especial = _formatar_ia_local(resultado)
+    if especial is not None:
+        return especial
+
     especial = _formatar_conserto(resultado)
     if especial is not None:
         return especial
@@ -2982,6 +3041,28 @@ def _formatar_atualizacao(resultado: dict[str, Any]) -> str | None:
         f"Última checagem: {resultado.get('ultima_checagem') or 'nunca'}",
         "Palco pronto: " + (", ".join(resultado.get("palcos_prontos") or []) or "nenhum"),
     ])
+
+
+def _formatar_ia_local(resultado: dict[str, Any]) -> str | None:
+    """Estado, download e configuração do modelo local — em texto curto."""
+    if not ({"local", "modelos", "baixado", "ligado", "desligado"} & set(resultado)):
+        return None
+    if resultado.get("resumo"):
+        linhas = [str(resultado["resumo"])]
+    else:
+        linhas = []
+    achados = resultado.get("modelos") or []
+    if achados and not resultado.get("resumo"):
+        linhas.append("Modelos na pasta:")
+        for item in achados[:5]:
+            linhas.append(f"- {item.get('nome')} ({max(1, round((item.get('bytes') or 0) / (1024 * 1024)))} MB)")
+    if resultado.get("reiniciar"):
+        linhas.append(str(resultado["reiniciar"]))
+    if resultado.get("caminho") and resultado.get("baixado"):
+        linhas.append(f"Arquivo: `{resultado['caminho']}`")
+    if resultado.get("porta_aberta") is False and resultado.get("ligado"):
+        linhas.append("(a configuração está escrita; falta subir o llama-server)")
+    return "\n".join(linhas)[:LIMITE_RESPOSTA] if linhas else None
 
 
 def _formatar_conserto(resultado: dict[str, Any]) -> str | None:
@@ -4007,6 +4088,10 @@ async def _resolver(
     # 0b8d. Atualização delta: ver, baixar só o que mudou, aplicar.
     if direto is None:
         direto = _pedido_direto_de_atualizacao(termo)
+
+    # 0b8e. Modelo local: o cérebro sem chave, dentro do pendrive.
+    if direto is None:
+        direto = _pedido_direto_de_ia_local(termo)
 
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:

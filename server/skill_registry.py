@@ -30,6 +30,7 @@ from . import agenda as agenda_local
 from . import estudo as estudo_local
 from . import portatil as portatil_local
 from . import atualizacao as atualizacao_local
+from . import ia_local as ia_local_mod
 from . import conserto as conserto_local
 from . import limpeza as limpeza_local
 from . import arrumar as arrumar_local
@@ -462,6 +463,17 @@ class ArrumarInput(BaseModel):
         "description": "Inclui Xbox, Teams, Search, Superfetch e hibernação — todos reversíveis. WinSxS, Windows.old, Installer e Prefetch continuam fora."
     })
     ponto_de_restauracao: bool = Field(default=True, title="Criar ponto de restauração antes")
+
+
+class IALocalInput(BaseModel):
+    acao: str = Field(default="estado", title="Ação", pattern="^(estado|baixar|ligar|desligar)$",
+                      json_schema_extra={"description": "estado (só olha), baixar (traz um .gguf), ligar (aponta o .env para ele) ou desligar (volta o .env)."})
+    url: str = Field(default="", max_length=500, title="Endereço do .gguf",
+                     json_schema_extra={"description": "Só para acao=baixar. Precisa ser http(s) e terminar em .gguf."})
+    nome: str = Field(default="", max_length=120, title="Nome do arquivo",
+                      json_schema_extra={"description": "Opcional em baixar; em ligar, o modelo a usar (padrão: o maior da pasta)."})
+    base: str = Field(default="http://127.0.0.1:8080/v1", max_length=200, title="Endereço do servidor local",
+                      json_schema_extra={"description": "Só para acao=ligar. Precisa ser desta máquina (127.0.0.1, localhost)."})
 
 
 class AtualizacaoVerificarInput(BaseModel):
@@ -4972,6 +4984,25 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         )
         return {**resultado, "plano_resumo": plano.get("resumo", "")}
 
+    def ia_local_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # Modelo local não pede chave: é a IA que roda dentro do pendrive.
+        entrada = data  # IALocalInput
+        try:
+            if entrada.acao == "baixar":
+                if not entrada.url:
+                    raise ValueError("para baixar, informe a url do arquivo .gguf")
+                return ia_local_mod.baixar(entrada.url, nome=entrada.nome)
+            if entrada.acao == "ligar":
+                return ia_local_mod.ligar(base=entrada.base, modelo=entrada.nome)
+            if entrada.acao == "desligar":
+                return ia_local_mod.desligar()
+            return ia_local_mod.estado()
+        except (ValueError, OSError) as exc:
+            # Recusa esperada (URL errada, disco cheio, endereço de outro PC)
+            # vira `SkillError`: a API mostra a frase, em vez do genérico
+            # "nenhum detalhe interno foi exposto", que não ajuda ninguém.
+            raise SkillError(str(exc)) from exc
+
     def atualizacao_estado_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         return atualizacao_local.estado()
 
@@ -5538,9 +5569,13 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("maquina.arrumar", "Arrumar a máquina agora", "Os braços. Em vez de entregar um .bat para você ler e rodar, executa a limpeza das sobras: fecha processo inútil (devolve RAM), remove app de loja sem uso, desativa tarefa de telemetria e serviço que ninguém usa, limpa cache e lixeira. Só o veredito 'sobra' é tocado — driver (NVIDIA Container), essencial (Store, VCLibs, Segurança) e o que depende do seu uso (Xbox, WinSxS, hibernação) nunca entram. Antes de encerrar um processo confere se o PID ainda é o mesmo; grava cada ação com comando e desfazer em storage/limpezas/. Exige JARVIS_HOST_ARRUMAR=1 e confirmação.", "Máquina", ArrumarInput, maquina_arrumar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("maquina.desfazer", "Desfazer a última limpeza", "Relê o último diário de `maquina.arrumar` e reverte o que tem volta: religa serviço e tarefa no modo original e reinstala app de loja pela Store. Processo fechado e cache apagado não voltam — o relatório diz exatamente o que ficou sem retorno. Exige confirmação.", "Máquina", DesfazerInput, maquina_desfazer_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("atualizacao.estado", "Há versão nova?", "Lê o registro da última checagem e do último palco: sua versão, a versão remota vista, quantos arquivos faltavam e quais pacotes já estão baixados e conferidos em `storage/atualizacao/`. Não acessa a rede — para checar agora, `atualizacao.verificar`.", "Atualização", EmptyInput, atualizacao_estado_handler, timeout_seconds=10),
-        SkillDefinition("atualizacao.verificar", "Checar atualização (só o manifesto)", "Baixa **apenas o `manifest.json`** (~56 KB) do GitHub, calcula o sha256 dos arquivos locais e diz o que mudou — arquivo por arquivo, com tamanho. Em vez de comparar versão por número, compara conteúdo: dois arquivos iguais não voltam. Não baixa o código e não altera nada; grava só a data da checagem em `storage/atualizacao/estado.json`.", "Atualização", AtualizacaoVerificarInput, atualizacao_verificar_handler, timeout_seconds=120),
+        SkillDefinition("atualizacao.verificar", "Checar atualização (só o manifesto)", "Baixa **apenas o `manifest.json`** (~57 KB) do GitHub, calcula o sha256 dos arquivos locais e diz o que mudou — arquivo por arquivo, com tamanho. Em vez de comparar versão por número, compara conteúdo: dois arquivos iguais não voltam. Não baixa o código e não altera nada; grava só a data da checagem em `storage/atualizacao/estado.json`.", "Atualização", AtualizacaoVerificarInput, atualizacao_verificar_handler, timeout_seconds=120),
         SkillDefinition("atualizacao.preparar", "Baixar só o que mudou", "Baixa cada arquivo alterado (não o zip inteiro) para `storage/atualizacao/<versão>/`, conferindo o sha256 de cada um contra o manifesto. Arquivo que não confere é recusado — nada é aplicado. Numa versão típica são poucos arquivos e centenas de KB em vez de 3,5 MB.", "Atualização", EmptyInput, atualizacao_preparar_handler, side_effects=True, dry_run_supported=False, requires_confirmation=True, timeout_seconds=600),
         SkillDefinition("atualizacao.aplicar", "Aplicar e reiniciar", "Copia o palco conferido por cima do projeto, guardando cada arquivo substituído em `storage/atualizacao/backup-<data>/`. Exige confirmação e um palco sem falhas. Depois de aplicar, a API precisa reiniciar — o código novo está no disco, mas o processo em memória continua o antigo.", "Atualização", AtualizacaoAplicarInput, atualizacao_aplicar_handler, side_effects=True, dry_run_supported=False, requires_confirmation=True, timeout_seconds=300),
+        SkillDefinition("ia.local",
+                       "Rodar a IA sem chave (modelo local)",
+                       "O cérebro que não depende de conta nem de internet: confere se há um modelo `.gguf` na pasta, baixa um endereço que você passe (conferindo espaço livre e um limite de tamanho antes de gastar dados) e escreve no `.env` as três linhas que apontam o JARVIS para o `llama-server` em 127.0.0.1. Desde a 0.75.0 modelo local **não pede chave** — antes pedia, e era o que travava o uso no pendrive. Avisos honestos: mais lento que a nuvem, e o `.gguf` é lido do disco e carregado na RAM a cada resposta (pendrive serve de armazenamento, não de memória).",
+                       "IA", IALocalInput, ia_local_handler, timeout_seconds=900),
         SkillDefinition("conserto.diagnosticar", "Onde quebrou e por quê", "Lê o último erro interno do diário (`storage/erros.jsonl`) — ou um traceback que você cole — e diz o arquivo, a linha, a função, o trecho do código em volta, a causa classificada por regra (permissão, arquivo ausente, chave ausente, codificação, rede, timeout…) e se aquele módulo tem teste. Não escreve nada e não chama modelo: é leitura pura sobre o erro que já aconteceu.", "Conserto", ConsertoErroInput, conserto_diagnosticar_handler, timeout_seconds=20),
         SkillDefinition("conserto.dossie", "O dossiê para corrigir de primeira", "Junta o erro, o trecho do código com número de linha, a docstring que diz para que o módulo serve, o teste existente e as guardas do projeto num texto único. É o que faz a correção sair em uma tentativa em vez de dez — para você, para mim ou para um modelo. Só lê e monta texto.", "Conserto", ConsertoErroInput, conserto_dossie_handler, timeout_seconds=20),
         SkillDefinition("conserto.propor", "Propor o patch do erro", "Pede a um modelo (o mesmo provedor de `JARVIS_AI_API_KEY`) um diff unificado a partir do dossiê, e devolve o diff já passando pela régua do `evoluir.*`: o diff aplica, qual o risco e quais guardas ele viola. Não escreve nada no código — quem ensaia é `evoluir.ensaiar` (numa cópia, rodando a suíte real) e quem aplica é `evoluir.promover`, com token. Sem chave, recusa em vez de inventar correção.", "Conserto", ConsertoProporInput, conserto_propor_handler, side_effects=True, requires_confirmation=True, timeout_seconds=120),

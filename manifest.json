@@ -1,6 +1,6 @@
 {
- "versao": "0.74.0",
- "gerado": "2026-11-02T00:45:16+00:00",
+ "versao": "0.75.0",
+ "gerado": "2026-11-03T01:04:13+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -222,16 +222,20 @@
    "sha256": "8ecbbb9b1bb5fce8507b36842b4d4cbef24d7fff6c7b64a2382cc1853c23f10a",
    "bytes": 7753
   },
+  "NOVO-0.75.0.md": {
+   "sha256": "4c771be15e27c49610fc0f2f91d2cc5f1bb0c5fab896e5298413ef4f42abaabb",
+   "bytes": 5517
+  },
   "README.md": {
-   "sha256": "d2215642c8fffa6616e11f57ead49fde719792140efda236703eb55397214c6c",
-   "bytes": 112318
+   "sha256": "c50d337a3f200d2cee153281e7a390b6b907a1a85194a3f4236c78a92a56ed3f",
+   "bytes": 113412
   },
   "acesso-celular.bat": {
-   "sha256": "ddeb2582a855ce3f460e879f32084b5a987a0ff717431e8fa5ca402494c041c6",
+   "sha256": "16c74434a48ba0b6856d393a859fe6c1b89bf427d2bb87dc6a236e537ebc0862",
    "bytes": 692
   },
   "acesso-celular.ps1": {
-   "sha256": "cd521106e3fa931c5fcfc41c6fac0654ca15718c7dabbe4c8e9942f68aafad38",
+   "sha256": "76d931cae4559ff3e7e0109e18e82fbbe8ec9499529f6c04e8f7ad96c226223d",
    "bytes": 6147
   },
   "arrumar-pc.bat": {
@@ -243,7 +247,7 @@
    "bytes": 12588
   },
   "atualizar.bat": {
-   "sha256": "53c7c781789a64bed3fed9326a7de508c8aed8150c23b046fd4f0a2d83023add",
+   "sha256": "d58a0682b9f11b618293b72c3543421f2edb067239f942602bd49be449c838f1",
    "bytes": 7850
   },
   "configurar-celular.py": {
@@ -251,8 +255,8 @@
    "bytes": 5423
   },
   "configurar-chave.py": {
-   "sha256": "75d5e59b156a96eb9e5f5b88b400cd53e2df4aae27a465287583c3f8399b3384",
-   "bytes": 11456
+   "sha256": "f7d808639065338701453eec5360d8b8718b97dcb96b079bc58081c7dd6604ef",
+   "bytes": 11823
   },
   "consertar-arquivos.bat": {
    "sha256": "c69c6c4e6cbbcbcddd9caae36f83ccabd3075701e4c9a0903696f07563619a94",
@@ -275,11 +279,11 @@
    "bytes": 10109
   },
   "docs/AGENTE-LOCAL.md": {
-   "sha256": "3f4e11c30b4df70acb00697422e967ad12e26f900c6d33c159d7b180a31e8b00",
+   "sha256": "8910e421613b079f7d759f76306b82ca36db91961404a59841e6b40988bc8ff4",
    "bytes": 18869
   },
   "docs/AGENTES.md": {
-   "sha256": "0683ec358ecb9ccdb2e4917538c028642a6a7243f26089a4fc9479bf22ffcd89",
+   "sha256": "bae9937785850fc760555f9f5da53d28575044310d0adf3b8af45768b1cafd18",
    "bytes": 11183
   },
   "docs/ARQUITETURA.md": {
@@ -287,15 +291,15 @@
    "bytes": 45900
   },
   "docs/ATUALIZACAO.md": {
-   "sha256": "85b1fe9d7a8a1d8a6e64a6f38fcae91f20ce5de86c6847e4108805d15ce94ab9",
+   "sha256": "d7438b022697382693da74aadf36c9be060a5977be1c87a6a75abbdc1137fb10",
    "bytes": 6015
   },
   "docs/BIBLIOTECA.md": {
-   "sha256": "262f9af99daa183b75f0119616f16e92aedc69fb551845ae775ad102a1c5a77f",
-   "bytes": 12873
+   "sha256": "3757199ba59aeb86cfec89556d072579423078090e7531831c22dd39563c7582",
+   "bytes": 13305
   },
   "docs/CARREIRA.md": {
-   "sha256": "4b6c958e7512bfb7a3c9768f00cf55320c1e917b3cecf3f4d4f07f129a8fe06e",
+   "sha256": "c3feeb0193bbaa383bd453e65d384544fc86bc9c75ce4f7c406ee05c878d0db8",
    "bytes": 15170
   },
   "docs/CATALOGO.md": {
@@ -315,11 +319,11 @@
    "bytes": 14160
   },
   "docs/CONFIGURAR-IA.md": {
-   "sha256": "3a38c6a6011af7d587a2cc9701b671354382955a2fa713916bca4a1fa45ecba5",
-   "bytes": 12522
+   "sha256": "69debaecac0816a193401317c3a320036cb60aaba161e7fa55da8ea816ba2394",
+   "bytes": 14215
   },
   "docs/CONSERTO.md": {
-   "sha256": "7c4b2f3e31bdf176bc96f5810e053191f19ac4e70d6f738c7a40519f0c56d054",
+   "sha256": "51e83230224fc236ea18f243a95333b962684d748f5521928252b6ca413fe56d",
    "bytes": 6186
   },
   "docs/CONTEXTO.md": {
@@ -343,11 +347,11 @@
    "bytes": 12847
   },
   "docs/DIAGRAMAS.md": {
-   "sha256": "d219817cb0ac3cb892599fc07c205826e218441d1363a3c9bee00526bc8b7527",
+   "sha256": "4c7da8320c17d4335edfed7375c94be5bfc9b6f986657422f72345215802c142",
    "bytes": 27937
   },
   "docs/DIRECAO.md": {
-   "sha256": "d20a300b0100d614a8bb73e421f8f8a0b8f251debe93891c3f1a963228104cbb",
+   "sha256": "dd9828dbdbc7259cc3c57ae8bec916c9f0a5a2d1f878b88595592f1e89f85618",
    "bytes": 14892
   },
   "docs/DISTILAR.md": {
@@ -355,7 +359,7 @@
    "bytes": 11819
   },
   "docs/DOCUMENTOS-E-SKILLS.md": {
-   "sha256": "252284dc605bf42587b0bab92df823dfea7efe8c75b50f4808b30cfc0120f87f",
+   "sha256": "f2bcb1bbd550f44af347661cb9f8296ab879c51e71d4004e427edc2821eac605",
    "bytes": 19472
   },
   "docs/ENGENHARIA-REVERSA.md": {
@@ -375,7 +379,7 @@
    "bytes": 7760
   },
   "docs/ESTUDIO.md": {
-   "sha256": "8a11da1b983317e11e16a1c044fe9a02232399e73e84915373aef6c5a04db227",
+   "sha256": "c408f043369c4bdaaa43699da73e5835dab60820299fb595003697fb4b7a66dd",
    "bytes": 12523
   },
   "docs/EVOLUCAO.md": {
@@ -389,6 +393,10 @@
   "docs/HABILIDADES.md": {
    "sha256": "02186a3196a1d28e7dfba73b31eca4a3ef547bafac11d16283a6eac904521788",
    "bytes": 8208
+  },
+  "docs/IA-LOCAL.md": {
+   "sha256": "f9ad87ac4a6fe513b5d1adc69b4f106fcd868e45c9812ffb9e821b79337e45e7",
+   "bytes": 6471
   },
   "docs/INSTALADOR.md": {
    "sha256": "d9744e196bf15e7f0070ab3beefaf90ffd7e64ec95604ffa183256f12ab13fa1",
@@ -407,7 +415,7 @@
    "bytes": 4928
   },
   "docs/LIMPEZA.md": {
-   "sha256": "b808e1c628ba1fc5a13239eb9bc6236c0d6da3396a78d5bf497d928d059841ef",
+   "sha256": "fa825f3e01721de9a942c1ab7117970833a97ca72e1c039ecd0dd86cb7cf1bda",
    "bytes": 19367
   },
   "docs/MARKETING.md": {
@@ -427,7 +435,7 @@
    "bytes": 4587
   },
   "docs/PENDRIVE.md": {
-   "sha256": "08ea55cd2f7b349b3a697bdee117415cb59849579407ae5428f18069bfb7070b",
+   "sha256": "5f3830ced866b87e6b8b6ff7f51ed5c1745e4fd32d787efdaf78d485d1815eae",
    "bytes": 56508
   },
   "docs/PESQUISA.md": {
@@ -459,7 +467,7 @@
    "bytes": 12059
   },
   "docs/SISTEMA.md": {
-   "sha256": "a4eeff1160b4c6aa48045daa1dcb8092d2269d80213601aacee21932237ea083",
+   "sha256": "509b5611233fc696bd71ed5e95c9ce4a73c4d5796de53abdbb59fa711bb09301",
    "bytes": 22584
   },
   "docs/SUBMISSAO.md": {
@@ -559,11 +567,11 @@
    "bytes": 2552
   },
   "formatar-celular.bat": {
-   "sha256": "4707dcf6f12f282983f6377ec06b85be7c3853088a20c5cb522b514b06bced67",
+   "sha256": "f830fcf2cf3061abb9c96232e46b554eb8c7c16f6640587adf8e8e0090069499",
    "bytes": 1324
   },
   "formatar-celular.ps1": {
-   "sha256": "b4acb34194b2e6990e3cc0551aee482693a137e3d02d742877f0509af3fb7b67",
+   "sha256": "6eaf83e8107f1e6278c6c177250fb78c819f3d01a37a4bec5a86bc58d6c542b5",
    "bytes": 13112
   },
   "index.html": {
@@ -571,7 +579,7 @@
    "bytes": 547
   },
   "iniciar-jarvis.bat": {
-   "sha256": "2a280027eec033350165dd64e43b0af9184e3c932df4ac872fa7c532bc560e23",
+   "sha256": "8d4ae09386f3e1f44a092012b171133782df585d9b3dd9114753bac6799206be",
    "bytes": 4475
   },
   "iniciar.py": {
@@ -582,16 +590,20 @@
    "sha256": "da81526de316edcf7681fcec026eee8775be9477f87edc1199fcb6d0d45afae7",
    "bytes": 700
   },
+  "modelo-local.ps1": {
+   "sha256": "5b5aba1cf539eee9d637c34e86b66997b053e0415cf52e91578208046c9ac17a",
+   "bytes": 10105
+  },
   "mover-dados.py": {
    "sha256": "0c46f9f61c92e3d108dbb3e5ca1a634f3c0b3ae4aacf44b9222d7e2d8cb9a7c6",
    "bytes": 13450
   },
   "package-lock.json": {
-   "sha256": "5fee006f3c6d5bcdfc4d62a46f79da350f930323b3718a9569e9164f2ad130ab",
+   "sha256": "324f7f3695cf6074612ac5bb91203a9b5b0a88d59e4a0529129ba45a6fc843d4",
    "bytes": 81798
   },
   "package.json": {
-   "sha256": "4d1fabc6f285b03b58f7b9b9fb64d59e0c5c753bfe91b3532cdb2975e8d26aa1",
+   "sha256": "cee88a40dccd6ec84b47b23b99064666f53af6b1efa03e5b5a348a67bf609882",
    "bytes": 1350
   },
   "parar-jarvis.bat": {
@@ -619,16 +631,16 @@
    "bytes": 750
   },
   "resgatar-cartao.bat": {
-   "sha256": "7899145e35e835c55f9cec2a5002d9178458a51aa75b0a7df2c47b10e959df08",
+   "sha256": "7ba70e71d67a2cb629f3b0a9acdf0c365df01828222773357cbcd4fef331b6b4",
    "bytes": 1400
   },
   "resgatar-cartao.ps1": {
-   "sha256": "89e7fe7407cccb3dbcba12f7fca985a80584e9a690ad4c63af783d8623f8a191",
+   "sha256": "81215998b54924a0ccf2f94a78e617ab814f766f3c443e2653aafdfc415a46dd",
    "bytes": 13022
   },
   "scripts/checar-pendrive.mjs": {
-   "sha256": "292fd83bf9e5bb58f829a7345c285877003c5f8f02f80844f729f91dfd5b1c10",
-   "bytes": 19254
+   "sha256": "438afccaacdd6397b6c8126bf95a0c30c801d431d5d042664e796f4c8ae42f1b",
+   "bytes": 19922
   },
   "scripts/dev.mjs": {
    "sha256": "b44ae8f3f5243b8752bdf55d0843f55676c42314c78f8ef5eb7e2399a2ddaf86",
@@ -659,7 +671,7 @@
    "bytes": 76678
   },
   "server/agenda.py": {
-   "sha256": "f9c51304496776044356928576e13a1f6c541c5df738cabfd531f47cf2b1ff38",
+   "sha256": "c1d647a16bad0e1a99a534a035422339f642d71caaf8b74d4f66095308f670f6",
    "bytes": 16893
   },
   "server/agent_skills_topico.json": {
@@ -667,15 +679,15 @@
    "bytes": 6930
   },
   "server/agente_local.py": {
-   "sha256": "58ca97a8ebaa01a5cb11fa605340b0ba23fdd212c18d503dc45c0abcaba942a0",
-   "bytes": 184840
+   "sha256": "a0c70cadca3d159cfa0d05602afd056a2bee2d46b03a99d0acc81ee3d139e38a",
+   "bytes": 188369
   },
   "server/ai.py": {
-   "sha256": "fdaadd48224b1fea6646c170d456ad879bfc6e8bed7b97ff8f8ca726a7057c25",
-   "bytes": 5168
+   "sha256": "0013224760d8d9915e020ee465fa176901fd10510a855e13e747df27d2d51cdd",
+   "bytes": 5997
   },
   "server/app.py": {
-   "sha256": "c95d5f49b440200d5002f07d7a8dc94dfc0e9043a01aaacbcafc391922ce81f7",
+   "sha256": "3b69f00da99e877c704aa6df2651eb257795f4b79edf8c54caf29a5635e24846",
    "bytes": 37511
   },
   "server/arrumar.py": {
@@ -683,11 +695,11 @@
    "bytes": 37004
   },
   "server/atualizacao.py": {
-   "sha256": "e30801a0b98d7ad60d6fd0de1cd5f0a7930d379b1151241bda806b9a2ead4658",
+   "sha256": "d0eb597c2071ea238115088788f7fdd54cf6c4fc61541f3eead075c771b33941",
    "bytes": 23844
   },
   "server/backup.py": {
-   "sha256": "9252d6c339b8f0fef7df446f8a65382e6c70f99b3eadf422ec04b5af29b845b5",
+   "sha256": "9c429a7a103a2f285596ae4986bf1323518f9826180847b857e85dbd336d8bc0",
    "bytes": 11585
   },
   "server/biblioteca.py": {
@@ -711,23 +723,23 @@
    "bytes": 104114
   },
   "server/ciencia.py": {
-   "sha256": "433c746491d95d730cac1c4d1c9378aaa343f7ed841c86849ff5f9e5a1b63dcd",
+   "sha256": "b238f0ebcefe0c445eb5edd37fd8fbc342930c8095c2f5a7f721d70b9a8baa7f",
    "bytes": 81141
   },
   "server/confianca.py": {
-   "sha256": "122f13fe754580764aca1247d1a26ccee68feff3bb0e4e0d4ffdfb87a088f3a1",
+   "sha256": "f38ae425c58cdbca96c5ae33815c6beae5f8260d841f0b662f808dc0a65fd0f8",
    "bytes": 72362
   },
   "server/conserto.py": {
-   "sha256": "8d7081b72efd73bcc59020da9b19345f2398120629a36dc6a39ebf41bc5bf418",
+   "sha256": "7ef8d07fac75e35d92d0d0a761ac24c7c86916a47154841baddabc3f84786b1a",
    "bytes": 22651
   },
   "server/contexto.py": {
-   "sha256": "80e2aa6a1f9a92962fe280f60bcc448cc57cff134ce34ffe3f2924a7a172e842",
+   "sha256": "b7a931dc98e85e97e915ecb5b18a915e76c6565bc3e2b2a0487c4ffcd69dc107",
    "bytes": 75728
   },
   "server/continuidade.py": {
-   "sha256": "5284386b7032cec555aaaa4b2177d91967abe4fbe6628ae22c84c2fe1464e8f2",
+   "sha256": "eb7472b6451c05d47c083429f3dc862d5f48bbf1e25c04a84b4e08e51f40e1e4",
    "bytes": 80894
   },
   "server/correio.py": {
@@ -739,7 +751,7 @@
    "bytes": 17834
   },
   "server/curadoria.py": {
-   "sha256": "35b334c9e315eec86ecae1e53f20cc5d07bc3f961d13ba07c3ea89e8311b8ed7",
+   "sha256": "b0eb09e15caddcab68c24f961a35c73ca672c35b90ce47a2c5d277fd6598e71f",
    "bytes": 62228
   },
   "server/dados.py": {
@@ -751,7 +763,7 @@
    "bytes": 141933
   },
   "server/distilar.py": {
-   "sha256": "279307ab708161292418258df7738010084ac59aa6b0ca2275f12efe43cc81e1",
+   "sha256": "f4b1e088aed985a45874d294b0f1f8e4283e19a09afdde9c6cce5d9d2aaa766a",
    "bytes": 50517
   },
   "server/distilar_ia.py": {
@@ -767,11 +779,11 @@
    "bytes": 26853
   },
   "server/editorial.py": {
-   "sha256": "166ede9aa69bb13821a54f143624bca4da39b97bc9ec885cb238b87b1359c3a8",
+   "sha256": "b6c43c25466ccdd0a211dcfc145c467441817080b363b183eea2fc1a09046fc7",
    "bytes": 110275
   },
   "server/elevacao.py": {
-   "sha256": "1f7bad9437881d7937e88494c660d620a9036a16ef61a2f5d0402f49301f1f3a",
+   "sha256": "b1fa062ff0533043b9062566a1b846f4690c84ed7a790f8ab84464116ccab75a",
    "bytes": 26898
   },
   "server/engineering.py": {
@@ -779,27 +791,27 @@
    "bytes": 23652
   },
   "server/escritorio.py": {
-   "sha256": "a3fe4f09662fcea81dc564685adf959e33a0f8192d35285878de21ba49c1cf8b",
+   "sha256": "13511b51d4e439ca4b047d56253a80334b5056324e86086e0ef6006d437161d4",
    "bytes": 106593
   },
   "server/estacao.py": {
-   "sha256": "d840c9393e8c15988840fd14519097663411e881d6717807c58086a41694355a",
+   "sha256": "b8814b040b109535908b020bbfeaa6e6dc71383259a2ee24b192bf66426414c8",
    "bytes": 68417
   },
   "server/estacao_runtime.py": {
-   "sha256": "c4cb635203427f99ddc15686ae024bd76f85690b0ef1e7ef891ba2276186cf8d",
+   "sha256": "b2d65a5bd06b540153e6864d764fdc4904381f566295b6dbf2eff50d720aa3cf",
    "bytes": 33391
   },
   "server/estudo.py": {
-   "sha256": "5e9cb4d01072ce73a4feccf4cd785a90e9eeb989a4ec7e05bdc56a9f3bd5e15a",
+   "sha256": "e0d2d8f15899ba6737dfea3817a438a9a5b09101d20d102dfba0bd3185fe4e19",
    "bytes": 24085
   },
   "server/evolucao.py": {
-   "sha256": "eeecaf72074b7a53a56817697eed7eea1d578936faff6e50ed54db5972f5ee38",
+   "sha256": "5c40a035837a6d943622674ce41bbdcaaaf84aa76306258642228ea575aa7643",
    "bytes": 69607
   },
   "server/git.py": {
-   "sha256": "f315880d05b481b47eae059ac9fc423c30b0aaa8024f530ed5cd947e41d7abe0",
+   "sha256": "bbe2c0d83afa3373b6feedfaa37a87800d76dd7810bf8262be78a73d20c9766d",
    "bytes": 8218
   },
   "server/github.py": {
@@ -810,8 +822,12 @@
    "sha256": "b38128da1079ee35abc296b9ac72494f8f3610bef7be5891d01af24159ee41ce",
    "bytes": 24953
   },
+  "server/ia_local.py": {
+   "sha256": "bbb528d5cf5e56efae3506b01875376edb34d048e6bec9041fced7a33d5a04b7",
+   "bytes": 19676
+  },
   "server/instalador.py": {
-   "sha256": "4808f22044cac7cd5635a4840d280d7bf9677cf0938da4ad76ce861a7f6fa2ff",
+   "sha256": "8dd5f6e097dfaa453b986d6d673448f848050618295b6562436de1c9f3b90fe3",
    "bytes": 40865
   },
   "server/instancia.py": {
@@ -871,11 +887,11 @@
    "bytes": 42190
   },
   "server/marketing.py": {
-   "sha256": "4a43bc9de97ed43af981af90aaeb2f789bfe07b632f7237fe9f2675067474dd2",
+   "sha256": "ab329faf6c82cee99408d699cb0e6a8a226da0a959e47b7074b78546e895121f",
    "bytes": 89176
   },
   "server/memoria.py": {
-   "sha256": "259e9151f42749b8e888bd3701f4984828da045b589026514471605ea0d47d97",
+   "sha256": "0aa0ca4a166907bfd0d498ad608b3c40e72a7d56a2f96548a039d4766effc56a",
    "bytes": 79801
   },
   "server/mesa.py": {
@@ -883,7 +899,7 @@
    "bytes": 12172
   },
   "server/navegador.py": {
-   "sha256": "500f82b6a437bcddd9ac816f6ef4d45d7df1d3b2285af948dea49beac3d864c0",
+   "sha256": "40deec5ae7c0b9556755e4df20a16a8fe1b1794dc211c4d7a821fbadb379df22",
    "bytes": 96412
   },
   "server/ocr.py": {
@@ -903,7 +919,7 @@
    "bytes": 24036
   },
   "server/portabilidade.py": {
-   "sha256": "7e0c0db3d76398f0d45638f126bc549ed4a2f8e35a4c248e1e0fdaef60a2c087",
+   "sha256": "901b4aa253033e0a57c974e78258d95642f29c865ea982549b0f9b4b367d22fb",
    "bytes": 88805
   },
   "server/portatil.py": {
@@ -931,27 +947,27 @@
    "bytes": 4256
   },
   "server/revisao.py": {
-   "sha256": "a9b1caf2d5431aa505d4500a2b2940155a56ceb0fa20d9132a335b2069d7d77b",
+   "sha256": "731627d4316e03aae7c26b57f72401c29e6463f307ec3b9c4e7523f97e0040d8",
    "bytes": 89911
   },
   "server/selecao.py": {
-   "sha256": "5cb292a9dd491456e86f7a6b0a15e899e319575acbb968913b021ec90d86c386",
+   "sha256": "0d357daf77c2350fade75ef1767b70270211eb93a540c48cde1c50ef2f1d09d0",
    "bytes": 77822
   },
   "server/sistema.py": {
-   "sha256": "aedf0e1217df739e4b6e1136aecd64e76a6133c613ad815a9f41c4881f165a0c",
+   "sha256": "b7779cf54c935b3a5e5c5e06c8903c557226fe2edbaa4c2cb81b7152db58d419",
    "bytes": 117017
   },
   "server/skill_registry.py": {
-   "sha256": "a5f8a9ccd6182845897804fa9c96e82a496f4af20dbca07a1c8b1d1fc7c1c292",
-   "bytes": 402067
+   "sha256": "9259bdcefde67a979130097b34bb5bc64134d9f26b374a0c0d35d419beebe264",
+   "bytes": 404839
   },
   "server/studio.py": {
    "sha256": "56e4c0bd6b705e0ff3521caaedd1293fb60ce9154819b632be63db75fa4ab605",
    "bytes": 68089
   },
   "server/submissao.py": {
-   "sha256": "7265a1dbfffc9bba4d4d3d86d5214d59008067d9fea8ad8d5e42702490811658",
+   "sha256": "3220d57af8471df7aea35a5885a728e79ec352eaa1971176e23e7949b845bf83",
    "bytes": 95142
   },
   "server/taste.py": {
@@ -967,7 +983,7 @@
    "bytes": 6224
   },
   "server/tests/test_agency.py": {
-   "sha256": "b4900bf8b9bd52152879fd9478d850ea1abfde42c8b580e619e24bcbd93185cb",
+   "sha256": "fcbcf99e40798f27473b1cb87e891e210ee4422f6e6da52ec8623bbd41b0e303",
    "bytes": 20077
   },
   "server/tests/test_agenda.py": {
@@ -975,15 +991,15 @@
    "bytes": 10273
   },
   "server/tests/test_agente_local.py": {
-   "sha256": "60ab90d46d37d3a41ee3839221beb886d6f34e368da31d1ba73af7d93c7537b9",
-   "bytes": 103450
+   "sha256": "5ab5381f1ce40887aa29189a22e17a91041e77df91e4e1aba66d48a8ebe36420",
+   "bytes": 105841
   },
   "server/tests/test_ai_provider.py": {
-   "sha256": "7ce3c6ec54c8b6aa44413abc42d362f651b320441f6dd86259b35f1ce2dd6143",
-   "bytes": 2546
+   "sha256": "243086ff06f38f7fa042d91bf867b92245ade4dd656b07f3e7457f2fd5984e74",
+   "bytes": 5838
   },
   "server/tests/test_api.py": {
-   "sha256": "455495d4872e9053854983136419004b52b754458c4b9ceceed9ebcdd40dd88c",
+   "sha256": "ef1a751a46f89d53b44452f06c6b93481ac99e0c93ffa1ac65c2adb4e53dd6d0",
    "bytes": 13273
   },
   "server/tests/test_arrumar.py": {
@@ -991,8 +1007,8 @@
    "bytes": 30484
   },
   "server/tests/test_atualizacao.py": {
-   "sha256": "8156dceb1675329202684b9658b2b165caed19736e14644ad65b0575ab86aa6b",
-   "bytes": 16047
+   "sha256": "0b6cc8bbc552b5c9e4a3602dce01c9c095c1637404a4dc53c85bf4fb46c2a00e",
+   "bytes": 16279
   },
   "server/tests/test_atualizador.py": {
    "sha256": "ced0b248e2adbdbf7444d2016ccad8b1d29df70165d06b5809a51bc93e9f53df",
@@ -1007,7 +1023,7 @@
    "bytes": 12193
   },
   "server/tests/test_career.py": {
-   "sha256": "6c9bec0699234330b8cf2d7c9160c5c3c8887284c145f45e4b9151be8e1e50c7",
+   "sha256": "7e6da6a9935f07334f3be73fcdc3b74e8041f2db46e425aebc52566bee9fb667",
    "bytes": 24540
   },
   "server/tests/test_catalogo.py": {
@@ -1015,7 +1031,7 @@
    "bytes": 9611
   },
   "server/tests/test_celular.py": {
-   "sha256": "3663308a23292af897194f26d9e8bea8f05415801b28bdf19133e0fd1b35f156",
+   "sha256": "8ba693d8e97afc1b7e11d2c2404bf9a31b81684a0b826e41adef1bcacb231adc",
    "bytes": 78869
   },
   "server/tests/test_checar_pendrive.py": {
@@ -1027,12 +1043,12 @@
    "bytes": 19966
   },
   "server/tests/test_confianca.py": {
-   "sha256": "37eb50ac0e088886253fffd202a8ceded515482a6dc203c868f1a27fc0f8d600",
+   "sha256": "11e767aa4128c90a4748e8e4c87cb798594c96d7840624c66bd56c8a955737c6",
    "bytes": 19721
   },
   "server/tests/test_configurar_chave.py": {
-   "sha256": "2439aeb3d00d6bd556b64268ba63b4d42f0a4bde616296bd9d17350dfe1ed7de",
-   "bytes": 11619
+   "sha256": "425e4dccffc13763bc3a1ea1a4eaaea11fb00a9b3b04b63fe03300254b2019cf",
+   "bytes": 11744
   },
   "server/tests/test_conserto.py": {
    "sha256": "ba1b0d339291c9a847ad03cc20d58eebe88a2a50fd007aad7d7899e0908d37b3",
@@ -1043,7 +1059,7 @@
    "bytes": 18843
   },
   "server/tests/test_continuidade.py": {
-   "sha256": "eb2d23f41b63b3eab46b63eb2468ab8641c6574940a00a29468f48e189b1f3ff",
+   "sha256": "f5843af91077396d439e3c2d755f6fd2678739150e209e0e13b55b4a0c8b0948",
    "bytes": 22720
   },
   "server/tests/test_correio.py": {
@@ -1055,7 +1071,7 @@
    "bytes": 5826
   },
   "server/tests/test_curadoria.py": {
-   "sha256": "d5cfe1d95fd47320af0934ece3701282765390ee8c30a52da12e0cbb56e87901",
+   "sha256": "0f70ab32cc72f84d99da2ad63b00b9f2cd98fe33007e176bc571f187241682b9",
    "bytes": 24426
   },
   "server/tests/test_dados.py": {
@@ -1067,11 +1083,11 @@
    "bytes": 5703
   },
   "server/tests/test_diagram.py": {
-   "sha256": "d81b002fb31c8f80df44ad5738a173d8e54260b8615a9aaa697524da91efd9f9",
+   "sha256": "fa772d8f803b7861952b563e6a9eb73d9e0041dd21b1a87e3d162c02ada942b3",
    "bytes": 21249
   },
   "server/tests/test_distilar.py": {
-   "sha256": "5519cd2b91984fcb2ce9279e859b7aab51c240da3214d7d6b421e3b099600016",
+   "sha256": "85b2a9b65134468cc9808f6d99ff43cea9b787e7439d6554461becfecc8618c1",
    "bytes": 21579
   },
   "server/tests/test_documents.py": {
@@ -1083,11 +1099,11 @@
    "bytes": 14580
   },
   "server/tests/test_editorial.py": {
-   "sha256": "11f9ffe5f09d77a9128350004df25ea4178918599cea58bd76fd43e287b746e2",
+   "sha256": "3b060e42031afc901f64f4551c181e539bb89911066ac6d9ccfb760a415a4020",
    "bytes": 30060
   },
   "server/tests/test_elevacao.py": {
-   "sha256": "ad108206974f2addcbe822582d8a3f817c78518eccacee7eb9cc8deeb6ea46e3",
+   "sha256": "4de6e766c0dd24631b8bb15ec4de3f6d0523960480036d086a887709de6c2fb4",
    "bytes": 17051
   },
   "server/tests/test_engineering.py": {
@@ -1095,15 +1111,15 @@
    "bytes": 5079
   },
   "server/tests/test_escritorio.py": {
-   "sha256": "046dff1ec4fcb315fdf324ba79fd554ab39f2b929b7362b53cc1d61ee3fefa53",
+   "sha256": "e972f22455a0ee866b08230ebad9b2481fba2b7605a47d32e654bea3d2f60d6b",
    "bytes": 25989
   },
   "server/tests/test_estacao.py": {
-   "sha256": "134eaa80781b7cefce36c8192cc2dbb49519500980ac87c49d344925e9bd8bd5",
+   "sha256": "47098c75ce40784401d0cce0c132090946b4b590f3428f0f77769d364fbbee2e",
    "bytes": 28266
   },
   "server/tests/test_estacao_runtime.py": {
-   "sha256": "6cc919754b2a0b65fe8aba74642d349da17d96e0f1d5f370bb99a7ebfdda6bf7",
+   "sha256": "59ad439d257c460f4ff0990780b0409bb91b424813bd278f82f572859e109e15",
    "bytes": 23090
   },
   "server/tests/test_estudo.py": {
@@ -1111,7 +1127,7 @@
    "bytes": 11828
   },
   "server/tests/test_evolucao.py": {
-   "sha256": "4bb91794cd83ed489ebb49c25342db7348d8dd89ee2e6151499386babe1d8b05",
+   "sha256": "47439d9d117d5d3382fe8ea23fb37f8a82b8c511a60bd7574fb8b698c36361d6",
    "bytes": 27071
   },
   "server/tests/test_formatar_celular.py": {
@@ -1130,6 +1146,10 @@
    "sha256": "2d44a7fffce57c79fd92b88ce21c05a16adbaa33fa7d38edecabe52c15f3c519",
    "bytes": 14306
   },
+  "server/tests/test_ia_local.py": {
+   "sha256": "aa9238e0a21936affd41386f74d19f8fe8c116e5a4efa48774b7b6d56f0c6131",
+   "bytes": 12837
+  },
   "server/tests/test_importar.py": {
    "sha256": "593129c58d3b7d5df830646200eb18674a7dce448dc3aa72177a5d4cee84d818",
    "bytes": 9260
@@ -1143,7 +1163,7 @@
    "bytes": 15407
   },
   "server/tests/test_instancia.py": {
-   "sha256": "a5d9052d06b638c00fcad8a89b1f9d413f5d34a28558f52ee8fc8487a3c3e4c3",
+   "sha256": "7dc12fb47448e0ab8e9f0a4812b426d01b1c18fe6b7e525e038227957c4d5209",
    "bytes": 11487
   },
   "server/tests/test_interface_embutida.py": {
@@ -1159,15 +1179,15 @@
    "bytes": 2680
   },
   "server/tests/test_limpeza.py": {
-   "sha256": "b4e5ce1f2f14a89ca2836618d6026665e76077d77ca4caedf7443c2a149c26f0",
+   "sha256": "94cea069ea645a1855c5fb40f5068a0202e4f20e0b43871fc55e101bb8e81716",
    "bytes": 10443
   },
   "server/tests/test_marketing.py": {
-   "sha256": "ffde6a423966eed887de71140bc2d3ff0b1f4a40e291ef0cd98c0bc1dca61eb1",
+   "sha256": "bc91675bfadc9a12047fee1d413ce819b815f1a27b061e0016ab23f261da5196",
    "bytes": 22464
   },
   "server/tests/test_memoria.py": {
-   "sha256": "b8f15cd9c1530719219cfb3ba8f71b84f69a39904dd1dc509b47ff7b763c42af",
+   "sha256": "821495ab7983c345f8762533cdc28d908f271e10d68b63731c71a687d989e425",
    "bytes": 20309
   },
   "server/tests/test_mesa.py": {
@@ -1175,7 +1195,7 @@
    "bytes": 6589
   },
   "server/tests/test_modo_dono.py": {
-   "sha256": "29bd9edb6f35ecbfa34301dd60c82a2b06b783038d44a7f824f9e7b4a592b5ee",
+   "sha256": "3147c99d8fd2bddef56cbb9a27807ea1220f72e7bd0a1e55f9dddaa1b13a16b6",
    "bytes": 16030
   },
   "server/tests/test_mover_dados.py": {
@@ -1203,7 +1223,7 @@
    "bytes": 9482
   },
   "server/tests/test_portabilidade.py": {
-   "sha256": "68461d6199f4d2bbc8ae3acef9dcfcdae8fe21cdbaba514368b6bf08e14b2498",
+   "sha256": "93b2e7e27e2b4c49f17c9667b9f4840d6e347c7883c823ef2627feb3a0633ecd",
    "bytes": 19236
   },
   "server/tests/test_processos_portatil.py": {
@@ -1223,11 +1243,11 @@
    "bytes": 4812
   },
   "server/tests/test_reverse.py": {
-   "sha256": "d68f6ccd4fa47f9dde26bee801b1740d3d7b39f4dbfb9260c678bc24bd8de9d3",
+   "sha256": "991525847d6cfd84e1fc72f122780d54e1a39c8f6e6fa180d1d2772e8be800d2",
    "bytes": 16367
   },
   "server/tests/test_revisao.py": {
-   "sha256": "53f5ec6c70b7366a9b49dcd5c1d1e65ef490080d1e3ff76f7a244a3b55f898e6",
+   "sha256": "79d4da7608c5d3a20b4cc61eef89896f91cc8928ad83156ba7006c737b6c8c7a",
    "bytes": 27170
   },
   "server/tests/test_selecao.py": {
@@ -1235,23 +1255,23 @@
    "bytes": 21158
   },
   "server/tests/test_sistema.py": {
-   "sha256": "52a51365ced2860cb6604489787d76f96520f52ab5dba1fef607e361b81e03f0",
+   "sha256": "2c15a50f98b6802f3461f1aa060049611e777f55dfe629fcdeeb2145e518af37",
    "bytes": 60768
   },
   "server/tests/test_studio.py": {
-   "sha256": "69269eb4d6df980dbca9f0993faf963a06d37da17287869d8d385ae805c88812",
+   "sha256": "5d13b23f162eaa622d7bbc5ea7f20db77e695bdbec0dc65f9e1a63350133d98f",
    "bytes": 27296
   },
   "server/tests/test_submissao.py": {
-   "sha256": "80e276605c983ebe33b952fdb898fd67cdb1732ddaedbf8fb914304d4bb11edb",
+   "sha256": "d55522b3b2f9cea1783c5265de56c287765108a0bc6224fd97b06869c8ee9d19",
    "bytes": 27712
   },
   "server/tests/test_taste.py": {
-   "sha256": "62548bfaf27d0f48249528588d7756a7c24c26a5e4294488fca14a2aa9cfdc68",
+   "sha256": "897d2ffdec541667c5a83693ade8bdbf81e621755a47d9a1fb51ed4e280b0608",
    "bytes": 24141
   },
   "server/tests/test_teste_cabo.py": {
-   "sha256": "2a51e509a498888c04ae7c2268c67e93649379e5b0c076089afafa39339647fe",
+   "sha256": "1793e352830dea6bff2110cbb2c48417df80bddb6e4daa526b69cec97a579d98",
    "bytes": 6848
   },
   "server/tests/test_video.py": {
@@ -1279,7 +1299,7 @@
    "bytes": 1743
   },
   "sonda-otg.bat": {
-   "sha256": "717bd1994c4b24dd96724d6e24f01f7336d58b3e80601a8855cf805d4d464476",
+   "sha256": "e3a8e04e4978bfd379af5c721a1dd6d572117f59fe4e4aaaaf1c67a0a45ec2a7",
    "bytes": 1580
   },
   "sonda-otg.ps1": {
@@ -1319,8 +1339,8 @@
    "bytes": 3422
   },
   "src/components/ChatPanel.tsx": {
-   "sha256": "3810adab1868b123f33382b720ca4d4977239aa861e96a9fd3ddae6a140ec67e",
-   "bytes": 5841
+   "sha256": "fdee60245cd959579593c69d72b754776ac0372dfc65dd93900b831518f9ec05",
+   "bytes": 5878
   },
   "src/components/CommandCenter.tsx": {
    "sha256": "c8ca2dd99039e970671d019d233bc00522332c35ff37db59d8f7390e9733982e",
@@ -1455,8 +1475,8 @@
    "bytes": 568
   },
   "src/lib/api.ts": {
-   "sha256": "7f43b6a9b503278e68951d408b0b8160ec7d69711b35fe317d425235463cb446",
-   "bytes": 17932
+   "sha256": "fc42159f89b9c6d3adda3f01c8e75a7cb5c3d1308a49f75fd7252228e590c89c",
+   "bytes": 18035
   },
   "src/lib/calculator.ts": {
    "sha256": "ad9ba260800e788aa94cd8fbd31851c76720b25e87410a88782e32c0da11bc16",
@@ -1511,7 +1531,7 @@
    "bytes": 509
   },
   "src/maquina.css": {
-   "sha256": "7e3e3484e7fc4652153fd68a33fa73daf3a0e9c6afd5cddafa0d4d29d6e20289",
+   "sha256": "e45b51b0e27f87242fa1f0401dec63262f10394cd720e35b510d1ce0859a4ab8",
    "bytes": 14798
   },
   "src/marketing.css": {
@@ -1619,7 +1639,7 @@
    "bytes": 15972
   },
   "src/pages/MaquinaPage.tsx": {
-   "sha256": "69b0732e0f8f550e066b305ee0cac7a4606cb3990627ec3471156205fad4f02e",
+   "sha256": "e9ff206e4e75f7d18f6575f61645654463cb1907bd9558e5d7e9b016659b2537",
    "bytes": 37759
   },
   "src/pages/MarketingPage.tsx": {
@@ -1707,7 +1727,7 @@
    "bytes": 2812
   },
   "src/styles.css": {
-   "sha256": "90beff739237249d1308490a751127ee9aa03f9370c12a7d28d07bb1f73df862",
+   "sha256": "b62f534e0e86050a2e01a63ee343828994e50c6c575809c93c0c4d058c2cd1aa",
    "bytes": 101037
   },
   "src/submissao.css": {
@@ -1727,15 +1747,15 @@
    "bytes": 38
   },
   "teclado-pelo-pc.bat": {
-   "sha256": "188ffa93075ff774f84375458467108cc0abf9b486a20c55e88b39847b22492f",
+   "sha256": "eb80d2c14176928b06d84c36564eb56b9f44288b13531c1eb34bd059a3214ecb",
    "bytes": 5844
   },
   "teste-cabo.bat": {
-   "sha256": "4daadd1d9680385ae614b6d66a0faf8d211bbc309ee34e1c6cf5eb31689b9d3d",
+   "sha256": "1fc135938842f85cc5d159097dc349d5276ab0e143ec7dd48d631753a441936e",
    "bytes": 1262
   },
   "teste-cabo.ps1": {
-   "sha256": "941ff904ef70c2997d106ddeb4fcffbe655ea0f1bc2cc499bb840657fbedd84b",
+   "sha256": "e95cbd36f33873c094f088fdb39c7509b0c3f13e7f2c4b14a20a679124796679",
    "bytes": 17346
   },
   "tests/calculator.test.ts": {
@@ -1771,7 +1791,7 @@
    "bytes": 677
   },
   "vigiar-cabo.bat": {
-   "sha256": "4722617ae1b9395996498ecad1ff4954659a441773fb4ca84588ec03fa7120fb",
+   "sha256": "281091b14492750e0f5431b0ed1da07c0f1cba317d8b95548fee930cc1788e34",
    "bytes": 1561
   },
   "vigiar-usb-atento.bat": {
@@ -1834,13 +1854,13 @@
    "sha256": "bced561d991e3f81c150c08e71f7fa849fcbff523560f6059245f2edce19b600",
    "bytes": 5620
   },
+  "web-dist/assets/index-DAOUx126.js": {
+   "sha256": "4f621b1fb36563f5a1423c0f2579c2e99738399baeb5eff233665eb74f536be5",
+   "bytes": 1226551
+  },
   "web-dist/assets/index-DwgLlUTs.css": {
    "sha256": "537e0b2acb5871f87c171862612291fbd16fee9ca44e2da549621b0b9b052040",
    "bytes": 307262
-  },
-  "web-dist/assets/index-OVIU1b_O.js": {
-   "sha256": "a188d4aea321c0a8fe489692390d46122f488eaa4d4c5ab7fc0eb6861566e766",
-   "bytes": 1226525
   },
   "web-dist/assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2": {
    "sha256": "c268b459a9329e59fecf39a17618efd44c71735532048d60b12aab76a8c14914",
@@ -1867,7 +1887,7 @@
    "bytes": 266
   },
   "web-dist/index.html": {
-   "sha256": "22f64eaa77f897e9f48ef648262e41226193e66e8e76a28cb4e7be0c9c597aa4",
+   "sha256": "08a1025885d9ef0636a5b29148525fc257eca00765c13638289e325892561317",
    "bytes": 645
   }
  }

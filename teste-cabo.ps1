@@ -12,7 +12,7 @@
 #
 # O QUE MUDOU NA 0.74.0 (tres correcoes, todas vindas de falha real em campo):
 #
-#   1. **Leitura confiavel.** A 0.74.0 usava uma consulta WMI so. Numa maquina de
+#   1. **Leitura confiavel.** A 0.75.0 usava uma consulta WMI so. Numa maquina de
 #      4 GB com Win10 1607 essa consulta as vezes volta VAZIA sem erro, e o teste
 #      entao dizia "falha de leitura" (codigo 3) e mandava repetir. Agora sao 3
 #      tentativas e, se ainda vier vazio, dois planos B (CIM e Get-PnpDevice).

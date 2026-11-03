@@ -24,7 +24,7 @@ Números conferidos em **25/10/2026**. Limite de camada gratuita muda sem aviso;
 | OpenRouter | depende do modelo de origem; os `:free` variam |
 | Google AI Studio | **sim** na camada gratuita, fora da União Europeia, Reino Unido e Suíça — o Brasil entra nessa |
 
-Se a conversa tiver dado sensível, prefira o Groq ou simplesmente não configure IA externa: as 314 skills locais continuam funcionando sem chave nenhuma.
+Se a conversa tiver dado sensível, prefira o Groq ou simplesmente não configure IA externa: as 315 skills locais continuam funcionando sem chave nenhuma.
 
 ### Passo a passo — Groq (o mais rápido, ~3 minutos)
 
@@ -86,7 +86,27 @@ O teste não imprime a chave. Você pode rodá-lo quantas vezes quiser.
 
 ### Modelo local: sem chave, sem limite e sem internet
 
-**Você não é obrigado a ter chave.** A camada de IA é opcional: sem chave nenhuma, as **314 skills** locais, a legislação, os documentos, a memória e as tarefas continuam funcionando. O que fica de fora é só o chat aberto (`IA EXTERNA`) e o `distilar.persona`.
+> **Mudou na 0.75.0:** modelo local não pede chave. Antes, o JARVIS exigia
+> `JARVIS_AI_API_KEY` preenchida mesmo para `127.0.0.1` — e isso bloqueava
+> justamente quem queria rodar tudo do pendrive, sem conta em lugar nenhum.
+> Agora, se o endereço é desta máquina, a chave é dispensável; se é de nuvem,
+> continua obrigatória (senão o pedido só tomaria `401`).
+
+Para o JARVIS usar um modelo no seu PC, o `.env` fica assim (três linhas, sem
+chave):
+
+```text
+JARVIS_AI_PROVIDER=Modelo local
+JARVIS_AI_BASE_URL=http://127.0.0.1:8080/v1
+JARVIS_AI_MODEL=nome-do-arquivo.gguf
+```
+
+Endereços reconhecidos como "desta máquina": `127.0.0.1`, `localhost`, `[::1]`,
+`0.0.0.0` e `host.docker.internal`. Um servidor em **outro** PC da rede
+(`192.168.x.x`) **não** conta: ali a chave continua sendo exigida, porque o
+tráfego sai da máquina.
+
+**Você não é obrigado a ter chave.** A camada de IA é opcional: sem chave nenhuma, as **315 skills** locais, a legislação, os documentos, a memória e as tarefas continuam funcionando. O que fica de fora é só o chat aberto (`IA EXTERNA`) e o `distilar.persona`.
 
 Se você quer o chat também, sem chave e sem limite de requisições, dá para rodar o modelo **na sua máquina**. O custo não é dinheiro, é RAM e paciência: a resposta sai bem mais devagar que num provedor de nuvem.
 
@@ -138,6 +158,21 @@ São estimativas de CPU, não medições: dependem do modelo e de quanta memóri
 **Processador sem AVX (Intel Core 2, Pentium, Athlon antigos):** os binários `avx2` e `avx` fecham com *"instrução ilegal"*. Baixe o pacote **`noavx`** do llama.cpp (`llama-bXXXX-bin-win-noavx-x64.zip`); ele é lento de propósito, mas não usa instrução que a máquina não tem. Core 2 Quad é de 2007–2008: **não tem AVX**, então é essa a versão.
 
 **Onde guardar o arquivo:** no disco com mais espaço livre, não necessariamente o do projeto. O `.gguf` é lido do disco local o tempo todo, então pendrive e rede deixam tudo mais lento.
+
+**Cabe no pendrive?** O arquivo e o `llama-server.exe` cabem — o modelo pequeno
+(1–3 B em 4 bits) tem 0,7 a 2 GB, e a pasta `ferramentas/` do pendrive já existe
+para isso. Mas **pendrive não é memória**: ao responder, o modelo inteiro é
+carregado na RAM, e o pendrive serve só de armazenamento.
+
+| peça | onde fica | por quê |
+|---|---|---|
+| `llama-server.exe` + DLLs | pendrive (`ferramentas\llama\`) | é programa, roda de onde estiver |
+| `modelo.gguf` | **disco interno**, se couber | ler 1–2 GB pelo USB a cada carga soma segundos por resposta |
+| pesos na hora de gerar | **RAM** | não existe "rodar do pendrive" |
+
+Levar o JARVIS **com** o modelo no pendrive para outro PC é uma vantagem real;
+no PC em que ele roda, o `.gguf` rende mais no disco. Se o pendrive for USB 3.0
+e o disco for antigo, a diferença é pequena.
 
 ### Google Drive não resolve falta de RAM
 

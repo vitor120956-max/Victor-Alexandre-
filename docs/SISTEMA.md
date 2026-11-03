@@ -63,7 +63,7 @@ desligado.
 página maliciosa aberta no navegador de chamar a API local.
 
 ```text
-GET /api/health  →  { "version": "0.74.0", "skills": 314, "confiarLocal": true }
+GET /api/health  →  { "version": "0.75.0", "skills": 315, "confiarLocal": true }
 ```
 
 ## “O que ele já instalou” e a remoção sugerida (0.59.0)

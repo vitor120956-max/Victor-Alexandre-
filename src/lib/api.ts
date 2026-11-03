@@ -153,6 +153,8 @@ export interface AIStatus {
   provider: string;
   model: string | null;
   external: boolean;
+  /** Modelo rodando nesta máquina (llama.cpp/Ollama): não sai dado para fora. */
+  local?: boolean;
 }
 
 export interface BackendHealth {

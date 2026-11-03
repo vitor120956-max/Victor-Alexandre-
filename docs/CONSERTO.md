@@ -1,4 +1,4 @@
-# Conserto: do erro real à proposta ensaiada (0.74.0)
+# Conserto: do erro real à proposta ensaiada (0.75.0)
 
 O pedido: *“tem como ele se auto programar? deu erro numa função, ele vai procurar
 para que serve e como funciona, aí ele pesquisa, entende, testa, roda e, se

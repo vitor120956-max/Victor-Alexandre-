@@ -39,7 +39,7 @@ def projeto(tmp_path: Path) -> Path:
     (base / "src" / "pages").mkdir(parents=True)
     (base / "server" / "app.py").write_text("print('app')\n", encoding="utf-8")
     (base / "src" / "pages" / "Home.tsx").write_text("export const A = 1;\n", encoding="utf-8")
-    (base / "package.json").write_text('{"version":"0.74.0"}\n', encoding="utf-8")
+    (base / "package.json").write_text('{"version":"0.75.0"}\n', encoding="utf-8")
     (base / ".env").write_text("SEGREDO=1\n", encoding="utf-8")
     (base / "storage").mkdir()
     (base / "storage" / "dados.json").write_text("{}\n", encoding="utf-8")
@@ -56,10 +56,14 @@ def dados(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return raiz
 
 
+# Versão remota usada nos testes: nunca é a do projeto, então sobrevive a bump.
+REMOTA = "9.9.9"
+
+
 def _remoto_alterando(projeto: Path, mudancas: dict[str, bytes]) -> tuple[dict, dict[str, bytes]]:
     """Manifesto remoto + conteúdo servido pela rede falsa."""
     manifesto = atualizacao.gerar_manifesto(raiz=projeto)
-    manifesto["versao"] = "0.75.0"
+    manifesto["versao"] = REMOTA
     fonte: dict[str, bytes] = {}
     for caminho, conteudo in mudancas.items():
         manifesto["arquivos"][caminho] = {"sha256": _sha(conteudo), "bytes": len(conteudo)}
@@ -84,7 +88,7 @@ def test_o_manifesto_ignora_dado_do_usuario_e_o_proprio_manifesto(projeto: Path)
     manifesto = atualizacao.gerar_manifesto(raiz=projeto)
     arquivos = set(manifesto["arquivos"])
     assert "server/app.py" in arquivos
-    assert manifesto["versao"] == "0.74.0"
+    assert manifesto["versao"] == "0.75.0"
     assert not any(nome.startswith(".env") for nome in arquivos)
     assert not [nome for nome in arquivos if nome.startswith(("storage/", ".git/"))]
     assert atualizacao.NOME_MANIFESTO not in arquivos
@@ -159,12 +163,12 @@ def test_checagem_forcada_funciona_com_a_automatica_desligada(dados: Path, proje
     assert resultado["checou"] is True
     assert resultado["disponivel"] is True
     assert resultado["a_baixar"] == 1
-    assert resultado["remota"] == "0.75.0"
+    assert resultado["remota"] == REMOTA
     assert "em vez do zip" in resultado["resumo"]
     # ficou registrado no estado, para a tela não precisar checar de novo
     estado = json.loads((dados / "atualizacao" / "estado.json").read_text(encoding="utf-8"))
     assert estado["disponivel"] is True
-    assert estado["remota"] == "0.75.0"
+    assert estado["remota"] == REMOTA
     assert estado["ultima_checagem"]
 
 
@@ -179,9 +183,11 @@ def test_ja_na_ultima_nao_inventa_atualizacao(dados: Path, projeto: Path):
 
 def test_o_resumo_nao_finge_versao_nova_quando_a_versao_e_a_mesma():
     """Editar um arquivo à mão não pode virar “versão nova: X (a sua é X)”."""
-    assert "Versão nova: 0.75.0" in atualizacao._resumo("0.74.0", "0.75.0", 2, 2_048)
-    assert "Mesma versão (0.74.0)" in atualizacao._resumo("0.74.0", "0.74.0", 1, 100)
-    assert "diferente(s) do publicado" in atualizacao._resumo("0.74.0", "", 1, 100)
+    # Versões literais próprias do teste: um bump de versão não pode mudar o que
+    # este teste verifica (foi o que aconteceu no bump para 0.75.0).
+    assert "Versão nova: 9.9.9" in atualizacao._resumo("0.1.0", REMOTA, 2, 2_048)
+    assert "Mesma versão (0.1.0)" in atualizacao._resumo("0.1.0", "0.1.0", 1, 100)
+    assert "diferente(s) do publicado" in atualizacao._resumo("0.1.0", "", 1, 100)
 
 
 def test_falha_de_rede_nao_derruba_e_aponta_o_plano_b(dados: Path, projeto: Path):
@@ -251,9 +257,9 @@ def test_aplicar_troca_arquivo_guarda_backup_e_manda_reiniciar(dados: Path, proj
         "src/pages/Nova.tsx": b"export const B = 2;\n",
     })
     atualizacao.preparar(projeto=projeto, baixar=_rede(fonte))
-    resultado = atualizacao.aplicar(versao="0.75.0", projeto=projeto, confirmado=True)
+    resultado = atualizacao.aplicar(versao=REMOTA, projeto=projeto, confirmado=True)
     assert resultado["aplicado"] is True
-    assert resultado["versao"] == "0.75.0"
+    assert resultado["versao"] == REMOTA
     assert resultado["substituidos"] == ["server/app.py"]
     assert resultado["adicionados"] == ["src/pages/Nova.tsx"]
     assert (projeto / "server" / "app.py").read_bytes() == b"print('novo')\n"
@@ -270,13 +276,13 @@ def test_aplicar_troca_arquivo_guarda_backup_e_manda_reiniciar(dados: Path, proj
 def test_aplicar_recusa_caminho_que_sai_do_projeto(dados: Path, projeto: Path):
     _, fonte = _remoto_alterando(projeto, {"server/app.py": b"print('novo')\n"})
     atualizacao.preparar(projeto=projeto, baixar=_rede(fonte))
-    palco = dados / "atualizacao" / "0.75.0"
+    palco = dados / "atualizacao" / REMOTA
     pronto = json.loads((palco / "pronto.json").read_text(encoding="utf-8"))
     pronto["baixados"].append({"caminho": "../../fora.py", "bytes": 3, "novo": True})
     forjado = palco / "files" / "server" / "forjado.py"
     forjado.write_text("print(1)\n", encoding="utf-8")
     (palco / "pronto.json").write_text(json.dumps(pronto), encoding="utf-8")
-    resultado = atualizacao.aplicar(versao="0.75.0", projeto=projeto, confirmado=True)
+    resultado = atualizacao.aplicar(versao=REMOTA, projeto=projeto, confirmado=True)
     assert resultado["recusados"] == ["../../fora.py"]
     assert not (projeto.parent.parent / "fora.py").exists()
 
@@ -286,7 +292,7 @@ def test_palco_com_falha_nao_aplica(dados: Path, projeto: Path):
     fonte["server/app.py"] = b"outro conteudo"
     atualizacao.preparar(projeto=projeto, baixar=_rede(fonte))
     with pytest.raises(ValueError, match="palco tem falhas"):
-        atualizacao.aplicar(versao="0.75.0", projeto=projeto, confirmado=True)
+        atualizacao.aplicar(versao=REMOTA, projeto=projeto, confirmado=True)
 
 
 # ------------------------------------------------------------------- integração
@@ -315,7 +321,7 @@ def test_a_api_checa_e_para_no_aviso(tmp_path: Path, monkeypatch: pytest.MonkeyP
     projeto = tmp_path / "projeto"
     (projeto / "server").mkdir(parents=True)
     (projeto / "server" / "app.py").write_text("print('app')\n", encoding="utf-8")
-    (projeto / "package.json").write_text('{"version":"0.74.0"}\n', encoding="utf-8")
+    (projeto / "package.json").write_text('{"version":"0.75.0"}\n', encoding="utf-8")
     _, fonte = _remoto_alterando(projeto, {"server/app.py": b"print('novo')\n"})
     monkeypatch.setattr(atualizacao, "_baixar_url", _rede(fonte))
 

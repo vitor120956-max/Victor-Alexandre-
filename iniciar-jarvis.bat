@@ -92,7 +92,7 @@ echo           a pasta web-dist de novo.
 echo.
 
 :tem_interface
-REM 0.74.0: a checagem de versao nova liga junto com a API. Ela baixa so o
+REM 0.75.0: a checagem de versao nova liga junto com a API. Ela baixa so o
 REM manifest.json (uns 56 KB) uma vez ao subir e avisa no terminal e no topo da
 REM tela. Baixar e aplicar continuam sendo a sua decisao.
 set JARVIS_ATUALIZACAO=1

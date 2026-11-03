@@ -215,11 +215,23 @@ let pythonEscolhido = null;
     const apiKey = ler('JARVIS_AI_API_KEY');
     const base = ler('JARVIS_AI_BASE_URL');
     const modelo = ler('JARVIS_AI_MODEL');
+    // Modelo local (127.0.0.1, localhost, [::1]) não pede chave desde a 0.75.0:
+    // avisar "chave vazia" aí seria dizer que está faltando o que não falta.
+    const hostLocal = (() => {
+      try {
+        const alvo = new URL(base || 'https://api.openai.com/v1').hostname.toLowerCase();
+        return ['127.0.0.1', 'localhost', '::1', '0.0.0.0', 'host.docker.internal'].includes(alvo);
+      } catch {
+        return false;
+      }
+    })();
     if (apiKey) {
       const mascarada = `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}`;
       registrar('chave', 'Chave de IA', 'ok', `preenchida (${mascarada}, ${apiKey.length} caracteres)`);
+    } else if (hostLocal) {
+      registrar('chave', 'Chave de IA', 'ok', `não precisa — ${base} é modelo local (sem internet, sem chave)`);
     } else {
-      registrar('chave', 'Chave de IA', 'aviso', 'vazia — as 8 skills de perfil sem modelo funcionam; distilar.persona e o chat externo não', 'Cole o valor em JARVIS_AI_API_KEY e reinicie a API.');
+      registrar('chave', 'Chave de IA', 'aviso', 'vazia — as 8 skills de perfil sem modelo funcionam; distilar.persona e o chat externo não', 'Cole o valor em JARVIS_AI_API_KEY, ou aponte JARVIS_AI_BASE_URL para http://127.0.0.1:8080/v1 e rode a IA local sem chave.');
     }
     if (base && modelo) {
       registrar('modelo', 'Endpoint e modelo', 'ok', `${base} · ${modelo}`);

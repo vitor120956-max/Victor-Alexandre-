@@ -1,10 +1,10 @@
-# Atualização delta (0.74.0)
+# Atualização delta (0.75.0)
 
 > Pedido: *“em vez de ficar baixando tudo só baixar e alterar o que foi mexido…
 > e fazer o JARVIS reconhecer sempre que houver atualização.”*
 
-O `atualizar.bat` sempre funcionou, mas baixava **3,5 MB e 464 arquivos** para
-trocar, numa versão típica, umas cinco coisas. A 0.74.0 acrescenta o caminho
+O `atualizar.bat` sempre funcionou, mas baixava **3,5 MB e 472 arquivos** para
+trocar, numa versão típica, umas cinco coisas. A 0.75.0 acrescenta o caminho
 delta: um manifesto com o `sha256` de cada arquivo, comparação local e download
 só do que mudou.
 
@@ -12,7 +12,7 @@ só do que mudou.
 
 | Pergunta | O que acontece | Custo |
 |---|---|---|
-| **Tem versão nova?** | baixa só o `manifest.json` e compara hash por hash | ~56 KB, nenhuma escrita no projeto |
+| **Tem versão nova?** | baixa só o `manifest.json` e compara hash por hash | ~57 KB, nenhuma escrita no projeto |
 | **Baixar o que mudou** | baixa os arquivos divergentes e confere cada `sha256` | uns poucos arquivos, centenas de KB |
 | **Aplicar** | copia o palco conferido por cima, com backup | exige confirmação e reinício da API |
 
@@ -31,10 +31,10 @@ Windows”* ou *“atualizar o celular”* **não** cai aqui — é outra coisa.
 
 ## Como a comparação funciona
 
-`manifest.json` (na raiz, ~56 KB) tem, para cada arquivo gerenciado:
+`manifest.json` (na raiz, ~57 KB) tem, para cada arquivo gerenciado:
 
 ```json
-{"versao": "0.74.0", "gerado": "2026-11-01T21:00:00+00:00",
+{"versao": "0.75.0", "gerado": "2026-11-01T21:00:00+00:00",
  "arquivos": {"server/app.py": {"sha256": "…", "bytes": 12345}}}
 ```
 
@@ -63,7 +63,7 @@ escreve fora da pasta do projeto.
 
 - `iniciar-jarvis.bat` exporta `JARVIS_ATUALIZACAO=1`.
 - Ao subir a API, uma thread espera 8 s, baixa o manifesto uma vez e escreve no
-  terminal: `JARVIS atualizacao: versao 0.74.0 disponivel (5 arquivo(s), 210 KB…)`.
+  terminal: `JARVIS atualizacao: versao 0.75.0 disponivel (5 arquivo(s), 210 KB…)`.
 - A tela mostra o aviso no topo (`src/components/UpdateBanner.tsx`), no máximo
   uma vez por hora por sessão (`sessionStorage`), com dois botões:
   **Baixar só o que mudou** e **Aplicar e reiniciar**.
@@ -104,7 +104,7 @@ O `.bat` lê o código de saída do Python:
 | Caminho | Bytes | Arquivos tocados |
 |---|---|---|
 | zip inteiro (`atualizar.bat` antigo) | ~3,5 MB | 464 |
-| delta (só o manifesto) | ~56 KB | 0 |
+| delta (só o manifesto) | ~57 KB | 0 |
 | delta (versão típica) | ~60–400 KB | 2–15 |
 
 Numa versão típica isso é **~1% do zip**. E, para quem tem `.git`, o delta já era

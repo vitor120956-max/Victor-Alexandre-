@@ -261,11 +261,13 @@ def test_doc_do_pendrive_aponta_para_os_provedores():
     assert "CONFIGURAR-IA.md" in texto
 
 
-def test_local_grava_chave_marcadora_e_base_padrao(script, tmp_path):
+def test_local_nao_grava_chave_e_usa_base_padrao(script, tmp_path):
+    """Desde a 0.75.0 o modelo local nao pede chave: o marcador `local` saiu."""
     assert script.principal(["--local", "--modelo", "qwen2.5-1.5b-instruct-q4_k_m.gguf"]) == 0
     bruto = (tmp_path / ".env").read_bytes()
     assert b"JARVIS_AI_BASE_URL=http://127.0.0.1:8080/v1\r\n" in bruto
-    assert b"JARVIS_AI_API_KEY=local\r\n" in bruto
+    assert b"JARVIS_AI_API_KEY=\r\n" in bruto
+    assert b"JARVIS_AI_API_KEY=local" not in bruto
     assert b"qwen2.5-1.5b-instruct-q4_k_m.gguf" in bruto
 
 

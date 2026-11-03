@@ -223,13 +223,15 @@ def principal(argv: list[str] | None = None) -> int:
         )
         return 0 if prova else 1
 
-    if args.local:
-        # Servidor local nao usa chave; o JARVIS exige um valor nao vazio para
-        # considerar a IA configurada, entao gravamos um marcador.
-        args.provedor = args.provedor or "Local (sem internet)"
+    # Modelo local desde a 0.75.0: o servidor aceita 127.0.0.1 sem chave. Antes
+    # era preciso gravar o marcador `local`, porque a checagem exigia chave para
+    # qualquer endereco — inclusive a propria maquina, o que travava o uso no
+    # pendrive. O marcador continua aceito (nao atrapalha), mas nao e mais
+    # gravado: chave vazia e o estado honesto de quem nao tem chave.
+    local = bool(args.local)
+    if local:
+        args.provedor = args.provedor or "Modelo local (sem chave)"
         args.base = args.base or args.local
-        if not args.chave:
-            args.chave = "local"
 
     print("Configurar a IA externa do JARVIS")
     print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")
@@ -246,7 +248,7 @@ def principal(argv: list[str] | None = None) -> int:
     base = base.rstrip("/") or base
 
     chave = args.chave
-    if chave is None:
+    if chave is None and not local:
         if interativo():
             try:
                 chave = getpass.getpass("Chave (não aparece ao digitar): ").strip()
@@ -257,10 +259,12 @@ def principal(argv: list[str] | None = None) -> int:
             chave = ""
 
     if not chave:
-        atual = ler_valor(texto, CHAVE)
+        atual = ler_valor(texto, CHAVE) if not local else ""
         if atual:
             print("\nNenhuma chave digitada; mantendo a que já estava gravada.")
             chave = atual
+        elif local:
+            chave = ""  # modelo local nao usa chave: e o caso normal, nao erro
         else:
             print("\nNenhuma chave digitada e nenhuma gravada. Nada foi alterado.")
             return 1
@@ -275,7 +279,7 @@ def principal(argv: list[str] | None = None) -> int:
     print(f"  provedor: {provedor}")
     print(f"  base:     {base}")
     print(f"  modelo:   {modelo}")
-    print(f"  chave:    {mascarar(chave)}")
+    print(f"  chave:    {mascarar(chave) if chave else '(nenhuma - modelo local)'}")
     if args.testar:
         print()
         tester(base, modelo, chave)
@@ -283,9 +287,9 @@ def principal(argv: list[str] | None = None) -> int:
 
     print("\nAgora reinicie o servidor para ele ler o arquivo novo:")
     if os.name == "nt":
-        print(r"  Ctrl+C na janela atual, depois: .venv\Scripts\python iniciar.py")
+        print(r"  Feche a janela do JARVIS no X e rode iniciar-jarvis.bat")
     else:
-        print("  Ctrl+C na janela atual, depois: .venv/bin/python iniciar.py")
+        print("  Encerre o processo da API e rode iniciar-jarvis.bat")
     print("Confira em http://127.0.0.1:8000/api/ai/status")
     return 0
 

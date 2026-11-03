@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.74.0"
+VERSAO = "0.75.0"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -374,8 +374,8 @@ def _resumo(versao_local: str, versao_remota: str, quantos: int, bytes_: int) ->
     """A frase do aviso — e ela não pode mentir sobre a versão.
 
     Se o número da versão é o mesmo mas o conteúdo diverge (arquivo editado à
-    mão, cópia antiga com um arquivo novo), dizer “versão nova: 0.74.0 (a sua é
-    0.74.0)” confunde. Aí a frase é sobre arquivos, não sobre versão.
+    mão, cópia antiga com um arquivo novo), dizer “versão nova: 0.75.0 (a sua é
+    0.75.0)” confunde. Aí a frase é sobre arquivos, não sobre versão.
     """
     if versao_remota and versao_remota != versao_local:
         return (
