@@ -155,6 +155,11 @@ export interface AIStatus {
   external: boolean;
   /** Modelo rodando nesta máquina (llama.cpp/Ollama): não sai dado para fora. */
   local?: boolean;
+  /** Quantas chaves existem no .env. Com mais de uma, o JARVIS troca sozinho
+   *  quando uma estoura a cota diária/minuto. */
+  keys?: number;
+  /** Qual chave respondeu por último (1-based), só quando há mais de uma. */
+  key_in_use?: number | null;
 }
 
 export interface BackendHealth {

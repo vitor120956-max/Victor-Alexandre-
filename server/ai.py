@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from urllib.parse import urlsplit
 from typing import Any, Protocol
 
@@ -27,9 +28,32 @@ class AIRequest(BaseModel):
 
 class AIProvider(Protocol):
     @property
+    def api_key(self) -> str:
+        """A primeira chave. Existe para quem só quer saber "tem chave?"."""
+        return self.api_keys[0] if self.api_keys else ""
+
+    @property
     def configured(self) -> bool: ...
     def status(self) -> dict[str, Any]: ...
     async def generate(self, request: AIRequest) -> str: ...
+
+
+def separar_chaves(bruto: str) -> list[str]:
+    """Uma, duas ou três chaves no mesmo campo — sem repetir e sem espaços.
+
+    O Groq limita por chave (pedidos e tokens por minuto). Com três chaves no
+    `.env`, o JARVIS troca de chave quando uma estoura, em vez de parar de
+    responder. A separação aceita vírgula, ponto e vírgula, barra vertical ou
+    quebra de linha — o que vier do copiar-e-colar.
+    """
+    vistas: set[str] = set()
+    saida: list[str] = []
+    for parte in re.split(r"[,;|\s]+", (bruto or "").strip()):
+        parte = parte.strip()
+        if parte and parte not in vistas:
+            vistas.add(parte)
+            saida.append(parte)
+    return saida
 
 
 def e_local(url: str) -> bool:
@@ -47,7 +71,10 @@ def e_local(url: str) -> bool:
 
 class OpenAICompatibleProvider:
     def __init__(self) -> None:
-        self.api_key = os.getenv("JARVIS_AI_API_KEY", "").strip()
+        self.api_keys = separar_chaves(os.getenv("JARVIS_AI_API_KEY", ""))
+        # Qual chave respondeu por último. A próxima chamada começa nela, para
+        # não gastar um pedido numa chave que já se sabe recusada.
+        self._indice = 0
         self.base_url = os.getenv("JARVIS_AI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
         self.model = os.getenv("JARVIS_AI_MODEL", "gpt-4o-mini").strip()
         self.local = e_local(self.base_url)
@@ -57,7 +84,7 @@ class OpenAICompatibleProvider:
     @property
     def configured(self) -> bool:
         # Local dispensa chave; remoto, não: sem chave o pedido só tomaria 401.
-        return bool(self.model and self.base_url and (self.api_key or self.local))
+        return bool(self.model and self.base_url and (self.api_keys or self.local))
 
     def status(self) -> dict[str, Any]:
         return {
@@ -66,6 +93,10 @@ class OpenAICompatibleProvider:
             "model": self.model if self.configured else None,
             "external": not self.local,
             "local": self.local,
+            # Quantas chaves existem (nunca quais). Com mais de uma, o JARVIS
+            # troca sozinho quando uma estoura a cota.
+            "keys": len(self.api_keys),
+            "key_in_use": (self._indice + 1) if len(self.api_keys) > 1 else None,
         }
 
     async def generate(self, request: AIRequest) -> str:
@@ -95,12 +126,51 @@ class OpenAICompatibleProvider:
             messages.append({"role": "assistant" if item.role == "jarvis" else "user", "content": item.content})
         messages.append({"role": "user", "content": request.message})
 
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        payload = {"model": self.model, "messages": messages, "temperature": 0.3, "max_tokens": request.max_tokens}
-        # Geração longa precisa de mais tempo que uma resposta de conversa.
         limite = 45.0 if request.max_tokens <= 800 else 150.0
+
+        # Modelo local não tem chave: uma tentativa, sem cabeçalho de autorização.
+        if not self.api_keys:
+            return await self._pedir(messages, None, limite, request.max_tokens)
+
+        total = len(self.api_keys)
+        recusas: list[int] = []
+        for passo in range(total):
+            indice = (self._indice + passo) % total
+            try:
+                texto = await self._pedir(messages, self.api_keys[indice], limite, request.max_tokens)
+            except _ChaveRecusada as exc:
+                # 401/403/429 são da chave, não do pedido: a próxima pode dar conta.
+                recusas.append(exc.status)
+                continue
+            self._indice = indice
+            return texto
+
+        # Todas recusaram: a frase diz o que fazer, sem citar nenhuma chave.
+        if all(codigo in (401, 403) for codigo in recusas):
+            if total == 1:
+                raise AIUnavailable(
+                    "a chave foi recusada pelo provedor (HTTP 401). "
+                    "Gere uma nova em console.groq.com/keys e rode configurar-chave.py."
+                )
+            raise AIUnavailable(
+                f"as {total} chaves foram recusadas pelo provedor (HTTP {recusas[0]}). "
+                "Gere chaves novas em console.groq.com/keys e rode configurar-chave.py."
+            )
+        if all(codigo == 429 for codigo in recusas):
+            raise AIUnavailable(
+                f"as {total} chaves estão no limite agora (HTTP 429). "
+                "Espere alguns minutos ou acrescente outra chave ao .env."
+            )
+        raise AIUnavailable(f"o provedor de IA respondeu com HTTP {recusas[-1]}.")
+
+    async def _pedir(
+        self, messages: list[dict[str, str]], chave: str | None, limite: float, max_tokens: int
+    ) -> str:
+        """Uma tentativa com uma chave. Traduz o HTTP em erro seguro em português."""
+        headers = {"Content-Type": "application/json"}
+        if chave:
+            headers["Authorization"] = f"Bearer {chave}"
+        payload = {"model": self.model, "messages": messages, "temperature": 0.3, "max_tokens": max_tokens}
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(limite, connect=10.0)) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
@@ -109,6 +179,8 @@ class OpenAICompatibleProvider:
         except httpx.HTTPError as exc:
             raise AIUnavailable("Não foi possível conectar ao provedor de IA.") from exc
 
+        if response.status_code in (401, 403, 429):
+            raise _ChaveRecusada(response.status_code)
         if response.status_code != 200:
             raise AIUnavailable(f"O provedor de IA respondeu com HTTP {response.status_code}.")
         try:
@@ -121,6 +193,14 @@ class OpenAICompatibleProvider:
         if not isinstance(content, str) or not content.strip():
             raise AIUnavailable("O provedor retornou uma resposta vazia.")
         return content.strip()[:12_000]
+
+
+class _ChaveRecusada(Exception):
+    """A chave não serve agora (401/403/429): vale tentar a próxima."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(str(status))
 
 
 class AIUnavailable(Exception):

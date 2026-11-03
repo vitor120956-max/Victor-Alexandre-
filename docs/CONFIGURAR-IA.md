@@ -50,6 +50,52 @@ Modelo [gpt-4o-mini]: nome-que-voce-copiou-do-painel
 Chave (não aparece ao digitar): gsk_...
 ```
 
+### Três chaves = três cérebros (0.76.0)
+
+Se uma chave só não aguenta o dia — o Groq limita pedidos e tokens **por
+chave** —, você pode pôr mais de uma no `.env`, na mesma linha, separadas por
+vírgula:
+
+```text
+JARVIS_AI_API_KEY=gsk_primeira...,gsk_segunda...,gsk_terceira...
+```
+
+O que acontece com mais de uma:
+
+| situação | o que o JARVIS faz |
+|---|---|
+| a 1ª responde | usa a 1ª — e passa a começar por ela nas próximas |
+| a 1ª estourou a cota (`429`) | tenta a 2ª **na mesma pergunta**, sem você perceber |
+| a 1ª foi recusada (`401`/`403`) | idem: pula para a próxima |
+| as três estouraram | “as 3 chaves estão no limite agora (HTTP 429). Espere alguns minutos…” |
+| as três recusadas | “as 3 chaves foram recusadas (HTTP 401). Gere chaves novas em console.groq.com/keys” |
+| o modelo não existe (`404`/`422`) | **não** troca de chave: erro de configuração não se resolve trocando de conta |
+
+A frase de erro nunca mostra a chave — nem parcial. Na tela, o cabeçalho da
+conversa passa a dizer `Groq · 3 chaves`.
+
+Para gravar as três de uma vez, sem elas aparecerem na tela:
+
+```bat
+.venv\Scripts\python configurar-chave.py
+```
+
+Quando ele pedir a chave, cole as três separadas por vírgula (o que você digita
+não aparece). Para conferir, uma chamada real em cada uma:
+
+```bat
+.venv\Scripts\python configurar-chave.py --testar
+```
+
+A saída diz, chave por chave, o que aconteceu, e fecha com
+`Resumo: 2 de 3 chave(s) respondendo`. Uma chave no limite hoje pode voltar
+amanhã; uma recusada (`401`) não volta.
+
+**Onde ficam:** só no `.env` da sua máquina. O `.env` não entra no
+`manifest.json`, não vai para o Git e não é tocado pela atualização delta.
+Chave que você compartilhou em conversa, print ou arquivo **não é mais
+secreta**: gere outra em <https://console.groq.com/keys> e apague a antiga lá.
+
 ### Passo a passo — Google AI Studio
 
 1. Abra <https://aistudio.google.com/apikey> com a sua conta Google.

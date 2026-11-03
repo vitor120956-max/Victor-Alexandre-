@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.75.0
+# Biblioteca e armazenamento — 0.76.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -264,11 +264,12 @@ Limites, sem enfeite:
 | Testes dos braços | **48** (`test_arrumar.py`: só sobra executa, PID reciclado é pulado, as quatro travas, diário e desfazer com o que não volta, instantâneo < 4 KB, ponto de restauração que falha sem derrubar a limpeza, **modo ousado** que traz só o reversível, elevação que respeita a recusa do UAC e os dois `.bat` que se elevam sozinhos) |
 | Testes do conserto | **31** (`test_conserto.py`: diário podado, quadro certo entre stdlib e projeto, 12 causas por regra, dossiê com docstring e guardas, proposta sem chave recusada, diff validado pela régua de evolução, e o app registrando a falha sem vazar detalhe pelo HTTP) |
 | Testes da atualização | **31** (`test_atualizacao.py`: manifesto sem `.env`/`storage`, comparação por hash que não marca igual como alterado, palco que recusa `sha256` errado, aplicar que exige confirmação, guarda de backup e recusa de `../`, e o roteamento das frases no chat) |
+| Testes das três chaves | **11** (`test_ai_provider.py` e `test_configurar_chave.py`: lista separada por vírgula, troca no `429` e no `401`, começar de novo na chave que funcionou, `404` que **não** troca, mensagem que diz quantas falharam sem citar nenhuma, máscara de várias e `--testar` com resumo `1 de 3`) |
 | Testes do modelo local | **29** (`test_ia_local.py` e dois no roteador: `.env` que preserva comentário e guarda cópia, download que não começa sem espaço, `.parcial` apagado quando falha, endereço de outro PC recusado sem chave, `desligar` que devolve o `.env` como era, porta aberta medida por socket de verdade e as frases do chat) |
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.162** |
+| Suíte da API | **3.173** |
 | Skills no registro | **315** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação; 1 em `ia.*`: `ia.local`, que confere, baixa e aponta o `.env` para um modelo sem chave) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

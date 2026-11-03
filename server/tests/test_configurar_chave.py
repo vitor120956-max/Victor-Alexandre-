@@ -308,3 +308,62 @@ def test_doc_de_pesquisa_explica_o_que_existe_e_o_que_falta():
     assert "material" in texto, "o doc precisa dizer que o canal existe e nada o alimenta"
     assert "não" in texto
     assert "docs/PESQUISA.md" in (RAIZ / "README.md").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------- tres chaves no mesmo .env
+
+def test_mascarar_varias_chaves_diz_quantas_e_nao_mostra_nenhuma_inteira(script):
+    texto = script.mascarar("gsk_primeira123456,gsk_segunda123456,gsk_terceira123456")
+    assert texto.startswith("3 chaves:")
+    assert "gsk_primeira123456" not in texto
+    assert "gsk_segunda123456" not in texto
+    assert "gsk_terceira123456" not in texto
+
+
+def test_grava_as_tres_chaves_na_mesma_linha(script, tmp_path):
+    codigo = script.principal([
+        "--provedor", "Groq",
+        "--base", "https://api.groq.com/openai/v1",
+        "--modelo", "llama-3.3-70b-versatile",
+        "--chave", "gsk_aaa,gsk_bbb,gsk_ccc",
+    ])
+    assert codigo == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_API_KEY=gsk_aaa,gsk_bbb,gsk_ccc\r\n" in bruto
+    assert bruto.count(b"JARVIS_AI_API_KEY=") == 1
+
+
+def test_testar_varias_chaves_resume_quantas_respondem(script, monkeypatch, capsys):
+    class Resposta:
+        def __init__(self, status):
+            self.status_code = status
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    status_por_chave = {"gsk_boa": 200, "gsk_gasta": 429, "gsk_morta": 401}
+
+    def post(_url, headers=None, **_kwargs):
+        chave = headers["Authorization"].removeprefix("Bearer ")
+        return Resposta(status_por_chave[chave])
+
+    monkeypatch.setattr(script.httpx, "post", post)
+    ok = script.tester("https://api.groq.com/openai/v1", "modelo", "gsk_boa,gsk_gasta,gsk_morta")
+    saida = capsys.readouterr().out
+    assert ok is True
+    assert "Chave 1 de 3" in saida and "Chave 3 de 3" in saida
+    assert "Resumo: 1 de 3 chave(s) respondendo" in saida
+    assert "gsk_boa" not in saida and "gsk_morta" not in saida
+
+
+def test_testar_varias_sem_nenhuma_boa_aponta_o_modelo_local(script, monkeypatch, capsys):
+    class Resposta:
+        status_code = 429
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(script.httpx, "post", lambda *_a, **_k: Resposta())
+    ok = script.tester("https://api.groq.com/openai/v1", "modelo", "gsk_a,gsk_b")
+    assert ok is False
+    assert "modelo local" in capsys.readouterr().out

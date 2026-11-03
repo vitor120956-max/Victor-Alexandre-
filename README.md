@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.75.0.**
+**Versão atual: 0.76.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -495,6 +495,14 @@ JARVIS_AI_API_KEY=chave-configurada-somente-no-servidor
 
 Reinicie `npm run dev` depois de editar `.env`. A chave nunca é enviada ao navegador, ao Git ou ao conteúdo das respostas. Sem essa configuração, a interface informa **“IA não configurada”** e mantém os comandos locais.
 
+**Mais de uma chave (0.76.0).** `JARVIS_AI_API_KEY` aceita várias, separadas por
+vírgula na mesma linha. Quando uma estoura a cota (`429`) ou é recusada
+(`401`/`403`), o JARVIS tenta a próxima **na mesma pergunta** e passa a começar
+por ela nas seguintes; erro de modelo (`404`/`422`) não troca de chave, porque
+não é problema de conta. A mensagem final diz quantas falharam — nunca o valor de
+nenhuma. Na tela, o cabeçalho mostra `Groq · 3 chaves`, e
+`configurar-chave.py --testar` testa cada uma e fecha com `Resumo: 1 de 3`.
+
 Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 
 ## Skills Python disponíveis
@@ -716,7 +724,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.75.0", "skills": 315}`.
+`{"version": "0.76.0", "skills": 315}`.
 
 ## Verificações
 

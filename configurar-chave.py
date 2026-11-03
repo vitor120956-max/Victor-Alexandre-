@@ -22,6 +22,11 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    import httpx  # só é usado no --testar; o resto do script funciona sem ele
+except ImportError:  # pragma: no cover - ambiente sem httpx
+    httpx = None  # type: ignore[assignment]
+
 RAIZ = Path(__file__).resolve().parent
 ENV = RAIZ / ".env"
 EXEMPLO = RAIZ / ".env.example"
@@ -82,12 +87,32 @@ def gravar(texto: str, caminho: Path | None = None) -> Path:
     return destino
 
 
+def separar_chaves(bruto: str) -> list[str]:
+    """Mesma regra do servidor: vírgula, ponto e vírgula, barra ou quebra de linha."""
+    vistas: set[str] = set()
+    saida: list[str] = []
+    for parte in re.split(r"[,;|\s]+", (bruto or "").strip()):
+        parte = parte.strip()
+        if parte and parte not in vistas:
+            vistas.add(parte)
+            saida.append(parte)
+    return saida
+
+
 def mascarar(chave: str | None) -> str:
-    if not chave:
+    """Mascara uma ou várias chaves. Nunca imprime a chave inteira."""
+    chaves = separar_chaves(chave or "")
+    if not chaves:
         return "(vazia)"
-    if len(chave) <= 10:
-        return chave[:2] + "…" + chave[-2:]
-    return f"{chave[:5]}…{chave[-4:]} ({len(chave)} caracteres)"
+    mascaradas = []
+    for item in chaves:
+        if len(item) <= 10:
+            mascaradas.append(item[:2] + "…" + item[-2:])
+        else:
+            mascaradas.append(f"{item[:5]}…{item[-4:]} ({len(item)} caracteres)")
+    if len(mascaradas) == 1:
+        return mascaradas[0]
+    return f"{len(mascaradas)} chaves: " + ", ".join(mascaradas)
 
 
 def interativo() -> bool:
@@ -111,10 +136,27 @@ def perguntar(rotulo: str, padrao: str) -> str:
 
 
 def tester(base: str, modelo: str, chave: str) -> bool:
-    """Faz uma chamada mínima de verdade e diz, em português, o que aconteceu.
+    """Testa a chave — ou cada uma delas, se houver várias.
 
-    Não imprime a chave nem o corpo cru da resposta do provedor.
+    Com três chaves, saber que "a segunda está no limite" vale mais que um
+    "falhou" genérico: é o que decide se dá para trabalhar hoje ou não.
     """
+    chaves = separar_chaves(chave)
+    if len(chaves) > 1:
+        resultados = []
+        for indice, item in enumerate(chaves, 1):
+            print(f"\nChave {indice} de {len(chaves)}:")
+            resultados.append(_testar_uma(base, modelo, item))
+        boas = sum(1 for ok in resultados if ok)
+        print(f"\nResumo: {boas} de {len(resultados)} chave(s) respondendo.")
+        if boas == 0:
+            print("Nenhuma serve agora. O JARVIS continua respondendo pelo modelo local, se estiver ligado.")
+        return boas > 0
+    return _testar_uma(base, modelo, chaves[0] if chaves else "")
+
+
+def _testar_uma(base: str, modelo: str, chave: str) -> bool:
+    """Uma chamada real de 8 tokens, sem imprimir a chave."""
     if not chave:
         print("Não há chave gravada para testar. Rode sem --testar e informe a chave.")
         return False
@@ -124,9 +166,7 @@ def tester(base: str, modelo: str, chave: str) -> bool:
 
     url = f"{base.rstrip('/')}/chat/completions"
     print(f"Testando {modelo} em {url} ...")
-    try:
-        import httpx  # noqa: PLC0415 - só é necessário aqui
-    except ImportError:
+    if httpx is None:
         print("O pacote httpx não está instalado; não dá para testar agora.")
         return False
 
@@ -179,7 +219,7 @@ def principal(argv: list[str] | None = None) -> int:
     parser.add_argument("--modelo", help="Nome exato do modelo na sua conta.")
     parser.add_argument(
         "--chave",
-        help="Grava a chave direto. Prefira deixar em branco: o padrão é digitar sem eco, sem deixar rastro no histórico.",
+        help="Grava a chave direto (aceita várias separadas por vírgula). Prefira deixar em branco: o padrão é digitar sem eco, sem deixar rastro no histórico.",
     )
     parser.add_argument(
         "--local",
@@ -251,7 +291,7 @@ def principal(argv: list[str] | None = None) -> int:
     if chave is None and not local:
         if interativo():
             try:
-                chave = getpass.getpass("Chave (não aparece ao digitar): ").strip()
+                chave = getpass.getpass("Chave(s), uma ou separadas por vírgula (não aparece ao digitar): ").strip()
             except (EOFError, KeyboardInterrupt):
                 chave = ""
         else:
