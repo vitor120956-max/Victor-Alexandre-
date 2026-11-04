@@ -65,6 +65,8 @@ interface AppContextValue {
   toasts: Toast[];
   backendOnline: boolean;
   backendVersion: string | null;
+  /** Tela servida: nome da pasta, versão carimbada e se é mais velha que o servidor. */
+  interfaceServida: { pasta: string; versao: string | null; velha: boolean };
   modoDono: boolean;
   pythonSkills: PythonSkill[];
   aiStatus: AIStatus;
@@ -132,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
+  const [interfaceServida, setInterfaceServida] = useState({ pasta: 'ausente', versao: null as string | null, velha: false });
   const [modoDono, setModoDono] = useState(false);
   const lembretesMostrados = useRef<Set<string>>(new Set());
   const [pythonSkills, setPythonSkills] = useState<PythonSkill[]>([]);
@@ -242,6 +245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!health?.ok) {
       setBackendOnline(false);
       setBackendVersion(null);
+      setInterfaceServida({ pasta: 'ausente', versao: null, velha: false });
       setModoDono(false);
       setPythonSkills([]);
       setAIStatus(initialAIStatus);
@@ -249,6 +253,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setBackendOnline(true);
     setBackendVersion(health.version);
+    setInterfaceServida({
+      pasta: health.interface ?? 'ausente',
+      versao: health.interfaceVersao ?? null,
+      velha: Boolean(health.interfaceVelha),
+    });
     setModoDono(Boolean(health.confiarLocal));
     const [catalog, ai] = await Promise.allSettled([listPythonSkills(), getAIStatus()]);
     setPythonSkills(catalog.status === 'fulfilled' ? catalog.value : []);
@@ -1180,6 +1189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toasts,
     backendOnline,
     backendVersion,
+    interfaceServida,
     modoDono,
     pythonSkills,
     aiStatus,

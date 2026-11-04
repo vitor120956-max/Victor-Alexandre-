@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, BrainCircuit, Check, Database, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
-import { apagarChavesIA, getChavesIA, salvarChavesIA, testarChavesIA } from '../lib/api';
-import type { ChaveTesteResultado, ChavesIA } from '../lib/api';
+import { apagarChavesIA, getChavesIA, getModelosIA, salvarChavesIA, salvarModeloIA, testarChavesIA } from '../lib/api';
+import type { ChaveTesteResultado, ChavesIA, ModelosIA } from '../lib/api';
 import type { Preferences } from '../types';
 
 export function SettingsPage() {
@@ -21,6 +21,52 @@ export function SettingsPage() {
   const [salvandoChaves, setSalvandoChaves] = useState(false);
   const [teste, setTeste] = useState<ChaveTesteResultado | null>(null);
   const campoChaves = useRef<HTMLTextAreaElement | null>(null);
+
+  // --- modelo de IA -------------------------------------------------------
+  // “e sobre os modelos, como funcionam?”: cada opção vem com o que ela custa,
+  // e a escolha é gravada no `.env` sem ninguém decorar nome de modelo.
+  const [modelos, setModelos] = useState<ModelosIA | null>(null);
+  const [modeloEscolhido, setModeloEscolhido] = useState('');
+  const [modeloLivre, setModeloLivre] = useState('');
+  const [salvandoModelo, setSalvandoModelo] = useState(false);
+
+  const recarregarModelos = useCallback(async () => {
+    if (!backendOnline) {
+      setModelos(null);
+      return;
+    }
+    try {
+      const dados = await getModelosIA();
+      setModelos(dados);
+      setModeloEscolhido(dados.modelo || dados.padrao);
+      setModeloLivre(dados.modelo && !dados.opcoes.some((item) => item.id === dados.modelo) ? dados.modelo : '');
+    } catch {
+      setModelos(null);
+    }
+  }, [backendOnline]);
+
+  useEffect(() => { void recarregarModelos(); }, [recarregarModelos]);
+
+  const usarModelo = async () => {
+    const alvo = (modeloLivre.trim() || modeloEscolhido).trim();
+    if (!alvo) {
+      pushToast('Escolha um modelo', 'Selecione na lista ou digite o nome exato.', 'warning');
+      return;
+    }
+    setSalvandoModelo(true);
+    try {
+      const dados = await salvarModeloIA(alvo);
+      setModelos(dados);
+      setModeloEscolhido(dados.modelo);
+      setModeloLivre('');
+      await refreshBackend();
+      pushToast('Modelo trocado', `Agora respondendo com ${dados.modelo}. Vale na próxima mensagem.`, 'success');
+    } catch (erro) {
+      pushToast('Não deu para trocar o modelo', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setSalvandoModelo(false);
+    }
+  };
 
   const recarregarChaves = useCallback(async () => {
     if (!backendOnline) {
@@ -218,6 +264,56 @@ export function SettingsPage() {
                   </ul>
                 </div>
               )}
+            </div>
+
+            {/* 0.79.1 — o modelo é a segunda metade de “o cérebro”: a chave
+                abre a porta, o modelo é quem responde. */}
+            <div className="modelos-card" id="modelos-de-ia">
+              <h3 className="chaves-titulo"><BrainCircuit size={13} /> Modelos de IA</h3>
+              <p className="modelos-resumo">
+                {modelos?.local
+                  ? 'Modelo local: não há catálogo — o modelo é o arquivo .gguf que o llama-server carrega.'
+                  : 'A chave abre a porta; o modelo é quem responde. Grande entende melhor e gasta mais cota; pequeno responde rápido e rende muito mais pedidos por dia.'}
+              </p>
+              {modelos && !modelos.local && (
+                <>
+                  <label className="field">
+                    <span>Modelo do provedor</span>
+                    <select value={modeloEscolhido} onChange={(event) => setModeloEscolhido(event.target.value)}>
+                      {modelos.opcoes.map((opcao) => (
+                        <option key={opcao.id} value={opcao.id}>{opcao.nome} — {opcao.perfil}</option>
+                      ))}
+                      {modeloEscolhido && !modelos.opcoes.some((item) => item.id === modeloEscolhido) && (
+                        <option value={modeloEscolhido}>{modeloEscolhido} (fora da lista)</option>
+                      )}
+                    </select>
+                  </label>
+                  <p className="modelos-detalhe">
+                    {modelos.opcoes.find((item) => item.id === modeloEscolhido)?.quando
+                      || 'Modelo fora da lista: confira o nome no painel do provedor.'}
+                  </p>
+                </>
+              )}
+              <label className="field">
+                <span>Ou o nome exato do modelo {modelos?.local ? '(arquivo .gguf)' : ''}</span>
+                <input
+                  value={modeloLivre}
+                  onChange={(event) => setModeloLivre(event.target.value)}
+                  placeholder={modelos?.modelo || 'ex.: llama-3.3-70b-versatile'}
+                  maxLength={120}
+                />
+              </label>
+              <div className="modelos-acoes">
+                <button className="button button-primary" onClick={() => void usarModelo()} disabled={!backendOnline || salvandoModelo}>
+                  <Zap size={15} /> {salvandoModelo ? 'Gravando…' : 'Usar este modelo'}
+                </button>
+                <button className="button button-secondary" onClick={() => { setModeloLivre(''); setModeloEscolhido(modelos?.padrao || ''); }} disabled={salvandoModelo}>
+                  <RotateCcw size={15} /> Voltar ao padrão
+                </button>
+              </div>
+              <p className="modelos-nota">
+                A cota de cada modelo é do provedor e muda. Se um nome sair do ar, o botão <strong>Testar</strong> das chaves mostra o erro na hora.
+              </p>
             </div>
           </section>
           <section className="panel settings-section">

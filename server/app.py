@@ -20,6 +20,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import atualizacao as atualizacao_local
+from . import interface_web
+from . import modelos as modelos_mod
 from . import chaves as chaves_mod
 from . import conserto
 from . import dados as dados_locais
@@ -76,6 +78,12 @@ class ChavesTesteRequest(BaseModel):
 
     # 1-based; vazio testa todas.
     indice: int | None = Field(default=None, ge=1, le=20)
+
+
+class ModeloRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    modelo: str = Field(min_length=1, max_length=120)
 
 
 class AgenteRequest(BaseModel):
@@ -292,30 +300,16 @@ def _rotulo_dono() -> str:
 def pasta_da_interface(base: Path | None = None) -> Path | None:
     """Onde está a interface já compilada: `dist` (build local) ou `web-dist` (embutida no Git).
 
-    O `web-dist` existe para quem não quer (ou não consegue) rodar `npm install`:
-    a API serve a mesma interface sem Node instalado.
+    A decisão inteira mora em `server/interface_web.py`, com a ordem: variável de
+    ambiente → **versão carimbada no build** → data do `index.html` → `dist`.
+    Aqui fica só o nome que o resto do projeto já conhece.
 
-    **Qual das duas?** A mais **nova**, medida pela data do `index.html`. Antes a
-    ordem era fixa (`dist` primeiro), e isso criou um problema real: quem tinha
-    um `dist` de um `npm run build` antigo continuava vendo a tela velha mesmo
-    depois de atualizar — a atualização delta traz o `web-dist` novo, mas o
-    `dist` velho ganhava por estar na frente. Em empate, `dist` continua
-    ganhando, porque é o build de quem está desenvolvendo.
+    O porquê do carimbo: a regra por data consertou um caso real (`dist` velho
+    escondendo `web-dist` novo), mas data mente em cópia por pendrive e em
+    backup restaurado — e o relato de “atualizei e a tela continua a antiga”
+    continuou aparecendo. Versão está escrita dentro do arquivo.
     """
-    raiz = base or PROJECT_ROOT
-    candidatas: list[tuple[float, int, Path]] = []
-    for prioridade, nome in enumerate(("dist", "web-dist")):
-        indice = raiz / nome / "index.html"
-        if indice.is_file():
-            try:
-                quando = indice.stat().st_mtime
-            except OSError:  # pragma: no cover - disco sem permissão
-                quando = 0.0
-            candidatas.append((quando, -prioridade, raiz / nome))
-    if not candidatas:
-        return None
-    candidatas.sort(reverse=True)
-    return candidatas[0][2]
+    return interface_web.escolher(base)
 
 
 def create_app(
@@ -458,6 +452,27 @@ def create_app(
             "confiarLocalPorVariavel": sistema_mod.confiar_local(),
             "exigirTokenLocal": sistema_mod.exigir_token_local(),
             "interface": interface.name if interface else "ausente",
+            # 0.79.1: “atualizei e a tela continua a antiga” virou diagnóstico.
+            # O carimbo do build diz qual tela está sendo servida — e se ela é
+            # mais velha que este servidor.
+            "interfaceVersao": interface_web.versao_da_pasta(interface) if interface else None,
+            "interfaceVelha": bool(
+                interface
+                and interface_web.versao_da_pasta(interface)
+                and interface_web.versao_da_pasta(interface) != atualizacao_local.VERSAO
+            ),
+        }
+
+    @application.get("/api/interface/estado")
+    def interface_estado() -> dict[str, Any]:
+        """Qual tela está sendo servida, de onde, e se bate com o servidor.
+
+        É a resposta em JSON do que o `conferir-versao.bat` mostra na tela. Não
+        lê nada do usuário: só o carimbo dos builds e o nome das pastas.
+        """
+        return {
+            "ok": True,
+            "result": interface_web.estado(versao_servidor=atualizacao_local.VERSAO, servida=interface),
         }
 
     @application.get("/api/skills")
@@ -687,6 +702,35 @@ def create_app(
     def ai_status() -> dict[str, Any]:
         return {"ok": True, **provider.status()}
 
+    # ------------------------------------------------------------ modelo de IA
+    # “e sobre os modelos, como funcionam?” — a resposta é uma lista com o que
+    # cada um custa, e um botão que grava a escolha no `.env`. Decorar nome de
+    # modelo não é trabalho de ninguém.
+
+    @application.get("/api/ai/modelos")
+    def ai_modelos() -> dict[str, Any]:
+        return {"ok": True, "result": modelos_mod.estado()}
+
+    @application.post("/api/ai/modelo")
+    def ai_modelo_salvar(request: Request, payload: ModeloRequest) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = modelos_mod.aplicar(payload.modelo)
+        except modelos_mod.ModeloInvalido as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "MODELO_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "ENV_NAO_ESCRITO", "message": f"não consegui escrever o .env: {exc}"}},
+            )
+        # Recarrega na hora: trocar de modelo não pode exigir fechar a janela.
+        if hasattr(provider, "recarregar"):
+            provider.recarregar()  # type: ignore[attr-defined]
+        return {"ok": True, "result": resultado, "status": provider.status(), "estado": modelos_mod.estado()}
+
     @application.post("/api/ai/chat")
     async def ai_chat(payload: AIRequest) -> dict[str, Any]:
         if not provider.configured:
@@ -907,8 +951,19 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=403, detail="Caminho inválido.") from exc
         if full_path and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(raiz / "index.html")
+            resposta = FileResponse(candidate)
+            # `/assets/` tem hash no nome: se o conteúdo muda, o nome muda. Pode
+            # ficar no cache para sempre, e é o que segura a tela rápida.
+            if full_path.startswith("assets/"):
+                resposta.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                resposta.headers["Cache-Control"] = "no-cache, must-revalidate"
+            return resposta
+        indice = FileResponse(raiz / "index.html")
+        # O `index.html` aponta para os assets da versão atual: guardá-lo em cache
+        # é o que deixa a pessoa presa na tela antiga depois de atualizar.
+        indice.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return indice
 
     return application
 

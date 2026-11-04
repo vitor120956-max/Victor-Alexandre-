@@ -10,7 +10,7 @@
  *   npm run build            # gera dist/ com Vite
  *   npm run build:embutido   # build + cópia para web-dist/
  */
-import { cpSync, existsSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,6 +39,22 @@ function medir(pasta) {
   return arquivos;
 }
 
+/**
+ * Carimbo da interface: `versao.json` dentro do `web-dist`.
+ *
+ * Existe para responder a uma pergunta que já custou três idas e voltas: “eu
+ * atualizei, por que a tela continua a antiga?”. A API lê este arquivo, compara
+ * com a própria versão e diz — em `/api/health`, na tela e no
+ * `conferir-versao.bat`. Data de arquivo mente (cópia por pendrive, backup
+ * restaurado); versão escrita dentro do build não.
+ */
+const pacote = JSON.parse(readFileSync(join(RAIZ, 'package.json'), 'utf-8'));
+writeFileSync(
+  join(DESTINO, 'versao.json'),
+  JSON.stringify({ versao: pacote.version, geradoEm: new Date().toISOString() }, null, 2) + '\n',
+  'utf-8',
+);
+
 const arquivos = medir(DESTINO);
 const total = arquivos.reduce((soma, item) => soma + item.bytes, 0);
 const maiores = [...arquivos].sort((a, b) => b.bytes - a.bytes).slice(0, 5);
@@ -60,7 +76,7 @@ writeFileSync(
   'utf-8',
 );
 
-console.log(`web-dist atualizado: ${arquivos.length} arquivos, ${mb(total)}.`);
+console.log(`web-dist atualizado: ${arquivos.length} arquivos, ${mb(total)}, versão ${pacote.version}.`);
 for (const item of maiores) {
   console.log(`  ${mb(item.bytes).padStart(9)}  ${item.caminho.slice(DESTINO.length + 1)}`);
 }

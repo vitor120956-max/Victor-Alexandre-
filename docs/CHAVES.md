@@ -15,19 +15,51 @@ texto, não um comando.
 
 ---
 
-## 0. Se o cartão não aparece
+## 0. Se o cartão não aparece — comece por `conferir-versao.bat`
 
-Duas causas conhecidas, nesta ordem:
+Desde a **0.79.1** existe um duplo clique que responde isso com fato, em vez de
+“tenta atualizar de novo”: **`conferir-versao.bat`**. Ele mostra a versão do
+disco, a versão da API que está respondendo, qual interface está sendo servida
+e **o que fazer**. Não instala, não baixa e não altera nada.
+
+```text
+  versão do servidor:       0.79.1
+  pasta da interface:       web-dist
+  versão da interface:      0.79.1
+  versão da API:            0.79.1
+```
+
+Se os três primeiros baterem com o último, o problema é só o navegador:
+**Ctrl+F5** na página.
+
+Sem o conferidor, a tabela abaixo serve para o diagnóstico no olho:
 
 | o que você vê | causa | solução |
 |---|---|---|
 | a frase *“Não cole chaves no chat ou nesta tela”* | versão anterior à 0.77.0 | atualize (`atualizar.bat`, ou “atualiza o jarvis” no chat) |
-| rodapé dizendo **VERSÃO 0.5.0** | o rodapé era fixo até a 0.77.1 | atualize: agora ele mostra a versão real |
+| rodapé dizendo **VERSÃO 0.5.0** | tela de antes da 0.77.1 (o rodapé era texto fixo) | `conferir-versao.bat` e siga o veredito |
 | cartão sem título (só “Nenhuma chave guardada”) | 0.77.0, antes do título | atualize para a 0.77.1 |
 
-O caminho mais seguro quando a tela parece velha: feche no **X**,
-duplo-clique em `atualizar.bat`, espere **atualizado** e abra
-`iniciar-jarvis.bat`.
+O caminho mais seguro quando a tela parece velha: feche a janela preta no **X**,
+duplo-clique em `atualizar.bat`, espere a linha **Versao instalada nesta pasta
+agora** (o `.bat` imprime o número), e abra `iniciar-jarvis.bat`.
+
+### Por que isso não era óbvio
+
+Três coisas diferentes produzem a mesma tela velha, e sem número nenhuma delas
+se distingue da outra:
+
+1. **os arquivos** não foram trocados nesta pasta (o `atualizar.bat` de outra
+   cópia foi rodado, ou falhou e a janela fechou antes de alguém ler);
+2. **o processo** em execução é antigo: o Python carrega o código no start e não
+   recarrega sozinho ao trocar arquivo no disco;
+3. **o navegador** guardou o `index.html` velho em cache e nem pediu de novo.
+
+A 0.79.1 ataca as três: o `.bat` imprime a versão que ficou; o build carimba
+`versao.json` dentro da interface e a API compara com a sua própria versão
+(aparece em `/api/health` e num aviso vermelho na tela); e o `index.html` passou
+a sair com `no-cache`, enquanto `/assets/*` (nome com hash) pode ficar em cache
+para sempre — o que é guardado é o que nunca muda de conteúdo.
 
 ## 1. O caminho novo: três cliques
 

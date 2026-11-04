@@ -132,12 +132,19 @@ echo   Copia concluida.
 goto checar_dist
 
 :checar_dist
+echo.
+echo   Versao instalada nesta pasta agora:
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" -c "from server import atualizacao; print('    ' + atualizacao.VERSAO)" 2>nul
+) else (
+  py -3 -c "from server import atualizacao; print('    ' + atualizacao.VERSAO)" 2>nul
+)
 if not exist "dist\index.html" goto checar_req
 echo.
-echo   ATENCAO: existe uma pasta dist\ de um build antigo. A API prefere
-echo   dist\ a web-dist\, entao a tela continuaria velha. Apague ou renomeie:
-echo     rmdir /s /q dist
-echo.
+echo   Existe uma pasta dist\ de um build antigo. Desde a 0.79.1 a API
+echo   escolhe a interface de maior versao carimbada, entao isso nao deve
+echo   esconder mais a tela nova. Se quiser limpar: rmdir /s /q dist
+goto checar_req
 
 :checar_req
 echo.
@@ -150,6 +157,10 @@ goto terminou
 :terminou
 echo.
 echo   A versao aparece em http://127.0.0.1:8000/api/health
+echo.
+echo   Se depois de subir a tela continuar velha ou faltar algum cartao,
+echo   rode o conferir-versao.bat: ele diz qual versao esta no disco, qual a
+echo   API responde e o que fazer. E nao e preciso reinstalar nada.
 echo.
 echo   Pronto. Agora:
 echo     1^) feche a janela da API no X (nao digite nada no terminal dela)

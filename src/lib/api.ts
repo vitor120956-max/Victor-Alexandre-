@@ -201,6 +201,31 @@ export interface BackendHealth {
   skills: number;
   /** Modo dono: ligado com JARVIS_HOST_CONFIAR_LOCAL=1. Nesta máquina o token não é digitado. */
   confiarLocal?: boolean;
+  /** Pasta da interface servida: `dist`, `web-dist` ou `ausente`. */
+  interface?: string;
+  /** Versão carimbada no build da tela servida. `null` = build de antes da 0.79.1. */
+  interfaceVersao?: string | null;
+  /** A tela é mais velha que o servidor: atualização não chegou nesta pasta. */
+  interfaceVelha?: boolean;
+}
+
+/** Um modelo de IA oferecido na tela, com o que ele custa. */
+export interface ModeloIA {
+  id: string;
+  nome: string;
+  perfil: string;
+  quando: string;
+  atual: boolean;
+}
+
+export interface ModelosIA {
+  modelo: string;
+  padrao: string;
+  provedor: string;
+  base: string;
+  local: boolean;
+  opcoes: ModeloIA[];
+  nota: string;
 }
 
 export interface RemocaoSugerida {
@@ -348,6 +373,21 @@ export async function uploadReverseArtifact(input: {
 
 export async function getAIStatus(): Promise<AIStatus> {
   return apiFetch<AIStatus>('/api/ai/status');
+}
+
+/** Catálogo de modelos: qual está em uso e o que cada opção custa. */
+export async function getModelosIA(): Promise<ModelosIA> {
+  const resposta = await apiFetch<{ ok: boolean; result: ModelosIA }>('/api/ai/modelos');
+  return resposta.result;
+}
+
+/** Troca o modelo no `.env` e recarrega o provedor na hora. */
+export async function salvarModeloIA(modelo: string): Promise<ModelosIA> {
+  const resposta = await apiFetch<{ ok: boolean; estado: ModelosIA }>('/api/ai/modelo', {
+    method: 'POST',
+    body: JSON.stringify({ modelo }),
+  });
+  return resposta.estado;
 }
 
 /** Estado das chaves de IA — o que a tela mostra. Nunca traz a chave inteira. */

@@ -1197,6 +1197,25 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 /* 0.77.0 — chaves de IA na tela: colar, testar e apagar sem abrir o .env.
    O campo fica oculto por padrão (o texto colado é uma chave, não um lembrete);
    o botão do olho existe porque esconder sem poder revelar faz digitar errado. */
+/* 0.79.1 — aviso de tela velha: servidor novo, interface antiga. */
+.interface-banner { border-color: rgba(229, 62, 62, .45); background: rgba(229, 62, 62, .10); flex-wrap: wrap; }
+.interface-banner svg { color: #e53e3e; flex: 0 0 auto; }
+.interface-banner b { color: #f38a8a; }
+
+/* 0.79.1 — cartão “Modelos de IA”: a chave abre a porta, o modelo responde.
+   Fica logo abaixo das chaves porque é a pergunta seguinte de quem acabou de
+   colar uma chave: “e agora, qual cérebro?”. */
+.modelos-card { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: rgba(var(--accent-rgb), .02); }
+.modelos-resumo { margin: 6px 0 11px; font-size: 9px; line-height: 1.5; color: var(--muted); }
+.modelos-card .field { margin-bottom: 9px; }
+.modelos-detalhe { margin: -4px 0 11px; font-size: 9px; line-height: 1.45; color: var(--text-soft); }
+.modelos-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.modelos-nota { margin-top: 10px; font-size: 8.5px; line-height: 1.45; color: var(--muted); }
+.modelos-card select {
+  width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface-soft); color: var(--text); font-size: 10px;
+}
+
 /* 0.79.0 — cota dentro do cartão de chaves: o mesmo dado do aviso do topo,
    aqui com o detalhe de cada chave. */
 .chaves-cota { margin-top: 10px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .02); }

@@ -272,3 +272,62 @@ def test_o_teste_das_chaves_devolve_o_status_da_cota(client: TestClient, monkeyp
     resposta = client.post("/api/ai/chaves/testar", json={})
     assert resposta.status_code == 200
     assert resposta.json()["status"]["provider"] == "Provedor de teste"
+
+
+# ------------------------------- 0.79.1: modelo na tela e tela velha visível
+
+def test_a_rota_de_modelos_lista_o_catalogo(client: TestClient, tmp_path, monkeypatch):
+    from server import chaves
+
+    arquivo = tmp_path / ".env"
+    arquivo.write_text(
+        "JARVIS_AI_PROVIDER=Groq\r\n"
+        "JARVIS_AI_BASE_URL=https://api.groq.com/openai/v1\r\n"
+        "JARVIS_AI_MODEL=llama-3.3-70b-versatile\r\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chaves, "ENV_CAMINHO", arquivo)
+    dados = client.get("/api/ai/modelos").json()["result"]
+    assert dados["modelo"] == "llama-3.3-70b-versatile"
+    assert any(item["atual"] for item in dados["opcoes"])
+    assert all("quando" in item for item in dados["opcoes"])
+
+
+def test_trocar_modelo_recarrega_o_provedor(client: TestClient, tmp_path, monkeypatch):
+    from server import chaves
+
+    arquivo = tmp_path / ".env"
+    arquivo.write_text(
+        "JARVIS_AI_PROVIDER=Groq\r\n"
+        "JARVIS_AI_BASE_URL=https://api.groq.com/openai/v1\r\n"
+        "JARVIS_AI_MODEL=llama-3.3-70b-versatile\r\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chaves, "ENV_CAMINHO", arquivo)
+    recarregou = {"vezes": 0}
+
+    class ProvedorQueRecarrega(FakeProvider):
+        def recarregar(self) -> None:
+            recarregou["vezes"] += 1
+
+    app = create_app(ai_provider=ProvedorQueRecarrega(), registry=build_registry(tmp_path / "files"))
+    with TestClient(app) as client_novo:
+        resposta = client_novo.post("/api/ai/modelo", json={"modelo": "llama-3.1-8b-instant"})
+    assert resposta.status_code == 200
+    assert "JARVIS_AI_MODEL=llama-3.1-8b-instant" in arquivo.read_text(encoding="utf-8")
+    assert recarregou["vezes"] == 1
+
+
+def test_modelo_invalido_responde_400(client: TestClient, tmp_path, monkeypatch):
+    from server import chaves
+
+    monkeypatch.setattr(chaves, "ENV_CAMINHO", tmp_path / ".env")
+    resposta = client.post("/api/ai/modelo", json={"modelo": "nome com espaço"})
+    assert resposta.status_code == 400
+    assert resposta.json()["error"]["code"] == "MODELO_INVALIDO"
+
+
+def test_a_rota_de_interface_diz_qual_tela_esta_servida(client: TestClient):
+    dados = client.get("/api/interface/estado").json()["result"]
+    assert "servida" in dados and "desatualizada" in dados
+    assert any(item["pasta"] in {"dist", "web-dist"} for item in dados["candidatas"])

@@ -119,3 +119,47 @@ def test_todo_goto_do_bat_tem_rotulo():
 
 def test_bat_nao_manda_digitar_ctrl_c():
     assert "Ctrl+C" not in _texto(BAT)
+
+
+# ------------------------- 0.79.1: o .bat diz a versão e aponta o conferidor
+
+CONFERIR = RAIZ / "conferir-versao.bat"
+VERIFICAR = RAIZ / "verificar_versao.py"
+
+
+def test_o_conferidor_existe_ao_lado_do_atualizador():
+    assert CONFERIR.is_file()
+    assert VERIFICAR.is_file()
+
+
+def test_o_conferidor_e_ascii_puro_e_chama_o_script():
+    bruto = CONFERIR.read_bytes()
+    assert all(byte < 128 for byte in bruto)
+    assert b"\r\n" in bruto
+    texto = bruto.decode("ascii")
+    assert "verificar_versao.py" in texto
+    assert ".venv\\Scripts\\python.exe" in texto
+    assert "pause" in texto  # sem pause a janela fecha e ninguém lê o veredito
+
+
+def test_o_conferidor_nao_pede_ctrl_c():
+    texto = CONFERIR.read_text(encoding="ascii")
+    assert "Ctrl+C" not in texto and "CTRL+C" not in texto
+
+
+def test_o_atualizador_imprime_a_versao_que_ficou():
+    """Quem roda o .bat precisa ver o número, não adivinhar pelo rodapé."""
+    texto = BAT.read_text(encoding="ascii")
+    assert "atualizacao.VERSAO" in texto
+
+
+def test_o_atualizador_manda_rodar_o_conferidor_quando_a_tela_parecer_velha():
+    texto = BAT.read_text(encoding="ascii")
+    assert "conferir-versao.bat" in texto
+
+
+def test_o_atualizador_nao_manda_mais_apagar_o_dist_as_cegas():
+    """A regra mudou: a interface é escolhida por versão carimbada, não por pasta."""
+    texto = BAT.read_text(encoding="ascii")
+    assert "A API prefere" not in texto
+    assert "versao carimbada" in texto
