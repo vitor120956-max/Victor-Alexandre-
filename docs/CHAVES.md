@@ -15,6 +15,20 @@ texto, não um comando.
 
 ---
 
+## 0. Se o cartão não aparece
+
+Duas causas conhecidas, nesta ordem:
+
+| o que você vê | causa | solução |
+|---|---|---|
+| a frase *“Não cole chaves no chat ou nesta tela”* | versão anterior à 0.77.0 | atualize (`atualizar.bat`, ou “atualiza o jarvis” no chat) |
+| rodapé dizendo **VERSÃO 0.5.0** | o rodapé era fixo até a 0.77.1 | atualize: agora ele mostra a versão real |
+| cartão sem título (só “Nenhuma chave guardada”) | 0.77.0, antes do título | atualize para a 0.77.1 |
+
+O caminho mais seguro quando a tela parece velha: feche no **X**,
+duplo-clique em `atualizar.bat`, espere **atualizado** e abra
+`iniciar-jarvis.bat`.
+
 ## 1. O caminho novo: três cliques
 
 1. **Configurações** (na barra lateral).

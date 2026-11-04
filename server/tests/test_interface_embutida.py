@@ -41,10 +41,31 @@ def test_sem_nenhuma_interface_devolve_none(tmp_path):
     assert pasta_da_interface(base) is None
 
 
-def test_prefere_dist_quando_existe(tmp_path):
+def test_em_empate_prefere_dist(tmp_path):
+    """Os dois com a mesma data: ganha o build local, que é o de quem desenvolve."""
     base = _montar(tmp_path, dist=True, web=True)
+    mesma_data = 1_700_000_000
+    for nome in ("dist", "web-dist"):
+        import os
+
+        os.utime(base / nome / "index.html", (mesma_data, mesma_data))
     escolhida = pasta_da_interface(base)
     assert escolhida is not None and escolhida.name == "dist"
+
+
+def test_prefere_a_interface_mais_nova(tmp_path):
+    """`dist` velho não pode esconder o `web-dist` que a atualização acabou de trazer.
+
+    Foi o caso real: atualizou, a tela continuou a antiga, porque o `dist` de um
+    `npm run build` antigo vinha primeiro na ordem.
+    """
+    import os
+
+    base = _montar(tmp_path, dist=True, web=True)
+    os.utime(base / "dist" / "index.html", (1_600_000_000, 1_600_000_000))
+    os.utime(base / "web-dist" / "index.html", (1_700_000_000, 1_700_000_000))
+    escolhida = pasta_da_interface(base)
+    assert escolhida is not None and escolhida.name == "web-dist"
 
 
 def test_cai_para_web_dist_sem_dist(tmp_path):

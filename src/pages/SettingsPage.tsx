@@ -7,7 +7,7 @@ import type { ChaveTesteResultado, ChavesIA } from '../lib/api';
 import type { Preferences } from '../types';
 
 export function SettingsPage() {
-  const { preferences, updatePreferences, exportBackup, resetWorkspace, pushToast, aiStatus, backendOnline, refreshBackend } = useApp();
+  const { preferences, updatePreferences, exportBackup, resetWorkspace, pushToast, aiStatus, backendOnline, backendVersion, refreshBackend } = useApp();
   const [resetOpen, setResetOpen] = useState(false);
 
   // --- chaves de IA -------------------------------------------------------
@@ -131,6 +131,7 @@ export function SettingsPage() {
             <div className="setting-row"><div><strong>Usar IA para perguntas abertas</strong><p>Somente pedidos fora das skills locais são enviados ao provedor.</p></div><button className={`switch ${preferences.aiEnabled && aiStatus.configured ? 'switch-on' : ''}`} role="switch" aria-checked={preferences.aiEnabled && aiStatus.configured} disabled={!aiStatus.configured} onClick={() => updatePreferences({ aiEnabled: !preferences.aiEnabled })}><span /></button></div>
             <div className="setting-row"><div><strong>Compartilhar tarefas e notas como contexto</strong><p>Desativado por padrão. O histórico recente da conversa ainda é enviado nas chamadas de IA.</p></div><button className={`switch ${preferences.shareContextWithAI ? 'switch-on' : ''}`} role="switch" aria-checked={preferences.shareContextWithAI} disabled={!aiStatus.configured || !preferences.aiEnabled} onClick={() => updatePreferences({ shareContextWithAI: !preferences.shareContextWithAI })}><span /></button></div>
             <div className="chaves-card">
+              <h3 className="chaves-titulo"><KeyRound size={13} /> Chaves de IA</h3>
               <div className="chaves-topo">
                 <div>
                   <strong>
@@ -212,7 +213,7 @@ export function SettingsPage() {
         <aside className="settings-aside">
           <section className="panel data-card"><span className="settings-aside-icon"><Database size={21} /></span><h2>Seus dados</h2><p>Leve uma cópia das tarefas, notas, conversas, rotinas e preferências.</p><button className="button button-secondary" onClick={exportBackup}><Download size={16} /> Exportar backup</button><small>Arquivo JSON · gerado localmente</small></section>
           <section className="panel security-settings"><ShieldCheck size={20} /><div><strong>Modo local-first</strong><p>Skills locais não exigem chave. A IA externa é opcional e recebe contexto pessoal somente com sua autorização.</p></div></section>
-          <section className="panel about-card"><div><span>VERSÃO</span><strong>0.5.0</strong></div><div><span>NÚCLEO</span><strong>React + Python</strong></div><div><span>IDIOMA</span><strong>Português (BR)</strong></div></section>
+          <section className="panel about-card"><div><span>VERSÃO</span><strong>{backendVersion ?? (backendOnline ? '—' : 'API OFFLINE')}</strong></div><div><span>NÚCLEO</span><strong>React + Python</strong></div><div><span>IDIOMA</span><strong>Português (BR)</strong></div></section>
           <button className="reset-button" onClick={() => setResetOpen(true)}><RotateCcw size={16} /> Restaurar dados de exemplo</button>
         </aside>
       </div>

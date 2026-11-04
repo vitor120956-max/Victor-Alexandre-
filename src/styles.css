@@ -1210,3 +1210,7 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .chaves-check input { accent-color: var(--accent); }
 .chaves-aviso { margin-top: 12px; padding: 10px 11px; border-left: 2px solid rgba(var(--accent-rgb), .25); background: rgba(var(--accent-rgb), .03); font-size: 8px; line-height: 1.7; }
 .chaves-apagar { color: #e0876f; }
+
+/* O cartão precisa de nome na tela: sem título, quem procura "Chaves de IA" em
+   Configurações não acha — foi exatamente o que aconteceu na 0.77.0. */
+.chaves-titulo { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; color: var(--accent); font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }

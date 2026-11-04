@@ -291,13 +291,28 @@ def pasta_da_interface(base: Path | None = None) -> Path | None:
 
     O `web-dist` existe para quem não quer (ou não consegue) rodar `npm install`:
     a API serve a mesma interface sem Node instalado.
+
+    **Qual das duas?** A mais **nova**, medida pela data do `index.html`. Antes a
+    ordem era fixa (`dist` primeiro), e isso criou um problema real: quem tinha
+    um `dist` de um `npm run build` antigo continuava vendo a tela velha mesmo
+    depois de atualizar — a atualização delta traz o `web-dist` novo, mas o
+    `dist` velho ganhava por estar na frente. Em empate, `dist` continua
+    ganhando, porque é o build de quem está desenvolvendo.
     """
     raiz = base or PROJECT_ROOT
-    for nome in ("dist", "web-dist"):
-        candidata = raiz / nome
-        if (candidata / "index.html").is_file():
-            return candidata
-    return None
+    candidatas: list[tuple[float, int, Path]] = []
+    for prioridade, nome in enumerate(("dist", "web-dist")):
+        indice = raiz / nome / "index.html"
+        if indice.is_file():
+            try:
+                quando = indice.stat().st_mtime
+            except OSError:  # pragma: no cover - disco sem permissão
+                quando = 0.0
+            candidatas.append((quando, -prioridade, raiz / nome))
+    if not candidatas:
+        return None
+    candidatas.sort(reverse=True)
+    return candidatas[0][2]
 
 
 def create_app(

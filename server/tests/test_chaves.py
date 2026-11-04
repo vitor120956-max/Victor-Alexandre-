@@ -366,3 +366,26 @@ def test_extrair_e_igual_ao_script_do_terminal():
     ]
     for amostra in amostras:
         assert chaves.chaves_do_texto(amostra) == modulo.chaves_do_texto(amostra), amostra[:40]
+
+
+# ------------------------------------------------------- a tela tem de existir
+
+def test_a_tela_de_configuracoes_tem_o_cartao_e_nao_mente_a_versao():
+    """Guarda de tela: o cartão precisa estar lá, e a versão não pode ser fixa.
+
+    O cartão "Chaves de IA" existe desde a 0.77.0 — quem está em versão anterior
+    abre Configurações e não encontra nada, o que já aconteceu. E o rodapé dizia
+    `VERSÃO 0.5.0` fixo desde sempre: era impossível saber que versão estava
+    rodando, e foi por isso que a ausência do cartão virou dúvida.
+    """
+    import re
+
+    from pathlib import Path as _Path
+
+    texto = (_Path(__file__).resolve().parents[2] / "src" / "pages" / "SettingsPage.tsx").read_text(encoding="utf-8")
+    assert "Chaves de IA" in texto, "o cartão de chaves sumiu da tela"
+    assert "Colar chaves" in texto
+    assert "getChavesIA" in texto
+    # Nenhum número de versão escrito à mão: vem do /api/health (backendVersion).
+    assert re.search(r"<strong>\d+\.\d+\.\d+</strong>", texto) is None, "versão fixa voltou ao rodapé"
+    assert "backendVersion" in texto
