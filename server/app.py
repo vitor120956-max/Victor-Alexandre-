@@ -23,6 +23,7 @@ from . import atualizacao as atualizacao_local
 from . import interface_web
 from . import modelos as modelos_mod
 from . import provedores as provedores_mod
+from . import conectores as conectores_mod
 from . import chaves as chaves_mod
 from . import conserto
 from . import dados as dados_locais
@@ -79,6 +80,17 @@ class ChavesTesteRequest(BaseModel):
 
     # 1-based; vazio testa todas.
     indice: int | None = Field(default=None, ge=1, le=20)
+
+
+class ConectorEmailRequest(BaseModel):
+    """A caixa de e-mail do dono: usuário, senha de app e, se preciso, servidor."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    usuario: str = Field(min_length=5, max_length=200)
+    senha: str = Field(min_length=8, max_length=200)
+    servidor: str = Field(default="", max_length=120)
+    pasta: str = Field(default="", max_length=80)
 
 
 class ProvedorRequest(BaseModel):
@@ -720,6 +732,54 @@ def create_app(
     @application.get("/api/ai/modelos")
     def ai_modelos() -> dict[str, Any]:
         return {"ok": True, "result": modelos_mod.estado()}
+
+    # ------------------------------------------------------------ conectores
+    # “quero que o JARVIS tenha acesso ao meu Gmail e WhatsApp”: o que dá sem
+    # OAuth é IMAP somente leitura (e-mail) e a sessão do navegador (sites).
+    # O cartão na tela diz o nível de cada conector em vez de prometer.
+
+    @application.get("/api/conectores")
+    def conectores_estado(request: Request) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "result": conectores_mod.estado(),
+            "podeEditar": _veio_da_propria_maquina(request),
+        }
+
+    @application.post("/api/conectores/email")
+    def conectores_email_salvar(request: Request, payload: ConectorEmailRequest) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = conectores_mod.configurar_email(
+                payload.usuario, payload.senha, payload.servidor, payload.pasta
+            )
+        except conectores_mod.ConectorError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONECTOR_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "ENV_NAO_ESCRITO", "message": f"não consegui escrever o .env: {exc}"}},
+            )
+        return {"ok": True, "result": resultado}
+
+    @application.delete("/api/conectores/email")
+    def conectores_email_esquecer(request: Request) -> dict[str, Any]:
+        _so_da_maquina(request)
+        return {"ok": True, "result": conectores_mod.esquecer_email()}
+
+    @application.post("/api/conectores/email/testar")
+    def conectores_email_testar(request: Request) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            return {"ok": True, "result": conectores_mod.testar_email()}
+        except conectores_mod.ConectorError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CAIXA_INDISPONIVEL", "message": str(exc)}},
+            )
 
     @application.get("/api/ai/provedores")
     def ai_provedores() -> dict[str, Any]:

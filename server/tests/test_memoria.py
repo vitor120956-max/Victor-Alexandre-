@@ -466,7 +466,7 @@ def test_registro_tem_as_sete_skills_de_memoria() -> None:
     itens = registry.list()
     memoria = [item for item in itens if item["id"].startswith("memoria.")]
     assert len(memoria) == 7
-    assert len(itens) == 315
+    assert len(itens) == 319
     assert all(item["category"] == "Memória" for item in memoria)
     assert all(item["sideEffects"] is False for item in memoria)
 

@@ -292,6 +292,7 @@ from . import (
     catalogo,
     celular,
     correio,
+    conectores,
     cultura,
     drive_setup,
     github,
@@ -2261,6 +2262,28 @@ class CorreioTriarInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pasta: str = Field(default="", max_length=500, title="Pasta")
     limite: int = Field(default=25, ge=1, le=200, title="Quantas mensagens mostrar")
+
+
+class ConectoresEstadoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConectoresEmailTriarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limite: int = Field(default=20, ge=1, le=60, title="Quantas mensagens mostrar")
+    dias: int = Field(default=7, ge=1, le=365, title="Janela em dias")
+
+
+class ConectoresWhatsappLinkInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    numero: str = Field(min_length=8, max_length=30, title="Número", json_schema_extra={"description": "Com DDD. O 55 do Brasil entra sozinho."})
+    texto: str = Field(default="", max_length=1_500, title="Mensagem", json_schema_extra={"format": "textarea"})
+
+
+class ConectoresWhatsappLerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(default="", max_length=300, title="Arquivo exportado", json_schema_extra={"description": "Deixe vazio para o primeiro .txt de storage/whatsapp."})
+    limite: int = Field(default=200, ge=1, le=2000, title="Quantas mensagens")
 
 
 class CorreioRascunhoInput(BaseModel):
@@ -4367,6 +4390,13 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         try:
             return correio.triar(_pasta_do_correio(data.pasta), limite=data.limite)
         except correio.CorreioError as exc:
+            # 0.81.0 — “filtra meus e-mails” com a caixa ligada por IMAP: em vez
+            # de mandar exportar o Takeout, lê a caixa agora (somente leitura).
+            if not data.pasta and conectores.estado()["email_configurado"]:
+                try:
+                    return conectores.triar_ao_vivo(limite=data.limite)
+                except conectores.ConectorError as falha:
+                    raise SkillError(f"{exc} Também tentei a caixa ao vivo: {falha}") from falha
             raise SkillError(str(exc)) from exc
 
     def correio_padroes_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
@@ -4386,6 +4416,38 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                 pasta=_pasta_do_correio(data.pasta),
             )
         except correio.CorreioError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def conectores_estado_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return conectores.estado()
+
+    def conectores_email_triar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConectoresEmailTriarInput)
+        try:
+            return conectores.triar_ao_vivo(limite=data.limite, dias=data.dias)
+        except conectores.ConectorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def conectores_whatsapp_link_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConectoresWhatsappLinkInput)
+        try:
+            return conectores.whatsapp_link(data.numero, data.texto)
+        except conectores.ConectorError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def conectores_whatsapp_ler_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConectoresWhatsappLerInput)
+        try:
+            if data.arquivo:
+                return conectores.ler_conversa(data.arquivo, limite=data.limite)
+            arquivos = conectores._arquivos_whatsapp()  # noqa: SLF001 - mesma pasta da tela
+            if not arquivos:
+                raise conectores.ConectorError(
+                    "não há conversa exportada em storage/whatsapp. Exporte pelo WhatsApp "
+                    "(Conversa → ⋮ → Mais → Exportar conversa → sem mídia)."
+                )
+            return conectores.ler_conversa(arquivos[0], limite=data.limite)
+        except conectores.ConectorError as exc:
             raise SkillError(str(exc)) from exc
 
     def habilidades_aplicar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
@@ -5553,6 +5615,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("correio.triar", "Triar e-mail por importância", "Lê os e-mails exportados e classifica por regra determinística: intimação/processo, fatura/boleto (com vencimento), governo, segurança, pessoal e newsletter. Ordena por prioridade. Não conecta no Gmail.", "Correio", CorreioTriarInput, correio_triar_handler, timeout_seconds=60),
         SkillDefinition("correio.padroes", "Meu jeito de escrever", "Mede só as mensagens enviadas: saudação, fecho, assinatura, tamanho médio, uso de lista. Serve de base para o rascunho sair no seu estilo.", "Correio", CorreioPastaInput, correio_padroes_handler, timeout_seconds=60),
         SkillDefinition("correio.rascunho", "Rascunhar e-mail no seu estilo", "Escreve um e-mail novo copiando o seu padrão (saudação, fecho, assinatura) e os pontos que você ditar. Devolve texto para revisar — não envia nada e não fala com o Gmail.", "Correio", CorreioRascunhoInput, correio_rascunho_handler, timeout_seconds=60),
+        SkillDefinition("conectores.estado", "Estado dos conectores", "Diz o que está ligado: caixa de e-mail por IMAP (somente leitura), Gmail pela sessão do navegador e WhatsApp. Para cada um, o nível e o que falta — sem prometer o que não existe.", "Conectores", ConectoresEstadoInput, conectores_estado_handler, timeout_seconds=10),
+        SkillDefinition("conectores.email-triar", "Triar a caixa ao vivo", "Entra na sua caixa por IMAP em modo **somente leitura** (`EXAMINE`, `BODY.PEEK`), lê assunto, remetente e data dos e-mails recentes e aplica as mesmas regras determinísticas do correio: intimação 100, fatura 85, governo 75, segurança 70. Nada é marcado como lido, apagado ou enviado.", "Conectores", ConectoresEmailTriarInput, conectores_email_triar_handler, timeout_seconds=60),
+        SkillDefinition("conectores.whatsapp-link", "Abrir conversa do WhatsApp", "Monta o link da conversa no WhatsApp Web com o texto já no campo (o 55 do Brasil entra sozinho). Não envia: quem aperta Enter é você. É o máximo sem API paga.", "Conectores", ConectoresWhatsappLinkInput, conectores_whatsapp_link_handler, timeout_seconds=10),
+        SkillDefinition("conectores.whatsapp-ler", "Ler conversa exportada", "Lê o `.txt` que o próprio WhatsApp exporta (Conversa → ⋮ → Mais → Exportar conversa) e devolve quem falou, quando e o quê. É o único jeito honesto de o JARVIS ler mensagens sem violar os termos do WhatsApp.", "Conectores", ConectoresWhatsappLerInput, conectores_whatsapp_ler_handler, timeout_seconds=30),
         SkillDefinition("habilidades.aplicar", "Usar habilidade importada", "Devolve o roteiro da habilidade junto com a sua pergunta, para ser seguido passo a passo. Sem modelo configurado, é texto de apoio — não é código executado.", "Habilidades", HabilidadesAplicarInput, habilidades_aplicar_handler, timeout_seconds=15),
         SkillDefinition("habilidades.remover", "Esquecer habilidade", "Tira a habilidade de `storage/habilidades.json`. Nada fora desse arquivo é tocado.", "Habilidades", HabilidadesRemoverInput, habilidades_remover_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=10),
         SkillDefinition("github.repo", "Ficha de repositório", "Lê a API pública do GitHub e descreve o repositório: estrelas, linguagem, licença, branch padrão e tópicos. Sem token, até 60 pedidos por hora.", "GitHub", GithubRepoInput, github_repo_handler, timeout_seconds=30),

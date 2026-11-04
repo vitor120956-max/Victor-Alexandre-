@@ -422,6 +422,66 @@ export async function salvarModeloIA(modelo: string): Promise<ModelosIA> {
   return resposta.estado;
 }
 
+/** Um conector: o que ele alcança, em que nível, e o que falta para funcionar. */
+export interface Conector {
+  id: string;
+  nome: string;
+  nivel: string;
+  pronto: boolean;
+  gratis: string;
+  precisa: string;
+  como: string;
+  onde?: string;
+  servidor?: string;
+  usuario?: string;
+  pasta?: string;
+  conversas_exportadas?: number;
+}
+
+export interface ConectoresIA {
+  conectores: Conector[];
+  prontos: number;
+  total: number;
+  email_configurado: boolean;
+  resumo: string;
+  nota: string;
+  podeEditar?: boolean;
+}
+
+export async function getConectores(): Promise<ConectoresIA> {
+  const resposta = await apiFetch<{ ok: boolean; result: ConectoresIA; podeEditar: boolean }>('/api/conectores');
+  return { ...resposta.result, podeEditar: resposta.podeEditar };
+}
+
+export interface ResultadoConector extends ConectoresIA {
+  salvo?: boolean;
+  apagado?: boolean;
+}
+
+/** Liga a caixa de e-mail por IMAP (somente leitura). A senha não volta. */
+export async function salvarEmailConector(usuario: string, senha: string, servidor = ''): Promise<ResultadoConector> {
+  const resposta = await apiFetch<{ ok: boolean; result: ResultadoConector }>('/api/conectores/email', {
+    method: 'POST',
+    body: JSON.stringify({ usuario, senha, servidor }),
+  });
+  return resposta.result;
+}
+
+export async function esquecerEmailConector(): Promise<ResultadoConector> {
+  const resposta = await apiFetch<{ ok: boolean; result: ResultadoConector }>('/api/conectores/email', { method: 'DELETE' });
+  return resposta.result;
+}
+
+export interface ProvaConector {
+  ok: boolean;
+  resumo: string;
+}
+
+export async function testarEmailConector(): Promise<ProvaConector> {
+  const resposta = await apiFetch<{ ok: boolean; result: ProvaConector }>('/api/conectores/email/testar', { method: 'POST' });
+  return resposta.result;
+}
+
 /** Troca de provedor (Groq, Google, OpenRouter…). Grava o `.env` e recarrega. */
 export async function trocarProvedorIA(provedor: string, modelo?: string): Promise<ModelosIA> {
   const resposta = await apiFetch<{ ok: boolean; estado: ModelosIA }>('/api/ai/provedor', {

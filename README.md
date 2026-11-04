@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.80.3.**
+**Versão atual: 0.81.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,13 +44,15 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 315, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 319, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Modelo na tela:** a chave abre a porta, o modelo é quem responde. Em **Configurações → Inteligência generativa** há o cartão **Modelos de IA** com o custo de cada opção — grande entende melhor e gasta mais cota, pequeno responde rápido e rende muito mais pedidos por dia — e a troca grava no `.env` e vale na hora, sem fechar a janela. Detalhes em [`docs/MODELOS.md`](docs/MODELOS.md).
 
 **Provedor na tela:** chave é do provedor, e provedor é preço. Em **Configurações → Modelos de IA → Provedor** está a lista com o preço honesto de cada um: **Groq**, **Google Gemini** (grátis nos Flash, com a condição de que o conteúdo do plano grátis pode treinar os produtos do Google), **OpenRouter** (é por onde se usa **DeepSeek de graça**, com `:free` no nome) e **Mistral** são grátis; **DeepSeek direto**, **Claude**, **OpenAI** e **Cerebras** são pagos — e a tela diz isso antes de você criar conta. Colar uma chave troca o endereço sozinho, as chaves do provedor anterior ficam guardadas, e **Ver modelos da minha chave** pergunta ao provedor quais nomes a sua conta enxerga hoje, com `:free` marcado. Detalhes em [`docs/PROVEDORES.md`](docs/PROVEDORES.md).
 
 **Aviso de cota:** o JARVIS registra o que o provedor respondeu em cada chave (200, 429, 401) e quanto resta no minuto nos cabeçalhos `x-ratelimit-*`. Com isso avisa — faixa âmbar *“as chaves estão acabando”* e vermelha *“as chaves acabaram”* — e responde no chat *“quantas chaves restam?”*. É medida, não estimativa: quando o provedor não manda o número, o aviso fala do que aconteceu, não de porcentagem inventada. Em [`docs/CHAVES.md`](docs/CHAVES.md) §9.
+
+**Conectores: Gmail, WhatsApp e sites.** Em **Configurações → Conectores** está o que cada um alcança, com o nível declarado em vez de promessa. A **caixa de e-mail** liga por **IMAP somente leitura** (`EXAMINE` + `BODY.PEEK`: nada é marcado como lido, apagado ou enviado) com a senha de app do provedor — e aí `filtra meus e-mails por importância` lê a caixa **na hora**, com as regras determinísticas do correio, sem exportar Takeout. O **Gmail pelos sites** continua pelo navegador onde você já está logado. O **WhatsApp** abre a conversa em `web.whatsapp.com` com o texto no campo (quem envia é você) e lê o `.txt` que o próprio app exporta. OAuth — ler, marcar como lido, enviar, agenda — existe, mas exige projeto no Google Cloud: está escrito, não escondido. Em [`docs/CONECTORES.md`](docs/CONECTORES.md).
 
 **Correio sem entrar na conta:** exporte sua caixa (Takeout ou “Baixar mensagem” do Gmail) e ponha em `storage/correio`: `filtra meus e-mails por importância` classifica por regra determinística — **intimação/processo** (100), **fatura/boleto** (85, +10 se vence em até 7 dias), **governo** (75), **segurança** (70), **pessoal** (45), **newsletter** (5) — e ordena; `analisa meus e-mails enviados` mede o seu estilo (saudação, fecho, assinatura, tamanho, listas); `escreve um e-mail para a Ana sobre o relatório: enviar planilha; pedir retorno` monta o rascunho nesse estilo. **Não marca como lido e não envia.** Para o JARVIS ler a caixa *por programa* seria preciso OAuth; mas, com você já logado no navegador do seu PC, ele abre o Gmail pela tela (`mesa.*`, com a sua autorização) e `abre o gmail com as faturas` devolve a busca já filtrada para a sua sessão — sem chave e sem nada sair da máquina. Em [`docs/CORREIO.md`](docs/CORREIO.md).
 
@@ -621,7 +623,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **315 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **319 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -742,7 +744,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.80.3", "skills": 315}`.
+`{"version": "0.81.0", "skills": 319}`.
 
 ## Verificações
 
@@ -833,7 +835,7 @@ server/
 ├── processos.py             # o que está rodando: veredito, comando e desfazer
 ├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
 ├── limpeza.py               # debloat: app de loja, tarefa, serviço e cache — só gera plano
-├── skill_registry.py        # allowlist, Pydantic e 315 skills
+├── skill_registry.py        # allowlist, Pydantic e 319 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

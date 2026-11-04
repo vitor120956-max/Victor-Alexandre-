@@ -1709,7 +1709,10 @@ def _formatar_correio(resultado: dict[str, Any]) -> str | None:
         if resultado.get("por_categoria"):
             resumo = ", ".join(f"{chave}: {valor}" for chave, valor in resultado["por_categoria"].items())
             linhas += ["", f"Por categoria — {resumo}."]
-        linhas += ["", "Nada foi aberto no Gmail: isto é o que você exportou em storage/correio."]
+        if resultado.get("fonte") == "imap":
+            linhas += ["", "Lido da sua caixa agora, por IMAP somente leitura — nada foi marcado como lido."]
+        else:
+            linhas += ["", "Nada foi aberto no Gmail: isto é o que você exportou em storage/correio."]
         return "\n".join(linhas)
 
     if "total_enviadas" in resultado:

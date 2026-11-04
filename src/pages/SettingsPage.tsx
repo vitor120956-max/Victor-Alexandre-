@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, BrainCircuit, Check, Database, Globe, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
+import { Bell, BrainCircuit, Check, Database, Globe, Inbox, Link2, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
-import { apagarChavesIA, getChavesIA, getModelosIA, listarModelosDisponiveis, salvarChavesIA, salvarModeloIA, testarChavesIA, trocarProvedorIA } from '../lib/api';
-import type { ChaveTesteResultado, ChavesIA, ModelosDescobertos, ModelosIA } from '../lib/api';
+import { apagarChavesIA, esquecerEmailConector, getChavesIA, getConectores, getModelosIA, listarModelosDisponiveis, salvarChavesIA, salvarEmailConector, salvarModeloIA, testarChavesIA, testarEmailConector, trocarProvedorIA } from '../lib/api';
+import type { ChaveTesteResultado, ChavesIA, ConectoresIA, ModelosDescobertos, ModelosIA } from '../lib/api';
 import type { Preferences } from '../types';
 
 export function SettingsPage() {
@@ -29,6 +29,63 @@ export function SettingsPage() {
   const [modeloEscolhido, setModeloEscolhido] = useState('');
   const [modeloLivre, setModeloLivre] = useState('');
   const [salvandoModelo, setSalvandoModelo] = useState(false);
+
+  // --- conectores ----------------------------------------------------------
+  // 0.81.0 — “quero o JARVIS com acesso ao Gmail e ao WhatsApp”. O cartão diz
+  // o nível de cada um em vez de prometer: e-mail por IMAP somente leitura,
+  // sites pela sessão do navegador, WhatsApp por link + conversa exportada.
+  const [conectores, setConectores] = useState<ConectoresIA | null>(null);
+  const [emailUsuario, setEmailUsuario] = useState('');
+  const [emailSenha, setEmailSenha] = useState('');
+  const [emailServidor, setEmailServidor] = useState('');
+  const [salvandoEmail, setSalvandoEmail] = useState(false);
+
+  const recarregarConectores = useCallback(async () => {
+    if (!backendOnline) {
+      setConectores(null);
+      return;
+    }
+    try {
+      setConectores(await getConectores());
+    } catch {
+      setConectores(null);
+    }
+  }, [backendOnline]);
+
+  useEffect(() => { void recarregarConectores(); }, [recarregarConectores]);
+
+  const salvarEmail = async () => {
+    setSalvandoEmail(true);
+    try {
+      const dados = await salvarEmailConector(emailUsuario, emailSenha, emailServidor);
+      setConectores(dados);
+      setEmailSenha('');
+      pushToast('Caixa ligada', 'O JARVIS já pode triar seus e-mails, somente leitura.', 'success');
+    } catch (erro) {
+      pushToast('Não deu para ligar a caixa', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setSalvandoEmail(false);
+    }
+  };
+
+  const testarEmail = async () => {
+    try {
+      const prova = await testarEmailConector();
+      pushToast('Caixa respondeu', prova.resumo, 'success');
+      await recarregarConectores();
+    } catch (erro) {
+      pushToast('A caixa não respondeu', erro instanceof Error ? erro.message : undefined, 'warning');
+    }
+  };
+
+  const esquecerEmail = async () => {
+    try {
+      setConectores(await esquecerEmailConector());
+      pushToast('Caixa desconectada', 'Usuário e senha saíram do .env.', 'info');
+    } catch (erro) {
+      pushToast('Não deu para desconectar', erro instanceof Error ? erro.message : undefined, 'warning');
+    }
+  };
 
   // --- provedor ------------------------------------------------------------
   // 0.80.0 — “não dá para usar DeepSeek ou Claude de graça?” A resposta honesta
@@ -441,6 +498,95 @@ export function SettingsPage() {
               <p className="modelos-nota">
                 A cota de cada modelo é do provedor e muda. Se um nome sair do ar, o botão <strong>Testar</strong> das chaves mostra o erro na hora.
               </p>
+            </div>
+
+            {/* 0.81.0 — conectores: Gmail, WhatsApp e sites. Cada um com o nível
+                declarado, porque prometer “acesso total” e entregar link é o
+                tipo de mentira que já custou versão neste projeto. */}
+            <div className="conectores-card" id="conectores">
+              <h3 className="chaves-titulo"><Link2 size={13} /> Conectores</h3>
+              <p className="modelos-resumo">
+                {conectores?.resumo || 'Lendo o estado dos conectores…'}
+              </p>
+              {conectores && (
+                <>
+                  <ul className="conectores-lista">
+                    {conectores.conectores.map((item) => (
+                      <li key={item.id} className={item.pronto ? 'conector-pronto' : 'conector-parado'}>
+                        <div className="conector-cabeca">
+                          <strong>{item.nome}</strong>
+                          <span className={`provedor-selo ${item.pronto ? 'selo-gratis' : 'selo-pago'}`}>{item.nivel}</span>
+                          <em className="conector-custo">grátis: {item.gratis}</em>
+                        </div>
+                        <p>{item.como}</p>
+                        <small>{item.pronto ? item.precisa : `Falta: ${item.precisa}`}</small>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="conector-email">
+                    <h4><Inbox size={13} /> Sua caixa de e-mail {conectores.email_configurado ? '(ligada)' : '(desligada)'}</h4>
+                    <p className="modelos-nota">
+                      Senha de app, não a senha normal. No Gmail: <code>myaccount.google.com/apppasswords</code>
+                      {' '}(precisa de verificação em duas etapas ligada). O JARVIS entra por IMAP em modo
+                      somente leitura: nada é marcado como lido, apagado ou enviado.
+                    </p>
+                    <div className="conector-campos">
+                      <label className="field">
+                        <span>E-mail</span>
+                        <input
+                          value={emailUsuario}
+                          onChange={(event) => setEmailUsuario(event.target.value)}
+                          placeholder={conectores.conectores.find((item) => item.id === 'email')?.usuario || 'seuemail@gmail.com'}
+                          autoComplete="off"
+                          maxLength={200}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Senha de app</span>
+                        <input
+                          type="password"
+                          value={emailSenha}
+                          onChange={(event) => setEmailSenha(event.target.value)}
+                          placeholder="16 letras, sem espaços"
+                          autoComplete="off"
+                          maxLength={200}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Servidor (opcional)</span>
+                        <input
+                          value={emailServidor}
+                          onChange={(event) => setEmailServidor(event.target.value)}
+                          placeholder={conectores.conectores.find((item) => item.id === 'email')?.servidor || 'imap.gmail.com'}
+                          autoComplete="off"
+                          maxLength={120}
+                        />
+                      </label>
+                    </div>
+                    <div className="modelos-acoes">
+                      <button
+                        className="button button-primary"
+                        onClick={() => void salvarEmail()}
+                        disabled={!backendOnline || salvandoEmail || conectores.podeEditar === false || emailUsuario.length < 5 || emailSenha.length < 8}
+                      >
+                        <Link2 size={15} /> {salvandoEmail ? 'Ligando…' : 'Ligar a caixa'}
+                      </button>
+                      {conectores.email_configurado && (
+                        <>
+                          <button className="button button-secondary" onClick={() => void testarEmail()}>
+                            <Zap size={15} /> Testar
+                          </button>
+                          <button className="button button-ghost" onClick={() => void esquecerEmail()}>
+                            <Trash2 size={15} /> Desconectar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <p className="modelos-nota">{conectores.nota}</p>
+                </>
+              )}
             </div>
           </section>
           <section className="panel settings-section">

@@ -1294,3 +1294,17 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .descoberto-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .09); background: transparent; color: var(--text-dim); cursor: pointer; }
 .descoberto-chip code { font-size: .7rem; }
 .descoberto-chip:hover, .descoberto-chip.provedor-atual { border-color: rgba(var(--accent-rgb), .5); color: var(--text); }
+
+/* 0.81.0 — conectores: o nível de cada um à vista, sem promessa vaga. */
+.conectores-card { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .07); }
+.conectores-lista { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 8px; }
+.conectores-lista li { border: 1px solid rgba(255, 255, 255, .09); border-radius: 10px; padding: 9px 10px; }
+.conectores-lista li.conector-pronto { border-color: rgba(126, 226, 184, .28); }
+.conectores-lista li.conector-parado { border-color: rgba(240, 179, 126, .28); }
+.conector-cabeca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .8rem; }
+.conector-custo { font-style: normal; font-size: .68rem; color: var(--text-dim); }
+.conectores-lista p { margin: 6px 0 4px; font-size: .76rem; color: var(--text-dim); line-height: 1.5; }
+.conectores-lista small { font-size: .72rem; color: var(--text-dim); opacity: .85; }
+.conector-email { border-top: 1px dashed rgba(255, 255, 255, .1); padding-top: 10px; }
+.conector-email h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: .8rem; font-weight: 600; }
+.conector-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 8px 0; }
