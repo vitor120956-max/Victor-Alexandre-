@@ -74,6 +74,31 @@ O que acontece com mais de uma:
 A frase de erro nunca mostra a chave — nem parcial. Na tela, o cabeçalho da
 conversa passa a dizer `Groq · 3 chaves`.
 
+**Se as chaves já estão anotadas num arquivo `.txt`** (por exemplo
+`cerebro javis 1 e 2 e 3.txt`), não precisa digitar nada — desde a 0.76.1 o
+script lê o arquivo, acha o que tem cara de chave (`gsk_…`, `sk-…`, `AIza…`,
+`sk-or-v1-…`) e ignora o resto do texto:
+
+```bat
+cd /d D:\JARVIS
+```
+
+```bat
+.venv\Scripts\python configurar-chave.py --arquivo "cerebro javis 1 e 2 e 3.txt"
+```
+
+Dica que evita erro de digitação no caminho: em vez de digitar, **arraste o
+arquivo para dentro da janela preta** — o Windows escreve o caminho completo.
+Aspas só são necessárias quando o caminho tem espaço (é o caso desse nome).
+
+Para ver quantas chaves ele achou **sem gravar nada**:
+
+```bat
+.venv\Scripts\python configurar-chave.py --arquivo "cerebro javis 1 e 2 e 3.txt" --so-mostrar
+```
+
+Saída esperada: `Achei 3 chave(s) em cerebro javis 1 e 2 e 3.txt.`
+
 Para gravar as três de uma vez, sem elas aparecerem na tela:
 
 ```bat

@@ -471,7 +471,7 @@ npm ls --depth=0
 Saída correta: treze pacotes e **nenhuma** linha `UNMET DEPENDENCY`:
 
 ```text
-jarvis-nucleo-pessoal@0.76.0 D:\JARVIS
+jarvis-nucleo-pessoal@0.76.1 D:\JARVIS
 +-- @fontsource-variable/manrope@5.3.0
 +-- @fontsource/ibm-plex-mono@5.3.0
 +-- @types/react-dom@19.3.0
@@ -727,7 +727,7 @@ Abra **http://localhost:5173**. A API sobe em `http://127.0.0.1:8000`.
 curl http://127.0.0.1:8000/api/health
 ```
 
-Esperado: `"version": "0.76.0"` e `"skills": 315`.
+Esperado: `"version": "0.76.1"` e `"skills": 315`.
 
 O token de host aparece no terminal da API, no formato `UJ4F…q8CM`, e fica em `storage/host-token.txt`. Ele é exigido pelas skills que tocam a máquina — inclusive a importação. Desde a 0.60.5 o token **nem é pedido** em `127.0.0.1`: o servidor preenche sozinho, e é por isso que a interface não mostra mais o campo quando você está na própria máquina. `JARVIS_HOST_CONFIAR_LOCAL=1` (o que o `ligar-celular.bat` grava) só deixa isso explícito no banner; `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve o pedido de token até localmente. As travas de rede e de instalação continuam valendo, e pedido de outra máquina continua pedindo token.
 
@@ -849,7 +849,7 @@ A resposta traz `copiados`, `ignorados` (com o motivo de cada um) e `bytes`.
 - [ ] `.env` preenchido com a chave (`py configurar-chave.py --ver` mostra `(vazia)` quando falta)
 - [ ] `npm run checar` sem nenhuma linha FALTA
 - [ ] `npm run dev` sobe sem erro
-- [ ] `http://127.0.0.1:8000/api/health` mostra `0.76.0` e `315`
+- [ ] `http://127.0.0.1:8000/api/health` mostra `0.76.1` e `315`
 - [ ] `files.import` testado com simulação antes da cópia real
 
 ### Sequência completa no Windows (do zero ao `npm run dev`)
@@ -1052,7 +1052,7 @@ sumir, o `npm run dev` não cospe mais o erro cru do Windows — ele diz isto:
 
 ```text
   O JARVIS nao esta quebrado: falta a pasta node_modules.
-  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.76.0.
+  Ela vem do "npm install" (cerca de 140 MB, uma vez so). Versao desta pasta: 0.76.1.
 
   Opcao 1 - nao instalar nada e usar o JARVIS agora:
     .venv\Scripts\python.exe iniciar.py
@@ -1168,7 +1168,7 @@ Agora a mesma situação responde assim:
 
 ```text
   Já existe um JARVIS na porta 8000 — mas é de outra versão
-  Rodando: 0.62.6. Esta pasta: 0.76.0. O navegador mostraria o código antigo
+  Rodando: 0.62.6. Esta pasta: 0.76.1. O navegador mostraria o código antigo
   e pareceria que a atualização não pegou.
 
     - Feche a janela antiga no X (procure “JARVIS” na barra de tarefas)

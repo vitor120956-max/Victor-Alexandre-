@@ -367,3 +367,77 @@ def test_testar_varias_sem_nenhuma_boa_aponta_o_modelo_local(script, monkeypatch
     ok = script.tester("https://api.groq.com/openai/v1", "modelo", "gsk_a,gsk_b")
     assert ok is False
     assert "modelo local" in capsys.readouterr().out
+
+
+# --------------------------------------- ler as chaves de um arquivo .txt
+
+ARQUIVO_DO_DONO = (
+    "api grok 1 gsk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n"
+    "api groq 2 gsk_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\r\n"
+    "api cerebro 3 gsk_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\r\n"
+)
+
+
+def test_chaves_do_texto_acha_as_tres_e_ignora_as_palavras(script, tmp_path):
+    arquivo = tmp_path / "cerebro javis 1 e 2 e 3.txt"
+    arquivo.write_bytes(ARQUIVO_DO_DONO.encode("utf-8"))
+    chaves = script.ler_arquivo_de_chaves(str(arquivo))
+    assert len(chaves) == 3
+    assert all(chave.startswith("gsk_") for chave in chaves)
+    assert chaves[0].endswith("AAAA")
+
+
+def test_chaves_do_texto_nao_repete_a_mesma_chave(script):
+    repetida = "gsk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    assert script.chaves_do_texto(f"{repetida}\n{repetida}\n") == [repetida]
+
+
+def test_chaves_do_texto_reconhece_os_outros_formatos(script):
+    texto = (
+        "openai sk-abcdefghijklmnopqrstuvwxyz0123\n"
+        "openrouter sk-or-v1-abcdefghijklmnopqrstuvwxyz\n"
+        "google AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456\n"
+    )
+    assert len(script.chaves_do_texto(texto)) == 3
+
+
+def test_arquivo_grava_as_tres_e_ja_preenche_groq(script, tmp_path):
+    arquivo = tmp_path / "cerebro javis 1 e 2 e 3.txt"
+    arquivo.write_bytes(ARQUIVO_DO_DONO.encode("utf-8"))
+    assert script.principal(["--arquivo", str(arquivo)]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    # as três numa linha só, na ordem do arquivo
+    linha = [l for l in bruto.split(b"\r\n") if l.startswith(b"JARVIS_AI_API_KEY=")][0]
+    assert linha.count(b",") == 2
+    assert b"gsk_AAAA" in linha and b"gsk_BBBB" in linha and b"gsk_CCCC" in linha
+    assert b"JARVIS_AI_BASE_URL=https://api.groq.com/openai/v1\r\n" in bruto
+    assert b"JARVIS_AI_MODEL=llama-3.3-70b-versatile\r\n" in bruto
+    assert b"JARVIS_AI_PROVIDER=Groq\r\n" in bruto
+
+
+def test_arquivo_com_so_mostrar_nao_grava_nada(script, tmp_path, capsys):
+    arquivo = tmp_path / "chaves.txt"
+    arquivo.write_bytes(ARQUIVO_DO_DONO.encode("utf-8"))
+    assert script.principal(["--arquivo", str(arquivo), "--so-mostrar"]) == 0
+    assert "Achei 3 chave(s)" in capsys.readouterr().out
+    assert not (tmp_path / ".env").exists()
+
+
+def test_arquivo_sem_chave_recusa_sem_gravar(script, tmp_path, capsys):
+    arquivo = tmp_path / "anotacoes.txt"
+    arquivo.write_text("comprar cafe\nligar para o advogado\n", encoding="utf-8")
+    assert script.principal(["--arquivo", str(arquivo)]) == 1
+    assert "nenhuma chave reconhecível" in capsys.readouterr().out
+    assert not (tmp_path / ".env").exists()
+
+
+def test_arquivo_que_nao_existe_explica_o_caminho(script, capsys):
+    assert script.principal(["--arquivo", "/pasta/que/nao/existe.txt"]) == 1
+    assert "não achei o arquivo" in capsys.readouterr().out
+
+
+def test_arquivo_aceita_bloco_de_notas_antigo_em_latin1(script, tmp_path):
+    arquivo = tmp_path / "notas.txt"
+    arquivo.write_bytes("chave do groq 1: gsk_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD\n"
+                        "observacao: café e pão\n".encode("latin-1"))
+    assert len(script.ler_arquivo_de_chaves(str(arquivo))) == 1

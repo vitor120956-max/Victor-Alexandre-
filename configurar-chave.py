@@ -87,6 +87,46 @@ def gravar(texto: str, caminho: Path | None = None) -> Path:
     return destino
 
 
+# Formatos de chave que os provedores usam. A lista existe para não confundir
+# "api groq 1" com chave: só o que casa aqui é gravado.
+_PADROES_CHAVE = (
+    r"gsk_[A-Za-z0-9]{20,}",          # Groq
+    r"sk-or-v1-[A-Za-z0-9]{20,}",     # OpenRouter
+    r"sk-[A-Za-z0-9_-]{20,}",         # OpenAI e compatíveis
+    r"AIza[A-Za-z0-9_-]{30,}",        # Google AI Studio
+)
+
+
+def chaves_do_texto(texto: str) -> list[str]:
+    """Acha chaves dentro de um arquivo de anotações — sem repetir.
+
+    Serve para o caso mais comum: a pessoa anotou as três chaves num `.txt`
+    ("api groq 1 gsk_…"), e digitar 56 caracteres três vezes sem errar é
+    exatamente onde se perde uma letra. Aqui o arquivo é lido inteiro e só o
+    que tem cara de chave é aproveitado.
+    """
+    achadas: list[str] = []
+    for padrao in _PADROES_CHAVE:
+        for achado in re.findall(padrao, texto or ""):
+            if achado not in achadas:
+                achadas.append(achado)
+    return achadas
+
+
+def ler_arquivo_de_chaves(caminho: str) -> list[str]:
+    """Lê o `.txt` em utf-8 e, se falhar, em latin-1 (Bloco de Notas antigo)."""
+    alvo = Path(caminho).expanduser()
+    if not alvo.is_file():
+        raise FileNotFoundError(f"não achei o arquivo {alvo}")
+    bruto = alvo.read_bytes()
+    for codificacao in ("utf-8-sig", "latin-1"):
+        try:
+            return chaves_do_texto(bruto.decode(codificacao))
+        except UnicodeDecodeError:
+            continue
+    return []
+
+
 def separar_chaves(bruto: str) -> list[str]:
     """Mesma regra do servidor: vírgula, ponto e vírgula, barra ou quebra de linha."""
     vistas: set[str] = set()
@@ -229,11 +269,43 @@ def principal(argv: list[str] | None = None) -> int:
         help="Aponta para um servidor de IA rodando na sua maquina (llama.cpp, KoboldCpp, LM Studio, Ollama no Linux). Sem URL usa %(const)s. Grava a chave de mentira 'local', que esses servidores ignoram.",
     )
     parser.add_argument(
+        "--arquivo",
+        metavar="CAMINHO",
+        help="Lê as chaves de um arquivo .txt (uma ou várias, em qualquer linha). "
+        "Evita digitar 56 caracteres no escuro. Nada do arquivo é impresso.",
+    )
+    parser.add_argument(
+        "--so-mostrar",
+        dest="so_mostrar",
+        action="store_true",
+        help="Com --arquivo: diz quantas chaves achou e sai, sem gravar no .env.",
+    )
+    parser.add_argument(
         "--testar",
         action="store_true",
         help="Depois de gravar (ou com o que já está no .env), faz uma chamada real e diz se a chave, a base e o modelo funcionam.",
     )
     args = parser.parse_args(argv)
+
+    if args.arquivo:
+        try:
+            do_arquivo = ler_arquivo_de_chaves(args.arquivo)
+        except FileNotFoundError as exc:
+            print(f"{exc}. Confira o caminho (pode arrastar o arquivo para a janela).")
+            return 1
+        if not do_arquivo:
+            print("O arquivo não tem nenhuma chave reconhecível (gsk_…, sk-…, AIza…, sk-or-v1-…).")
+            return 1
+        print(f"Achei {len(do_arquivo)} chave(s) em {Path(args.arquivo).name}.")
+        if args.so_mostrar:
+            return 0
+        # Entram na frente das que já estão no .env; duplicata é descartada.
+        anteriores = separar_chaves(args.chave or "")
+        args.chave = ",".join(separar_chaves(",".join(do_arquivo + anteriores)))
+        if do_arquivo[0].startswith("gsk_"):
+            args.provedor = args.provedor or "Groq"
+            args.base = args.base or "https://api.groq.com/openai/v1"
+            args.modelo = args.modelo or "llama-3.3-70b-versatile"
 
     texto = texto_base()
 
