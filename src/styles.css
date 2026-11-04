@@ -1273,3 +1273,24 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .chaves-trocar-modelo { margin: 7px 0 3px; }
 
 .chaves-aviso-conta { margin-top: 6px; border-left: 2px solid rgba(var(--accent-rgb), .45); padding-left: 9px; }
+
+/* 0.80.0 — provedores: a lista de quem é grátis, com o preço à vista. */
+.provedores-bloco { margin: 10px 0 12px; border-top: 1px solid rgba(255, 255, 255, .06); padding-top: 10px; }
+.provedores-cabeca { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--text-dim); flex-wrap: wrap; }
+.provedores-cabeca span { display: inline-flex; align-items: center; gap: 5px; }
+.provedores-cabeca strong { color: var(--text); }
+.provedor-selo, .selo-gratis, .selo-pago { font-style: normal; font-size: .68rem; padding: 1px 6px; border-radius: 999px; border: 1px solid transparent; }
+.selo-gratis { color: #7ee2b8; border-color: rgba(126, 226, 184, .35); background: rgba(126, 226, 184, .08); }
+.selo-pago { color: #f0b37e; border-color: rgba(240, 179, 126, .35); background: rgba(240, 179, 126, .08); }
+.provedores-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.provedor-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .02); color: var(--text); font-size: .76rem; cursor: pointer; }
+.provedor-chip:hover:not(:disabled) { border-color: rgba(var(--accent-rgb), .5); }
+.provedor-chip:disabled { cursor: default; opacity: .75; }
+.provedor-chip.provedor-atual { border-color: rgba(var(--accent-rgb), .55); background: rgba(var(--accent-rgb), .08); }
+.provedores-nota { margin: 8px 0 0; font-size: .74rem; color: var(--text-dim); line-height: 1.45; }
+.modelos-descobertos { margin-top: 12px; padding: 10px; border-radius: 10px; border: 1px dashed rgba(255, 255, 255, .12); }
+.modelos-descobertos strong { font-size: .78rem; display: block; }
+.descobertos-lista { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; max-height: 220px; overflow: auto; }
+.descoberto-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .09); background: transparent; color: var(--text-dim); cursor: pointer; }
+.descoberto-chip code { font-size: .7rem; }
+.descoberto-chip:hover, .descoberto-chip.provedor-atual { border-color: rgba(var(--accent-rgb), .5); color: var(--text); }

@@ -193,6 +193,13 @@ class OpenAICompatibleProvider:
 
     # ------------------------------------------------------- diário da cota
 
+    def _onde_pegar_chave(self) -> str:
+        """O painel do provedor em uso — a frase de socorro tem de apontar para lá."""
+        from . import provedores  # noqa: PLC0415 (evita ciclo de importação)
+
+        achado = provedores.por_base(self.base_url)
+        return (achado["onde"] if achado else "") or "console.groq.com/keys"
+
     def _anotar_ok(self, indice: int) -> None:
         """Aquela chave respondeu: ela deixa de estar recusada."""
         self._recusas.pop(indice, None)
@@ -367,9 +374,9 @@ class OpenAICompatibleProvider:
         """A frase do aviso vermelho — o que aconteceu e o que continua de pé."""
         if recusadas and not no_limite:
             conselho = (
-                "Gere chaves novas em console.groq.com/keys e cole no cartão **Chaves de IA**."
+                f"Gere chaves novas em {self._onde_pegar_chave()} e cole no cartão **Chaves de IA**."
                 if total > 1
-                else "Gere uma chave nova em console.groq.com/keys e cole no cartão **Chaves de IA**."
+                else f"Gere uma chave nova em {self._onde_pegar_chave()} e cole no cartão **Chaves de IA**."
             )
         elif no_limite and not recusadas:
             espera = next(
@@ -477,11 +484,11 @@ class OpenAICompatibleProvider:
             if total == 1:
                 raise AIUnavailable(
                     "a chave foi recusada pelo provedor (HTTP 401). "
-                    "Gere uma nova em console.groq.com/keys e rode configurar-chave.py."
+                    f"Gere uma nova em {self._onde_pegar_chave()} e rode configurar-chave.py."
                 )
             raise AIUnavailable(
                 f"as {total} chaves foram recusadas pelo provedor (HTTP {recusas[0]}). "
-                "Gere chaves novas em console.groq.com/keys e rode configurar-chave.py."
+                f"Gere chaves novas em {self._onde_pegar_chave()} e rode configurar-chave.py."
             )
         if all(codigo == 429 for codigo in recusas):
             raise AIUnavailable(

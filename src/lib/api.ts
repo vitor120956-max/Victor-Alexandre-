@@ -218,14 +218,46 @@ export interface ModeloIA {
   atual: boolean;
 }
 
+/** Um provedor no catálogo: se é grátis e onde pegar a chave. */
+export interface ProvedorIA {
+  id: string;
+  nome: string;
+  gratis: string;
+  resumo: string;
+  onde: string;
+  nota: string;
+  chave_dica: string;
+  modelo: string;
+  atual: boolean;
+}
+
 export interface ModelosIA {
   modelo: string;
   padrao: string;
   provedor: string;
+  provedor_id?: string;
+  provedor_nome?: string;
+  gratis?: string;
+  provedores?: ProvedorIA[];
   base: string;
   local: boolean;
   opcoes: ModeloIA[];
   nota: string;
+}
+
+/** Um modelo que a chave desta conta realmente enxerga. */
+export interface ModeloDescoberto {
+  id: string;
+  gratis: boolean;
+}
+
+export interface ModelosDescobertos {
+  provedor: string;
+  base: string;
+  modelos: ModeloDescoberto[];
+  total: number;
+  gratis: number;
+  resumo: string;
 }
 
 export interface RemocaoSugerida {
@@ -390,12 +422,31 @@ export async function salvarModeloIA(modelo: string): Promise<ModelosIA> {
   return resposta.estado;
 }
 
+/** Troca de provedor (Groq, Google, OpenRouter…). Grava o `.env` e recarrega. */
+export async function trocarProvedorIA(provedor: string, modelo?: string): Promise<ModelosIA> {
+  const resposta = await apiFetch<{ ok: boolean; estado: ModelosIA }>('/api/ai/provedor', {
+    method: 'POST',
+    body: JSON.stringify(modelo ? { provedor, modelo } : { provedor }),
+  });
+  return resposta.estado;
+}
+
+/** Pergunta ao provedor quais modelos esta chave vê — a lista real, não o atalho. */
+export async function listarModelosDisponiveis(): Promise<ModelosDescobertos> {
+  const resposta = await apiFetch<{ ok: boolean; result: ModelosDescobertos }>('/api/ai/modelos-disponiveis');
+  return resposta.result;
+}
+
 /** Estado das chaves de IA — o que a tela mostra. Nunca traz a chave inteira. */
 export interface ChavesIA {
   ok: boolean;
   quantidade: number;
   mascaradas: string[];
   provedor: string;
+  /** Id do provedor (`groq`, `google`…), quando o endereço é reconhecido. */
+  provedor_id?: string;
+  gratis?: string;
+  onde?: string;
   base: string;
   modelo: string;
   local: boolean;

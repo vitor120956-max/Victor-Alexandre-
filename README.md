@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.79.2.**
+**Versão atual: 0.80.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -47,6 +47,8 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 **Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 315, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Modelo na tela:** a chave abre a porta, o modelo é quem responde. Em **Configurações → Inteligência generativa** há o cartão **Modelos de IA** com o custo de cada opção — grande entende melhor e gasta mais cota, pequeno responde rápido e rende muito mais pedidos por dia — e a troca grava no `.env` e vale na hora, sem fechar a janela. Detalhes em [`docs/MODELOS.md`](docs/MODELOS.md).
+
+**Provedor na tela:** chave é do provedor, e provedor é preço. Em **Configurações → Modelos de IA → Provedor** está a lista com o preço honesto de cada um: **Groq**, **Google Gemini** (grátis nos Flash, com a condição de que o conteúdo do plano grátis pode treinar os produtos do Google), **OpenRouter** (é por onde se usa **DeepSeek de graça**, com `:free` no nome) e **Mistral** são grátis; **DeepSeek direto**, **Claude**, **OpenAI** e **Cerebras** são pagos — e a tela diz isso antes de você criar conta. Colar uma chave troca o endereço sozinho, as chaves do provedor anterior ficam guardadas, e **Ver modelos da minha chave** pergunta ao provedor quais nomes a sua conta enxerga hoje, com `:free` marcado. Detalhes em [`docs/PROVEDORES.md`](docs/PROVEDORES.md).
 
 **Aviso de cota:** o JARVIS registra o que o provedor respondeu em cada chave (200, 429, 401) e quanto resta no minuto nos cabeçalhos `x-ratelimit-*`. Com isso avisa — faixa âmbar *“as chaves estão acabando”* e vermelha *“as chaves acabaram”* — e responde no chat *“quantas chaves restam?”*. É medida, não estimativa: quando o provedor não manda o número, o aviso fala do que aconteceu, não de porcentagem inventada. Em [`docs/CHAVES.md`](docs/CHAVES.md) §9.
 
@@ -740,7 +742,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.79.2", "skills": 315}`.
+`{"version": "0.80.0", "skills": 315}`.
 
 ## Verificações
 

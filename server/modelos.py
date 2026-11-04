@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from . import chaves
+from . import chaves, provedores
 
 MODELO_PADRAO = "llama-3.3-70b-versatile"
 
@@ -84,17 +84,31 @@ def nome_valido(modelo: str) -> bool:
 
 
 def estado() -> dict[str, Any]:
-    """O que a tela precisa: qual é o modelo agora, se é local e as opções."""
+    """O que a tela precisa: qual é o modelo agora, se é local e as opções.
+
+    0.80.0 — o catálogo passou a depender do **provedor**: o nome
+    `llama-3.3-70b-versatile` não existe no Google, e `gemini-2.5-flash` não
+    existe no Groq. Mostrar a lista errada era convidar a pessoa a colar um
+    nome que só podia dar 404.
+    """
     atual = chaves.estado()
+    em_uso = provedores.provedor_atual()
+    provedor_id = em_uso["id"] if em_uso else "groq"
+    padrao = em_uso["modelo"] if em_uso else MODELO_PADRAO
+    opcoes = provedores.modelos_do(provedor_id) or CATALOGO
     return {
         "modelo": atual.get("modelo") or "",
-        "padrao": MODELO_PADRAO,
+        "padrao": padrao,
         "provedor": atual.get("provedor") or "",
+        "provedor_id": provedor_id,
+        "provedor_nome": em_uso["nome"] if em_uso else (atual.get("provedor") or ""),
+        "gratis": em_uso["gratis"] if em_uso else "",
+        "provedores": provedores.catalogo()["provedores"],
         "base": atual.get("base") or "",
         "local": bool(atual.get("local")),
         "opcoes": [
             {**item, "atual": item["id"] == (atual.get("modelo") or "")}
-            for item in CATALOGO
+            for item in opcoes
         ],
         # Modelo local não tem catálogo: o “modelo” é o arquivo `.gguf` no disco.
         "nota": (
@@ -126,5 +140,6 @@ def aplicar(modelo: str) -> dict[str, Any]:
 
 
 def restaurar() -> dict[str, Any]:
-    """Volta ao modelo padrão — o caminho de volta de toda escolha."""
-    return aplicar(MODELO_PADRAO)
+    """Volta ao modelo padrão **do provedor em uso** — não ao do Groq."""
+    em_uso = provedores.provedor_atual()
+    return aplicar(em_uso["modelo"] if em_uso else MODELO_PADRAO)

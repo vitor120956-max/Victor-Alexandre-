@@ -195,10 +195,16 @@ def estado() -> dict[str, Any]:
     texto = _texto_atual()
     chaves = separar_chaves(ler_valor("JARVIS_AI_API_KEY", texto))
     base = ler_valor("JARVIS_AI_BASE_URL", texto)
+    from . import provedores  # noqa: PLC0415 (import tardio: provedores importa este módulo)
+
+    dono = provedores.por_base(base)
     return {
         "quantidade": len(chaves),
         "mascaradas": [mascarar(chave) for chave in chaves],
         "provedor": ler_valor("JARVIS_AI_PROVIDER", texto),
+        "provedor_id": dono["id"] if dono else "",
+        "gratis": dono["gratis"] if dono else "",
+        "onde": dono["onde"] if dono else "",
         "base": base,
         "modelo": ler_valor("JARVIS_AI_MODEL", texto),
         "local": e_local(base),
@@ -213,6 +219,13 @@ def estado() -> dict[str, Any]:
 
 def _todos_groq(chaves: list[str]) -> bool:
     return bool(chaves) and all(chave.startswith("gsk_") for chave in chaves)
+
+
+def _provedor_atual_id() -> str:
+    from . import provedores  # noqa: PLC0415 (evita ciclo de importação)
+
+    achado = provedores.por_base(ler_valor("JARVIS_AI_BASE_URL"))
+    return achado["id"] if achado else ""
 
 
 def salvar(texto_colado: str, acrescentar: bool = False) -> dict[str, Any]:
@@ -248,8 +261,32 @@ def salvar(texto_colado: str, acrescentar: bool = False) -> dict[str, Any]:
 
     texto = atual
     valores = {"JARVIS_AI_API_KEY": ",".join(juntas)}
-    # Endereço e modelo só entram se ainda não estiverem apontando para o Groq:
-    # quem configurou OpenRouter de propósito não perde a configuração.
+
+    # 0.80.0 — a cara da chave diz de quem ela é: `gsk_` é Groq, `AIza` é Google,
+    # `sk-or-v1-` é OpenRouter. Se todas vêm do mesmo provedor e ele não é o que
+    # está configurado, o endereço e o modelo vão junto — senão a chave nova
+    # bateria na porta do provedor antigo e o erro seria 401 sem explicação.
+    from . import provedores  # noqa: PLC0415 (evita ciclo de importação)
+
+    dono = provedores.detectar_varias(juntas)
+    atual_id = _provedor_atual_id()
+    if dono:
+        preset = provedores.POR_ID[dono]
+        valores[f"JARVIS_CHAVES_{dono.upper()}"] = ",".join(juntas)
+        if dono != atual_id:
+            # Troca de casa: as chaves que estavam aqui ficam guardadas com o
+            # nome do provedor antigo, para voltarem se ele for escolhido de novo.
+            antigas = separar_chaves(ler_valor("JARVIS_AI_API_KEY", texto))
+            if antigas and atual_id:
+                valores[f"JARVIS_CHAVES_{atual_id.upper()}"] = ",".join(antigas)
+            valores.update(
+                {
+                    "JARVIS_AI_PROVIDER": preset["nome"],
+                    "JARVIS_AI_BASE_URL": preset["base"],
+                    "JARVIS_AI_MODEL": preset["modelo"],
+                }
+            )
+    # Compatibilidade: qualquer chave que só o Groq reconhece preenche o Groq.
     if _todos_groq(juntas) and "groq.com" not in ler_valor("JARVIS_AI_BASE_URL", texto):
         valores.update(GROQ)
     for nome, valor in valores.items():
@@ -258,13 +295,18 @@ def salvar(texto_colado: str, acrescentar: bool = False) -> dict[str, Any]:
     aplicar_no_ambiente()
 
     resultado = estado()
-    trocado = "groq.com" in (resultado["base"] or "")
+    trocado = "JARVIS_AI_BASE_URL" in valores and dono is not None
     resultado["salvo"] = True
     resultado["novas"] = len(novas)
     resultado["acrescentou"] = acrescentar
     resultado["resumo"] = (
         f"{len(juntas)} chave(s) guardada(s) no .env"
-        + (f", endereço e modelo do Groq preenchidos" if trocado and "JARVIS_AI_BASE_URL" in valores else "")
+        + (
+            f", e o provedor passou a ser {provedores.POR_ID[dono]['nome']} "
+            f"(modelo {provedores.POR_ID[dono]['modelo']})"
+            if trocado
+            else ""
+        )
         + ". O JARVIS já está usando — nada de reiniciar."
     )
     return resultado
@@ -370,6 +412,14 @@ def testar(
     }
 
 
+def onde_pegar_chave() -> str:
+    """O endereço do painel do provedor em uso — a frase de socorro certa."""
+    from . import provedores  # noqa: PLC0415 (evita ciclo de importação)
+
+    dono = provedores.por_base(ler_valor("JARVIS_AI_BASE_URL"))
+    return (dono["onde"] if dono else "") or "console.groq.com/keys"
+
+
 def _resumo_teste(boas: int, total: int, resultados: list[dict[str, Any]] | None = None) -> str:
     """Diz o que aconteceu **e** o que fazer — separando chave, cota e modelo."""
     itens = resultados or []
@@ -402,7 +452,7 @@ def _resumo_teste(boas: int, total: int, resultados: list[dict[str, Any]] | None
         )
     if codigos == {401} or codigos == {401, 403}:
         return (
-            f"As {total} chaves foram recusadas (HTTP 401/403). Gere chaves novas em console.groq.com/keys "
+            f"As {total} chaves foram recusadas (HTTP 401/403). Gere chaves novas em {onde_pegar_chave()} "
             "e cole aqui de novo."
         )
     if codigos == {404}:

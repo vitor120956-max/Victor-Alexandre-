@@ -1,4 +1,4 @@
-# Os modelos de IA — como funcionam e como trocar (0.79.1)
+# Os modelos de IA — como funcionam e como trocar (0.80.0)
 
 A pergunta foi curta: *“e sobre os modelos, como funcionam?”*. A resposta cabe
 em uma frase e o resto é consequência dela:

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, BrainCircuit, Check, Database, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
+import { Bell, BrainCircuit, Check, Database, Globe, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
-import { apagarChavesIA, getChavesIA, getModelosIA, salvarChavesIA, salvarModeloIA, testarChavesIA } from '../lib/api';
-import type { ChaveTesteResultado, ChavesIA, ModelosIA } from '../lib/api';
+import { apagarChavesIA, getChavesIA, getModelosIA, listarModelosDisponiveis, salvarChavesIA, salvarModeloIA, testarChavesIA, trocarProvedorIA } from '../lib/api';
+import type { ChaveTesteResultado, ChavesIA, ModelosDescobertos, ModelosIA } from '../lib/api';
 import type { Preferences } from '../types';
 
 export function SettingsPage() {
@@ -30,6 +30,15 @@ export function SettingsPage() {
   const [modeloLivre, setModeloLivre] = useState('');
   const [salvandoModelo, setSalvandoModelo] = useState(false);
 
+  // --- provedor ------------------------------------------------------------
+  // 0.80.0 — “não dá para usar DeepSeek ou Claude de graça?” A resposta honesta
+  // é uma lista: Groq, Google e os :free do OpenRouter são grátis; DeepSeek
+  // direto e Claude são pagos. Quem decide é quem paga a conta — e vê o preço
+  // aqui, antes de colar a chave.
+  const [salvandoProvedor, setSalvandoProvedor] = useState(false);
+  const [descobertos, setDescobertos] = useState<ModelosDescobertos | null>(null);
+  const [buscandoModelos, setBuscandoModelos] = useState(false);
+
   const recarregarModelos = useCallback(async () => {
     if (!backendOnline) {
       setModelos(null);
@@ -46,6 +55,39 @@ export function SettingsPage() {
   }, [backendOnline]);
 
   useEffect(() => { void recarregarModelos(); }, [recarregarModelos]);
+
+  const usarProvedor = async (alvo: string) => {
+    setSalvandoProvedor(true);
+    try {
+      const dados = await trocarProvedorIA(alvo);
+      setModelos(dados);
+      setModeloEscolhido(dados.modelo || dados.padrao);
+      setModeloLivre('');
+      setDescobertos(null);
+      setTeste(null);
+      await refreshBackend();
+      const nome = dados.provedores?.find((item) => item.id === alvo)?.nome || alvo;
+      pushToast('Provedor trocado', `Agora é ${nome}, com o modelo ${dados.modelo}.`, 'success');
+    } catch (erro) {
+      pushToast('Não deu para trocar o provedor', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setSalvandoProvedor(false);
+    }
+  };
+
+  const verModelosDaChave = async () => {
+    setBuscandoModelos(true);
+    try {
+      const dados = await listarModelosDisponiveis();
+      setDescobertos(dados);
+      pushToast('Lista da sua chave', dados.resumo, 'success');
+    } catch (erro) {
+      setDescobertos(null);
+      pushToast('Não deu para listar os modelos', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setBuscandoModelos(false);
+    }
+  };
 
   const usarModeloEspecifico = async (alvo: string) => {
     setSalvandoModelo(true);
@@ -302,6 +344,34 @@ export function SettingsPage() {
                 abre a porta, o modelo é quem responde. */}
             <div className="modelos-card" id="modelos-de-ia">
               <h3 className="chaves-titulo"><BrainCircuit size={13} /> Modelos de IA</h3>
+              {modelos && !modelos.local && modelos.provedores && modelos.provedores.length > 0 && (
+                <div className="provedores-bloco">
+                  <div className="provedores-cabeca">
+                    <span><Globe size={13} /> Provedor</span>
+                    <strong>{modelos.provedor_nome || modelos.provedor || '—'}</strong>
+                    {modelos.gratis && <em className={`provedor-selo ${modelos.gratis.startsWith('sim') ? 'selo-gratis' : 'selo-pago'}`}>{modelos.gratis}</em>}
+                  </div>
+                  <div className="provedores-lista">
+                    {modelos.provedores.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`provedor-chip ${item.atual ? 'provedor-atual' : ''}`}
+                        onClick={() => void usarProvedor(item.id)}
+                        disabled={salvandoProvedor || item.atual || !backendOnline || chaves?.podeEditar === false}
+                        title={item.nota}
+                      >
+                        <strong>{item.nome}</strong>
+                        <span className={item.gratis.startsWith('sim') ? 'selo-gratis' : 'selo-pago'}>{item.gratis}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="provedores-nota">
+                    {modelos.provedores.find((item) => item.id === modelos.provedor_id)?.resumo
+                      || 'Escolha acima. A chave é do provedor: ao trocar, as chaves do anterior ficam guardadas.'}
+                  </p>
+                </div>
+              )}
               <p className="modelos-resumo">
                 {modelos?.local
                   ? 'Modelo local: não há catálogo — o modelo é o arquivo .gguf que o llama-server carrega.'
@@ -339,10 +409,35 @@ export function SettingsPage() {
                 <button className="button button-primary" onClick={() => void usarModelo()} disabled={!backendOnline || salvandoModelo}>
                   <Zap size={15} /> {salvandoModelo ? 'Gravando…' : 'Usar este modelo'}
                 </button>
+                {!modelos?.local && (
+                  <button className="button button-secondary" onClick={() => void verModelosDaChave()} disabled={!backendOnline || buscandoModelos || (chaves?.quantidade ?? 0) === 0}>
+                    <Database size={15} /> {buscandoModelos ? 'Consultando…' : 'Ver modelos da minha chave'}
+                  </button>
+                )}
                 <button className="button button-secondary" onClick={() => { setModeloLivre(''); setModeloEscolhido(modelos?.padrao || ''); }} disabled={salvandoModelo}>
                   <RotateCcw size={15} /> Voltar ao padrão
                 </button>
               </div>
+              {descobertos && descobertos.modelos.length > 0 && (
+                <div className="modelos-descobertos">
+                  <strong>{descobertos.resumo}</strong>
+                  <p className="modelos-nota">Clique para usar. “:free” é o que não cobra nada.</p>
+                  <div className="descobertos-lista">
+                    {descobertos.modelos.slice(0, 40).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`descoberto-chip ${item.id === modelos?.modelo ? 'provedor-atual' : ''}`}
+                        onClick={() => { setModeloLivre(item.id); setModeloEscolhido(item.id); }}
+                        title={item.gratis ? 'Grátis' : 'Cobra por token'}
+                      >
+                        <code>{item.id}</code>
+                        {item.gratis && <span className="selo-gratis">grátis</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="modelos-nota">
                 A cota de cada modelo é do provedor e muda. Se um nome sair do ar, o botão <strong>Testar</strong> das chaves mostra o erro na hora.
               </p>
@@ -377,6 +472,13 @@ export function SettingsPage() {
             Cole o bloco inteiro, com ou sem os rótulos — o JARVIS pega só o que é chave
             (<code>gsk_…</code>, <code>sk-…</code>, <code>AIza…</code>). Uma por linha ou separadas por vírgula.
           </p>
+          {chaves?.provedor_id && (
+            <p className="chaves-aviso chaves-aviso-onde">
+              Provedor em uso: <strong>{chaves.provedor}</strong>
+              {chaves.gratis ? ` (${chaves.gratis})` : ''}. A chave dele sai em <code>{chaves.onde}</code>.
+              {' '}Se você colar chave de outro provedor, o JARVIS troca o endereço sozinho.
+            </p>
+          )}
           <div className="chaves-campo">
             <textarea
               ref={campoChaves}

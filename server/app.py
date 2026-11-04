@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import atualizacao as atualizacao_local
 from . import interface_web
 from . import modelos as modelos_mod
+from . import provedores as provedores_mod
 from . import chaves as chaves_mod
 from . import conserto
 from . import dados as dados_locais
@@ -78,6 +79,15 @@ class ChavesTesteRequest(BaseModel):
 
     # 1-based; vazio testa todas.
     indice: int | None = Field(default=None, ge=1, le=20)
+
+
+class ProvedorRequest(BaseModel):
+    """Trocar a casa: `groq`, `google`, `openrouter`, `deepseek`…"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    provedor: str = Field(min_length=2, max_length=40)
+    modelo: str | None = Field(default=None, max_length=120)
 
 
 class ModeloRequest(BaseModel):
@@ -710,6 +720,49 @@ def create_app(
     @application.get("/api/ai/modelos")
     def ai_modelos() -> dict[str, Any]:
         return {"ok": True, "result": modelos_mod.estado()}
+
+    @application.get("/api/ai/provedores")
+    def ai_provedores() -> dict[str, Any]:
+        """Quem é grátis, quem é pago e onde pegar a chave — sem abrir outra aba."""
+        return {"ok": True, "result": provedores_mod.catalogo()}
+
+    @application.post("/api/ai/provedor")
+    def ai_provedor_trocar(request: Request, payload: ProvedorRequest) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = provedores_mod.aplicar(payload.provedor, payload.modelo)
+        except provedores_mod.ProvedorInvalido as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "PROVEDOR_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "ENV_NAO_ESCRITO", "message": f"não consegui escrever o .env: {exc}"}},
+            )
+        # O cérebro em memória tem de apontar para o endereço novo agora, não no
+        # próximo start: trocar de provedor e continuar vendo o antigo é o mesmo
+        # defeito da tela velha que já custou duas versões.
+        if hasattr(provider, "recarregar"):
+            provider.recarregar()  # type: ignore[attr-defined]
+        return {
+            "ok": True,
+            "result": resultado,
+            "status": provider.status(),
+            "estado": modelos_mod.estado(),
+        }
+
+    @application.get("/api/ai/modelos-disponiveis")
+    def ai_modelos_disponiveis() -> dict[str, Any]:
+        """A lista real da conta — porque nome de modelo envelhece em semanas."""
+        try:
+            return {"ok": True, "result": provedores_mod.listar_modelos()}
+        except provedores_mod.ProvedorInvalido as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "LISTA_INDISPONIVEL", "message": str(exc)}},
+            )
 
     @application.post("/api/ai/modelo")
     def ai_modelo_salvar(request: Request, payload: ModeloRequest) -> dict[str, Any]:
