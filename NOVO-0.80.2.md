@@ -55,5 +55,5 @@ local — os dois continuam funcionando.
 
 - pytest: **3.341 passed, 2 skipped, 0 failed**
 - vitest: **134 passed**
-- manifesto: **501 arquivos**
+- manifesto: **502 arquivos**
 - skills: **315** (nenhuma nova)
