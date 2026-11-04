@@ -410,6 +410,14 @@ export interface ChaveTeste {
   ok: boolean;
   codigo: number;
   motivo: string;
+  /** O que o provedor escreveu, traduzido: “tente em 12m34s — limite 100000, usado 100000”. */
+  detalhe?: string;
+  /** Modelo usado nesta tentativa. */
+  modelo?: string;
+  /** A primeira tentativa falhou, mas a chave respondeu em outro modelo. */
+  chave_valida?: boolean;
+  /** Qual modelo respondeu, quando a chave está boa e o modelo atual não. */
+  modelo_que_respondeu?: string;
 }
 
 export interface ChaveTesteResultado {
@@ -418,6 +426,10 @@ export interface ChaveTesteResultado {
   boas: number;
   total: number;
   resumo: string;
+  /** Modelo configurado no `.env` no momento do teste. */
+  modelo?: string;
+  /** Modelo que respondeu quando o atual não respondeu: a troca de um clique. */
+  modelo_sugerido?: string | null;
 }
 
 /**

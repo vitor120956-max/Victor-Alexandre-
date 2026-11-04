@@ -258,3 +258,52 @@ nunca entra em resposta HTTP — há teste para isso.
   limite por minuto nos cabeçalhos e a recusa real quando ela acontece;
 - **não** some com o problema: avisar é o máximo que um aviso faz. Trocar ou
   acrescentar chave continua sendo no cartão.
+
+## 10. “Coloquei 4 chaves e nenhuma respondeu” (0.79.2)
+
+Esse foi um caso real, com print: quatro chaves `gsk_…` coladas de uma vez, o
+aviso verde *“4 chaves guardadas”* e, dois segundos depois, o vermelho
+*“Nenhuma das 4 respondeu agora”*.
+
+### A causa mais provável: a cota é da conta, não da chave
+
+O Groq — e quase todo provedor — limita **por organização/conta**, não por
+chave. Quatro chaves criadas no mesmo login (`console.groq.com` com o mesmo
+e-mail) **dividem o mesmo limite**. Elas não somam cota: servem para trocar
+quando uma está com problema, não para multiplicar.
+
+Se as quatro vieram do mesmo login e a conta estourou o dia, as quatro dão
+`429` juntas — que é exatamente o que o print mostra.
+
+### A alavanca que **funciona**: trocar de modelo
+
+Cada **modelo** tem a sua própria cota, mesmo dentro da mesma conta. O
+`llama-3.3-70b-versatile` (padrão) tem cerca de 1.000 pedidos/dia e 100 mil
+tokens/dia no plano grátis; o `llama-3.1-8b-instant` tem cerca de 14.400
+pedidos/dia. Trocar no cartão **Modelos de IA** costuma devolver a conversa na
+hora, sem chave nova e sem conta nova.
+
+### O que o botão Testar passou a fazer
+
+| antes | agora |
+|---|---|
+| dizia “HTTP 429” | diz **“tente de novo em 12m34s — limite 100000, usado 100000”**, com o número que o provedor mandou |
+| “nenhuma das 4 respondeu” | separa as três causas: chave inválida (401), cota da conta (429), nome do modelo que não existe (404) |
+| só o código | quando a falha é 429/404, testa **uma vez** com `llama-3.1-8b-instant`. Se responder, a chave está boa e a tela oferece o botão **Usar llama-3.1-8b-instant** |
+
+O segundo teste custa 8 tokens e só acontece quando o primeiro falha. Ele é o
+que transforma “não sei o que houve” em “a chave é boa, o modelo é que caiu”.
+
+### Se as quatro derem 401
+
+Aí é chave mesmo: copiada pela metade, revogada, ou apagada no painel. Gere
+novas em `console.groq.com/keys`. **E não cole chaves no chat** — quem vê a
+conversa vê a chave; o certo é revogar as que passaram por ali.
+
+### Ordem de socorro, do mais barato ao mais caro
+
+1. **Testar** no cartão Chaves de IA — mostra o motivo real e o tempo de espera;
+2. **trocar de modelo** no cartão Modelos de IA (cota separada, custo zero);
+3. **esperar** o tempo que o próprio provedor disse;
+4. **outra conta** (outro e-mail) — é a única forma de somar cota de verdade;
+5. **modelo local** (`ia.local`) — sem conta, sem cota, mais lento.

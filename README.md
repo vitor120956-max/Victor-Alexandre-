@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.79.1.**
+**Versão atual: 0.79.2.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,7 +44,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.1 — o JARVIS procura a skill certa nas 315, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 315, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Modelo na tela:** a chave abre a porta, o modelo é quem responde. Em **Configurações → Inteligência generativa** há o cartão **Modelos de IA** com o custo de cada opção — grande entende melhor e gasta mais cota, pequeno responde rápido e rende muito mais pedidos por dia — e a troca grava no `.env` e vale na hora, sem fechar a janela. Detalhes em [`docs/MODELOS.md`](docs/MODELOS.md).
 
@@ -740,7 +740,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.79.1", "skills": 315}`.
+`{"version": "0.79.2", "skills": 315}`.
 
 ## Verificações
 

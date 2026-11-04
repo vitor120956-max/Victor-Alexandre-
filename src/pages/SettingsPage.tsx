@@ -47,6 +47,22 @@ export function SettingsPage() {
 
   useEffect(() => { void recarregarModelos(); }, [recarregarModelos]);
 
+  const usarModeloEspecifico = async (alvo: string) => {
+    setSalvandoModelo(true);
+    try {
+      const dados = await salvarModeloIA(alvo);
+      setModelos(dados);
+      setModeloEscolhido(dados.modelo);
+      setModeloLivre('');
+      await refreshBackend();
+      pushToast('Modelo trocado', `Agora respondendo com ${dados.modelo}.`, 'success');
+    } catch (erro) {
+      pushToast('Não deu para trocar o modelo', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setSalvandoModelo(false);
+    }
+  };
+
   const usarModelo = async () => {
     const alvo = (modeloLivre.trim() || modeloEscolhido).trim();
     if (!alvo) {
@@ -253,12 +269,28 @@ export function SettingsPage() {
 
               {teste && (
                 <div className="chaves-resultado">
+                  {/* 0.79.2 — o resumo agora diz QUAL das três coisas aconteceu:
+                      chave inválida, cota da conta, ou só o modelo fora do ar. */}
                   <strong>{teste.resumo}</strong>
+                  {teste.modelo_sugerido && (
+                    <button
+                      className="button button-primary chaves-trocar-modelo"
+                      onClick={() => void usarModeloEspecifico(teste.modelo_sugerido as string)}
+                      disabled={salvandoModelo}
+                    >
+                      <Zap size={14} /> Usar {teste.modelo_sugerido}
+                    </button>
+                  )}
                   <ul>
                     {teste.resultados.map((item) => (
                       <li key={item.indice} className={item.ok ? 'chave-ok' : 'chave-falhou'}>
-                        <span>{item.ok ? <Check size={13} /> : '×'}</span>
-                        chave {item.indice}: {item.motivo}
+                        <span>{item.ok && !item.modelo_que_respondeu ? <Check size={13} /> : item.ok ? '!' : '×'}</span>
+                        <div>
+                          chave {item.indice}: {item.motivo}
+                          {/* A frase do provedor: “tente em 12m34s — limite 100000, usado 100000”.
+                              Sem ela, “HTTP 429” não diz se espera 30 s ou 8 h. */}
+                          {item.detalhe ? <small className="chave-detalhe">{item.detalhe}</small> : null}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -273,7 +305,7 @@ export function SettingsPage() {
               <p className="modelos-resumo">
                 {modelos?.local
                   ? 'Modelo local: não há catálogo — o modelo é o arquivo .gguf que o llama-server carrega.'
-                  : 'A chave abre a porta; o modelo é quem responde. Grande entende melhor e gasta mais cota; pequeno responde rápido e rende muito mais pedidos por dia.'}
+                  : 'A chave abre a porta; o modelo é quem responde. Grande entende melhor e gasta mais cota; pequeno responde rápido e rende muito mais. Cada modelo tem a sua cota: quando um estoura, trocar de modelo renova.'}
               </p>
               {modelos && !modelos.local && (
                 <>
@@ -364,10 +396,18 @@ export function SettingsPage() {
             <input type="checkbox" checked={acrescentar} onChange={(event) => setAcrescentar(event.target.checked)} />
             Manter as que já estão (acrescentar em vez de trocar)
           </label>
+          {/* 0.79.2 — a verdade que faltava: no Groq a cota é por CONTA, não por
+              chave. Quatro chaves do mesmo login não são quatro cotas, e foi
+              exatamente isso que fez as quatro falharem juntas no print. */}
           <p className="chaves-aviso">
             A chave é enviada uma vez para o servidor local e gravada no <code>.env</code>. Depois de salvar,
             o campo é limpo e a chave nunca mais é mostrada — nem aqui, nem no chat. Como você já compartilhou
             essas chaves em algum lugar, o certo é gerar novas no painel do provedor.
+          </p>
+          <p className="chaves-aviso chaves-aviso-conta">
+            <strong>No Groq a cota é por conta, não por chave.</strong> Várias chaves criadas no mesmo login
+            dividem o mesmo limite — elas servem para trocar quando uma falha, não para somar cota. Cada
+            <em> modelo </em> tem a sua cota própria: trocar de modelo no cartão abaixo é o que renova.
           </p>
           <div className="modal-actions">
             <button className="button button-ghost" onClick={fecharChaves}>Cancelar</button>

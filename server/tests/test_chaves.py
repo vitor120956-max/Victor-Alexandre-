@@ -389,3 +389,99 @@ def test_a_tela_de_configuracoes_tem_o_cartao_e_nao_mente_a_versao():
     # Nenhum número de versão escrito à mão: vem do /api/health (backendVersion).
     assert re.search(r"<strong>\d+\.\d+\.\d+</strong>", texto) is None, "versão fixa voltou ao rodapé"
     assert "backendVersion" in texto
+
+
+# ------------------------- 0.79.2: por que as quatro falharam juntas
+
+CORPO_429 = {
+    "error": {
+        "message": (
+            "Rate limit reached for model `llama-3.3-70b-versatile` in organization "
+            "`org_01xyz` on tokens per day (TPD): Limit 100000, Used 100000, Requested 8. "
+            "Please try again in 12m34.5s."
+        ),
+        "type": "tokens",
+        "code": "rate_limit_exceeded",
+    }
+}
+
+
+def test_o_429_do_provedor_vira_frase_util():
+    """“HTTP 429” não diz se a espera é de 30 s ou de 8 h. O corpo diz."""
+    frase = chaves._motivo_do_corpo(429, CORPO_429)
+    assert "12m34.5s" in frase
+    assert "100000" in frase
+    assert "org_01xyz" not in frase  # identificador da conta não vai para a tela
+
+
+def test_mensagem_do_provedor_nunca_mostra_chave():
+    suja = {"error": {"message": "falhou para gsk_TESTEnaoEhChave000000000000000000000000 hoje"}}
+    frase = chaves._motivo_do_corpo(401, suja)
+    assert "gsk_" not in frase
+    assert "[chave]" in frase
+
+
+def test_sem_corpo_json_o_motivo_continua_legivel():
+    assert chaves._motivo_do_corpo(429, None) == ""
+    # Corpo sem o campo `error.message` não inventa frase: quem responde é o
+    # motivo padrão do código (_MOTIVOS), não um texto vazio.
+    assert chaves._motivo_do_corpo(401, {"erro": "formato estranho"}) == ""
+    assert "recusada" in chaves._MOTIVOS[401]
+
+
+def test_429_em_um_modelo_e_200_no_outro_prova_que_a_chave_e_boa(env: Path):
+    """O print do dono: quatro chaves, “nenhuma respondeu”. Podia ser o modelo."""
+    chaves.salvar("gsk_aaaaaaaaaaaaaaaaaaaaaaaaaaaa,gsk_bbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    vistas: list[str] = []
+
+    def postar(_url, corpo, _cabecalho):
+        vistas.append(corpo["model"])
+        if corpo["model"] == chaves.MODELO_DE_SOCORRO:
+            return 200
+        return {"codigo": 429, "corpo": CORPO_429}
+
+    resultado = chaves.testar(postar=postar, modelo_socorro=chaves.MODELO_DE_SOCORRO)
+    assert resultado["boas"] == 2
+    assert resultado["modelo_sugerido"] == chaves.MODELO_DE_SOCORRO
+    assert "válida" in resultado["resumo"]
+    assert chaves.MODELO_DE_SOCORRO in resultado["resumo"]
+    # Cada chave tentou o modelo configurado; as duas caíram e as duas provaram com o socorro.
+    assert vistas.count("llama-3.3-70b-versatile") == 2
+    assert vistas.count(chaves.MODELO_DE_SOCORRO) == 2
+
+
+def test_401_nao_gasta_segunda_tentativa(env: Path):
+    """Chave inválida é inválida em qualquer modelo: não vale gastar pedido."""
+    chaves.salvar("gsk_cccccccccccccccccccccccccccc")
+    vistas: list[str] = []
+
+    def postar(_url, corpo, _cabecalho):
+        vistas.append(corpo["model"])
+        return 401
+
+    resultado = chaves.testar(postar=postar, modelo_socorro=chaves.MODELO_DE_SOCORRO)
+    assert resultado["boas"] == 0
+    assert len(vistas) == 1
+    assert "recusadas" in resultado["resumo"].lower() or "recusada" in resultado["resumo"].lower()
+
+
+def test_quatro_429_viram_a_verdade_sobre_conta_compartilhada(env: Path):
+    """No Groq a cota é por conta, não por chave: quatro chaves não são quatro cotas."""
+    chaves.salvar(",".join(f"gsk_{letra * 24}" for letra in "abcd"))
+
+    def postar(*_a):
+        return {"codigo": 429, "corpo": CORPO_429}
+
+    resultado = chaves.testar(postar=postar, modelo_socorro="")
+    assert resultado["boas"] == 0
+    assert "conta" in resultado["resumo"]
+    assert "mesmo login" in resultado["resumo"]
+    assert "conta nova" in resultado["resumo"]
+
+
+def test_o_resultado_nao_devolve_a_chave(env: Path):
+    import json
+
+    chaves.salvar("gsk_eeeeeeeeeeeeeeeeeeeeeeeeeeee")
+    resultado = chaves.testar(postar=lambda *_a: {"codigo": 429, "corpo": CORPO_429}, modelo_socorro="")
+    assert "gsk_eeee" not in json.dumps(resultado, ensure_ascii=False)

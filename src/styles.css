@@ -1264,3 +1264,12 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 /* O cartão precisa de nome na tela: sem título, quem procura "Chaves de IA" em
    Configurações não acha — foi exatamente o que aconteceu na 0.77.0. */
 .chaves-titulo { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; color: var(--accent); font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+
+/* 0.79.2 — o detalhe do provedor no teste das chaves: “tente em 12m34s —
+   limite 100000, usado 100000”. Sem esse número, “HTTP 429” não diz se a
+   espera é de 30 segundos ou de 8 horas. */
+.chave-detalhe { display: block; margin-top: 2px; font-size: 8.5px; line-height: 1.45; color: var(--muted); font-family: var(--mono); }
+.chaves-resultado li > div { min-width: 0; }
+.chaves-trocar-modelo { margin: 7px 0 3px; }
+
+.chaves-aviso-conta { margin-top: 6px; border-left: 2px solid rgba(var(--accent-rgb), .45); padding-left: 9px; }

@@ -292,11 +292,23 @@ def testar(
     indice: int | None = None,
     limite: int = 45.0,
     postar: Any = None,
+    modelo_socorro: str | None = None,
 ) -> dict[str, Any]:
     """Uma chamada real de 8 tokens por chave, na ordem, para dizer o que vale.
 
     `indice` (1-based) testa só uma — útil para conferir a que acabou de entrar.
     A resposta nunca contém a chave: só posição, se respondeu e o motivo.
+
+    **Por que há um segundo teste com outro modelo (0.79.2).** No print do dono
+    as quatro chaves falharam juntas e a tela dizia só *“nenhuma das 4 respondeu”*.
+    Isso confunde duas causas muito diferentes:
+
+    * a **chave** está inválida (401) — não adianta esperar, tem de trocar;
+    * o **modelo** está no limite (429) — a chave é boa, só aquele modelo parou.
+
+    Quando a primeira tentativa falha por 429 ou 404, a segunda usa um modelo com
+    cota separada. Se ele responde, a chave está viva e o problema é o modelo:
+    a resposta já diz qual usar. Custa 8 tokens, e só quando há falha.
     """
     valores = estado()
     chaves = separar_chaves(ler_valor("JARVIS_AI_API_KEY"))
@@ -304,6 +316,10 @@ def testar(
         raise ValueError("não há chave guardada para testar")
     base = valores["base"] or "https://api.groq.com/openai/v1"
     modelo = valores["modelo"] or "llama-3.3-70b-versatile"
+    socorro = modelo_socorro or MODELO_DE_SOCORRO
+    # Só tenta o segundo modelo quando faz sentido: provedor Groq e modelo
+    # diferente do atual. Num provedor alheio, o nome do socorro pode não existir.
+    tentar_outro = bool(socorro) and socorro != modelo and "groq.com" in base
 
     escolhidas = list(enumerate(chaves, 1))
     if indice is not None:
@@ -313,50 +329,163 @@ def testar(
 
     resultados = []
     for posicao, chave in escolhidas:
-        codigo, detalhe = _testar_uma(base, modelo, chave, limite, postar)
-        resultados.append({"indice": posicao, "ok": codigo == 200, "codigo": codigo, "motivo": detalhe})
+        primeira = _testar_uma_detalhado(base, modelo, chave, limite, postar)
+        codigo = int(primeira["codigo"])
+        item: dict[str, Any] = {
+            "indice": posicao,
+            "ok": codigo == 200,
+            "codigo": codigo,
+            "motivo": primeira["motivo"],
+            "detalhe": primeira["detalhe"],
+            "modelo": modelo,
+        }
+        # Falhou por limite ou por modelo inexistente: a chave pode estar ótima.
+        if codigo in (404, 429) and tentar_outro:
+            segunda = _testar_uma_detalhado(base, socorro, chave, limite, postar)
+            if int(segunda["codigo"]) == 200:
+                item["ok"] = True
+                item["codigo"] = codigo  # o código que a pessoa precisa ver
+                item["chave_valida"] = True
+                item["modelo_que_respondeu"] = socorro
+                item["motivo"] = f"a chave é válida: só o modelo {modelo} está indisponível agora"
+            else:
+                item["chave_valida"] = False
+                if segunda["detalhe"]:
+                    item["detalhe"] = f"{item['detalhe']} | com {socorro}: {segunda['detalhe']}".strip(" |")
+        resultados.append(item)
 
     boas = sum(1 for item in resultados if item["ok"])
+    sugestao = next(
+        (item["modelo_que_respondeu"] for item in resultados if item.get("modelo_que_respondeu")),
+        None,
+    )
     return {
         "ok": boas > 0,
         "resultados": resultados,
         "boas": boas,
         "total": len(resultados),
-        "resumo": _resumo_teste(boas, len(resultados)),
+        "modelo": modelo,
+        "modelo_sugerido": sugestao,
+        "resumo": _resumo_teste(boas, len(resultados), resultados),
     }
 
 
-def _resumo_teste(boas: int, total: int) -> str:
+def _resumo_teste(boas: int, total: int, resultados: list[dict[str, Any]] | None = None) -> str:
+    """Diz o que aconteceu **e** o que fazer — separando chave, cota e modelo."""
+    itens = resultados or []
     if total == 0:
         return "Nada para testar."
+
+    # Antes de dizer “responderam”, é preciso dizer **com qual modelo**: se a
+    # resposta só veio pelo modelo de socorro, o modelo configurado está fora do
+    # ar — e o resumo tem de mandar trocar, não comemorar.
+    via_socorro = [item for item in itens if item.get("modelo_que_respondeu")]
+    diretas = sum(1 for item in itens if item.get("ok") and not item.get("modelo_que_respondeu"))
+    if via_socorro and diretas == 0:
+        modelo = via_socorro[0].get("modelo") or "o modelo atual"
+        socorro = via_socorro[0]["modelo_que_respondeu"]
+        quantas = "A chave é válida" if total == 1 else f"As {total} chaves são válidas"
+        return (
+            f"{quantas}: o modelo {modelo} é que está indisponível. "
+            f"Troque para {socorro} no cartão Modelos de IA e a conversa volta."
+        )
+
     if boas == total:
         return f"As {total} chaves responderam." if total > 1 else "A chave respondeu. O cérebro está de pé."
-    if boas == 0:
+
+    codigos = {int(item.get("codigo") or 0) for item in itens}
+    if codigos == {429}:
         return (
-            f"Nenhuma das {total} respondeu agora. "
-            "Se todas deram 429, a cota do dia acabou; se deram 401, gere chaves novas."
-            if total > 1
-            else "A chave não respondeu agora. Veja o motivo acima."
+            f"As {total} chaves bateram no mesmo limite (HTTP 429). "
+            "No Groq a cota é por conta, não por chave: chaves do mesmo login dividem a mesma cota. "
+            "Troque de modelo (cada modelo tem cota própria) ou crie uma conta nova."
         )
+    if codigos == {401} or codigos == {401, 403}:
+        return (
+            f"As {total} chaves foram recusadas (HTTP 401/403). Gere chaves novas em console.groq.com/keys "
+            "e cole aqui de novo."
+        )
+    if codigos == {404}:
+        return (
+            "A chave não é o problema: o nome do modelo não existe no provedor (HTTP 404). "
+            "Escolha outro no cartão Modelos de IA."
+        )
+    if boas == 0:
+        detalhe = next((item.get("detalhe") for item in itens if item.get("detalhe")), "")
+        if total > 1:
+            return f"Nenhuma das {total} respondeu agora. {detalhe or 'Veja o motivo chave por chave.'}"
+        return f"A chave não respondeu agora: {detalhe or 'veja o motivo acima.'}"
     return f"{boas} de {total} responderam — as outras ficam de reserva para quando faltar cota."
 
 
 _MOTIVOS = {
-    401: "chave recusada (HTTP 401) — copiada pela metade ou apagada no painel",
+    401: "chave recusada (HTTP 401) — copiada pela metade, revogada ou apagada no painel",
     403: "chave sem permissão para este modelo (HTTP 403)",
-    404: "modelo não encontrado (HTTP 404) — o nome muda com o tempo",
-    422: "o provedor recusou o formato (HTTP 422) — provavelmente o modelo",
+    404: "modelo não encontrado (HTTP 404) — esse nome não existe mais no provedor",
+    413: "o pedido passou do limite do provedor (HTTP 413)",
+    422: "o provedor recusou o formato (HTTP 422) — quase sempre o nome do modelo",
     429: "cota ou limite de requisições estourado (HTTP 429)",
 }
 
+# Modelo de socorro: tem a maior cota grátis do Groq. Serve para **separar** duas
+# causas que dão o mesmo sintoma no teste: “a chave é inválida” e “este modelo
+# está no limite”. Se a chave responde com ele, a chave está boa.
+MODELO_DE_SOCORRO = "llama-3.1-8b-instant"
 
-def _testar_uma(
+# O provedor devolve, no 429, o número exato do limite. Sem isso a pessoa lê
+# “cota estourada” e não sabe se espera 30 s ou 8 h.
+_RE_SEGUNDOS = re.compile(r"(?:try again|tente|retry) in ([0-9]+m?[0-9.]*s?)", re.I)
+_RE_LIMITE = re.compile(r"(?:limit|limite)\s*[:=]?\s*([\d.,]+)", re.I)
+_RE_USADO = re.compile(r"(?:used|usado)\s*[:=]?\s*([\d.,]+)", re.I)
+
+
+def _limpar_mensagem(texto: str) -> str:
+    """Mensagem do provedor, sem nada que possa ser chave ou endereço interno."""
+    limpo = re.sub(r"(gsk_|sk-|AIza)[A-Za-z0-9_-]+", "[chave]", texto or "")
+    limpo = re.sub(r"https?://\S+", "[endereço]", limpo)
+    limpo = re.sub(r"\s+", " ", limpo).strip()
+    return limpo[:400]
+
+
+def _motivo_do_corpo(codigo: int, corpo: Any) -> str:
+    """A frase que o provedor escreveu, traduzida para o que interessa.
+
+    O Groq manda, no 429, algo como *“Rate limit reached for model `x` … on
+    tokens per day (TPD): Limit 100000, Used 100000, try again in 12m34s”*. Isso
+    é o dado que resolve o problema — guardar só “HTTP 429” foi o que fez o dono
+    perguntar “e agora?” no print.
+    """
+    if not isinstance(corpo, dict):
+        return ""
+    erro = corpo.get("error") if isinstance(corpo.get("error"), dict) else {}
+    mensagem = str(erro.get("message") or corpo.get("message") or "")
+    if not mensagem:
+        return ""
+    mensagem = _limpar_mensagem(mensagem)
+    pedacos: list[str] = []
+    espera = _RE_SEGUNDOS.search(mensagem)
+    if espera:
+        pedacos.append(f"tente de novo em {espera.group(1)}")
+    limite = _RE_LIMITE.search(mensagem)
+    usado = _RE_USADO.search(mensagem)
+    if limite and usado:
+        # `[\d.,]+` pega a vírgula da frase junto com o número: limpa as pontas.
+        teto = limite.group(1).rstrip(".,")
+        gasto = usado.group(1).rstrip(".,")
+        pedacos.append(f"limite {teto}, usado {gasto}")
+    if codigo == 404:
+        pedacos.append("confira o nome no cartão Modelos de IA")
+    return " — ".join(pedacos) or mensagem
+
+
+def _testar_uma_detalhado(
     base: str,
     modelo: str,
     chave: str,
     limite: float,
     postar: Any = None,
-) -> tuple[int, str]:
+) -> dict[str, Any]:
+    """Uma chamada real de 8 tokens. Devolve código, motivo e o que o provedor disse."""
     url = f"{base.rstrip('/')}/chat/completions"
     corpo = {
         "model": modelo,
@@ -367,22 +496,57 @@ def _testar_uma(
 
     if postar is not None:  # teste: não sai da máquina
         try:
-            codigo = postar(url, corpo, cabecalho)
+            resposta = postar(url, corpo, cabecalho)
         except Exception as exc:  # noqa: BLE001 - qualquer falha vira motivo
-            return 0, f"falhou na conexão ({type(exc).__name__})"
-        return int(codigo), _MOTIVOS.get(int(codigo), f"respondeu HTTP {codigo}" if int(codigo) != 200 else "respondeu")
+            return {"codigo": 0, "motivo": f"falhou na conexão ({type(exc).__name__})", "detalhe": ""}
+        if isinstance(resposta, dict):
+            codigo = int(resposta.get("codigo") or resposta.get("status") or 0)
+            corpo_resposta = resposta.get("corpo")
+        else:
+            codigo = int(resposta)
+            corpo_resposta = None
+        motivo = _MOTIVOS.get(codigo, f"respondeu HTTP {codigo}" if codigo != 200 else "respondeu")
+        detalhe = _motivo_do_corpo(codigo, corpo_resposta) if codigo != 200 else ""
+        return {"codigo": codigo, "motivo": motivo, "detalhe": detalhe}
 
     try:
         import httpx  # noqa: PLC0415 - só quem testa paga o import
     except ImportError:
-        return 0, "o pacote httpx não está instalado"
+        return {"codigo": 0, "motivo": "o pacote httpx não está instalado", "detalhe": ""}
     try:
         resposta = httpx.post(url, json=corpo, headers=cabecalho, timeout=limite)
     except Exception as exc:  # noqa: BLE001
-        return 0, f"falhou na conexão ({type(exc).__name__}) — internet ou provedor"
+        return {
+            "codigo": 0,
+            "motivo": f"falhou na conexão ({type(exc).__name__}) — internet ou provedor",
+            "detalhe": "",
+        }
     if resposta.status_code == 200:
-        return 200, "respondeu"
-    return resposta.status_code, _MOTIVOS.get(resposta.status_code, f"respondeu HTTP {resposta.status_code}")
+        return {"codigo": 200, "motivo": "respondeu", "detalhe": ""}
+    try:
+        corpo_resposta = resposta.json()
+    except Exception:  # noqa: BLE001 - corpo que não é JSON não ajuda em nada
+        corpo_resposta = None
+    return {
+        "codigo": resposta.status_code,
+        "motivo": _MOTIVOS.get(resposta.status_code, f"respondeu HTTP {resposta.status_code}"),
+        "detalhe": _motivo_do_corpo(resposta.status_code, corpo_resposta),
+    }
+
+
+def _testar_uma(
+    base: str,
+    modelo: str,
+    chave: str,
+    limite: float,
+    postar: Any = None,
+) -> tuple[int, str]:
+    """Forma curta de `_testar_uma_detalhado` — mantida para quem só quer o código."""
+    detalhe = _testar_uma_detalhado(base, modelo, chave, limite, postar)
+    motivo = detalhe["motivo"]
+    if detalhe["detalhe"]:
+        motivo = f"{motivo} — {detalhe['detalhe']}"
+    return int(detalhe["codigo"]), motivo
 
 
 # ---------------------------------------------------------------------------

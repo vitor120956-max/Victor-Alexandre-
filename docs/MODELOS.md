@@ -59,6 +59,24 @@ Três avisos honestos sobre esta tabela:
    diferentes; o aviso de cota do JARVIS usa o que o provedor devolve nos
    cabeçalhos, não esta tabela.
 
+## A cota é de cada modelo — e é isso que te salva
+
+Um ponto que custou um print de tela ao dono: **no Groq a cota é por conta**
+(várias chaves do mesmo login dividem tudo), mas **é separada por modelo**.
+Ou seja: com a conta estourada no `llama-3.3-70b-versatile`, o
+`llama-3.1-8b-instant` ainda responde, com a mesma chave.
+
+Por isso trocar de modelo é o primeiro socorro — antes de criar conta nova, antes
+de esperar o dia virar. O botão **Testar** das chaves já provou isso sozinho: se
+a falha for 429/404, ele testa uma vez com `llama-3.1-8b-instant` e, se
+responder, mostra o botão **Usar llama-3.1-8b-instant**.
+
+| situação | o que trocar resolve |
+|---|---|
+| cota diária estourada no 70B | sim: outro modelo tem outra cota |
+| chave revogada (401) | não: chave vale para todos os modelos |
+| provedor fora do ar | não |
+
 ## Como ele escolhe quando você não escolhe
 
 1. o `.env` (`JARVIS_AI_MODEL`) — é o que a tela grava;
