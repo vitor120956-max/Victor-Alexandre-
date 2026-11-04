@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.80.1.**
+**Versão atual: 0.80.2.**
 
 ## O que ele faz sem chave de IA
 
@@ -165,7 +165,7 @@ Antes de subir, `npm run checar` mede a máquina e a pasta: versão de Node e Py
 
 O navegador usa somente URLs relativas `/api`; não é necessário chamar `localhost` a partir do código da interface.
 
-A chave de IA entra por `py configurar-chave.py` (ou pelo duplo clique em `usar-openrouter.bat`, que já aponta para o OpenRouter e testa no fim): o script pede a chave sem ecoar, não deixa rastro no histórico e grava o `.env` com quebra de linha do Windows. `--ver` mostra o que está gravado (mascarado) e `--limpar` apaga só a chave.
+A chave de IA entra por `py configurar-chave.py` (ou pelo duplo clique em `usar-openrouter.bat` / `usar-google.bat`, que já apontam para o provedor e testam no fim): o script pede a chave sem ecoar, não deixa rastro no histórico e grava o `.env` com quebra de linha do Windows. `--ver` mostra o que está gravado (mascarado) e `--limpar` apaga só a chave.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -742,7 +742,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.80.1", "skills": 315}`.
+`{"version": "0.80.2", "skills": 315}`.
 
 ## Verificações
 

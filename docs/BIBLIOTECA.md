@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.80.1
+# Biblioteca e armazenamento — 0.80.2
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -271,7 +271,7 @@ Limites, sem enfeite:
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.338** |
+| Suíte da API | **3.341** |
 | Skills no registro | **315** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação; 1 em `ia.*`: `ia.local`, que confere, baixa e aponta o `.env` para um modelo sem chave) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

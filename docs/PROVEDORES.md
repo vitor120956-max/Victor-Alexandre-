@@ -1,4 +1,4 @@
-# Provedores: quem é grátis, quem é pago e como trocar (0.80.1)
+# Provedores: quem é grátis, quem é pago e como trocar (0.80.2)
 
 A pergunta que abriu esta versão: **“não dá para usar modelos tipo DeepSeek ou
 Claude ou algumas outras de graça?”**
@@ -47,14 +47,20 @@ Comprou US$ 10 de crédito uma vez na vida? Sobe para 1.000 por dia.
 
 ---
 
-## Sem abrir a tela: `usar-openrouter.bat` (duplo clique)
+## Sem abrir a tela: um `.bat` por provedor (duplo clique)
 
-Se preferir não mexer na interface, existe um `.bat` com o mesmo efeito:
+Se preferir não mexer na interface, existem dois `.bat` com o mesmo efeito —
+um para cada provedor grátis:
 
-1. duplo clique em **`usar-openrouter.bat`**;
+| arquivo | provedor | chave começa com |
+|---|---|---|
+| `usar-openrouter.bat` | OpenRouter (DeepSeek `:free`) | `sk-or-v1-` |
+| `usar-google.bat` | Google Gemini | `AIza` ou `AQ.` |
+
+1. duplo clique no `.bat` do provedor;
 2. ele pede a chave e **não mostra o que você digita**;
-3. cole a `sk-or-v1-…` e aperte Enter;
-4. ele grava no `.env`, aponta o JARVIS para o OpenRouter e testa na hora.
+3. cole a chave e aperte Enter;
+4. ele grava no `.env`, aponta o JARVIS para aquele provedor e testa na hora.
 
 A tela do JARVIS já usa a chave nova sozinha — não precisa reiniciar.
 

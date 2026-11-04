@@ -499,3 +499,22 @@ def test_chave_nova_do_google_aq_no_script(script, tmp_path):
     assert script.principal(["--chave", colada]) == 0
     bruto = (tmp_path / ".env").read_bytes()
     assert b"JARVIS_AI_PROVIDER=Google Gemini\r\n" in bruto
+
+
+def test_os_dois_bats_de_provedor_existem_e_sao_ascii_com_crlf():
+    """0.80.2 — duplo clique, sem digitar comando: um .bat por provedor grátis.
+
+    O dono não quer abrir terminal. Estes arquivos são a interface dele: se um
+    sumir ou ganhar acento, o caminho quebra antes de existir.
+    """
+    for nome, provedor in (("usar-openrouter.bat", "openrouter"), ("usar-google.bat", "google")):
+        caminho = RAIZ / nome
+        assert caminho.is_file(), nome
+        bruto = caminho.read_bytes()
+        bruto.decode("ascii")  # só ASCII: `chcp 65001` cobre o resto
+        # CRLF puro: LF solto faz o `cmd` mostrar linha em branco no meio do texto.
+        assert bruto.count(b"\n") == bruto.count(b"\r\n"), nome
+        texto = bruto.decode("ascii")
+        assert f"--provedor {provedor} --testar" in texto, nome
+        assert "configurar-chave.py" in texto, nome
+        assert "pause" in texto, nome
