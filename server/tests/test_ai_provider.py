@@ -9,8 +9,9 @@ from server.ai import AIRequest, AIUnavailable, OpenAICompatibleProvider
 
 
 class FakeResponse:
-    def __init__(self, status: int = 200) -> None:
+    def __init__(self, status: int = 200, headers: dict[str, str] | None = None) -> None:
         self.status_code = status
+        self.headers = headers or {}
 
     def json(self) -> dict[str, Any]:
         return {"choices": [{"message": {"content": "Resposta gerada pelo provedor."}}]}
@@ -256,3 +257,152 @@ def test_status_nao_revela_a_chave(monkeypatch: pytest.MonkeyPatch):
     texto = str(provider.status())
     assert "gsk_segredo" not in texto
     assert provider.status()["keys"] == 2
+
+
+# ------------------------------------- cota: avisar quando acaba e quando acabou
+# O pedido: *“dá para o JARVIS avisar quando estiver acabando ou quando acabar
+# totalmente as APIs?”*. O aviso só vale se for medido: o que entra aqui é o
+# código HTTP e o cabeçalho `x-ratelimit-*` de cada tentativa.
+
+def _provedor(monkeypatch: pytest.MonkeyPatch, chaves: str) -> OpenAICompatibleProvider:
+    monkeypatch.setenv("JARVIS_AI_API_KEY", chaves)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://provider.example/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-teste")
+    return OpenAICompatibleProvider()
+
+
+def test_uma_chave_no_limite_avisa_que_esta_acabando(monkeypatch: pytest.MonkeyPatch):
+    FakeMulti.zerar({"chave-1": 429, "chave-2": 200, "chave-3": 200})
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeMulti)
+    provedor = _provedor(monkeypatch, "chave-1,chave-2,chave-3")
+    asyncio.run(provedor.generate(AIRequest(message="Olá")))
+
+    saude = provedor.status()["saude"]
+    assert saude["situacao"] == "apertando"
+    assert saude["no_limite"] == [1]
+    assert saude["disponiveis"] == 2
+    assert "2 de 3" in saude["aviso"]
+    assert "skills locais" in saude["aviso"]
+
+
+def test_todas_caidas_viram_aviso_de_que_acabou(monkeypatch: pytest.MonkeyPatch):
+    FakeMulti.zerar({"chave-1": 429, "chave-2": 429})
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeMulti)
+    provedor = _provedor(monkeypatch, "chave-1,chave-2")
+    with pytest.raises(AIUnavailable):
+        asyncio.run(provedor.generate(AIRequest(message="Olá")))
+
+    saude = provedor.status()["saude"]
+    assert saude["situacao"] == "esgotado"
+    assert saude["disponiveis"] == 0
+    assert "parou" in saude["aviso"] or "pararam" in saude["aviso"]
+    assert "skills locais" in saude["aviso"]
+
+
+def test_chave_recusada_401_aparece_como_recusada(monkeypatch: pytest.MonkeyPatch):
+    FakeMulti.zerar({"chave-1": 401, "chave-2": 200})
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeMulti)
+    provedor = _provedor(monkeypatch, "chave-1,chave-2")
+    asyncio.run(provedor.generate(AIRequest(message="Olá")))
+
+    saude = provedor.status()["saude"]
+    assert saude["recusadas"] == [1]
+    assert saude["chaves"][0]["estado"] == "recusada"
+    assert saude["chaves"][0]["codigo"] == 401
+    assert "troque no cartão" in saude["aviso"]
+
+
+def test_os_cabecalhos_dizem_quanto_resta_no_minuto(monkeypatch: pytest.MonkeyPatch):
+    class ComCota(FakeMulti):
+        async def post(self, url: str, **kwargs: Any) -> FakeResponse:
+            return FakeResponse(200, {
+                "x-ratelimit-remaining-requests": "2",
+                "x-ratelimit-limit-requests": "20",
+                "x-ratelimit-remaining-tokens": "52000",
+                "x-ratelimit-limit-tokens": "6000",
+            })
+
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", ComCota)
+    provedor = _provedor(monkeypatch, "chave-1")
+    asyncio.run(provedor.generate(AIRequest(message="Olá")))
+
+    saude = provedor.status()["saude"]
+    chave = saude["chaves"][0]
+    assert chave["estado"] == "apertando"
+    assert chave["aperto"] == "pedidos"
+    assert chave["restam_pedidos"] == 2 and chave["limite_pedidos"] == 20
+    assert saude["situacao"] == "apertando"
+    assert "2 de 20" in saude["aviso"]
+
+
+def test_retry_after_do_429_aparece_na_frase(monkeypatch: pytest.MonkeyPatch):
+    class ComEspera(FakeMulti):
+        async def post(self, url: str, **kwargs: Any) -> FakeResponse:
+            return FakeResponse(429, {"retry-after": "12"})
+
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", ComEspera)
+    provedor = _provedor(monkeypatch, "chave-1,chave-2")
+    with pytest.raises(AIUnavailable):
+        asyncio.run(provedor.generate(AIRequest(message="Olá")))
+    saude = provedor.status()["saude"]
+    assert saude["chaves"][0]["retry_after"] == 12.0
+    assert "12s" in saude["aviso"]
+
+
+def test_teste_das_chaves_limpa_o_aviso_de_esgotado(monkeypatch: pytest.MonkeyPatch):
+    """As três responderem no botão Testar não pode continuar dizendo “acabou”."""
+    provedor = _provedor(monkeypatch, "chave-1,chave-2")
+    provedor._anotar_recusa(0, 429)
+    provedor._anotar_recusa(1, 429)
+    assert provedor.saude_resumo()["situacao"] == "esgotado"
+
+    provedor.anotar_teste([
+        {"indice": 1, "ok": True, "codigo": 200},
+        {"indice": 2, "ok": True, "codigo": 200},
+    ])
+    assert provedor.saude_resumo()["situacao"] == "ok"
+
+
+def test_recusa_de_uma_hora_atras_deixa_de_valer(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timedelta, timezone
+
+    provedor = _provedor(monkeypatch, "chave-1")
+    antiga = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(timespec="seconds")
+    provedor._recusas[0] = {"codigo": 429, "em": antiga, "retry_after": None}
+    assert provedor.saude_resumo()["situacao"] == "ok"
+
+
+def test_recusa_401_nao_vence_com_o_tempo(monkeypatch: pytest.MonkeyPatch):
+    """Chave inválida continua inválida: só trocar a chave resolve."""
+    from datetime import datetime, timedelta, timezone
+
+    provedor = _provedor(monkeypatch, "chave-1")
+    antiga = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds")
+    provedor._recusas[0] = {"codigo": 401, "em": antiga, "retry_after": None}
+    assert provedor.saude_resumo()["situacao"] == "esgotado"
+
+
+def test_modelo_local_nao_inventa_cota(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-local")
+    saude = OpenAICompatibleProvider().saude_resumo()
+    assert saude["situacao"] == "local"
+    assert saude["aviso"] is None
+
+
+def test_sem_chave_nao_inventa_aviso(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://provider.example/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-teste")
+    saude = OpenAICompatibleProvider().saude_resumo()
+    assert saude["situacao"] == "sem_chave"
+    assert saude["aviso"] is None
+
+
+def test_o_diario_da_cota_nunca_mostra_a_chave(monkeypatch: pytest.MonkeyPatch):
+    provedor = _provedor(monkeypatch, "gsk_segredo_um,gsk_segredo_dois")
+    provedor._anotar_recusa(0, 429, 5.0)
+    provedor._anotar_recusa(1, 401)
+    texto = str(provedor.status())
+    assert "gsk_segredo" not in texto

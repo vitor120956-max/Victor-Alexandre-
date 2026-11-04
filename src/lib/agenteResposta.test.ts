@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { montarRespostaAgente } from './agenteResposta';
+import { montarRespostaAgente, respostaVeioDeSkill } from './agenteResposta';
 import type { AgenteResultado } from './api';
 
 function resultado(patch: Partial<AgenteResultado> = {}): AgenteResultado {
@@ -41,5 +41,28 @@ describe('montarRespostaAgente', () => {
   it('mantém os dois avisos quando são diferentes da resposta', () => {
     const texto = montarRespostaAgente(resultado({ resposta: 'Ok.', avisos: ['Primeiro.', 'Segundo.'] }));
     expect(texto).toBe('Ok.\n\nPrimeiro.\n\nSegundo.');
+  });
+});
+
+describe('respostaVeioDeSkill', () => {
+  it('skill executada com texto responde pelo chat', () => {
+    expect(respostaVeioDeSkill(resultado({ acao: 'executado', resposta: 'Feito.' }))).toBe(true);
+    expect(respostaVeioDeSkill(resultado({ acao: 'criado', resposta: 'Criei.' }))).toBe(true);
+    expect(respostaVeioDeSkill(resultado({ acao: 'guardado', resposta: 'Guardada.' }))).toBe(true);
+    expect(respostaVeioDeSkill(resultado({ acao: 'biblioteca', resposta: 'Do livro.' }))).toBe(true);
+  });
+
+  it('confirmação vale mesmo sem texto: é o pedido de autorização', () => {
+    expect(respostaVeioDeSkill(resultado({ acao: 'confirmar', resposta: '' }))).toBe(true);
+  });
+
+  it('sem skill, o modelo responde', () => {
+    expect(respostaVeioDeSkill(resultado({ acao: 'nada' }))).toBe(false);
+    expect(respostaVeioDeSkill(resultado({ acao: 'sugerir', confianca: 0.4 }))).toBe(false);
+  });
+
+  it('“falta um campo” só vale com confiança alta', () => {
+    expect(respostaVeioDeSkill(resultado({ acao: 'faltando', confianca: 0.62 }))).toBe(true);
+    expect(respostaVeioDeSkill(resultado({ acao: 'faltando', confianca: 0.31 }))).toBe(false);
   });
 });

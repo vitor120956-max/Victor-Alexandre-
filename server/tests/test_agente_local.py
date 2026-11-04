@@ -2842,3 +2842,102 @@ def test_resposta_do_modelo_local_no_chat_mostra_o_proximo_passo():
 
     # Resultado de outra skill não é formatado como modelo local.
     assert _formatar_ia_local({"aplicado": True}) is None
+
+
+# ---------------------------- 0.79.0: cota das chaves e skill antes do modelo
+
+def test_a_pergunta_da_cota_e_reconhecida():
+    from server.agente_local import _pede_cota
+
+    for frase in (
+        "quantas chaves restam?",
+        "as apis acabaram?",
+        "acabou a cota?",
+        "ainda tem credito na api?",
+        "quantas chaves eu tenho",
+    ):
+        assert _pede_cota(frase) is True, frase
+    for frase in (
+        "qual o limite da banda do drive?",
+        "quanto resta de download?",
+        "criar tarefa comprar pao",
+        "analisar texto: a vida e bela",
+    ):
+        assert _pede_cota(frase) is False, frase
+
+
+def test_a_resposta_da_cota_diz_estado_e_nunca_mostra_chave():
+    from server.agente_local import _formatar_cota
+
+    texto = _formatar_cota({
+        "provider": "Groq",
+        "model": "llama-3.3-70b-versatile",
+        "saude": {
+            "situacao": "esgotado",
+            "resumo": "As 2 chaves pararam de responder: 1 no limite (HTTP 429) e 1 recusada (HTTP 401/403).",
+            "aviso": "A conversa com o modelo parou; as skills locais continuam funcionando.",
+            "chaves": [
+                {"numero": 1, "estado": "no_limite", "codigo": 429, "retry_after": 12},
+                {"numero": 2, "estado": "recusada", "codigo": 401},
+            ],
+            "ultima_recusa": "2026-11-03T10:00:00+00:00",
+        },
+    })
+    assert "Groq" in texto
+    assert "Chave 1: no limite" in texto and "12s" in texto
+    assert "Chave 2: recusada" in texto
+    assert "skills locais" in texto
+    assert "gsk_" not in texto
+
+
+def test_atender_responde_a_cota_sem_chamar_modelo(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        resultado = await atender(
+            "quantas chaves restam?",
+            registry=reg,
+            raiz=tmp_path,
+            consultar_web=False,
+            estado_das_chaves=lambda: {
+                "provider": "Groq",
+                "saude": {"situacao": "ok", "resumo": "3 de 3 chaves respondendo.", "chaves": []},
+            },
+        )
+        assert resultado["acao"] == "executado"
+        assert resultado["via"] == "cota"
+        assert "3 de 3" in resultado["resposta"]
+        assert reg.execucoes == []
+    asyncio.run(run())
+
+
+def test_somente_skill_nao_entope_a_fila_de_falhas(tmp_path):
+    """Com o cérebro ligado, “não achei skill” não é falha: o modelo responde."""
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        resultado = await atender(
+            "me fala sobre a origem do universo",
+            registry=reg,
+            raiz=tmp_path,
+            consultar_web=True,
+            somente_skill=True,
+        )
+        assert resultado["acao"] in {"nada", "sugerir"}
+        from server.agente_local import listar_fila
+
+        assert listar_fila(tmp_path) == []
+    asyncio.run(run())
+
+
+def test_somente_skill_ainda_executa_a_skill_quando_ela_serve(tmp_path):
+    async def run():
+        reg = registro(SKILL_TEXTO, raiz=tmp_path)
+        resultado = await atender(
+            "analisar texto: a vida é bela",
+            registry=reg,
+            raiz=tmp_path,
+            consultar_web=False,
+            somente_skill=True,
+        )
+        assert resultado["acao"] == "executado"
+        assert resultado["skill"]["id"] == "text.analyze"
+    asyncio.run(run())

@@ -86,6 +86,9 @@ class AgenteRequest(BaseModel):
     criar: bool = True
     consultar_web: bool = Field(default=True, alias="consultarWeb")
     confirmar: bool = False
+    # Primeira passada do chat com o cérebro ligado: só skill, sem web e sem
+    # criar skill local. Se nada servir, quem responde é o modelo (0.79.0).
+    somente_skill: bool = Field(default=False, alias="somenteSkill")
 
 
 class EnsinarRequest(BaseModel):
@@ -674,7 +677,11 @@ def create_app(
             resultado = chaves_mod.testar(indice=payload.indice)
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"ok": False, "error": {"code": "CHAVE_INVALIDA", "message": str(exc)}})
-        return {"ok": True, "result": resultado}
+        # O teste é chamada real: o que ele viu vale para o aviso de cota.
+        # Sem isso, as três chaves responderem aqui não limpava o “acabou”.
+        if hasattr(provider, "anotar_teste"):
+            provider.anotar_teste(resultado.get("resultados") or [])  # type: ignore[attr-defined]
+        return {"ok": True, "result": resultado, "status": provider.status()}
 
     @application.get("/api/ai/status")
     def ai_status() -> dict[str, Any]:
@@ -734,6 +741,10 @@ def create_app(
                 criar=payload.criar,
                 consultar_web=payload.consultar_web,
                 confirmar=payload.confirmar,
+                somente_skill=payload.somente_skill,
+                # O diário da cota vem do provedor em memória, que é quem viu
+                # os códigos HTTP — a tela não consegue saber isso sozinha.
+                estado_das_chaves=provider.status,
             )
         except AgenteError as exc:
             return JSONResponse(

@@ -130,7 +130,7 @@ export function SettingsPage() {
             <div className="ai-provider-status"><div><span className={aiStatus.configured && backendOnline ? 'skill-status active' : 'skill-status'}><i />{backendOnline ? aiStatus.configured ? 'CONFIGURADA' : 'NÃO CONFIGURADA' : 'API OFFLINE'}</span><strong>{backendOnline && aiStatus.configured ? aiStatus.provider : 'Comandos locais continuam disponíveis'}</strong></div>{backendOnline && aiStatus.configured && aiStatus.model && <code>{aiStatus.model}</code>}</div>
             <div className="setting-row"><div><strong>Usar IA para perguntas abertas</strong><p>Somente pedidos fora das skills locais são enviados ao provedor.</p></div><button className={`switch ${preferences.aiEnabled && aiStatus.configured ? 'switch-on' : ''}`} role="switch" aria-checked={preferences.aiEnabled && aiStatus.configured} disabled={!aiStatus.configured} onClick={() => updatePreferences({ aiEnabled: !preferences.aiEnabled })}><span /></button></div>
             <div className="setting-row"><div><strong>Compartilhar tarefas e notas como contexto</strong><p>Desativado por padrão. O histórico recente da conversa ainda é enviado nas chamadas de IA.</p></div><button className={`switch ${preferences.shareContextWithAI ? 'switch-on' : ''}`} role="switch" aria-checked={preferences.shareContextWithAI} disabled={!aiStatus.configured || !preferences.aiEnabled} onClick={() => updatePreferences({ shareContextWithAI: !preferences.shareContextWithAI })}><span /></button></div>
-            <div className="chaves-card">
+            <div className="chaves-card" id="chaves-de-ia">
               <h3 className="chaves-titulo"><KeyRound size={13} /> Chaves de IA</h3>
               <div className="chaves-topo">
                 <div>
@@ -173,6 +173,32 @@ export function SettingsPage() {
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* 0.79.0 — cota: o que o provedor respondeu por último em cada
+                  chave. Sem isso, o aviso vermelho não tinha onde ser conferido. */}
+              {aiStatus.saude && aiStatus.saude.situacao !== 'local' && aiStatus.saude.situacao !== 'sem_chave' && (
+                <div className={`chaves-cota chaves-cota-${aiStatus.saude.situacao}`}>
+                  <strong>{aiStatus.saude.resumo}</strong>
+                  <ul>
+                    {aiStatus.saude.chaves.map((item) => (
+                      <li key={item.numero} className={`chave-${item.estado}`}>
+                        <span>{item.estado === 'ok' ? <Check size={13} /> : '×'}</span>
+                        chave {item.numero}:{' '}
+                        {item.estado === 'no_limite'
+                          ? `no limite do minuto (HTTP ${item.codigo})${item.retry_after ? `, tente em ${Math.round(item.retry_after)}s` : ''}`
+                          : item.estado === 'recusada'
+                            ? `recusada (HTTP ${item.codigo}) — troque esta chave`
+                            : item.aperto === 'pedidos'
+                              ? `restam ${item.restam_pedidos} de ${item.limite_pedidos} pedidos neste minuto`
+                              : item.aperto === 'tokens'
+                                ? `restam ${item.restam_tokens} de ${item.limite_tokens} tokens neste minuto`
+                                : 'respondendo'}
+                      </li>
+                    ))}
+                  </ul>
+                  {aiStatus.saude.situacao !== 'ok' && <p>{aiStatus.saude.aviso}</p>}
+                </div>
               )}
 
               {chaves && chaves.podeEditar === false && (

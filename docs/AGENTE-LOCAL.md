@@ -35,13 +35,28 @@ contar as palavras de: um dois três  → cria a skill local e devolve "3 palavr
 minhas skills locais                 → lista o que já foi criado
 ```
 
-Três jeitos de forçar o agente mesmo com IA configurada:
+Desde a **0.79.0** a skill vem **antes** do modelo, mesmo com IA configurada:
+uma frase desconhecida passa primeiro por este agente (só skill — sem web e sem
+criar skill local) e só chega ao modelo se nenhuma skill servir. Antes disso, com
+chave configurada, o chat ia direto para a IA e as 315 skills nunca eram
+consultadas justamente quando havia cérebro ligado.
+
+Os três prefixos continuam valendo para **forçar** o agente quando você quer
+garantir que ele não chame o modelo:
 
 ```text
 skill <pedido>
 agente <pedido>
 modo local <pedido>
 ```
+
+### O que a primeira passada não faz
+
+Com o cérebro ligado, a passada de skill é **estreita de propósito**: não busca
+na web (quem responde é o modelo, que é melhor nisso) e não cria skill local (a
+fila do Agente não deve encher com o que o modelo respondeu). Ela só executa
+skill existente, skill local já criada, resposta guardada e os pedidos que têm
+regra própria.
 
 ## Pedidos que ganham do ranking
 
@@ -65,6 +80,7 @@ de skills. Para esses existe regra explícita, antes da busca:
 | `aperta enter` · `aperta ctrl v` · `aperta page down` | `mesa.teclar` | **sim** |
 | `foca a janela do bloco de notas` | `mesa.focar` | **sim** |
 | `onde esta o mouse` · `status da mesa` | `mesa.status` (só lê) | não |
+| `quantas chaves restam` · `as apis acabaram` · `acabou a cota` | diário da cota do provedor (só lê) | não |
 | `importa a habilidade <link do SKILL.md>` | `habilidades.importar` | **sim** |
 | `quais habilidades você importou` | `habilidades.listar` (só lê) | não |
 | `usa a habilidade <nome> para <pedido>` | `habilidades.aplicar` (devolve o roteiro) | não |

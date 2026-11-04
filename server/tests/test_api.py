@@ -232,3 +232,43 @@ def test_unconfigured_ai_is_explicit(tmp_path: Path):
         response = client.post("/api/ai/chat", json={"message": "Olá"})
         assert response.status_code == 503
         assert response.json()["error"]["code"] == "AI_NOT_CONFIGURED"
+
+
+# --------------------------------------- 0.79.0: cota e skill antes do modelo
+
+def test_o_status_da_cota_vem_no_endpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A tela precisa do campo `saude` para avisar antes de acabar."""
+    from server.ai import OpenAICompatibleProvider
+
+    monkeypatch.delenv("JARVIS_AI_API_KEY", raising=False)
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "llama-3.3-70b-versatile")
+    app = create_app(ai_provider=OpenAICompatibleProvider(), registry=build_registry(tmp_path / "files"))
+    with TestClient(app) as client:
+        saude = client.get("/api/ai/status").json()["saude"]
+    assert saude["situacao"] == "sem_chave"
+    assert saude["aviso"] is None
+    assert saude["chaves"] == []
+
+
+def test_a_rota_do_agente_aceita_somente_skill(client: TestClient):
+    """O chat com IA ligada manda a primeira passada só para a skill."""
+    resposta = client.post(
+        "/api/agente/executar",
+        json={"pedido": "me fala sobre a origem do universo", "somenteSkill": True},
+    )
+    assert resposta.status_code == 200
+    assert resposta.json()["result"]["acao"] in {"nada", "sugerir", "web"}
+
+
+def test_o_teste_das_chaves_devolve_o_status_da_cota(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from server import chaves
+
+    monkeypatch.setattr(
+        chaves,
+        "testar",
+        lambda indice=None: {"ok": True, "resultados": [], "boas": 0, "total": 0, "resumo": "nada"},
+    )
+    resposta = client.post("/api/ai/chaves/testar", json={})
+    assert resposta.status_code == 200
+    assert resposta.json()["status"]["provider"] == "Provedor de teste"

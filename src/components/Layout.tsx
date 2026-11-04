@@ -5,6 +5,7 @@ import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 import { TaskModal } from './TaskModal';
 import { ToastStack } from './ToastStack';
+import { CotaBanner } from './CotaBanner';
 import { UpdateBanner } from './UpdateBanner';
 
 export function Layout() {
@@ -34,6 +35,7 @@ export function Layout() {
       <div className="app-main">
         <Topbar onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
         <main className="page-container">
+          <CotaBanner />
           <UpdateBanner />
           <Outlet />
         </main>

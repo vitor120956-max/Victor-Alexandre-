@@ -182,3 +182,47 @@ teste que compara os dois no bloco exato que você colou no `cmd`.
   custa quase nada, mas não é zero;
 - se o provedor estiver fora do ar, o teste devolve `falhou na conexão` — isso
   não quer dizer que a chave está errada.
+
+## 9. Aviso de cota: “está acabando” e “acabou” (0.79.0)
+
+A pergunta foi *“dá para o JARVIS avisar quando estiver acabando ou quando
+acabar totalmente as APIs?”*. Dá — desde que o aviso seja **medido**, não
+estimado. Quem mede é o processo Python: ele viu o código HTTP e os cabeçalhos
+`x-ratelimit-*` de cada tentativa.
+
+### O que fica registrado
+
+| sinal | o que entra no diário |
+|---|---|
+| resposta 200 | a chave volta a ser boa; `x-ratelimit-remaining-*` diz quanto resta no minuto |
+| HTTP 429 | chave **no limite**; `retry-after`, quando vem, diz em quantos segundos tentar |
+| HTTP 401/403 | chave **recusada** — não volta sozinha, só com chave nova |
+| botão **Testar** | é chamada real: o resultado do teste também alimenta o diário |
+
+O diário guarda **posição** (chave 1, 2, 3), código e horário. A chave em si
+nunca entra em resposta HTTP — há teste para isso.
+
+### Onde o aviso aparece
+
+1. **Faixa no topo** (`src/components/CotaBanner.tsx`), logo acima do aviso de
+   versão:
+   - âmbar — *“As chaves de IA estão acabando”*: alguma caiu, ou o que resta no
+     minuto já é ≤ 20% do limite;
+   - vermelho — *“As chaves de IA acabaram”*: nenhuma responde. O texto diz que
+     a conversa com o modelo parou e que **as skills locais continuam**.
+   - botões: **Conferir agora** (testa as chaves de verdade e atualiza) e
+     **Chaves de IA** (leva ao cartão).
+   - dispensável, mas volta sozinho quando a situação piora: a dispensa vale
+     para a assinatura “situação + quantas restam”, não para sempre;
+2. **No cartão Chaves de IA** (Configurações), com o detalhe de cada chave;
+3. **No chat**, se você perguntar: *“quantas chaves restam?”*, *“as APIs
+   acabaram?”*, *“acabou a cota?”* — responde com o diário, sem chamar modelo.
+
+### O que ele **não** promete
+
+- **não** inventa porcentagem: se o provedor não manda o cabeçalho de cota, o
+  aviso fala do que aconteceu (429/401) e não de “restam 37%”;
+- **não** antecipa a cota diária que o provedor não informa — o que existe é o
+  limite por minuto nos cabeçalhos e a recusa real quando ela acontece;
+- **não** some com o problema: avisar é o máximo que um aviso faz. Trocar ou
+  acrescentar chave continua sendo no cartão.

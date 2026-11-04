@@ -7,7 +7,7 @@ import { helpText, parseCommand } from '../lib/jarvisEngine';
 import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
-import { montarRespostaAgente } from '../lib/agenteResposta';
+import { montarRespostaAgente, respostaVeioDeSkill } from '../lib/agenteResposta';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
 import {
@@ -524,9 +524,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } : undefined;
     void requestAIChat({ message: texto, history, context })
       .then((response) => appendJarvisMessage(response.content, 'ai'))
-      .catch((error: unknown) => appendJarvisMessage(`Não consegui concluir pela IA externa: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nOs comandos locais continuam disponíveis; diga “ajuda” para ver exemplos.`))
+      .catch((error: unknown) => {
+        appendJarvisMessage(`Não consegui concluir pela IA externa: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nOs comandos locais continuam disponíveis; diga “ajuda” para ver exemplos.`);
+        // Se a falha foi cota, o aviso do topo precisa saber agora — não só no
+        // próximo ciclo de 30 s.
+        void refreshBackend();
+      })
       .finally(() => setProcessing(null));
-  }, [appendJarvisMessage, iniciarPedido, messages, notes, preferences.shareContextWithAI, tasks]);
+  }, [appendJarvisMessage, iniciarPedido, messages, notes, preferences.shareContextWithAI, refreshBackend, tasks]);
 
   const sendMessage = useCallback((rawText: string) => {
     const text = rawText.trim();
@@ -577,7 +582,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (intent.type === 'unknown') {
       if (backendOnline && aiStatus.configured && preferences.aiEnabled) {
-        responderComIA(text);
+        // 0.79.0 — com o cérebro ligado, a skill vem ANTES do modelo.
+        // Antes, a IA respondia qualquer frase desconhecida e as skills nunca
+        // eram consultadas justamente quando havia modelo. Agora a primeira
+        // passada é a mesma do modo sem IA (só skill: sem web, sem criar skill
+        // local); se nenhuma servir, o modelo responde.
+        const sinalSkill = iniciarPedido(text);
+        setProcessing('python');
+        void requestAgenteLocal(text, hostToken, false, sinalSkill, true)
+          .then((resultado) => {
+            if (resultado.acao === 'confirmar') confirmacaoPendente.current = { pedido: text };
+            if (respostaVeioDeSkill(resultado)) {
+              setProcessing(null);
+              appendJarvisMessage(montarRespostaAgente(resultado), 'python');
+              return;
+            }
+            responderComIA(text);
+          })
+          .catch(() => {
+            // A passada de skill falhou (API velha, timeout): o modelo continua
+            // sendo o caminho, e o erro do agente não aparece para o usuário.
+            responderComIA(text);
+          });
       } else if (backendOnline) {
         // Sem IA configurada quem responde é o agente local: ele procura a
         // skill, preenche os campos, cria skill de receita ou busca na web.

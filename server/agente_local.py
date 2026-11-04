@@ -2002,6 +2002,66 @@ _RE_IA_LOCAL_ASSUNTO = re.compile(
     r"|gguf|ia offline|ia sem chave|rodar a ia (?:aqui|sem))\b",
     re.I,
 )
+# “quantas chaves restam?”, “as apis acabaram?”, “ainda tem cota?”. A pergunta é
+# sobre o provedor de IA — não sobre banda, disco ou senha.
+_RE_COTA_ASSUNTO = re.compile(
+    r"\b(?:chaves?|apis?|api|cota|cotas|creditos?|limites?|tokens?)\b", re.I
+)
+_RE_COTA_PERGUNTA = re.compile(
+    r"\b(?:resta\w*|restam|sobrou|sobra\w*|acab\w*|acabou|quanto\w*|quantas|quantos|"
+    r"tem|tenho|gastou|gastando|estourou|estourando|zerou|zerando|usando|situacao|status)\b",
+    re.I,
+)
+_RE_COTA_DE_FORA = re.compile(
+    r"\b(?:banda|velocidade|download|upload|drive|pendrive|disco|ram|memoria|senha|"
+    r"arquivo|texto|caracteres|palavras|planilha)\b",
+    re.I,
+)
+
+
+def _pede_cota(termo: str) -> bool:
+    """A frase pergunta quantas chaves/APIs ainda restam?"""
+    texto = normalizar(termo)
+    if not texto or not _RE_COTA_ASSUNTO.search(texto):
+        return False
+    if not _RE_COTA_PERGUNTA.search(texto):
+        return False
+    return not _RE_COTA_DE_FORA.search(texto)
+
+
+def _formatar_cota(estado: dict[str, Any]) -> str:
+    """Situação das chaves em texto curto — sem nunca mostrar uma chave."""
+    saude = estado.get("saude") if isinstance(estado.get("saude"), dict) else estado
+    situacao = str(saude.get("situacao") or "")
+    provedor = str(estado.get("provider") or "")
+    modelo = str(estado.get("model") or "")
+    linhas: list[str] = []
+    if provedor:
+        linhas.append(f"Cérebro: {provedor}" + (f" · {modelo}" if modelo else "") + ".")
+    linhas.append(str(saude.get("resumo") or "Não tenho o número das chaves agora."))
+    for item in saude.get("chaves") or []:
+        numero = item.get("numero")
+        estado_chave = item.get("estado")
+        if estado_chave == "no_limite":
+            espera = f", tente de novo em {int(item['retry_after'])}s" if item.get("retry_after") else ""
+            linhas.append(f"- Chave {numero}: no limite do minuto (HTTP {item.get('codigo')}{espera}).")
+        elif estado_chave == "recusada":
+            linhas.append(f"- Chave {numero}: recusada (HTTP {item.get('codigo')}) — troque no cartão Chaves de IA.")
+        elif item.get("aperto") == "pedidos":
+            linhas.append(f"- Chave {numero}: restam {item.get('restam_pedidos')} de {item.get('limite_pedidos')} pedidos neste minuto.")
+        elif item.get("aperto") == "tokens":
+            linhas.append(f"- Chave {numero}: restam {item.get('restam_tokens')} de {item.get('limite_tokens')} tokens neste minuto.")
+        else:
+            linhas.append(f"- Chave {numero}: respondendo.")
+    if saude.get("aviso"):
+        linhas.append(str(saude["aviso"]))
+    ultima = saude.get("ultima_resposta") or saude.get("ultima_recusa")
+    if ultima:
+        linhas.append(f"Último sinal do provedor: {str(ultima)[:16].replace('T', ' ')}.")
+    if situacao == "sem_chave":
+        linhas.append("Sem chave, o chat aberto usa só as skills locais e o modelo local, se estiver ligado.")
+    return "\n".join(linhas)[:LIMITE_RESPOSTA]
+
 _RE_IA_LOCAL_BAIXAR = re.compile(r"\b(?:baixa\w*|baixe|puxa\w*|puxe|traz|traga|baixar)\b", re.I)
 _RE_IA_LOCAL_LIGAR = re.compile(r"\b(?:liga\w*|ligue|ativa\w*|ative|aponta\w*|use)\b", re.I)
 _RE_IA_LOCAL_DESLIGAR = re.compile(r"\b(?:desliga\w*|desligue|desativa\w*|desative|volta\w*|volte)\b", re.I)
@@ -3942,6 +4002,7 @@ async def _resolver(
     confirmar: bool = False,
     buscar: Callable[..., dict[str, Any]] | None = None,
     ler: Callable[..., dict[str, Any]] | None = None,
+    estado_das_chaves: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve o pedido sem IA: apelido → guardada → skill → receita → web."""
     termo = (pedido or "").strip()
@@ -4105,6 +4166,19 @@ async def _resolver(
     # 0b8e. Modelo local: o cérebro sem chave, dentro do pendrive.
     if direto is None:
         direto = _pedido_direto_de_ia_local(termo)
+
+    # 0b8f. Cota das chaves: “quantas APIs ainda restam?” tem resposta medida.
+    if estado_das_chaves is not None and _pede_cota(termo):
+        try:
+            estado_chaves = estado_das_chaves() or {}
+        except Exception:  # o diário não pode derrubar o chat
+            estado_chaves = {}
+        if estado_chaves:
+            base["acao"] = "executado"
+            base["via"] = "cota"
+            base["confianca"] = 1.0
+            base["resposta"] = _formatar_cota(estado_chaves)
+            return base
 
     # 0b9. Instalador: onde guardar, se roda neste PC e baixar para a pasta escolhida.
     if direto is None:
@@ -4352,12 +4426,19 @@ async def atender(
     buscar: Callable[..., dict[str, Any]] | None = None,
     ler: Callable[..., dict[str, Any]] | None = None,
     forcar_web: bool = False,
+    somente_skill: bool = False,
+    estado_das_chaves: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve o pedido sem IA e **registra** o que fez.
 
     A resolução fica em `_resolver`; aqui ficam as três coisas que o usuário
     não pode perder de vista: nada some (fila), tudo fica no histórico e a
     correção pela web vale para as próximas vezes.
+
+    `somente_skill` é a primeira passada do chat **com o cérebro ligado**: tenta
+    a skill e, se nenhuma servir, não busca na web, não cria skill local e não
+    entope a fila de falhas — quem responde é o modelo. Antes da 0.79.0, com IA
+    configurada o chat ia direto para o modelo e nenhuma skill era consultada.
     """
     termo = (pedido or "").strip()
     if len(termo) < 3:
@@ -4382,15 +4463,20 @@ async def atender(
         registry=registry,
         raiz=raiz,
         autorizacao=autorizacao,
-        criar=criar,
-        consultar_web=consultar_web,
+        criar=criar and not somente_skill,
+        consultar_web=consultar_web and not somente_skill,
         confirmar=confirmar,
         buscar=buscar,
         ler=ler,
+        estado_das_chaves=estado_das_chaves,
     )
     if resultado["acao"] == "confirmar":
         return resultado
     if resultado["acao"] in {"nada", "sugerir"}:
+        if somente_skill:
+            # Nada de fila de falhas: a resposta do modelo vem em seguida, e o
+            # pedido não ficou “sem solução”.
+            return resultado
         registrar_falha(termo, (resultado.get("resposta") or "")[:200], raiz)
     else:
         registrar_execucao(

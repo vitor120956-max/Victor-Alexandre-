@@ -148,6 +148,35 @@ export interface LegalSearchResult {
   notice: string;
 }
 
+/** Uma chave, do ponto de vista da cota: o que o provedor respondeu por último. */
+export interface SaudeDaChave {
+  numero: number;
+  estado: 'ok' | 'no_limite' | 'recusada' | 'apertando';
+  codigo: number | null;
+  desde: string | null;
+  retry_after: number | null;
+  restam_pedidos: number | null;
+  limite_pedidos: number | null;
+  restam_tokens: number | null;
+  limite_tokens: number | null;
+  aperto: 'pedidos' | 'tokens' | null;
+}
+
+/** Diário da cota: medido nas respostas do provedor, nunca adivinhado. */
+export interface SaudeDasChaves {
+  situacao: 'ok' | 'apertando' | 'esgotado' | 'sem_chave' | 'local';
+  total: number;
+  disponiveis: number;
+  no_limite: number[];
+  recusadas: number[];
+  chaves: SaudeDaChave[];
+  aviso: string | null;
+  resumo: string;
+  ultima_resposta: string | null;
+  ultima_recusa: string | null;
+  fracao_de_aviso: number;
+}
+
 export interface AIStatus {
   configured: boolean;
   provider: string;
@@ -160,6 +189,8 @@ export interface AIStatus {
   keys?: number;
   /** Qual chave respondeu por último (1-based), só quando há mais de uma. */
   key_in_use?: number | null;
+  /** Situação da cota — é daqui que sai o aviso de “acabando” e “acabou”. */
+  saude?: SaudeDasChaves;
 }
 
 export interface BackendHealth {
@@ -428,7 +459,7 @@ export interface AgenteSkill {
 export interface AgenteResultado {
   ok: boolean;
   pedido: string;
-  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada' | 'confirmar' | 'biblioteca';
+  acao: 'executado' | 'faltando' | 'criado' | 'sugerir' | 'web' | 'nada' | 'confirmar' | 'biblioteca' | 'guardado';
   skill: AgenteSkill | null;
   confianca: number;
   parametros: Record<string, unknown>;
@@ -450,12 +481,16 @@ export async function requestAgenteLocal(
   autorizacao: string,
   confirmar = false,
   sinal?: AbortSignal,
+  somenteSkill = false,
 ): Promise<AgenteResultado> {
+  // `somenteSkill` é a primeira passada com o cérebro ligado: tenta a skill e
+  // não busca na web nem cria skill local. Se nada servir, o chat chama o
+  // modelo. Sem isso, com IA configurada nenhuma skill era consultada.
   const resposta = await apiFetch<{ ok: boolean; result: AgenteResultado; error?: { message?: string } }>(
     '/api/agente/executar',
     {
       method: 'POST',
-      body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true, confirmar }),
+      body: JSON.stringify({ pedido, autorizacao, criar: true, consultarWeb: true, confirmar, somenteSkill }),
       signal: sinal,
     },
   );

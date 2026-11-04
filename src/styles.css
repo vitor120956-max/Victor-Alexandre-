@@ -1176,9 +1176,40 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
   .update-banner > span { flex: 1 1 100%; }
 }
 
+/* 0.79.0 — aviso de cota: “está acabando” (âmbar) e “acabou” (vermelho).
+   Usa a mesma base do aviso de versão para não inventar um quarto padrão de
+   faixa no topo da tela. */
+.cota-banner { flex-wrap: wrap; }
+.cota-banner-atencao {
+  border-color: rgba(214, 158, 46, .40);
+  background: rgba(214, 158, 46, .10);
+}
+.cota-banner-atencao svg { color: #d69e2e; flex: 0 0 auto; }
+.cota-banner-atencao b { color: #e0b354; }
+.cota-banner-critico {
+  border-color: rgba(229, 62, 62, .45);
+  background: rgba(229, 62, 62, .12);
+}
+.cota-banner-critico svg { color: #e53e3e; flex: 0 0 auto; }
+.cota-banner-critico b { color: #f38a8a; }
+.cota-banner .button, .cota-banner a.button { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+
 /* 0.77.0 — chaves de IA na tela: colar, testar e apagar sem abrir o .env.
    O campo fica oculto por padrão (o texto colado é uma chave, não um lembrete);
    o botão do olho existe porque esconder sem poder revelar faz digitar errado. */
+/* 0.79.0 — cota dentro do cartão de chaves: o mesmo dado do aviso do topo,
+   aqui com o detalhe de cada chave. */
+.chaves-cota { margin-top: 10px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .02); }
+.chaves-cota strong { font-size: 10px; font-weight: 600; }
+.chaves-cota ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.chaves-cota li { display: flex; align-items: center; gap: 6px; font-size: 9px; color: var(--muted); }
+.chaves-cota li span { display: inline-flex; width: 13px; justify-content: center; }
+.chaves-cota li.chave-ok span { color: var(--accent-soft); }
+.chaves-cota li.chave-no_limite span, .chaves-cota li.chave-recusada span, .chaves-cota li.chave-apertando span { color: #e0b354; }
+.chaves-cota p { margin-top: 7px; font-size: 9px; line-height: 1.45; color: var(--text-soft); }
+.chaves-cota-esgotado { border-color: rgba(229, 62, 62, .40); background: rgba(229, 62, 62, .07); }
+.chaves-cota-apertando { border-color: rgba(214, 158, 46, .35); background: rgba(214, 158, 46, .06); }
+
 .chaves-card { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: rgba(var(--accent-rgb), .02); }
 .chaves-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .chaves-topo strong { display: block; font-size: 10.5px; font-weight: 600; }

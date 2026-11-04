@@ -4,11 +4,75 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 
 import httpx
 from pydantic import BaseModel, Field
+
+
+# ----------------------------------------------------------------- cota/chaves
+# O pedido que gerou este bloco: *“dá para o JARVIS avisar quando estiver
+# acabando ou quando acabar totalmente as APIs?”*. Avisar exige **saber** — e o
+# único jeito honesto de saber é registrar o que o provedor respondeu:
+#
+# * sucesso → a chave volta a ser boa, e os cabeçalhos `x-ratelimit-*` dizem
+#   quanto resta no minuto;
+# * 429 → a chave está no limite (guardamos o `retry-after` quando vem);
+# * 401/403 → a chave é inválida e não volta sozinha.
+#
+# Nada aqui adivinha cota diária que o provedor não informa: quando não há
+# número, o aviso diz que o número não veio em vez de inventar um.
+JANELA_DA_RECUSA = 60 * 60  # 429 sem nova tentativa continua valendo por 1 h
+FRACAO_DE_AVISO = 0.20  # resta ≤ 20% do limite no minuto → "acabando"
+
+_CABECALHOS_RESTANTE = {
+    "pedidos": "x-ratelimit-remaining-requests",
+    "tokens": "x-ratelimit-remaining-tokens",
+}
+_CABECALHOS_LIMITE = {
+    "pedidos": "x-ratelimit-limit-requests",
+    "tokens": "x-ratelimit-limit-tokens",
+}
+
+
+def _agora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso() -> str:
+    return _agora().isoformat(timespec="seconds")
+
+
+def _inteiro(bruto: Any) -> int | None:
+    """Cabeçalho de cota em número. "12" e "12.0" valem; o resto é ignorado."""
+    if bruto is None:
+        return None
+    try:
+        return int(float(str(bruto).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _segundos(bruto: Any) -> float | None:
+    """`retry-after` em segundos. Data HTTP (formato antigo) é ignorada."""
+    if bruto is None:
+        return None
+    try:
+        valor = float(str(bruto).strip())
+    except (TypeError, ValueError):
+        return None
+    return valor if valor >= 0 else None
+
+
+def _idade(quando: str | None) -> float | None:
+    if not quando:
+        return None
+    try:
+        return (_agora() - datetime.fromisoformat(quando)).total_seconds()
+    except ValueError:
+        return None
 
 
 class HistoryMessage(BaseModel):
@@ -70,6 +134,12 @@ class OpenAICompatibleProvider:
         # Qual chave respondeu por último. A próxima chamada começa nela, para
         # não gastar um pedido numa chave que já se sabe recusada.
         self._indice = 0
+        # Diário da cota, por posição (nunca guarda a chave): recusa, quanto
+        # resta no minuto e quando foi a última resposta boa.
+        self._recusas: dict[int, dict[str, Any]] = {}
+        self._restante: dict[int, dict[str, Any]] = {}
+        self._ultima_ok: str | None = None
+        self._ultima_recusa: str | None = None
         self.base_url = os.getenv("JARVIS_AI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
         self.model = os.getenv("JARVIS_AI_MODEL", "gpt-4o-mini").strip()
         self.local = e_local(self.base_url)
@@ -89,6 +159,11 @@ class OpenAICompatibleProvider:
         self.local = e_local(self.base_url)
         self.provider_name = os.getenv("JARVIS_AI_PROVIDER", self.provider_name).strip() or self.provider_name
         self._indice = 0
+        # Chave nova, diário novo: recusa antiga não vale para a chave que
+        # acabou de ser colada na tela.
+        self._recusas.clear()
+        self._restante.clear()
+        self._ultima_recusa = None
 
     @property
     def api_key(self) -> str:
@@ -111,7 +186,242 @@ class OpenAICompatibleProvider:
             # troca sozinho quando uma estoura a cota.
             "keys": len(self.api_keys),
             "key_in_use": (self._indice + 1) if len(self.api_keys) > 1 else None,
+            # O que a tela precisa para avisar antes de acabar: situação,
+            # quanto resta medido e a frase pronta. Nunca traz a chave.
+            "saude": self.saude_resumo(),
         }
+
+    # ------------------------------------------------------- diário da cota
+
+    def _anotar_ok(self, indice: int) -> None:
+        """Aquela chave respondeu: ela deixa de estar recusada."""
+        self._recusas.pop(indice, None)
+        self._ultima_ok = _iso()
+
+    def _anotar_recusa(self, indice: int, codigo: int, retry_after: float | None = None) -> None:
+        self._recusas[indice] = {"codigo": int(codigo), "em": _iso(), "retry_after": retry_after}
+        self._ultima_recusa = _iso()
+
+    def _anotar_restante(self, indice: int, cabecalhos: Any) -> None:
+        """Quanto resta no minuto, quando o provedor manda nos cabeçalhos."""
+        obter = getattr(cabecalhos, "get", None)
+        if not callable(obter):
+            return
+        cota: dict[str, Any] = {"em": _iso()}
+        for nome, cabecalho in _CABECALHOS_RESTANTE.items():
+            valor = _inteiro(obter(cabecalho))
+            if valor is not None:
+                cota[f"restam_{nome}"] = valor
+        for nome, cabecalho in _CABECALHOS_LIMITE.items():
+            valor = _inteiro(obter(cabecalho))
+            if valor is not None:
+                cota[f"limite_{nome}"] = valor
+        if len(cota) > 1:
+            self._restante[indice] = cota
+
+    def anotar_teste(self, resultados: Iterable[dict[str, Any]]) -> None:
+        """O botão **Testar** também alimenta o diário: é chamada real, medida.
+
+        Sem isso, testar todas as chaves e ver as três responderem não limpava o
+        aviso de “esgotado” — e a tela continuaria dizendo que acabou.
+        """
+        for item in resultados or []:
+            try:
+                indice = int(item.get("indice", 0)) - 1
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= indice < len(self.api_keys):
+                continue
+            if item.get("ok"):
+                self._anotar_ok(indice)
+                continue
+            codigo = _inteiro(item.get("codigo"))
+            if codigo in (401, 403, 429):
+                self._anotar_recusa(indice, codigo)
+
+    def _chave_no_limite(self, indice: int) -> dict[str, Any] | None:
+        """A recusa vale agora? 429 vence sozinha; 401/403 não vence."""
+        recusa = self._recusas.get(indice)
+        if not recusa:
+            return None
+        if int(recusa.get("codigo") or 0) == 429:
+            idade = _idade(recusa.get("em"))
+            if idade is not None and idade > JANELA_DA_RECUSA:
+                return None
+        return recusa
+
+    def saude_resumo(self) -> dict[str, Any]:
+        """Situação medível das chaves — a base do aviso na tela e no chat."""
+        total = len(self.api_keys)
+        base: dict[str, Any] = {
+            "situacao": "ok",
+            "total": total,
+            "disponiveis": total,
+            "no_limite": [],
+            "recusadas": [],
+            "chaves": [],
+            "aviso": None,
+            "resumo": "",
+            "ultima_resposta": self._ultima_ok,
+            "ultima_recusa": self._ultima_recusa,
+            "fracao_de_aviso": FRACAO_DE_AVISO,
+        }
+        if self.local:
+            base.update(situacao="local", resumo="Modelo local: não há cota de provedor para acabar.", aviso=None)
+            return base
+        if total == 0:
+            base.update(situacao="sem_chave", resumo="Nenhuma chave de IA configurada.", aviso=None)
+            return base
+
+        chaves: list[dict[str, Any]] = []
+        no_limite: list[int] = []
+        recusadas: list[int] = []
+        apertadas: list[int] = []
+        for indice in range(total):
+            recusa = self._chave_no_limite(indice)
+            cota = self._restante.get(indice) or {}
+            estado = "ok"
+            codigo = None
+            desde = None
+            retry = None
+            if recusa is not None:
+                codigo = int(recusa.get("codigo") or 0)
+                desde = recusa.get("em")
+                retry = recusa.get("retry_after")
+                if codigo == 429:
+                    estado = "no_limite"
+                    no_limite.append(indice + 1)
+                else:
+                    estado = "recusada"
+                    recusadas.append(indice + 1)
+            aperto = self._aperto(cota)
+            if aperto is not None and estado == "ok":
+                estado = "apertando"
+                apertadas.append(indice + 1)
+            chaves.append(
+                {
+                    "numero": indice + 1,
+                    "estado": estado,
+                    "codigo": codigo,
+                    "desde": desde,
+                    "retry_after": retry,
+                    "restam_pedidos": cota.get("restam_pedidos"),
+                    "limite_pedidos": cota.get("limite_pedidos"),
+                    "restam_tokens": cota.get("restam_tokens"),
+                    "limite_tokens": cota.get("limite_tokens"),
+                    "aperto": aperto,
+                }
+            )
+
+        caidas = len(no_limite) + len(recusadas)
+        disponiveis = max(0, total - caidas)
+        base.update(
+            chaves=chaves,
+            no_limite=no_limite,
+            recusadas=recusadas,
+            disponiveis=disponiveis,
+        )
+        if disponiveis == 0:
+            base["situacao"] = "esgotado"
+            base["resumo"] = self._resumo_esgotado(total, no_limite, recusadas)
+            base["aviso"] = self._aviso_esgotado(total, no_limite, recusadas, chaves)
+        elif caidas or apertadas:
+            base["situacao"] = "apertando"
+            base["resumo"] = f"{disponiveis} de {total} chaves respondendo."
+            base["aviso"] = self._aviso_apertando(total, disponiveis, no_limite, recusadas, chaves)
+        else:
+            base["resumo"] = (
+                f"{total} de {total} chaves respondendo."
+                if total > 1
+                else "A chave está respondendo."
+            )
+        return base
+
+    @staticmethod
+    def _aperto(cota: dict[str, Any]) -> str | None:
+        """“pedidos” ou “tokens” quando o que resta no minuto já é pouco."""
+        for nome in ("pedidos", "tokens"):
+            restam = cota.get(f"restam_{nome}")
+            limite = cota.get(f"limite_{nome}")
+            if isinstance(restam, int) and isinstance(limite, int) and limite > 0:
+                if restam <= max(1, int(limite * FRACAO_DE_AVISO)):
+                    return nome
+        return None
+
+    @staticmethod
+    def _resumo_esgotado(total: int, no_limite: list[int], recusadas: list[int]) -> str:
+        partes = []
+        if no_limite:
+            partes.append(f"{len(no_limite)} no limite (HTTP 429)")
+        if recusadas:
+            rotulo = "recusada" if len(recusadas) == 1 else "recusadas"
+            partes.append(f"{len(recusadas)} {rotulo} (HTTP 401/403)")
+        detalhe = " e ".join(partes) if partes else "sem resposta"
+        if total == 1:
+            return f"A chave parou de responder: {detalhe}."
+        return f"As {total} chaves pararam de responder: {detalhe}."
+
+    def _aviso_esgotado(
+        self, total: int, no_limite: list[int], recusadas: list[int], chaves: list[dict[str, Any]]
+    ) -> str:
+        """A frase do aviso vermelho — o que aconteceu e o que continua de pé."""
+        if recusadas and not no_limite:
+            conselho = (
+                "Gere chaves novas em console.groq.com/keys e cole no cartão **Chaves de IA**."
+                if total > 1
+                else "Gere uma chave nova em console.groq.com/keys e cole no cartão **Chaves de IA**."
+            )
+        elif no_limite and not recusadas:
+            espera = next(
+                (
+                    item["retry_after"]
+                    for item in chaves
+                    if item.get("estado") == "no_limite" and item.get("retry_after")
+                ),
+                None,
+            )
+            quando = f" O provedor pediu para tentar de novo em {int(espera)}s." if espera else ""
+            conselho = (
+                f"Espere alguns minutos ou cole mais uma chave no cartão **Chaves de IA**.{quando}"
+            )
+        else:
+            conselho = "Cole chaves novas no cartão **Chaves de IA**."
+        return (
+            f"{self._resumo_esgotado(total, no_limite, recusadas)} "
+            "A conversa com o modelo parou; as skills locais continuam funcionando. "
+            f"{conselho}"
+        )
+
+    def _aviso_apertando(
+        self,
+        total: int,
+        disponiveis: int,
+        no_limite: list[int],
+        recusadas: list[int],
+        chaves: list[dict[str, Any]],
+    ) -> str:
+        """A frase do aviso âmbar — ainda dá, mas está no fim."""
+        linhas = [f"Restam {disponiveis} de {total} chaves."]
+        for item in chaves:
+            if item["numero"] in no_limite:
+                espera = f" (tente de novo em {int(item['retry_after'])}s)" if item.get("retry_after") else ""
+                linhas.append(f"A chave {item['numero']} está no limite do minuto{espera}.")
+            elif item["numero"] in recusadas:
+                linhas.append(f"A chave {item['numero']} foi recusada (HTTP {item['codigo']}).")
+            elif item.get("aperto") == "pedidos":
+                linhas.append(
+                    f"A chave {item['numero']} tem {item['restam_pedidos']} de "
+                    f"{item['limite_pedidos']} pedidos neste minuto."
+                )
+            elif item.get("aperto") == "tokens":
+                linhas.append(
+                    f"A chave {item['numero']} tem {item['restam_tokens']} de "
+                    f"{item['limite_tokens']} tokens neste minuto."
+                )
+        if recusadas:
+            linhas.append("Chave recusada só volta com chave nova: troque no cartão **Chaves de IA**.")
+        linhas.append("Quando a última cair, a conversa com o modelo para — as skills locais seguem.")
+        return " ".join(linhas)
 
     async def generate(self, request: AIRequest) -> str:
         if not self.configured:
@@ -151,9 +461,12 @@ class OpenAICompatibleProvider:
         for passo in range(total):
             indice = (self._indice + passo) % total
             try:
-                texto = await self._pedir(messages, self.api_keys[indice], limite, request.max_tokens)
+                texto = await self._pedir(
+                    messages, self.api_keys[indice], limite, request.max_tokens, indice=indice
+                )
             except _ChaveRecusada as exc:
                 # 401/403/429 são da chave, não do pedido: a próxima pode dar conta.
+                # A recusa já foi anotada em `_pedir` — é o diário da cota.
                 recusas.append(exc.status)
                 continue
             self._indice = indice
@@ -178,9 +491,18 @@ class OpenAICompatibleProvider:
         raise AIUnavailable(f"o provedor de IA respondeu com HTTP {recusas[-1]}.")
 
     async def _pedir(
-        self, messages: list[dict[str, str]], chave: str | None, limite: float, max_tokens: int
+        self,
+        messages: list[dict[str, str]],
+        chave: str | None,
+        limite: float,
+        max_tokens: int,
+        indice: int | None = None,
     ) -> str:
-        """Uma tentativa com uma chave. Traduz o HTTP em erro seguro em português."""
+        """Uma tentativa com uma chave. Traduz o HTTP em erro seguro em português.
+
+        `indice` é a posição da chave (0-based) só para o diário da cota: o que
+        fica registrado é o código HTTP e o quanto resta, nunca a chave.
+        """
         headers = {"Content-Type": "application/json"}
         if chave:
             headers["Authorization"] = f"Bearer {chave}"
@@ -193,10 +515,19 @@ class OpenAICompatibleProvider:
         except httpx.HTTPError as exc:
             raise AIUnavailable("Não foi possível conectar ao provedor de IA.") from exc
 
+        recebidos = getattr(response, "headers", None)
         if response.status_code in (401, 403, 429):
-            raise _ChaveRecusada(response.status_code)
+            espera = None
+            if indice is not None and chave:
+                if callable(getattr(recebidos, "get", None)):
+                    espera = _segundos(recebidos.get("retry-after"))
+                self._anotar_recusa(indice, response.status_code, espera)
+            raise _ChaveRecusada(response.status_code, retry_after=espera)
         if response.status_code != 200:
             raise AIUnavailable(f"O provedor de IA respondeu com HTTP {response.status_code}.")
+        if indice is not None and chave:
+            self._anotar_ok(indice)
+            self._anotar_restante(indice, recebidos)
         try:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
@@ -212,8 +543,9 @@ class OpenAICompatibleProvider:
 class _ChaveRecusada(Exception):
     """A chave não serve agora (401/403/429): vale tentar a próxima."""
 
-    def __init__(self, status: int) -> None:
+    def __init__(self, status: int, retry_after: float | None = None) -> None:
         self.status = status
+        self.retry_after = retry_after
         super().__init__(str(status))
 
 
