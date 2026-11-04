@@ -50,6 +50,26 @@ Modelo [gpt-4o-mini]: nome-que-voce-copiou-do-painel
 Chave (não aparece ao digitar): gsk_...
 ```
 
+### O jeito mais fácil: pela tela (0.77.0)
+
+Não precisa de `cmd`, de Bloco de Notas nem de comando nenhum:
+
+1. **Configurações** → **Inteligência generativa** → cartão **Chaves de IA**;
+2. **Colar chaves**;
+3. cole o bloco inteiro (com ou sem os rótulos `api groq 1 …`) e clique em
+   **Salvar e testar**.
+
+O cartão mostra quantas chaves existem, a máscara de cada uma
+(`gsk_a…BkXV`) e o resultado do teste, chave por chave. Detalhes em
+[`CHAVES.md`](CHAVES.md).
+
+> Por que isso existe: colar `api grok 1 gsk_…` no prompt do `cmd` devolve
+> *“'api' não é reconhecido como um comando interno ou externo”* — aquilo é
+> anotação, não comando, e nada é gravado. Na tela, o texto é varrido e só as
+> chaves são aproveitadas.
+
+Os passos abaixo continuam valendo para quem preferir o terminal.
+
 ### Três chaves = três cérebros (0.76.0)
 
 Se uma chave só não aguenta o dia — o Groq limita pedidos e tokens **por

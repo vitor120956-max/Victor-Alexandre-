@@ -11,6 +11,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.career import (
     BANDS,
@@ -590,7 +591,7 @@ def test_registry_registers_seven_read_only_career_skills() -> None:
 
 def test_health_reports_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.75.0"
+    assert health["version"] == VERSAO
     assert health["skills"] == 315
 
 

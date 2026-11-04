@@ -358,3 +358,18 @@ def test_a_api_checa_e_para_no_aviso(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_o_pedido_de_atualizacao_cai_na_skill_certa(frase: str, skill: str | None):
     pedido = _pedido_direto_de_atualizacao(frase)
     assert (pedido or {}).get("skill_id") == skill
+
+
+# ------------------------------------------------------------------ versão única
+
+def test_a_versao_tem_uma_fonte_so():
+    """Saúde, manifesto e package.json não podem divergir — foi o que aconteceu
+    na 0.76.1: o `/api/health` ainda dizia 0.75.0 porque estava escrito à mão."""
+    import json
+    from pathlib import Path as _Path
+
+    raiz = _Path(__file__).resolve().parents[2]
+    do_pacote = json.loads((raiz / "package.json").read_text(encoding="utf-8"))["version"]
+    assert atualizacao.VERSAO == do_pacote
+    manifesto = json.loads((raiz / atualizacao.NOME_MANIFESTO).read_text(encoding="utf-8"))
+    assert manifesto["versao"] == do_pacote

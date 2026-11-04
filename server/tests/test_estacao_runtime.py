@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.estacao_runtime import (
     FERRAMENTAS,
@@ -580,4 +581,4 @@ def test_api_recibos_e_chamadas(client: TestClient) -> None:
 
 
 def test_api_health_versao_nova(client: TestClient) -> None:
-    assert client.get("/api/health").json()["version"] == "0.75.0"
+    assert client.get("/api/health").json()["version"] == VERSAO

@@ -319,6 +319,72 @@ export async function getAIStatus(): Promise<AIStatus> {
   return apiFetch<AIStatus>('/api/ai/status');
 }
 
+/** Estado das chaves de IA — o que a tela mostra. Nunca traz a chave inteira. */
+export interface ChavesIA {
+  ok: boolean;
+  quantidade: number;
+  mascaradas: string[];
+  provedor: string;
+  base: string;
+  modelo: string;
+  local: boolean;
+  arquivo: string;
+  maximo: number;
+  /** Só a própria máquina grava; celular na rede local apenas lê. */
+  podeEditar: boolean;
+}
+
+export interface ChaveTeste {
+  indice: number;
+  ok: boolean;
+  codigo: number;
+  motivo: string;
+}
+
+export interface ChaveTesteResultado {
+  ok: boolean;
+  resultados: ChaveTeste[];
+  boas: number;
+  total: number;
+  resumo: string;
+}
+
+/**
+ * Máscara da chave, igual à do servidor (`gsk_a…BkXV`). Existe aqui só para a
+ * tela nunca precisar do valor inteiro depois de salvar — e para o teste provar
+ * que o que circula no navegador não serve para autenticar nada.
+ */
+export function __mascararParaTeste(chave: string): string {
+  const limpa = chave.trim();
+  if (limpa.length <= 10) return `${limpa.slice(0, 2)}…${limpa.slice(-2)}`;
+  return `${limpa.slice(0, 5)}…${limpa.slice(-4)} (${limpa.length} caracteres)`;
+}
+
+export async function getChavesIA(): Promise<ChavesIA> {
+  return apiFetch<ChavesIA>('/api/ai/chaves');
+}
+
+export async function salvarChavesIA(texto: string, acrescentar = false): Promise<ChavesIA> {
+  const resposta = await apiFetch<{ ok: boolean; result: Omit<ChavesIA, 'ok'>; status: AIStatus }>('/api/ai/chaves', {
+    method: 'POST',
+    body: JSON.stringify({ texto, acrescentar }),
+  });
+  return { ...resposta.result, ok: resposta.ok };
+}
+
+export async function apagarChavesIA(): Promise<ChavesIA> {
+  const resposta = await apiFetch<{ ok: boolean; result: Omit<ChavesIA, 'ok'> }>('/api/ai/chaves', { method: 'DELETE' });
+  return { ...resposta.result, ok: resposta.ok };
+}
+
+export async function testarChavesIA(indice?: number): Promise<ChaveTesteResultado> {
+  const resposta = await apiFetch<{ ok: boolean; result: ChaveTesteResultado }>('/api/ai/chaves/testar', {
+    method: 'POST',
+    body: JSON.stringify(indice ? { indice } : {}),
+  });
+  return resposta.result;
+}
+
 export interface PesquisaFonte {
   titulo: string;
   url: string;

@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import sistema as S
+from server.atualizacao import VERSAO
 from server.app import create_app
 
 
@@ -1364,7 +1365,7 @@ def client(tmp_path):
 
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
-    assert dados["version"] == "0.75.0"
+    assert dados["version"] == VERSAO
     assert dados["skills"] == 315
 
 

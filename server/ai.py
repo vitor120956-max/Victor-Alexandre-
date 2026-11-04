@@ -28,11 +28,6 @@ class AIRequest(BaseModel):
 
 class AIProvider(Protocol):
     @property
-    def api_key(self) -> str:
-        """A primeira chave. Existe para quem só quer saber "tem chave?"."""
-        return self.api_keys[0] if self.api_keys else ""
-
-    @property
     def configured(self) -> bool: ...
     def status(self) -> dict[str, Any]: ...
     async def generate(self, request: AIRequest) -> str: ...
@@ -80,6 +75,25 @@ class OpenAICompatibleProvider:
         self.local = e_local(self.base_url)
         padrao = "Modelo local (llama.cpp/Ollama)" if self.local else "OpenAI-compatible"
         self.provider_name = os.getenv("JARVIS_AI_PROVIDER", padrao).strip() or padrao
+
+    def recarregar(self) -> None:
+        """Relê as chaves e o endereço do ambiente, sem reiniciar a API.
+
+        O `.env` é lido uma vez no start; quando a tela grava uma chave nova, o
+        objeto em memória ficaria com a antiga até alguém fechar a janela. Aqui
+        ele se atualiza na hora — quem chama já pôs os valores em `os.environ`.
+        """
+        self.api_keys = separar_chaves(os.getenv("JARVIS_AI_API_KEY", ""))
+        self.base_url = os.getenv("JARVIS_AI_BASE_URL", self.base_url).strip().rstrip("/")
+        self.model = os.getenv("JARVIS_AI_MODEL", self.model).strip()
+        self.local = e_local(self.base_url)
+        self.provider_name = os.getenv("JARVIS_AI_PROVIDER", self.provider_name).strip() or self.provider_name
+        self._indice = 0
+
+    @property
+    def api_key(self) -> str:
+        """A primeira chave. Existe para quem só quer saber "tem chave?"."""
+        return self.api_keys[0] if self.api_keys else ""
 
     @property
     def configured(self) -> bool:

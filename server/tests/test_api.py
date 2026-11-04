@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.ai import AIRequest
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.skill_registry import build_registry
 
@@ -39,7 +40,7 @@ def client(tmp_path: Path):
 def test_health_and_catalog(client: TestClient):
     health = client.get("/api/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.75.0"
+    assert health.json()["version"] == VERSAO
     assert health.json()["skills"] == 315
     catalog = client.get("/api/skills").json()["skills"]
     assert {skill["id"] for skill in catalog} >= {

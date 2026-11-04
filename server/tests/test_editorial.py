@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.editorial import (
     ACESSIBILIDADE,
@@ -570,7 +571,7 @@ def test_delivery_rejects_bad_input() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.75.0"
+    assert health["version"] == VERSAO
     assert health["skills"] == 315
 
 

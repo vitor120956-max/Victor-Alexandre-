@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import reverse
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.skill_registry import build_registry
 
@@ -291,7 +292,7 @@ def test_api_executes_reverse_features_without_side_effects(tmp_path: Path):
     _write(tmp_path, "amostra.elf", _elf())
     with _app(tmp_path) as client:
         health = client.get("/api/health").json()
-        assert health["version"] == "0.75.0"
+        assert health["version"] == VERSAO
         assert health["skills"] == 315
         catalog = {skill["id"]: skill for skill in client.get("/api/skills").json()["skills"]}
         assert len([skill for skill in catalog if skill.startswith("reverse.")]) == 6

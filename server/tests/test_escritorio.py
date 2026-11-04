@@ -5,6 +5,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.escritorio import (
     CODIGOS_SAIDA,
@@ -685,7 +686,7 @@ def test_catalogo_tem_o_vocabulario() -> None:
 
 def test_api_health_reflete_versao_e_catalogo(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.75.0"
+    assert health["version"] == VERSAO
     assert health["skills"] == 315
 
 

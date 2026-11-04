@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import atualizacao as atualizacao_local
+from . import chaves as chaves_mod
 from . import conserto
 from . import dados as dados_locais
 from .agente_local import (
@@ -59,6 +60,22 @@ class PesquisaRequest(BaseModel):
     paginas: int = Field(default=2, ge=0, le=3)
     # Sem chave de API: a fonte é escolhida aqui, não no provedor.
     fonte: str = Field(default="auto", pattern="^(auto|duckduckgo|wikipedia|youtube)$")
+
+
+class ChavesRequest(BaseModel):
+    """O que chega da tela: o texto colado, com ou sem rótulo em volta."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    texto: str = Field(min_length=4, max_length=20_000)
+    acrescentar: bool = False
+
+
+class ChavesTesteRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    # 1-based; vazio testa todas.
+    indice: int | None = Field(default=None, ge=1, le=20)
 
 
 class AgenteRequest(BaseModel):
@@ -317,7 +334,7 @@ def create_app(
     application = FastAPI(
         title="JARVIS Skills API",
         description="Skills Python validadas, executor da Estação e camada opcional de IA externa.",
-        version="0.75.0",
+        version=atualizacao_local.VERSAO,
         lifespan=_estacao_lifespan(estacao_runtime),
     )
     application.state.estacao = estacao_runtime
@@ -415,7 +432,7 @@ def create_app(
         return {
             "ok": True,
             "service": "jarvis-python-api",
-            "version": "0.75.0",
+            "version": atualizacao_local.VERSAO,
             "time": datetime.now(timezone.utc).isoformat(),
             "skills": len(skill_registry.list()),
             # Respondido por origem: o front esconde o campo de token quando é True.
@@ -595,6 +612,54 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return FileResponse(source, media_type="application/octet-stream", filename=source.name)
+
+    # ------------------------------------------------------------ chaves de IA
+    #
+    # A tela daqui é a resposta a "não é melhor botar um botão onde eu só coloco
+    # as chaves?". Gravar chave é ato do dono, na própria máquina: quem chega
+    # pela rede local lê o estado, mas não escreve.
+
+    def _so_da_maquina(request: Request) -> None:
+        if not _veio_da_propria_maquina(request):
+            raise HTTPException(status_code=403, detail="Chave só é gravada da própria máquina.")
+
+    @application.get("/api/ai/chaves")
+    def ai_chaves_estado(request: Request) -> dict[str, Any]:
+        return {
+            "ok": True,
+            **chaves_mod.estado(),
+            "podeEditar": _veio_da_propria_maquina(request),
+        }
+
+    @application.post("/api/ai/chaves")
+    def ai_chaves_salvar(request: Request, payload: ChavesRequest) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = chaves_mod.salvar(payload.texto, acrescentar=payload.acrescentar)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"ok": False, "error": {"code": "CHAVE_INVALIDA", "message": str(exc)}})
+        except OSError as exc:
+            return JSONResponse(status_code=500, content={"ok": False, "error": {"code": "ENV_NAO_ESCRITO", "message": f"não consegui escrever o .env: {exc}"}})
+        if hasattr(provider, "recarregar"):
+            provider.recarregar()  # type: ignore[attr-defined]
+        return {"ok": True, "result": resultado, "status": provider.status()}
+
+    @application.delete("/api/ai/chaves")
+    def ai_chaves_apagar(request: Request) -> dict[str, Any]:
+        _so_da_maquina(request)
+        resultado = chaves_mod.apagar()
+        if hasattr(provider, "recarregar"):
+            provider.recarregar()  # type: ignore[attr-defined]
+        return {"ok": True, "result": resultado, "status": provider.status()}
+
+    @application.post("/api/ai/chaves/testar")
+    def ai_chaves_testar(request: Request, payload: ChavesTesteRequest) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = chaves_mod.testar(indice=payload.indice)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"ok": False, "error": {"code": "CHAVE_INVALIDA", "message": str(exc)}})
+        return {"ok": True, "result": resultado}
 
     @application.get("/api/ai/status")
     def ai_status() -> dict[str, Any]:

@@ -12,6 +12,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from server.atualizacao import VERSAO
 from server.app import create_app
 from server.curadoria import (
     CATEGORIAS,
@@ -478,7 +479,7 @@ def test_hygiene_rejects_an_out_of_range_interval() -> None:
 
 def test_health_reports_the_new_version_and_skill_count(client: TestClient) -> None:
     health = client.get("/api/health").json()
-    assert health["version"] == "0.75.0"
+    assert health["version"] == VERSAO
     assert health["skills"] == 315
 
 

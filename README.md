@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.76.1.**
+**Versão atual: 0.77.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -508,6 +508,13 @@ nenhuma. Na tela, o cabeçalho mostra `Groq · 3 chaves`, e
 `.venv\Scripts\python configurar-chave.py --arquivo "chaves.txt"`
 (com `--so-mostrar` ele só conta, sem gravar).
 
+**Pela tela (0.77.0)**, sem terminal: **Configurações → Inteligência generativa →
+Chaves de IA → Colar chaves**. O campo aceita o bloco inteiro (`api groq 1 gsk_…`
+e o resto é ignorado), grava no `.env` em CRLF, aplica na hora — sem reiniciar —
+e o botão **Testar** faz uma chamada real por chave, mostrando só a máscara e o
+motivo. Nada fica no navegador: o campo é limpo ao salvar. Detalhes em
+[`docs/CHAVES.md`](docs/CHAVES.md).
+
 Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 
 ## Skills Python disponíveis
@@ -729,7 +736,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.76.1", "skills": 315}`.
+`{"version": "0.77.0", "skills": 315}`.
 
 ## Verificações
 
