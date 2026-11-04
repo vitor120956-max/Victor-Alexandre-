@@ -473,6 +473,10 @@ def _resumo_teste(boas: int, total: int, resultados: list[dict[str, Any]] | None
 
 
 _MOTIVOS = {
+    # 0.80.3 — o Google usa **400** para chave inválida ou expirada. Sem esta
+    # linha, colar a chave do Gemini e testar devolvia um número mudo, que o
+    # dono leu como “HTTP 400” sem saber que a saída era gerar outra chave.
+    400: "o provedor recusou o pedido (HTTP 400) — quase sempre a chave (o Google usa 400 para chave inválida) ou a região não ser atendida",
     401: "chave recusada (HTTP 401) — copiada pela metade, revogada ou apagada no painel",
     403: "chave sem permissão para este modelo (HTTP 403)",
     404: "modelo não encontrado (HTTP 404) — esse nome não existe mais no provedor",
@@ -480,6 +484,53 @@ _MOTIVOS = {
     422: "o provedor recusou o formato (HTTP 422) — quase sempre o nome do modelo",
     429: "cota ou limite de requisições estourado (HTTP 429)",
 }
+
+# 0.80.3 — o corpo do erro diz **qual** é o problema; esta tabela traduz.
+# O Google devolve 400 para três coisas diferentes, e “HTTP 400” sozinho não
+# ajuda ninguém: chave inválida, região não atendida e histórico que não alterna.
+_CATEGORIAS: tuple[tuple[str, Any], ...] = (
+    (
+        "chave",
+        re.compile(
+            r"api[ _]key not valid|api_key_invalid|invalid api key|incorrect api key|"
+            r"api[ _]key expired|api key.*(revoked|disabled)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "regiao",
+        re.compile(
+            r"user location is not supported|location is not supported|"
+            r"not available in your (country|region)|unsupported (country|region)",
+            re.IGNORECASE,
+        ),
+    ),
+    ("historico", re.compile(r"alternate between user and model|multiturn|multi-turn", re.IGNORECASE)),
+    ("modelo", re.compile(r"model .*(not found|does not exist|is not supported)|invalid model", re.IGNORECASE)),
+    ("cota", re.compile(r"quota|rate limit|resource[_ ]exhausted|exceeded your current", re.IGNORECASE)),
+)
+
+_TRADUCOES = {
+    "chave": "chave inválida ou expirada — gere outra no painel do provedor",
+    "regiao": "o provedor não atende pedidos da sua região (o plano grátis do Gemini não existe em todo lugar)",
+    "historico": "o histórico da conversa precisa alternar entre você e o JARVIS — comece uma conversa nova",
+    "modelo": "esse nome de modelo não existe neste provedor",
+    "cota": "cota ou limite de requisições estourado",
+}
+
+
+def categoria_da_mensagem(mensagem: str) -> str:
+    """Classifica a frase do provedor. Vazio quando ela não diz nada conhecido."""
+    for nome, padrao in _CATEGORIAS:
+        if padrao.search(mensagem or ""):
+            return nome
+    return ""
+
+
+def traduzir_mensagem(mensagem: str) -> str:
+    """A causa conhecida em português; vazio quando o texto não é reconhecido."""
+    return _TRADUCOES.get(categoria_da_mensagem(mensagem), "")
+
 
 # Modelo de socorro: tem a maior cota grátis do Groq. Serve para **separar** duas
 # causas que dão o mesmo sintoma no teste: “a chave é inválida” e “este modelo
@@ -517,6 +568,9 @@ def _motivo_do_corpo(codigo: int, corpo: Any) -> str:
         return ""
     mensagem = _limpar_mensagem(mensagem)
     pedacos: list[str] = []
+    traduzida = traduzir_mensagem(mensagem)
+    if traduzida:
+        pedacos.append(traduzida)
     espera = _RE_SEGUNDOS.search(mensagem)
     if espera:
         pedacos.append(f"tente de novo em {espera.group(1)}")
@@ -527,7 +581,7 @@ def _motivo_do_corpo(codigo: int, corpo: Any) -> str:
         teto = limite.group(1).rstrip(".,")
         gasto = usado.group(1).rstrip(".,")
         pedacos.append(f"limite {teto}, usado {gasto}")
-    if codigo == 404:
+    if codigo == 404 and categoria_da_mensagem(mensagem) != "modelo":
         pedacos.append("confira o nome no cartão Modelos de IA")
     return " — ".join(pedacos) or mensagem
 

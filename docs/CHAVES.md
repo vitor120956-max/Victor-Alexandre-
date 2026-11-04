@@ -307,3 +307,39 @@ conversa vê a chave; o certo é revogar as que passaram por ali.
 3. **esperar** o tempo que o próprio provedor disse;
 4. **outra conta** (outro e-mail) — é a única forma de somar cota de verdade;
 5. **modelo local** (`ia.local`) — sem conta, sem cota, mais lento.
+
+
+## 11. “O provedor de IA respondeu com HTTP 400” (0.80.3)
+
+Esse foi o print: o chat devolveu **HTTP 400** e parou aí. Verdade e inútil — o
+Google usa 400 para **três** problemas diferentes, e só o corpo da resposta diz
+qual é. A tela passou a ler o corpo e traduzir:
+
+| o que o provedor escreve | o que a tela passa a dizer |
+|---|---|
+| `API key not valid. Please pass a valid API key.` | chave inválida ou expirada — gere outra no painel |
+| `User location is not supported for the API use.` | o provedor não atende a sua região; troque para o Groq ou OpenRouter |
+| `multiturn requests alternate between user and model` | o histórico precisa alternar — comece uma conversa nova (**e o JARVIS já junta as falas seguidas sozinho**) |
+| `model … does not exist` | esse nome de modelo não existe; use “Ver modelos da minha chave” |
+
+O terceiro caso era o mais provável aqui: quando uma skill local responde (abrir
+o Gmail, por exemplo), o turno do JARVIS **não entra no histórico** — sobram duas
+perguntas suas em sequência, e o Gemini recusa isso com 400. A correção é juntar
+as falas seguidas do mesmo lado antes de enviar; é inofensivo nos outros
+provedores e resolve o Google.
+
+### A segunda tentativa
+
+Se o 400 não for de chave, de região nem de histórico, o JARVIS repete **uma vez**
+com o corpo mínimo (`model` + `messages`), sem `temperature` e sem `max_tokens`.
+Parâmetro extra é a causa mais comum, e perder a resposta por causa de
+`temperature` seria burrice.
+
+### O que fazer no seu PC, agora
+
+1. abra o JARVIS;
+2. **Configurações → Chaves de IA → Testar** — a frase agora diz qual dos três é;
+3. se for chave, gere outra em `aistudio.google.com/apikey` (ou
+   `console.groq.com/keys`) e cole no cartão;
+4. se for região, troque o provedor para **Groq** no cartão **Modelos de IA**;
+5. se for histórico, mande a pergunta de novo (a conversa nova já nasce alinhada).

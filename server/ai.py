@@ -128,6 +128,106 @@ def e_local(url: str) -> bool:
     return host in {"127.0.0.1", "localhost", "::1", "0.0.0.0", "host.docker.internal"}
 
 
+# ---------------------------------------------------------------------------
+# Traduzir o erro do provedor (0.80.3)
+# ---------------------------------------------------------------------------
+# O dono viu “O provedor de IA respondeu com HTTP 400” e não tinha como saber o
+# que fazer. O corpo do erro diz exatamente qual é o problema — e o Google usa
+# **400** para coisas que os outros chamam de 401 (chave inválida) e de 403
+# (região não atendida). Quem classifica é `chaves`, para a tela do teste das
+# chaves e o chat contarem a mesma história com as mesmas palavras.
+
+def detalhe_do_corpo(resposta: Any) -> str:
+    """A frase do provedor, limpa de chave e de endereço interno.
+
+    Nunca deixa passar `gsk_…`, `sk-…`, `AIza…` nem `AQ.…`: a mensagem do
+    provedor às vezes ecoa a chave, e essa frase vai para a tela.
+    """
+    try:
+        corpo = resposta.json()
+    except Exception:  # noqa: BLE001 - corpo não-JSON é o caso comum no 502
+        return ""
+    if not isinstance(corpo, dict):
+        return ""
+    erro = corpo.get("error") if isinstance(corpo.get("error"), dict) else {}
+    mensagem = str(erro.get("message") or corpo.get("message") or erro.get("status") or "")
+    if not mensagem:
+        return ""
+    from . import chaves as chaves_mod  # noqa: PLC0415 (evita ciclo na importação)
+
+    return chaves_mod._limpar_mensagem(mensagem)[:300]  # noqa: SLF001 - mesma limpeza da tela
+
+
+def categoria_do_erro(status: int, detalhe: str) -> str:
+    """Classifica o erro em algo acionável: chave, região, histórico, modelo…"""
+    from . import chaves as chaves_mod  # noqa: PLC0415 (evita ciclo na importação)
+
+    achada = chaves_mod.categoria_da_mensagem(detalhe)
+    if achada:
+        return achada
+    if status in (401, 403):
+        return "chave"
+    if status == 429:
+        return "cota"
+    if status == 404:
+        return "modelo"
+    return "outro"
+
+
+def frase_do_erro(status: int, detalhe: str, categoria: str, modelo: str = "", onde: str = "") -> str:
+    """A frase que a pessoa vê: o que aconteceu **e** o que fazer."""
+    cauda = f' O provedor disse: “{detalhe}”.' if detalhe else ""
+    if categoria == "regiao":
+        return (
+            f"o provedor não atende pedidos vindos da sua região (HTTP {status}). "
+            "No plano grátis o Gemini não está disponível em todo lugar — troque para o Groq "
+            "ou para o OpenRouter no cartão Modelos de IA." + cauda
+        )
+    if categoria == "historico":
+        return (
+            f"o provedor recusou o histórico da conversa (HTTP {status}): as mensagens precisam "
+            "alternar entre você e o JARVIS. Comece uma conversa nova — o JARVIS também passou a "
+            "juntar as falas seguidas antes de enviar." + cauda
+        )
+    if categoria == "modelo":
+        return (
+            f"o modelo “{modelo}” não existe neste provedor (HTTP {status}). "
+            "Use “Ver modelos da minha chave” no cartão Modelos de IA e escolha um nome da lista."
+            + cauda
+        )
+    if categoria == "chave":
+        alvo = f" Gere outra em {onde}." if onde else ""
+        return f"a chave foi recusada pelo provedor (HTTP {status}).{alvo}{cauda}"
+    if categoria == "cota":
+        return (
+            f"a cota acabou agora (HTTP {status}). Espere o tempo que o provedor mandou, "
+            "troque de modelo (cada modelo tem cota própria) ou acrescente outra chave." + cauda
+        )
+    return f"o provedor de IA respondeu com HTTP {status}.{cauda}"
+
+
+def normalizar_mensagens(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Junta mensagens seguidas do mesmo papel — exigência do Google.
+
+    O Gemini recusa (HTTP 400, *“Please ensure that multiturn requests alternate
+    between user and model”*) um histórico com duas falas seguidas do mesmo
+    lado. E isso acontece muito aqui: quando uma skill local responde, o turno
+    do JARVIS não entra no histórico — sobram dois pedidos seus em sequência.
+    Juntar é inofensivo para os outros provedores e resolve o caso do Google.
+    """
+    juntas: list[dict[str, str]] = []
+    for item in messages:
+        papel = item.get("role") or "user"
+        conteudo = (item.get("content") or "").strip()
+        if not conteudo:
+            continue
+        if juntas and juntas[-1]["role"] == papel:
+            juntas[-1] = {"role": papel, "content": juntas[-1]["content"] + "\n\n" + conteudo}
+        else:
+            juntas.append({"role": papel, "content": conteudo})
+    return juntas
+
+
 class OpenAICompatibleProvider:
     def __init__(self) -> None:
         self.api_keys = separar_chaves(os.getenv("JARVIS_AI_API_KEY", ""))
@@ -484,11 +584,11 @@ class OpenAICompatibleProvider:
             if total == 1:
                 raise AIUnavailable(
                     "a chave foi recusada pelo provedor (HTTP 401). "
-                    f"Gere uma nova em {self._onde_pegar_chave()} e rode configurar-chave.py."
+                    f"Gere uma nova em {self._onde_pegar_chave()} e cole no cartão Chaves de IA."
                 )
             raise AIUnavailable(
                 f"as {total} chaves foram recusadas pelo provedor (HTTP {recusas[0]}). "
-                f"Gere chaves novas em {self._onde_pegar_chave()} e rode configurar-chave.py."
+                f"Gere chaves novas em {self._onde_pegar_chave()} e cole no cartão Chaves de IA."
             )
         if all(codigo == 429 for codigo in recusas):
             raise AIUnavailable(
@@ -513,10 +613,24 @@ class OpenAICompatibleProvider:
         headers = {"Content-Type": "application/json"}
         if chave:
             headers["Authorization"] = f"Bearer {chave}"
-        payload = {"model": self.model, "messages": messages, "temperature": 0.3, "max_tokens": max_tokens}
+        # 0.80.3 — juntar falas seguidas do mesmo lado antes de enviar: o Google
+        # recusa histórico que não alterna, e aqui isso acontece sempre que uma
+        # skill local responde (o turno do JARVIS não entra no histórico).
+        enviadas = normalizar_mensagens(messages)
+        payload = {"model": self.model, "messages": enviadas, "temperature": 0.3, "max_tokens": max_tokens}
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(limite, connect=10.0)) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+                # Um 400 que não é de chave ganha uma segunda chance com o corpo
+                # mínimo (modelo + mensagens). Parâmetro extra é a causa mais
+                # comum, e é burrice perder a resposta por causa de `temperature`.
+                if response.status_code == 400:
+                    detalhe = detalhe_do_corpo(response)
+                    if categoria_do_erro(400, detalhe) in ("outro", "historico", "regiao"):
+                        minimo = {"model": self.model, "messages": enviadas}
+                        response = await client.post(
+                            f"{self.base_url}/chat/completions", headers=headers, json=minimo
+                        )
         except httpx.TimeoutException as exc:
             raise AIUnavailable("A IA externa demorou mais que o limite. Tente novamente.") from exc
         except httpx.HTTPError as exc:
@@ -531,7 +645,24 @@ class OpenAICompatibleProvider:
                 self._anotar_recusa(indice, response.status_code, espera)
             raise _ChaveRecusada(response.status_code, retry_after=espera)
         if response.status_code != 200:
-            raise AIUnavailable(f"O provedor de IA respondeu com HTTP {response.status_code}.")
+            detalhe = detalhe_do_corpo(response)
+            categoria = categoria_do_erro(response.status_code, detalhe)
+            # O Google responde **400** para chave inválida ou expirada — o
+            # mesmo caso que os outros chamam de 401. Sem esta linha, o dono
+            # via “HTTP 400” e não sabia que a solução era gerar outra chave.
+            if categoria == "chave":
+                if indice is not None and chave:
+                    self._anotar_recusa(indice, 401)
+                raise _ChaveRecusada(401)
+            raise AIUnavailable(
+                frase_do_erro(
+                    response.status_code,
+                    detalhe,
+                    categoria,
+                    modelo=self.model,
+                    onde=self._onde_pegar_chave(),
+                )
+            )
         if indice is not None and chave:
             self._anotar_ok(indice)
             self._anotar_restante(indice, recebidos)
