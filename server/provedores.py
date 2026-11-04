@@ -307,7 +307,8 @@ _POR_PREFIXO = (
     ("sk-or-v1-", "openrouter"),
     ("gsk_", "groq"),
     ("csk-", "cerebras"),
-    ("AIza", "google"),
+    ("AIza", "google"),  # formato antigo
+    ("AQ.", "google"),   # formato novo do AI Studio (AQ.Ab8…)
 )
 
 

@@ -38,6 +38,72 @@ CAMPOS = {
 }
 CHAVE = "JARVIS_AI_API_KEY"
 
+# 0.80.1 — o mesmo catálogo da tela, em versão mínima. Este script roda sozinho
+# (sem importar o servidor) e é o caminho de quem prefere não abrir a interface.
+# Cada linha: nome exibido, base, modelo padrão, preço honesto.
+CATALOGO = {
+    "groq": ("Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "grátis, sem cartão"),
+    "google": (
+        "Google Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-2.5-flash",
+        "grátis nos Flash (o conteúdo pode treinar os produtos do Google)",
+    ),
+    "openrouter": ("OpenRouter", "https://openrouter.ai/api/v1", "deepseek/deepseek-chat-v3-0324:free", "grátis só nos modelos :free"),
+    "mistral": ("Mistral", "https://api.mistral.ai/v1", "mistral-small-latest", "grátis no modo Experiment"),
+    "deepseek": ("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", "pago, por token (barato)"),
+    "anthropic": ("Claude (Anthropic)", "https://api.anthropic.com/v1", "claude-sonnet-4-5", "pago"),
+    "openai": ("OpenAI", "https://api.openai.com/v1", "gpt-4o-mini", "pago"),
+    "cerebras": ("Cerebras", "https://api.cerebras.ai/v1", "gpt-oss-120b", "teste de US$ 5 com cartão"),
+}
+
+# A cara da chave diz de quem ela é. `sk-` sozinho fica fora: DeepSeek, OpenAI e
+# outros usam o mesmo prefixo — chutar mandaria a chave para o endereço errado.
+POR_PREFIXO = (
+    ("sk-ant-", "anthropic"),
+    ("sk-or-v1-", "openrouter"),
+    ("gsk_", "groq"),
+    ("csk-", "cerebras"),
+    ("AIza", "google"),  # formato antigo
+    ("AQ.", "google"),   # formato novo do AI Studio (AQ.Ab8...)
+)
+
+
+def provedor_da_chave(chave: str) -> str | None:
+    """Qual id do catálogo a chave denuncia. `None` quando é ambígua."""
+    limpa = (chave or "").strip()
+    for prefixo, identificador in POR_PREFIXO:
+        if limpa.startswith(prefixo):
+            return identificador
+    return None
+
+
+def preencher_do_catalogo(args: argparse.Namespace) -> None:
+    """`--provedor openrouter` passa a valer endereço e modelo, como na tela."""
+    achado = CATALOGO.get((args.provedor or "").strip().lower())
+    if not achado:
+        return
+    nome, base, modelo, _preco = achado
+    args.provedor = nome
+    args.base = args.base or base
+    args.modelo = args.modelo or modelo
+    args.preco = _preco
+
+
+def preencher_pela_chave(args: argparse.Namespace) -> None:
+    """Chave colada/arquivo define o provedor quando ele não foi escolhido."""
+    identificador = provedor_da_chave(args.chave or "")
+    achado = CATALOGO.get(identificador or "")
+    if not achado:
+        return
+    if args.provedor and args.provedor.strip().lower() not in CATALOGO:
+        return  # escolha explícita na linha de comando vence a dedução
+    nome, base, modelo, _preco = achado
+    args.provedor = nome
+    args.base = args.base or base
+    args.modelo = args.modelo or modelo
+    args.preco = _preco
+
 
 def ler_texto(caminho: Path) -> str:
     """Lê aceitando UTF-8 (com ou sem BOM) e caindo para cp1252.
@@ -93,7 +159,8 @@ _PADROES_CHAVE = (
     r"gsk_[A-Za-z0-9]{20,}",          # Groq
     r"sk-or-v1-[A-Za-z0-9]{20,}",     # OpenRouter
     r"sk-[A-Za-z0-9_-]{20,}",         # OpenAI e compatíveis
-    r"AIza[A-Za-z0-9_-]{30,}",        # Google AI Studio
+    r"AIza[A-Za-z0-9_-]{30,}",        # Google AI Studio (formato antigo)
+    r"AQ\.[A-Za-z0-9_-]{20,}",        # Google AI Studio (formato novo, AQ.Ab8...)
 )
 
 
@@ -286,6 +353,13 @@ def principal(argv: list[str] | None = None) -> int:
         help="Depois de gravar (ou com o que já está no .env), faz uma chamada real e diz se a chave, a base e o modelo funcionam.",
     )
     args = parser.parse_args(argv)
+    args.preco = ""  # preenchido pelo catálogo, quando o provedor é reconhecido
+
+    # 0.80.1 — `--provedor openrouter` (id do catálogo) preenche endereço e
+    # modelo. Quem usa a linha de comando não precisa mais decorar a URL.
+    preencher_do_catalogo(args)
+    if args.chave:
+        preencher_pela_chave(args)
 
     if args.arquivo:
         try:
@@ -294,7 +368,7 @@ def principal(argv: list[str] | None = None) -> int:
             print(f"{exc}. Confira o caminho (pode arrastar o arquivo para a janela).")
             return 1
         if not do_arquivo:
-            print("O arquivo não tem nenhuma chave reconhecível (gsk_…, sk-…, AIza…, sk-or-v1-…).")
+            print("O arquivo não tem nenhuma chave reconhecível (gsk_…, sk-…, AIza…, AQ.…, sk-or-v1-…).")
             return 1
         print(f"Achei {len(do_arquivo)} chave(s) em {Path(args.arquivo).name}.")
         if args.so_mostrar:
@@ -302,10 +376,21 @@ def principal(argv: list[str] | None = None) -> int:
         # Entram na frente das que já estão no .env; duplicata é descartada.
         anteriores = separar_chaves(args.chave or "")
         args.chave = ",".join(separar_chaves(",".join(do_arquivo + anteriores)))
-        if do_arquivo[0].startswith("gsk_"):
-            args.provedor = args.provedor or "Groq"
-            args.base = args.base or "https://api.groq.com/openai/v1"
-            args.modelo = args.modelo or "llama-3.3-70b-versatile"
+        # 0.80.1 — a primeira chave do arquivo diz o provedor, seja `gsk_`
+        # (Groq), `sk-or-v1-` (OpenRouter) ou `AIza` (Google).
+        sem_provedor = argparse.Namespace(
+            provedor=args.provedor if not args.base and not args.modelo else None,
+            base=args.base,
+            modelo=args.modelo,
+            chave=do_arquivo[0],
+            preco="",
+        )
+        preencher_pela_chave(sem_provedor)
+        args.provedor = args.provedor or sem_provedor.provedor
+        args.base = sem_provedor.base
+        args.modelo = sem_provedor.modelo
+        if sem_provedor.preco:
+            args.preco = sem_provedor.preco
 
     texto = texto_base()
 
@@ -391,6 +476,8 @@ def principal(argv: list[str] | None = None) -> int:
     print(f"  provedor: {provedor}")
     print(f"  base:     {base}")
     print(f"  modelo:   {modelo}")
+    if getattr(args, "preco", ""):
+        print(f"  preço:    {args.preco}")
     print(f"  chave:    {mascarar(chave) if chave else '(nenhuma - modelo local)'}")
     if args.testar:
         print()

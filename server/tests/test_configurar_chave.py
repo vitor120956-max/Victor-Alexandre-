@@ -441,3 +441,61 @@ def test_arquivo_aceita_bloco_de_notas_antigo_em_latin1(script, tmp_path):
     arquivo.write_bytes("chave do groq 1: gsk_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD\n"
                         "observacao: café e pão\n".encode("latin-1"))
     assert len(script.ler_arquivo_de_chaves(str(arquivo))) == 1
+
+
+# ---------------------------------------------------------------------------
+# 0.80.1 — o catálogo de provedores também na linha de comando
+# ---------------------------------------------------------------------------
+
+def test_provedor_pelo_id_preenche_endereco_e_modelo(script, tmp_path):
+    """`--provedor openrouter` vale o endereço e o modelo, como na tela."""
+    assert script.principal(["--provedor", "openrouter", "--chave", "sk-or-v1-" + "A" * 32]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_BASE_URL=https://openrouter.ai/api/v1\r\n" in bruto
+    assert b"JARVIS_AI_MODEL=deepseek/deepseek-chat-v3-0324:free\r\n" in bruto
+    assert b"JARVIS_AI_PROVIDER=OpenRouter\r\n" in bruto
+
+
+def test_chave_do_openrouter_troca_o_provedor_sozinha(script, tmp_path):
+    assert script.principal(["--chave", "sk-or-v1-" + "B" * 32]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_PROVIDER=OpenRouter\r\n" in bruto
+    assert b"openrouter.ai" in bruto
+
+
+def test_chave_do_google_troca_o_provedor_sozinha(script, tmp_path):
+    assert script.principal(["--chave", "AIza" + "C" * 35]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_PROVIDER=Google Gemini\r\n" in bruto
+    assert b"generativelanguage.googleapis.com" in bruto
+
+
+def test_chave_ambigua_sk_nao_escolhe_provedor(script, tmp_path):
+    """`sk-…` serve a DeepSeek, OpenAI e outros: adivinhar seria mandar errado."""
+    assert script.principal(["--chave", "sk-" + "D" * 40]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_BASE_URL=https://api.openai.com/v1\r\n" in bruto
+    assert b"JARVIS_AI_PROVIDER=OpenAI\r\n" in bruto
+
+
+def test_o_preco_do_provedor_aparece_no_resumo(script, tmp_path, capsys):
+    assert script.principal(["--provedor", "openrouter", "--chave", "sk-or-v1-" + "E" * 32]) == 0
+    saida = capsys.readouterr().out
+    assert "grátis só nos modelos :free" in saida
+
+
+def test_chave_de_groq_continua_indo_para_o_groq(script, tmp_path):
+    assert script.principal(["--chave", "gsk_" + "F" * 40]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_BASE_URL=https://api.groq.com/openai/v1\r\n" in bruto
+    assert b"JARVIS_AI_MODEL=llama-3.3-70b-versatile\r\n" in bruto
+
+
+def test_chave_nova_do_google_aq_no_script(script, tmp_path):
+    """O script tem a própria lista de formatos: ela também precisava do AQ."""
+    colada = "AQ.Ab8" + "G" * 40
+    assert script.chaves_do_texto(colada) == [colada]
+    assert script.provedor_da_chave(colada) == "google"
+    assert script.principal(["--chave", colada]) == 0
+    bruto = (tmp_path / ".env").read_bytes()
+    assert b"JARVIS_AI_PROVIDER=Google Gemini\r\n" in bruto

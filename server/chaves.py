@@ -46,7 +46,11 @@ PADROES_CHAVE = (
     r"gsk_[A-Za-z0-9]{20,}",          # Groq
     r"sk-or-v1-[A-Za-z0-9]{20,}",     # OpenRouter
     r"sk-[A-Za-z0-9_-]{20,}",         # OpenAI e compatíveis
-    r"AIza[A-Za-z0-9_-]{30,}",        # Google AI Studio
+    r"AIza[A-Za-z0-9_-]{30,}",        # Google AI Studio (formato antigo)
+    # 0.80.1 — o Google passou a emitir chaves no formato `AQ.Ab8…`. Sem esta
+    # linha, a chave que o painel dele entrega hoje seria recusada com
+    # "não encontrei nenhuma chave" — e o dono já colou uma dessas.
+    r"AQ\.[A-Za-z0-9_-]{20,}",        # Google AI Studio (formato novo)
 )
 
 CHAVES_IA = (

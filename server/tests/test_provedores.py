@@ -88,7 +88,8 @@ def test_catalogo_marca_quem_esta_em_uso(env: Path):
         ("gsk_abc", "groq"),
         ("sk-or-v1-abc", "openrouter"),
         ("sk-ant-abc", "anthropic"),
-        ("AIza" + "x" * 30, "google"),
+        ("AIza" + "x" * 30, "google"),  # formato antigo
+        ("AQ.Ab8" + "x" * 40, "google"),  # formato novo do AI Studio
         ("csk-abc", "cerebras"),
         # Ambíguo de propósito: DeepSeek, OpenAI e outros usam `sk-`.
         ("sk-abc", None),

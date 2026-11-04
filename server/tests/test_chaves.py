@@ -485,3 +485,28 @@ def test_o_resultado_nao_devolve_a_chave(env: Path):
     chaves.salvar("gsk_eeeeeeeeeeeeeeeeeeeeeeeeeeee")
     resultado = chaves.testar(postar=lambda *_a: {"codigo": 429, "corpo": CORPO_429}, modelo_socorro="")
     assert "gsk_eeee" not in json.dumps(resultado, ensure_ascii=False)
+
+
+def test_a_chave_nova_do_google_aq_e_aceita_e_troca_o_provedor(env: Path):
+    """0.80.1 — o AI Studio passou a emitir `AQ.Ab8…`.
+
+    Antes desta correção a chave era recusada com “não encontrei nenhuma chave”,
+    porque a lista de formatos só conhecia `AIza…`. A chave do print do dono
+    tinha exatamente essa cara.
+    """
+    colada = "AQ.Ab8" + "x" * 40
+    assert chaves.chaves_do_texto(f"minha chave: {colada}") == [colada]
+
+    resultado = chaves.salvar(colada)
+    assert resultado["provedor_id"] == "google"
+    assert resultado["base"].startswith("https://generativelanguage")
+    assert resultado["quantidade"] == 1
+
+
+def test_mascara_da_chave_aq_nao_mostra_o_miolo(env: Path):
+    colada = "AQ.Ab8" + "y" * 40
+    mascarada = chaves.mascarar(colada)
+    assert colada not in mascarada
+    assert mascarada.startswith("AQ.")
+    # A máscara mostra o começo e o fim e diz o tamanho: o miolo nunca sai.
+    assert "yyyy" in mascarada and colada not in mascarada

@@ -1,4 +1,4 @@
-# Provedores: quem é grátis, quem é pago e como trocar (0.80.0)
+# Provedores: quem é grátis, quem é pago e como trocar (0.80.1)
 
 A pergunta que abriu esta versão: **“não dá para usar modelos tipo DeepSeek ou
 Claude ou algumas outras de graça?”**
@@ -47,13 +47,49 @@ Comprou US$ 10 de crédito uma vez na vida? Sobe para 1.000 por dia.
 
 ---
 
+## Sem abrir a tela: `usar-openrouter.bat` (duplo clique)
+
+Se preferir não mexer na interface, existe um `.bat` com o mesmo efeito:
+
+1. duplo clique em **`usar-openrouter.bat`**;
+2. ele pede a chave e **não mostra o que você digita**;
+3. cole a `sk-or-v1-…` e aperte Enter;
+4. ele grava no `.env`, aponta o JARVIS para o OpenRouter e testa na hora.
+
+A tela do JARVIS já usa a chave nova sozinha — não precisa reiniciar.
+
+Pelo terminal, o equivalente é:
+
+```
+.venv\Scripts\python configurar-chave.py --provedor openrouter --testar
+```
+
+`--provedor` aceita o id do catálogo (`groq`, `google`, `openrouter`, `mistral`,
+`deepseek`, `anthropic`, `openai`, `cerebras`) e preenche endereço e modelo
+sozinho. Sem `--provedor`, a cara da chave decide — e um `sk-` solto não decide
+nada, de propósito.
+
+**Nunca cole a chave no chat.** Quem vê a conversa vê a chave; o lugar dela é o
+`.env` desta máquina, digitada aqui.
+
 ## Google Gemini: o grátis mais capaz — com uma condição
 
 1. abra `aistudio.google.com/apikey`;
 2. entre com a conta Google;
-3. **Create API key**, copie a chave (começa com `AIza`);
+3. **Create API key**, copie a chave;
 4. no JARVIS: **Modelos de IA** → **Provedor** → **Google Gemini**;
-5. **Colar chaves** → cole a `AIza…`.
+5. **Colar chaves** → cole a chave.
+
+O AI Studio emite a chave em **dois formatos**, e o JARVIS aceita os dois:
+
+| formato | exemplo | quando |
+|---|---|---|
+| antigo | `AIza…` | contas criadas antes de 2026 |
+| novo | `AQ.Ab8…` | o que o painel entrega hoje (0.80.1 passou a aceitar) |
+
+Antes da 0.80.1 a chave `AQ.` era recusada com *“não encontrei nenhuma chave no
+que foi colado”* — o JARVIS conhecia só o formato antigo. Corrigido: o formato
+novo é reconhecido, mascarado igual e já aponta o provedor para o Google.
 
 A condição, escrita antes de você decidir: **fora da União Europeia, Suíça e
 Reino Unido, o conteúdo do plano grátis pode ser usado para melhorar os produtos
