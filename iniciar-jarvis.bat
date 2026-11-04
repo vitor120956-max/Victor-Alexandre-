@@ -15,7 +15,8 @@ echo   ----------------------------------------------------------------
 echo   Esta janela faz o que falta e diz o que esta fazendo:
 echo     1. cria o ambiente Python (.venv), se ainda nao existir
 echo     2. instala as bibliotecas, se faltarem
-echo     3. sobe a API com a interface e abre o navegador
+echo     3. se atualiza sozinho (so o que mudou) antes de subir
+echo     4. sobe a API com a interface e abre o navegador
 echo.
 echo   Nao precisa de Node, nem de npm install, nem de Git.
 echo.
@@ -34,7 +35,7 @@ if not defined PYCMD (
 )
 if not defined PYCMD goto sem_python
 
-echo   [1/3] Criando o ambiente Python em .venv (uma vez so, cerca de 1 minuto)...
+echo   [1/4] Criando o ambiente Python em .venv (uma vez so, cerca de 1 minuto)...
 %PYCMD% -m venv .venv
 if not exist ".venv\Scripts\python.exe" goto venv_falhou
 echo         pronto.
@@ -62,7 +63,7 @@ REM ---------------------------------------------------------- 2. Bibliotecas
 ".venv\Scripts\python.exe" -c "import uvicorn, fastapi, dotenv" >nul 2>nul
 if not errorlevel 1 goto tem_bibliotecas
 
-echo   [2/3] Instalando as bibliotecas Python (so na primeira vez).
+echo   [2/4] Instalando as bibliotecas Python (so na primeira vez).
 echo         O pip mostra o progresso abaixo. Pode levar de 2 a 5 minutos.
 echo.
 ".venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
@@ -92,12 +93,38 @@ echo           a pasta web-dist de novo.
 echo.
 
 :tem_interface
-REM 0.75.0: a checagem de versao nova liga junto com a API. Ela baixa so o
-REM manifest.json (uns 56 KB) uma vez ao subir e avisa no terminal e no topo da
-REM tela. Baixar e aplicar continuam sendo a sua decisao.
+REM 0.78.0: o JARVIS se atualiza SOZINHO aqui, antes de subir.
+REM O momento e o segredo: ainda nao existe processo na memoria, entao copiar
+REM arquivo e seguro. Se qualquer passo falhar (sem internet, hash estranho,
+REM palco incompleto), ele sobe na versao atual e diz o motivo - nunca trava.
+REM Desligar: coloque JARVIS_AUTO_ATUALIZAR=0 no .env.
 set JARVIS_ATUALIZACAO=1
-echo   [3/3] Subindo o JARVIS. O navegador abre sozinho quando a API responder.
-echo         Versao nova? ele avisa sozinho - nao precisa procurar.
+set JARVIS_AUTO_ATUALIZAR=1
+echo   [3/4] Procurando versao nova (so o que mudou)...
+".venv\Scripts\python.exe" -m server.atualizacao --auto
+set AUTO=%errorlevel%
+REM Marca que a checagem ja foi feita aqui: o iniciar.py nao repete (sem baixar 2x).
+set JARVIS_AUTO_FEITO=1
+if "%AUTO%"=="4" goto deps_mudaram
+if "%AUTO%"=="1" goto auto_falhou
+goto subir
+
+:deps_mudaram
+echo.
+echo   As dependencias mudaram. Instalando o que falta (uma vez)...
+".venv\Scripts\python.exe" -m pip install -r requirements.txt --quiet
+echo   pronto.
+goto subir
+
+:auto_falhou
+echo.
+echo   A atualizacao automatica nao terminou. Sigo com a versao atual.
+echo   Para tentar de novo na mao: feche esta janela e rode atualizar.bat.
+
+:subir
+echo.
+echo   [4/4] Subindo o JARVIS. O navegador abre sozinho quando a API responder.
+echo         Na proxima vez ele se atualiza sozinho antes de subir.
 echo         Para parar: feche esta janela no X.
 echo.
 start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "for($i=0;$i -lt 120;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/health' -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process 'http://127.0.0.1:8000'; break } } catch {}; Start-Sleep -Milliseconds 500 }"

@@ -1958,6 +1958,15 @@ def _pedido_direto_de_atualizacao(termo: str) -> dict[str, Any] | None:
         return None
     if _RE_ATUALIZAR_DE_FORA.search(texto):
         return None
+    # "por que não se atualiza sozinho?" é pergunta sobre o modo automático:
+    # responder checando a versão seria responder outra coisa.
+    if re.search(r"\b(?:sozinh[oa]|automatic\w*|auto[- ]?atualiz\w*)\b", texto):
+        return {
+            "skill_id": "atualizacao.estado",
+            "nome": "Há versão nova?",
+            "parametros": {},
+            "confirma": False,
+        }
     if _RE_ATUALIZAR_APLICAR.search(texto):
         return {
             "skill_id": "atualizacao.aplicar",
@@ -3038,6 +3047,10 @@ def _formatar_atualizacao(resultado: dict[str, Any]) -> str | None:
             f" · remota vista: {resultado.get('remota')}" if resultado.get("remota") else ""
         ),
         "Checagem automática: " + ("ligada" if resultado.get("ligado") else "desligada (JARVIS_ATUALIZACAO=1 liga)"),
+        "Atualiza sozinho ao subir: " + (
+            "ligado" if resultado.get("automatico")
+            else "desligado" + (f" ({resultado['motivo_auto']})" if resultado.get("motivo_auto") else "")
+        ),
         f"Última checagem: {resultado.get('ultima_checagem') or 'nunca'}",
         "Palco pronto: " + (", ".join(resultado.get("palcos_prontos") or []) or "nenhum"),
     ])

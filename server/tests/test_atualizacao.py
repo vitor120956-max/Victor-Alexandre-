@@ -373,3 +373,170 @@ def test_a_versao_tem_uma_fonte_so():
     assert atualizacao.VERSAO == do_pacote
     manifesto = json.loads((raiz / atualizacao.NOME_MANIFESTO).read_text(encoding="utf-8"))
     assert manifesto["versao"] == do_pacote
+
+
+# ------------------------------------------------- atualização automática (0.78.0)
+
+@pytest.fixture()
+def projeto_zip(tmp_path: Path) -> Path:
+    """Instalação pelo zip: sem `.git`, que é o caso do D:\\JARVIS do dono."""
+    base = tmp_path / "jarvis-zip"
+    (base / "server").mkdir(parents=True)
+    (base / "src" / "pages").mkdir(parents=True)
+    (base / "server" / "app.py").write_text("print('app')\n", encoding="utf-8")
+    (base / "src" / "pages" / "Home.tsx").write_text("export const A = 1;\n", encoding="utf-8")
+    (base / "package.json").write_text('{"version":"0.77.1"}\n', encoding="utf-8")
+    (base / ".env").write_text("JARVIS_AUTO_ATUALIZAR=1\n", encoding="utf-8")
+    (base / "storage").mkdir()
+    (base / "storage" / "dados.json").write_text("{}\n", encoding="utf-8")
+    return base
+
+
+def _ligar_auto(projeto: Path, monkeypatch: pytest.MonkeyPatch, valor: str = "1") -> None:
+    (projeto / ".env").write_text(f"JARVIS_AUTO_ATUALIZAR={valor}\n", encoding="utf-8")
+    monkeypatch.setenv("JARVIS_AUTO_ATUALIZAR", valor)
+
+
+def test_auto_aplica_antes_de_subir_e_guarda_backup(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    """O pedido: 'ué, o JARVIS ainda não se auto atualiza?' — agora se atualiza."""
+    _ligar_auto(projeto_zip, monkeypatch)
+    _, fonte = _remoto_alterando(projeto_zip, {"server/app.py": b"print('novo')\n"})
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert resultado["atualizou"] is True
+    assert resultado["para"] == REMOTA
+    assert resultado["arquivos"] == ["server/app.py"]
+    assert (projeto_zip / "server" / "app.py").read_bytes() == b"print('novo')\n"
+    backup = Path(resultado["backup"])
+    assert (backup / "server" / "app.py").read_text(encoding="utf-8") == "print('app')\n"
+    assert "atualizado" in resultado["resumo"].lower() or "Atualizado" in resultado["resumo"]
+
+
+def test_auto_nao_toca_no_env_nem_no_storage(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    _ligar_auto(projeto_zip, monkeypatch)
+    _, fonte = _remoto_alterando(projeto_zip, {"src/pages/Home.tsx": b"export const A = 2;\n"})
+    atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert (projeto_zip / ".env").read_text(encoding="utf-8") == "JARVIS_AUTO_ATUALIZAR=1\n"
+    assert (projeto_zip / "storage" / "dados.json").exists()
+
+
+def test_auto_quando_ja_e_a_ultima_nao_faz_nada(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    _ligar_auto(projeto_zip, monkeypatch)
+    manifesto = atualizacao.gerar_manifesto(raiz=projeto_zip)
+    fonte = {atualizacao.NOME_MANIFESTO: json.dumps(manifesto).encode("utf-8")}
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert resultado["pulou"] is True
+    assert resultado["ja_ultima"] is True
+    assert "última" in resultado["resumo"]
+
+
+def test_auto_respeita_o_desligado_no_env(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    """`.env` manda mais que a variável que o .bat exporta — senão não desliga."""
+    _ligar_auto(projeto_zip, monkeypatch, valor="0")
+    _, fonte = _remoto_alterando(projeto_zip, {"server/app.py": b"print('novo')\n"})
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert resultado["pulou"] is True
+    assert "desligada" in resultado["resumo"].lower()
+    assert (projeto_zip / "server" / "app.py").read_bytes() == b"print('app')\n"
+
+
+def test_auto_nao_aplica_palco_com_falha_de_hash(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    _ligar_auto(projeto_zip, monkeypatch)
+    _, fonte = _remoto_alterando(projeto_zip, {"server/app.py": b"print('novo')\n"})
+    fonte["server/app.py"] = b"outro conteudo"  # não confere com o manifesto
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert resultado["pulou"] is True
+    assert resultado["falhou"] is True
+    assert (projeto_zip / "server" / "app.py").read_bytes() == b"print('app')\n"
+
+
+def test_auto_sem_internet_sobe_com_a_versao_atual(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    """A trava mais importante: automático que trava o start seria pior que nenhum."""
+    _ligar_auto(projeto_zip, monkeypatch)
+
+    def sem_rede(_url: str) -> bytes:
+        raise OSError("sem rota para o host")
+
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=sem_rede)
+    assert resultado["pulou"] is True
+    assert "atual" in resultado["resumo"]
+    assert (projeto_zip / "server" / "app.py").exists()
+
+
+def test_auto_recusa_pasta_com_git(projeto: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    """Ali quem manda é o git; aplicar por cima deixaria a árvore suja."""
+    monkeypatch.setenv("JARVIS_AUTO_ATUALIZAR", "1")
+    (projeto / ".env").write_text("JARVIS_AUTO_ATUALIZAR=1\n", encoding="utf-8")
+    resultado = atualizacao.auto_atualizar(projeto=projeto, baixar=lambda _url: b"{}")
+    assert resultado["pulou"] is True
+    assert "Git" in resultado["motivo"]
+
+
+def test_auto_avisa_quando_as_dependencias_mudaram(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    _ligar_auto(projeto_zip, monkeypatch)
+    (projeto_zip / "requirements.txt").write_text("fastapi>=0.115\n", encoding="utf-8")
+    _, fonte = _remoto_alterando(projeto_zip, {"requirements.txt": b"fastapi>=0.115\nhttpx>=0.27\n"})
+    resultado = atualizacao.auto_atualizar(projeto=projeto_zip, baixar=_rede(fonte))
+    assert resultado["atualizou"] is True
+    assert resultado["instalar_dependencias"] is True
+
+
+def test_cli_auto_devolve_4_quando_precisa_pip(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch, capsys):
+    """O .bat decide o `pip install` pelo código 4.
+
+    A CLI roda com o projeto do repositório (`__file__`), então o teste troca a
+    função inteira: o que se prova aqui é a **tradução** de `instalar_dependencias`
+    em código de saída, não a atualização de novo.
+    """
+    monkeypatch.setattr(
+        atualizacao,
+        "auto_atualizar",
+        lambda **_k: {"atualizou": True, "instalar_dependencias": True, "resumo": "ok"},
+    )
+    assert atualizacao._cli(["--auto"]) == 4
+    saida = capsys.readouterr().out
+    assert "ok" in saida
+
+
+def test_cli_auto_devolve_0_quando_nao_havia_nada(projeto_zip: Path, dados: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        atualizacao,
+        "auto_atualizar",
+        lambda **_k: {"pulou": True, "motivo": "já está na última", "resumo": "Já é a última versão."},
+    )
+    assert atualizacao._cli(["--auto"]) == 0
+
+
+def test_a_pergunta_do_dono_cai_no_estado_e_nao_em_checagem():
+    """“ué, o JARVIS ainda não se auto atualiza?” tem de explicar, não checar."""
+    for frase in (
+        "ue o jarvis ainda nao se auto atualiza",
+        "por que o jarvis nao se atualiza sozinho?",
+        "ele atualiza automatico?",
+        "o jarvis se auto-atualiza?",
+    ):
+        pedido = _pedido_direto_de_atualizacao(frase)
+        assert pedido is not None, frase
+        assert pedido["skill_id"] == "atualizacao.estado", frase
+        assert pedido["confirma"] is False
+
+
+def test_o_resumo_do_estado_diz_se_atualiza_sozinho():
+    from server.agente_local import _formatar_atualizacao
+
+    texto = _formatar_atualizacao({
+        "ligado": True,
+        "automatico": True,
+        "local": "0.78.0",
+        "ultima_checagem": "2026-11-01T10:00:00+00:00",
+        "palcos_prontos": [],
+    })
+    assert "Atualiza sozinho ao subir: ligado" in texto
+
+    desligado = _formatar_atualizacao({
+        "ligado": True,
+        "automatico": False,
+        "motivo_auto": "pasta com Git: use o atualizar.bat",
+        "local": "0.78.0",
+        "palcos_prontos": [],
+    })
+    assert "desligado" in desligado and "atualizar.bat" in desligado

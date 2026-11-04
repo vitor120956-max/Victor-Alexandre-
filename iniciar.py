@@ -31,6 +31,28 @@ if (VENV / "Scripts" / "python.exe").is_file() or (VENV / "bin" / "python").is_f
         os.execv(str(candidato), [str(candidato), str(Path(__file__).resolve()), *sys.argv[1:]])
 
 
+def _atualizar_sozinho() -> None:
+    """Atualiza antes de subir — só quando ninguém fez isso nesta execução.
+
+    O `iniciar-jarvis.bat` já roda `server.atualizacao --auto` e marca
+    `JARVIS_AUTO_FEITO=1`; aqui o mesmo passo vale para quem chama
+    `py iniciar.py` direto. Duas verificações seguidas baixariam o manifesto
+    duas vezes, o que num pendrive lento se nota.
+    """
+    if os.environ.get("JARVIS_AUTO_FEITO") == "1":
+        return
+    try:
+        from server import atualizacao  # noqa: PLC0415
+
+        if not atualizacao.auto_ligado(RAIZ):
+            return
+        resultado = atualizacao.auto_atualizar(projeto=RAIZ)
+        if resultado.get("resumo"):
+            print(f"  {resultado['resumo']}")
+    except Exception as exc:  # nunca impede o start
+        print(f"  [atualizacao] nao deu para atualizar agora ({type(exc).__name__}); seguindo.")
+
+
 def _pasta_da_interface() -> Path | None:
     """`dist` (build local) ou `web-dist` (a interface que vem no zip)."""
     for nome in ("dist", "web-dist"):
@@ -93,6 +115,12 @@ def principal() -> int:
     parser = argparse.ArgumentParser(description="Sobe o JARVIS com Python apenas (sem Node).")
     parser.add_argument("--host", default="127.0.0.1", help="Endereço de escuta (padrão: 127.0.0.1).")
     parser.add_argument("--porta", "--port", dest="porta", type=int, default=8000, help="Porta (padrão: 8000).")
+    parser.add_argument(
+        "--sem-atualizar",
+        dest="sem_atualizar",
+        action="store_true",
+        help="Sobe sem procurar versão nova (o automático também obedece JARVIS_AUTO_ATUALIZAR=0 no .env).",
+    )
     args = parser.parse_args()
 
     try:
@@ -111,6 +139,11 @@ def principal() -> int:
         print(f"  {pip} install fastapi uvicorn httpx pydantic python-dotenv", file=sys.stderr)
         print(f"  {pip} install python-docx openpyxl python-pptx pypdf reportlab python-multipart", file=sys.stderr)
         return 1
+
+    # 0.78.0: atualiza antes de subir. Precisa vir antes da checagem de porta:
+    # atualizar com a API no ar é o que este projeto evita de propósito.
+    if not getattr(args, "sem_atualizar", False):
+        _atualizar_sozinho()
 
     situacao = _situacao_da_porta(args.host, args.porta)
     if situacao["estado"] != "livre":

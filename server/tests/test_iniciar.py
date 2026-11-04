@@ -84,8 +84,12 @@ def test_o_atalho_usa_iniciar_py_e_o_python_do_venv():
 
 def test_o_atalho_avisa_antes_de_cada_passo_e_nao_pede_ctrl_c():
     texto = BAT.read_text(encoding="ascii")
-    for passo in ("[1/3]", "[2/3]", "[3/3]"):
-        assert passo in texto, passo
+    total = re.search(r"\[1/(\d+)\]", texto)
+    assert total, "o atalho nao numera os passos como [1/N]"
+    passos = int(total.group(1))
+    assert passos >= 3
+    for numero in range(1, passos + 1):
+        assert f"[{numero}/{passos}]" in texto, f"[{numero}/{passos}]"
     assert "Ctrl+C" not in texto and "CTRL+C" not in texto
     assert "feche esta janela no X" in texto
 
@@ -203,3 +207,13 @@ def test_sem_node_modules_o_dev_diz_o_que_fazer(tmp_path):
     assert "iniciar.py" in saida
     assert "9.9.9" in saida, "a mensagem deve citar a versão desta pasta"
     assert "quebrado" in saida
+
+
+def test_o_atalho_marca_que_a_atualizacao_ja_foi_checada():
+    """Sem essa marca o iniciar.py repete a checagem e baixa o manifesto duas vezes."""
+    texto = BAT.read_text(encoding="ascii")
+    assert "-m server.atualizacao --auto" in texto
+    assert "set JARVIS_AUTO_FEITO=1" in texto
+    pos_python = texto.index("-m server.atualizacao --auto")
+    pos_marca = texto.index("set JARVIS_AUTO_FEITO=1")
+    assert pos_marca > pos_python, "a marca tem de vir depois da checagem"

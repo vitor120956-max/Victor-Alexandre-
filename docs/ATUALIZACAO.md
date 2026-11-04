@@ -71,17 +71,62 @@ escreve fora da pasta do projeto.
   `forcar: true` continua funcionando mesmo desligada — “tem versão nova?” não
   depende de configuração.
 
-## O que **não** é automático, e por quê
+## Atualização automática ao subir (0.78.0)
 
-Reconhecer é seguro: lê 56 KB e não escreve no projeto. **Aplicar sozinho não é.**
-Três motivos concretos:
+Até a 0.77.1 o JARVIS **reconhecia** versão nova, mas aplicar era sempre um
+clique seu — e a pergunta voltou: *“ué, o JARVIS ainda não se auto atualiza?”*.
+
+A resposta certa não é aplicar no meio do expediente (aí o motivo original
+continua valendo: o processo velho tem o código na memória). É aplicar **no
+start**, quando a API ainda não existe:
+
+```text
+iniciar-jarvis.bat
+  [1/4] .venv
+  [2/4] bibliotecas
+  [3/4] se atualiza sozinho   <- aqui: verifica, baixa só o que mudou, aplica
+  [4/4] sobe a API            <- já com o código novo
+```
+
+O que roda é `python -m server.atualizacao --auto`, em
+`server/atualizacao.py:auto_atualizar`.
+
+### As três travas
+
+| trava | por quê |
+|---|---|
+| **nunca derruba o start** | sem internet, GitHub bloqueado, hash estranho: sobe na versão atual e diz o motivo |
+| **nunca aplica palco com falha** | um arquivo que não conferiu cancela o lote inteiro |
+| **nunca em pasta com `.git`** | ali quem manda é o `git`; aplicar por cima deixaria a árvore suja e o `evoluir.promover` exige árvore limpa |
+
+Além disso, `requirements.txt` mudou → o `.bat` roda `pip install -r
+requirements.txt` antes de subir (o Python avisa isso pelo código de saída **4**).
+
+### Ligar e desligar
+
+| onde | efeito |
+|---|---|
+| padrão | **ligado** (o `iniciar-jarvis.bat` exporta `JARVIS_AUTO_ATUALIZAR=1`) |
+| `.env` com `JARVIS_AUTO_ATUALIZAR=0` | desliga — o `.env` **manda mais** que a variável do `.bat` |
+| `py iniciar.py --sem-atualizar` | sobe sem checar (uma vez, sem mexer no `.env`) |
+| `py iniciar.py` sozinho | também atualiza (a menos que `JARVIS_AUTO_FEITO=1`, que o `.bat` marca) |
+
+### O que continua sendo você
+
+- **reiniciar** o JARVIS depois de uma atualização aplicada pela **tela** ou pelo
+  chat (aliás, o `atualizar.bat` e o start já reiniciam por natureza);
+- **decidir** quando não usar: se estiver no meio de um trabalho e não quiser
+  versão nova agora, é só `JARVIS_AUTO_ATUALIZAR=0` no `.env`;
+- **conferir o backup** quando algo parecer estranho: `storage/atualizacao/backup-<data>/`.
+
+### Por que não no meio do expediente
 
 1. o código novo só vale depois de **reiniciar a API** — o processo velho tem o
    módulo carregado na memória, e trocar arquivo embaixo não o atualiza;
 2. reiniciar sozinho derrubaria a sessão no meio de uma tarefa sua;
-3. atualizar é exatamente o tipo de ação que, se der errado, você precisa poder
-   identificar e desfazer — daí o backup em `storage/atualizacao/backup-<data>/`
-   e a resposta dizendo como voltar.
+3. atualizar é o tipo de ação que, se der errado, você precisa poder identificar
+   e desfazer — daí o backup em `storage/atualizacao/backup-<data>/` e a
+   resposta dizendo como voltar.
 
 ## Plano B continua valendo
 
@@ -98,6 +143,7 @@ O `.bat` lê o código de saída do Python:
 | 1 | falhou (rede, manifesto inválido) | cai no zip |
 | 2 | palco com falha de hash | cai no zip |
 | 3 | já está na última | não baixa nada |
+| 4 | `--auto` aplicou e as dependências mudaram | roda `pip install -r requirements.txt` antes de subir |
 
 ## Números reais
 

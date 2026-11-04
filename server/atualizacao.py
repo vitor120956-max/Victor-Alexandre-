@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.77.1"
+VERSAO = "0.78.0"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -71,6 +71,9 @@ BASE_PADRAO = (
 )
 
 AMBIENTE = "JARVIS_ATUALIZACAO"
+# Modo automático: quem aplica a atualização sozinho, **antes** de a API
+# subir. Desligável no `.env` com `JARVIS_AUTO_ATUALIZAR=0`.
+AMBIENTE_AUTO = "JARVIS_AUTO_ATUALIZAR"
 
 # O que **nunca** entra no manifesto nem na comparação: dado do usuário,
 # ambiente, build local e o próprio manifesto (que não pode se hashear).
@@ -100,6 +103,39 @@ def ligado() -> bool:
     a aplicação sempre pedem a sua decisão.
     """
     return os.environ.get(AMBIENTE, "0").strip() == "1"
+
+
+def auto_ligado(projeto: Path | None = None) -> bool:
+    """O JARVIS pode se atualizar sozinho ao subir?
+
+    Ligado por padrão **pelo `iniciar-jarvis.bat`**, que exporta
+    `JARVIS_AUTO_ATUALIZAR=1`. Desligado com `JARVIS_AUTO_ATUALIZAR=0` no `.env`.
+
+    O **`.env` manda mais que a variável de ambiente**, e a ordem é de propósito:
+    o `.bat` exporta `1` antes de o Python existir, então se a variável ganhasse,
+    escrever `=0` no `.env` não desligaria nada — e o dono ficaria com um
+    automático que não consegue parar. Lido por arquivo porque o `.env` só entra
+    em `os.environ` depois, dentro do `create_app`.
+
+    O momento importa: isto roda antes de a API existir, então aplicar arquivo
+    aqui é seguro — não há processo com a versão antiga na memória. É por isso
+    que o automático mora no start e não no meio do expediente.
+    """
+    raiz = Path(projeto) if projeto is not None else Path(__file__).resolve().parents[1]
+    env = raiz / ".env"
+    if env.is_file():
+        try:
+            texto = env.read_bytes().decode("utf-8", errors="replace")
+        except OSError:  # pragma: no cover - disco sem permissão
+            texto = ""
+        for linha in texto.splitlines():
+            limpa = linha.strip()
+            if limpa.startswith("#") or "=" not in limpa:
+                continue
+            nome, _, valor = limpa.partition("=")
+            if nome.strip() == AMBIENTE_AUTO:
+                return valor.strip().strip('"').strip("'").lower() not in {"0", "nao", "não", "false", "off"}
+    return os.environ.get(AMBIENTE_AUTO, "0").strip() == "1"
 
 
 def _base() -> str:
@@ -283,8 +319,16 @@ def estado(raiz: Path | None = None) -> dict[str, Any]:
             caminho.name for caminho in pasta_raiz.iterdir()
             if caminho.is_dir() and (caminho / "pronto.json").is_file()
         )
+    projeto = Path(__file__).resolve().parents[1]
     return {
         "ligado": ligado(),
+        # Duas coisas diferentes: "avisar" (ligado) e "aplicar sozinho" (automático).
+        "automatico": auto_ligado(projeto) and not (projeto / ".git").exists(),
+        "motivo_auto": (
+            "pasta com Git: use o atualizar.bat"
+            if (projeto / ".git").exists() and auto_ligado(projeto)
+            else ""
+        ),
         "base": _base(),
         "local": _versao_local(),
         "ultima_checagem": salvo.get("ultima_checagem", ""),
@@ -554,6 +598,107 @@ def aplicar(
 
 
 # ---------------------------------------------------------------------------
+# Modo automático: atualizar sozinho ao subir (0.78.0)
+# ---------------------------------------------------------------------------
+
+# Arquivos que, se mudarem, exigem `pip install` antes de a API subir.
+_ARQUIVOS_DE_DEPENDENCIA = ("requirements.txt", "requirements-dev.txt", "requirements-rapido.txt")
+
+
+def auto_atualizar(
+    *,
+    raiz: Path | None = None,
+    projeto: Path | None = None,
+    baixar: Callable[[str], bytes] | None = None,
+) -> dict[str, Any]:
+    """Verifica, baixa só o que mudou e aplica — **antes** de a API subir.
+
+    O pedido: *“ué, o JARVIS ainda não se auto atualiza?”*. Não se atualizava
+    porque aplicar com o processo velho na memória é o jeito mais fácil de ficar
+    com metade de cada versão rodando. A solução não é aplicar no meio do
+    expediente: é aplicar **no start**, quando ainda não há processo nenhum.
+
+    ## As três travas
+
+    1. **Nunca derruba o start.** Rede fora, GitHub bloqueado, arquivo com hash
+       estranho: o JARVIS sobe na versão atual e diz o motivo no terminal.
+    2. **Nunca aplica palco com falha.** Se um único arquivo não conferiu, nada é
+       copiado.
+    3. **Nunca em pasta com `.git`.** Ali quem manda é `git`, e aplicar arquivo
+       por cima deixaria a árvore suja — o `evoluir.promover` exige árvore
+       limpa, então o automático se recusa em vez de atrapalhar.
+
+    Devolve sempre um dicionário com `resumo` e `motivo`, para o terminal ter o
+    que mostrar mesmo quando não havia nada a fazer.
+    """
+    raiz_projeto = Path(projeto) if projeto is not None else Path(__file__).resolve().parents[1]
+    if not auto_ligado(raiz_projeto):
+        return {
+            "automatico": False,
+            "pulou": True,
+            "motivo": f"desligado ({AMBIENTE_AUTO}=0 no .env).",
+            "resumo": "Atualização automática desligada.",
+        }
+
+    if (raiz_projeto / ".git").exists():
+        return {
+            "automatico": True,
+            "pulou": True,
+            "motivo": "esta pasta é um repositório Git: use atualizar.bat (git fetch + pull).",
+            "resumo": "Pasta com Git: atualização automática não se aplica aqui.",
+        }
+
+    checagem = verificar(raiz=raiz, projeto=raiz_projeto, baixar=baixar, forcar=True)
+    if not checagem.get("checou"):
+        return {
+            "automatico": True,
+            "pulou": True,
+            "motivo": checagem.get("motivo") or "não consegui checar",
+            "resumo": "Não deu para checar versão nova — seguindo com a atual.",
+        }
+    if not checagem.get("disponivel"):
+        return {
+            "automatico": True,
+            "pulou": True,
+            "ja_ultima": True,
+            "versao": checagem.get("local"),
+            "motivo": "já está na última versão",
+            "resumo": f"Já é a última versão ({checagem.get('local')}).",
+        }
+
+    estagio = preparar(raiz=raiz, projeto=raiz_projeto, baixar=baixar)
+    if not estagio.get("preparado"):
+        return {
+            "automatico": True,
+            "pulou": True,
+            "falhou": True,
+            "motivo": estagio.get("motivo") or "o download não fechou",
+            "falhas": estagio.get("falhas") or [],
+            "resumo": "A atualização não veio inteira — seguindo com a versão atual.",
+        }
+
+    aplicada = aplicar(versao=str(estagio.get("remota") or ""), raiz=raiz, projeto=raiz_projeto, confirmado=True)
+    mexidos = list(aplicada.get("substituidos") or []) + list(aplicada.get("adicionados") or [])
+    dependencias = any(caminho in _ARQUIVOS_DE_DEPENDENCIA for caminho in mexidos)
+    return {
+        "automatico": True,
+        "pulou": False,
+        "atualizou": True,
+        "de": checagem.get("local"),
+        "para": aplicada.get("versao"),
+        "arquivos": mexidos,
+        "backup": aplicada.get("backup"),
+        "como_voltar": aplicada.get("como_voltar"),
+        "instalar_dependencias": dependencias,
+        "resumo": (
+            f"Atualizado de {checagem.get('local')} para {aplicada.get('versao')} "
+            f"({len(mexidos)} arquivo(s))."
+            + (" Dependências mudaram: rodando pip install." if dependencias else "")
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI — o `atualizar.bat` usa este caminho antes de partir para o zip
 # ---------------------------------------------------------------------------
 
@@ -567,10 +712,31 @@ def _cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--preparar", action="store_true")
     parser.add_argument("--aplicar", action="store_true")
     parser.add_argument("--sim", action="store_true", help="Não perguntar (usar só em script).")
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Atualizar sozinho, sem perguntar (usado pelo iniciar-jarvis.bat antes de subir).",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     try:
+        if args.auto:
+            dados_auto: dict[str, Any] = auto_atualizar()
+            if args.json:
+                print(json.dumps(dados_auto, ensure_ascii=False, indent=2))
+            else:
+                print(f"  {dados_auto.get('resumo', '')}")
+                if dados_auto.get("motivo") and not dados_auto.get("atualizou"):
+                    print(f"  ({dados_auto['motivo']})")
+                for caminho in (dados_auto.get("arquivos") or [])[:8]:
+                    print(f"    - {caminho}")
+                if dados_auto.get("backup"):
+                    print(f"  backup: {dados_auto['backup']}")
+            # 4 = atualizou e as dependências mudaram: o .bat roda pip antes de subir.
+            if dados_auto.get("atualizou"):
+                return 4 if dados_auto.get("instalar_dependencias") else 0
+            return 0
         if args.verificar:
             dados: dict[str, Any] = verificar(forcar=True)
         elif args.preparar:

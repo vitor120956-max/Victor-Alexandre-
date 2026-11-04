@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.77.1
+# Biblioteca e armazenamento — 0.78.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
