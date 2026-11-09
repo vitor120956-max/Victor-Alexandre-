@@ -1,6 +1,6 @@
 {
  "versao": "0.81.0",
- "gerado": "2026-11-04T14:03:01+00:00",
+ "gerado": "2026-11-09T23:09:06+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -279,8 +279,8 @@
    "bytes": 5061
   },
   "README.md": {
-   "sha256": "63323be41ba615a7c13c5d9eecb85ec26474af9dd0e44bf6796faec5d5ffce61",
-   "bytes": 117369
+   "sha256": "cf57f5ea815a3c287d9b54f2c64e1f8f3994611ecbbbdc051f155b8783dda664",
+   "bytes": 117745
   },
   "acesso-celular.bat": {
    "sha256": "66183fa4d0d225c56db6a2183a2da201b277a747ca45901f12b76cea0de34d97",
@@ -341,6 +341,10 @@
   "docs/AGENTES.md": {
    "sha256": "4dda9f2a6640c118d2df1c64c6020810fec38c766b59ce220ce1c7d215d34644",
    "bytes": 11183
+  },
+  "docs/ANALISE-AGENT-DESKTOP.md": {
+   "sha256": "53b355711a38809c244bf08bbc5f16c91e8a126f800d8dd2ed35d257214d4749",
+   "bytes": 8272
   },
   "docs/ARQUITETURA.md": {
    "sha256": "cd694f86bb6047068136813d88ac9377966ee57f3aa2313dad1aff7ac2b73286",
