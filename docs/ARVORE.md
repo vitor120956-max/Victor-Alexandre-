@@ -1,0 +1,93 @@
+# A árvore da janela: ver os elementos sem tocar (0.82.0)
+
+Etapa 1 do que o [`vercel-labs/agent-desktop`](ANALISE-AGENT-DESKTOP.md) propõe.
+O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que você
+ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
+publica sobre si mesma.
+
+## O que é a árvore de acessibilidade
+
+Todo programa no Windows é obrigado (por acessibilidade) a dizer quais elementos
+tem: “aqui há um botão chamado Salvar, nesta posição, e clicar nele faz X”. É o
+mesmo canal que o **Narrador** e o **NVDA** usam. O JARVIS lê por **MSAA**
+(`oleacc.dll`) com `ctypes` puro — **sem instalar nada**.
+
+```
+janela “Cadastro de cliente”
+  painel
+    botão “Salvar”              @a1b2c3d4:e3
+    botão “Cancelar”            @a1b2c3d4:e4
+    texto “Nome completo”
+    caixa de seleção “Aceito os termos”  @a1b2c3d4:e6
+  barra de ferramentas
+    item de menu “Arquivo”      @a1b2c3d4:e8
+```
+
+O `ref` (`@a1b2c3d4:e3`) só vai para o que **dá para acionar**, e carrega o id da
+leitura: se a tela mudar, o `ref` antigo deixa de valer — é assim que se evita
+clicar no botão errado depois de uma atualização da janela.
+
+## Como usar
+
+No chat:
+
+```
+vê os elementos da janela
+lê a janela do chrome
+o que dá para clicar no bloco de notas
+```
+
+Ou direto no terminal do PC (não precisa do JARVIS aberto):
+
+```
+.venv\Scripts\python arvore_sonda.py
+.venv\Scripts\python arvore_sonda.py --janelas
+.venv\Scripts\python arvore_sonda.py --alvo chrome --profundidade 8
+.venv\Scripts\python arvore_sonda.py --json --limite 200
+```
+
+## O que ele garante
+
+| garantia | como |
+|---|---|
+| **só leitura** | o módulo não tem função de clicar, digitar ou mover — há teste que falha se alguém acrescentar |
+| **sem foto da tela** | não usa `screenshot`, não lê pixel, não faz OCR |
+| **não derruba a API** | a leitura roda em `arvore_sonda.py`, processo separado, com tempo limite |
+| **não trava** | profundidade (máx. 14), total de elementos (máx. 3.000) e tempo (25 s) limitados |
+| **não finge** | corte vira `completo: false` com o motivo; papel desconhecido vira `elemento 999`; janela sem árvore vem com aviso |
+| **fora do Windows** | recusa com frase clara, em vez de devolver vazio |
+
+## O que **não** faz (ainda) e por quê
+
+- **Clicar por `ref`** é a **etapa 2**. Ela só entra depois que você rodar isto no
+  seu PC e me disser o que apareceu — porque o que decide é **quais programas
+  publicam árvore**. Chrome, WhatsApp Desktop e Explorer se comportam de formas
+  diferentes, e prometer clique sem essa medição seria repetir o erro das
+  versões anteriores.
+- **Ver a tela por imagem.** Se um programa não publica árvore (jogo, instalador
+  antigo), o JARVIS não vê. Isso é limite do programa, não do JARVIS — e está
+  dito em vez de escondido.
+
+## O teste que você mesmo pode fazer
+
+1. abra **o Bloco de Notas** e clique nele;
+2. no terminal do PC:
+
+```
+cd /d D:\JARVIS
+.venv\Scripts\python arvore_sonda.py
+```
+
+3. me diga o que apareceu (ou mande o `--json`).
+
+Se o Bloco de Notas publicar árvore (deve publicar), a etapa 2 fica viável para
+programas clássicos. Depois repetimos com o **Chrome** e com o **WhatsApp** —
+esses são os que decidem se vale a pena.
+
+## Detalhe técnico: por que a sonda é um processo separado
+
+A leitura conversa por COM com **código de outra pessoa** (o programa que você
+tem aberto). Um aplicativo malcomportado pode travar a chamada ou derrubar o
+processo inteiro. Derrubar uma sonda descartável é aceitável; derrubar o JARVIS
+no meio de uma conversa não é. É o mesmo princípio do `conferir-versao.bat`: o
+diagnóstico não pode ser perigoso.

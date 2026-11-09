@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.81.0.**
+**Versão atual: 0.82.0.**
 
 ## O que ele faz sem chave de IA
 
@@ -44,13 +44,17 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 319, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 320, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Modelo na tela:** a chave abre a porta, o modelo é quem responde. Em **Configurações → Inteligência generativa** há o cartão **Modelos de IA** com o custo de cada opção — grande entende melhor e gasta mais cota, pequeno responde rápido e rende muito mais pedidos por dia — e a troca grava no `.env` e vale na hora, sem fechar a janela. Detalhes em [`docs/MODELOS.md`](docs/MODELOS.md).
 
 **Provedor na tela:** chave é do provedor, e provedor é preço. Em **Configurações → Modelos de IA → Provedor** está a lista com o preço honesto de cada um: **Groq**, **Google Gemini** (grátis nos Flash, com a condição de que o conteúdo do plano grátis pode treinar os produtos do Google), **OpenRouter** (é por onde se usa **DeepSeek de graça**, com `:free` no nome) e **Mistral** são grátis; **DeepSeek direto**, **Claude**, **OpenAI** e **Cerebras** são pagos — e a tela diz isso antes de você criar conta. Colar uma chave troca o endereço sozinho, as chaves do provedor anterior ficam guardadas, e **Ver modelos da minha chave** pergunta ao provedor quais nomes a sua conta enxerga hoje, com `:free` marcado. Detalhes em [`docs/PROVEDORES.md`](docs/PROVEDORES.md).
 
 **Aviso de cota:** o JARVIS registra o que o provedor respondeu em cada chave (200, 429, 401) e quanto resta no minuto nos cabeçalhos `x-ratelimit-*`. Com isso avisa — faixa âmbar *“as chaves estão acabando”* e vermelha *“as chaves acabaram”* — e responde no chat *“quantas chaves restam?”*. É medida, não estimativa: quando o provedor não manda o número, o aviso fala do que aconteceu, não de porcentagem inventada. Em [`docs/CHAVES.md`](docs/CHAVES.md) §9.
+
+**Ver os elementos da janela (só leitura).** `mesa.arvore` lê a **árvore de acessibilidade** da janela em foco pela MSAA do Windows (`oleacc`, sem instalar nada) e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` nos acionáveis. **Não clica, não digita, não move o mouse e não tira foto** — e roda numa **sonda separada** (`arvore_sonda.py`), com tempo limite: se o programa alvo travar, cai a sonda e não a API. O corte é dito (`completo: false`), papel desconhecido não ganha nome inventado, e fora do Windows a leitura recusa com frase clara. Detalhes em [`docs/ARVORE.md`](docs/ARVORE.md).
+
+**Conectores por token (Notion, Linear, Dropbox, Vercel, Supabase).** O mesmo resultado de OAuth sem registrar aplicativo: você cria a chave no painel do serviço e cola em **Configurações → Conectores**. O token fica só no `.env`, nunca volta numa resposta (só a máscara), e cada serviço tem **Teste** de verdade — uma leitura barata que prova que a porta abre.
 
 **Ver a tela do PC, não só os títulos das janelas.** O `mesa.*` clica por coordenada e não confere o resultado — a lacuna está analisada em [`docs/ANALISE-AGENT-DESKTOP.md`](docs/ANALISE-AGENT-DESKTOP.md), a partir do `vercel-labs/agent-desktop` (leitura da árvore de acessibilidade, refs e verificação), com o que vale copiar e o que não instalar nesta máquina.
 
@@ -625,7 +629,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **319 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **320 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -746,7 +750,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.81.0", "skills": 319}`.
+`{"version": "0.82.0", "skills": 320}`.
 
 ## Verificações
 
@@ -837,7 +841,7 @@ server/
 ├── processos.py             # o que está rodando: veredito, comando e desfazer
 ├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
 ├── limpeza.py               # debloat: app de loja, tarefa, serviço e cache — só gera plano
-├── skill_registry.py        # allowlist, Pydantic e 319 skills
+├── skill_registry.py        # allowlist, Pydantic e 320 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

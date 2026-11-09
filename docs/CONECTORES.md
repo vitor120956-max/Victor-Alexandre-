@@ -145,3 +145,80 @@ existir.
 | Sua caixa de e-mail | IMAP somente leitura | sim | senha de app (1 minuto) |
 | Gmail e sites | sessão do navegador | sim | nada |
 | WhatsApp | navegador + conversa exportada | sim | o `.txt` para ler o conteúdo |
+
+---
+
+# Conectores por token: Notion, Linear, Dropbox, Vercel e Supabase (0.82.0)
+
+*“Não tem como criar conectores igual ao do Arena?”* — Tem, e a diferença é
+menor do que parece.
+
+## OAuth e token pessoal são a mesma porta
+
+| | OAuth (o que o Arena usa) | token pessoal (o que o JARVIS usa) |
+|---|---|---|
+| quem cria a credencial | o time do Arena registrou o aplicativo no serviço | **você** cria a chave no painel do serviço |
+| o que o serviço devolve | um token | um token |
+| onde ele fica | no servidor de quem hospeda o agente | **no `.env` desta máquina** |
+| tempo para começar | zero (já está pronto) | ~1 minuto por serviço |
+
+O resultado é o mesmo: o JARVIS fala com o serviço em seu nome. O que muda é
+**quem registra o aplicativo**. Para OAuth no seu PC, esse aplicativo teria de
+ser registrado por você em cada serviço — mais trabalho, não menos.
+
+## Como ligar (exemplo: Notion)
+
+1. abra `notion.so/my-integrations`;
+2. **New integration** → nome `jarvis` → escolha o workspace → **Save**;
+3. copie o **Internal Integration Secret** (começa com `secret_` ou `ntn_`);
+4. no JARVIS: **Configurações → Conectores → Serviços com token pessoal**;
+5. **Colar token** → cole → **Guardar token** → **Testar**.
+
+O Teste faz uma leitura de verdade (`GET /v1/users/me`) e responde com o nome do
+workspace. Se der 401, a frase diz que o token foi recusado e onde gerar outro.
+
+> **Notion:** a integração só vê as páginas que você **compartilhar com ela**
+> (na página: ⋯ → Connections → jarvis). Sem isso, a API responde vazio — não é
+> erro do JARVIS.
+
+## Os cinco, e onde pegar a chave
+
+| serviço | onde a chave nasce | o que o teste lê |
+|---|---|---|
+| **Notion** | `notion.so/my-integrations` | workspace dono do token |
+| **Linear** | `linear.app/settings/api` | seu nome e e-mail |
+| **Dropbox** | `dropbox.com/developers/apps` → Generated access token | nome da conta e espaço |
+| **Vercel** | `vercel.com/account/tokens` | usuário e times |
+| **Supabase** | painel do projeto → Settings → API → `service_role` | tabelas do projeto (pede o endereço `https://xxx.supabase.co`) |
+
+**Linear** autentica o token **cru** no cabeçalho `Authorization` (sem
+“Bearer”); **Supabase** usa `apikey` + `Bearer`. Cada serviço tem o seu jeito, e
+o módulo sabe qual é — você não precisa saber.
+
+## O que o módulo garante
+
+- o token **nunca** volta numa resposta: o estado mostra `secr…cdef (54 caracteres)`;
+- **não** grava token curto nem com espaço (erro de cópia acontece muito);
+- `Esquecer` apaga **só aquela** variável do `.env`;
+- o Teste é **leitura**, nunca escrita: nada é criado, alterado ou apagado no
+  serviço durante o teste.
+
+## O que ainda falta (e o que eu preciso de você)
+
+O que existe hoje é a **porta**: ligar, testar, saber o que está ligado. As
+**ações** de cada serviço — listar páginas do Notion, criar tarefa no Linear,
+mandar arquivo para o Dropbox, disparar deploy na Vercel, consultar tabela no
+Supabase — dependem de qual você usa primeiro.
+
+Diga **um** para começar e eu construo as três ações mais úteis dele na próxima
+versão, com a mesma regra de sempre: leitura primeiro, escrita com confirmação.
+
+## O que fica de fora, e por quê
+
+- **Google (Gmail, Agenda, Drive, Docs, Sheets, Slides) por OAuth**: dá, mas exige
+  que **você** crie um projeto no Google Cloud (~15 min, grátis). O Gmail já
+  resolve por IMAP (`docs/CONECTORES.md` §1); os outros ficam para quando você
+  quiser pagar esse pedágio.
+- **WhatsApp**: não existe API para uso pessoal — ver §2 deste documento.
+- **Slack, Discord, GitHub**: mesmo esquema de token pessoal; entram quando
+  fizerem falta.

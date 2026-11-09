@@ -681,7 +681,7 @@ def test_registro_publica_sete_skills_de_continuidade(tmp_path):
 
 def test_registro_total_de_skills_e_176(tmp_path):
     registry = build_registry(tmp_path / "files")
-    assert len(registry.list()) == 319
+    assert len(registry.list()) == 320
 
 
 def test_api_executa_fases_e_regras(client):

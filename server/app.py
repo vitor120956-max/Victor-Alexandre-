@@ -24,6 +24,7 @@ from . import interface_web
 from . import modelos as modelos_mod
 from . import provedores as provedores_mod
 from . import conectores as conectores_mod
+from . import conectores_tokens as tokens_mod
 from . import chaves as chaves_mod
 from . import conserto
 from . import dados as dados_locais
@@ -91,6 +92,15 @@ class ConectorEmailRequest(BaseModel):
     senha: str = Field(min_length=8, max_length=200)
     servidor: str = Field(default="", max_length=120)
     pasta: str = Field(default="", max_length=80)
+
+
+class ConectorTokenRequest(BaseModel):
+    """Token pessoal de um serviço (Notion, Linear, Dropbox, Vercel, Supabase)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    token: str = Field(min_length=8, max_length=400)
+    endereco: str = Field(default="", max_length=200)
 
 
 class ProvedorRequest(BaseModel):
@@ -779,6 +789,55 @@ def create_app(
             return JSONResponse(
                 status_code=400,
                 content={"ok": False, "error": {"code": "CAIXA_INDISPONIVEL", "message": str(exc)}},
+            )
+
+    @application.get("/api/conectores/tokens")
+    def conectores_tokens_estado(request: Request) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "result": tokens_mod.estado(),
+            "podeEditar": _veio_da_propria_maquina(request),
+        }
+
+    @application.post("/api/conectores/tokens/{identificador}")
+    def conectores_token_salvar(
+        identificador: str, request: Request, payload: ConectorTokenRequest
+    ) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            resultado = tokens_mod.configurar(identificador, payload.token, payload.endereco)
+        except tokens_mod.TokenError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONECTOR_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "ENV_NAO_ESCRITO", "message": f"não consegui escrever o .env: {exc}"}},
+            )
+        return {"ok": True, "result": resultado}
+
+    @application.delete("/api/conectores/tokens/{identificador}")
+    def conectores_token_esquecer(identificador: str, request: Request) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            return {"ok": True, "result": tokens_mod.esquecer(identificador)}
+        except tokens_mod.TokenError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONECTOR_INVALIDO", "message": str(exc)}},
+            )
+
+    @application.post("/api/conectores/tokens/{identificador}/testar")
+    def conectores_token_testar(identificador: str, request: Request) -> dict[str, Any]:
+        _so_da_maquina(request)
+        try:
+            return {"ok": True, "result": tokens_mod.testar(identificador)}
+        except tokens_mod.TokenError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONECTOR_INDISPONIVEL", "message": str(exc)}},
             )
 
     @application.get("/api/ai/provedores")

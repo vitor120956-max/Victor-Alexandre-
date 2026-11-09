@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, BrainCircuit, Check, Database, Globe, Inbox, Link2, Download, Eye, EyeOff, KeyRound, Mic2, Palette, RotateCcw, ShieldCheck, Trash2, UserRound, Volume2, Zap } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
-import { apagarChavesIA, esquecerEmailConector, getChavesIA, getConectores, getModelosIA, listarModelosDisponiveis, salvarChavesIA, salvarEmailConector, salvarModeloIA, testarChavesIA, testarEmailConector, trocarProvedorIA } from '../lib/api';
-import type { ChaveTesteResultado, ChavesIA, ConectoresIA, ModelosDescobertos, ModelosIA } from '../lib/api';
+import { apagarChavesIA, esquecerConectorToken, esquecerEmailConector, getChavesIA, getConectores, getConectoresToken, getModelosIA, listarModelosDisponiveis, salvarChavesIA, salvarConectorToken, salvarEmailConector, salvarModeloIA, testarChavesIA, testarConectorToken, testarEmailConector, trocarProvedorIA } from '../lib/api';
+import type { ChaveTesteResultado, ChavesIA, ConectoresIA, ConectoresToken, ModelosDescobertos, ModelosIA } from '../lib/api';
 import type { Preferences } from '../types';
 
 export function SettingsPage() {
@@ -39,6 +39,44 @@ export function SettingsPage() {
   const [emailSenha, setEmailSenha] = useState('');
   const [emailServidor, setEmailServidor] = useState('');
   const [salvandoEmail, setSalvandoEmail] = useState(false);
+
+  // Conectores por token (Notion, Linear, Dropbox, Vercel, Supabase): o mesmo
+  // resultado de OAuth sem registrar aplicativo — a chave é criada no painel do
+  // serviço e colada aqui. Ela fica só no .env desta máquina.
+  const [tokensConector, setTokensConector] = useState<ConectoresToken | null>(null);
+  const [tokenAtivo, setTokenAtivo] = useState('');
+  const [tokenTexto, setTokenTexto] = useState('');
+  const [tokenEndereco, setTokenEndereco] = useState('');
+  const [salvandoToken, setSalvandoToken] = useState(false);
+
+  const recarregarTokens = useCallback(async () => {
+    if (!backendOnline) {
+      setTokensConector(null);
+      return;
+    }
+    try {
+      setTokensConector(await getConectoresToken());
+    } catch {
+      setTokensConector(null);
+    }
+  }, [backendOnline]);
+
+  useEffect(() => { void recarregarTokens(); }, [recarregarTokens]);
+
+  const ligarToken = async () => {
+    if (!tokenAtivo) return;
+    setSalvandoToken(true);
+    try {
+      setTokensConector(await salvarConectorToken(tokenAtivo, tokenTexto, tokenEndereco));
+      setTokenTexto('');
+      const nome = tokensConector?.tokens.find((item) => item.id === tokenAtivo)?.nome || tokenAtivo;
+      pushToast('Conector ligado', `${nome} guardado no .env. Clique em Testar para provar.`, 'success');
+    } catch (erro) {
+      pushToast('Não deu para ligar', erro instanceof Error ? erro.message : undefined, 'warning');
+    } finally {
+      setSalvandoToken(false);
+    }
+  };
 
   const recarregarConectores = useCallback(async () => {
     if (!backendOnline) {
@@ -584,6 +622,90 @@ export function SettingsPage() {
                       )}
                     </div>
                   </div>
+                  {/* 0.82.0 — “conectores igual ao do Arena”: por token pessoal,
+                      que é o mesmo resultado de OAuth sem registrar aplicativo. */}
+                  {tokensConector && (
+                    <div className="conectores-tokens">
+                      <h4><Link2 size={13} /> Serviços com token pessoal</h4>
+                      <p className="modelos-nota">{tokensConector.nota}</p>
+                      <ul className="tokens-lista">
+                        {tokensConector.tokens.map((item) => (
+                          <li key={item.id} className={item.pronto ? 'conector-pronto' : ''}>
+                            <div className="conector-cabeca">
+                              <strong>{item.nome}</strong>
+                              <span className={`provedor-selo ${item.pronto ? 'selo-gratis' : 'selo-pago'}`}>
+                                {item.pronto ? item.mascara : 'sem token'}
+                              </span>
+                            </div>
+                            <small>{item.onde}</small>
+                            <div className="tokens-acoes">
+                              <button
+                                className="button button-ghost"
+                                onClick={() => { setTokenAtivo(item.id); setTokenEndereco(''); }}
+                              >
+                                {item.pronto ? 'Trocar token' : 'Colar token'}
+                              </button>
+                              {item.pronto && (
+                                <>
+                                  <button
+                                    className="button button-secondary"
+                                    onClick={() => void testarConectorToken(item.id).then((prova) => pushToast(`${item.nome} respondeu`, prova.resumo, 'success')).catch((erro) => pushToast(`${item.nome} recusou`, erro instanceof Error ? erro.message : undefined, 'warning'))}
+                                  >
+                                    <Zap size={14} /> Testar
+                                  </button>
+                                  <button
+                                    className="button button-ghost"
+                                    onClick={() => void esquecerConectorToken(item.id).then(setTokensConector).catch(() => undefined)}
+                                  >
+                                    <Trash2 size={14} /> Esquecer
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      {tokenAtivo && (
+                        <div className="tokens-colar">
+                          <label className="field">
+                            <span>Token do {tokensConector.tokens.find((item) => item.id === tokenAtivo)?.nome}</span>
+                            <input
+                              type="password"
+                              value={tokenTexto}
+                              onChange={(event) => setTokenTexto(event.target.value)}
+                              placeholder="cole aqui, não aparece na tela"
+                              autoComplete="off"
+                              maxLength={400}
+                            />
+                          </label>
+                          {tokensConector.tokens.find((item) => item.id === tokenAtivo)?.precisa_endereco && (
+                            <label className="field">
+                              <span>Endereço do projeto</span>
+                              <input
+                                value={tokenEndereco}
+                                onChange={(event) => setTokenEndereco(event.target.value)}
+                                placeholder="https://xxxx.supabase.co"
+                                autoComplete="off"
+                                maxLength={200}
+                              />
+                            </label>
+                          )}
+                          <div className="modelos-acoes">
+                            <button
+                              className="button button-primary"
+                              onClick={() => void ligarToken()}
+                              disabled={salvandoToken || tokenTexto.length < 8 || (tokensConector.tokens.find((item) => item.id === tokenAtivo)?.precisa_endereco === true && tokenEndereco.length < 12)}
+                            >
+                              <Check size={15} /> {salvandoToken ? 'Gravando…' : 'Guardar token'}
+                            </button>
+                            <button className="button button-ghost" onClick={() => { setTokenAtivo(''); setTokenTexto(''); }}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <p className="modelos-nota">{conectores.nota}</p>
                 </>
               )}

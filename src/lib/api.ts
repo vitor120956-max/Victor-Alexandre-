@@ -482,6 +482,56 @@ export async function testarEmailConector(): Promise<ProvaConector> {
   return resposta.result;
 }
 
+/** Um conector por token pessoal (Notion, Linear, Dropbox, Vercel, Supabase). */
+export interface ConectorToken {
+  id: string;
+  nome: string;
+  onde: string;
+  leitura: string;
+  extra: string;
+  pronto: boolean;
+  mascara: string;
+  precisa_endereco: boolean;
+  endereco?: string;
+}
+
+export interface ConectoresToken {
+  tokens: ConectorToken[];
+  prontos: number;
+  total: number;
+  resumo: string;
+  nota: string;
+  podeEditar?: boolean;
+}
+
+export async function getConectoresToken(): Promise<ConectoresToken> {
+  const resposta = await apiFetch<{ ok: boolean; result: ConectoresToken; podeEditar: boolean }>('/api/conectores/tokens');
+  return { ...resposta.result, podeEditar: resposta.podeEditar };
+}
+
+export async function salvarConectorToken(id: string, token: string, endereco = ''): Promise<ConectoresToken> {
+  const resposta = await apiFetch<{ ok: boolean; result: ConectoresToken }>(`/api/conectores/tokens/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    body: JSON.stringify({ token, endereco }),
+  });
+  return resposta.result;
+}
+
+export async function esquecerConectorToken(id: string): Promise<ConectoresToken> {
+  const resposta = await apiFetch<{ ok: boolean; result: ConectoresToken }>(`/api/conectores/tokens/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  return resposta.result;
+}
+
+export async function testarConectorToken(id: string): Promise<{ ok: boolean; resumo: string; perfil?: string }> {
+  const resposta = await apiFetch<{ ok: boolean; result: { ok: boolean; resumo: string; perfil?: string } }>(
+    `/api/conectores/tokens/${encodeURIComponent(id)}/testar`,
+    { method: 'POST' },
+  );
+  return resposta.result;
+}
+
 /** Troca de provedor (Groq, Google, OpenRouter…). Grava o `.env` e recarrega. */
 export async function trocarProvedorIA(provedor: string, modelo?: string): Promise<ModelosIA> {
   const resposta = await apiFetch<{ ok: boolean; estado: ModelosIA }>('/api/ai/provedor', {

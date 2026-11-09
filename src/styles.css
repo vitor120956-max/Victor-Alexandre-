@@ -1308,3 +1308,12 @@ kbd { display: inline-flex; align-items: center; gap: 2px; padding: 3px 5px; bor
 .conector-email { border-top: 1px dashed rgba(255, 255, 255, .1); padding-top: 10px; }
 .conector-email h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: .8rem; font-weight: 600; }
 .conector-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 8px 0; }
+
+/* 0.82.0 — conectores por token: a lista e o campo que não mostra o que se digita. */
+.conectores-tokens { margin-top: 12px; border-top: 1px dashed rgba(255, 255, 255, .1); padding-top: 10px; }
+.conectores-tokens h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: .8rem; font-weight: 600; }
+.tokens-lista { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.tokens-lista li { border: 1px solid rgba(255, 255, 255, .08); border-radius: 9px; padding: 7px 9px; }
+.tokens-lista small { display: block; font-size: .7rem; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.tokens-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tokens-colar { margin-top: 8px; padding: 9px; border: 1px solid rgba(var(--accent-rgb), .35); border-radius: 10px; }
