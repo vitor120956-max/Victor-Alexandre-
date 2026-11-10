@@ -178,6 +178,14 @@ def papel(numero: Any) -> str:
     return PAPEIS.get(codigo, f"elemento {codigo}")
 
 
+def _codigo(valor: Any) -> int:
+    """O número do papel, guardado ao lado do nome: decidir precisa do número."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _acionavel(bruto: dict[str, Any]) -> bool:
     if bruto.get("desativado"):
         return False
@@ -208,6 +216,7 @@ def _normalizar(
     no: dict[str, Any] = {
         "ref": f"{prefixo}:e{numero}" if acionavel else "",
         "papel": papel(bruto.get("papel")),
+        "codigo": _codigo(bruto.get("papel")),
         "nome": " ".join(str(bruto.get("nome") or "").split())[:200],
         "profundidade": profundidade,
         "acionavel": acionavel,
@@ -673,6 +682,7 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
     # Medido na árvore crua, onde o número do papel ainda existe: link, texto,
     # item de lista, documento. Moldura sozinha não é conteúdo.
     resultado["conteudo"] = tem_conteudo(bruto)
+    resultado["pronto"] = prontidao(resultado)
     sugestao = dica(resultado)
     if sugestao:
         resultado["dica"] = sugestao
@@ -933,13 +943,85 @@ def desenhar(no: dict[str, Any] | None, profundidade: int = 0, linhas: list[str]
     onde = ""
     if isinstance(caixa, (list, tuple)) and len(caixa) == 4:
         onde = f"  em {caixa[0]},{caixa[1]} ({caixa[2]}x{caixa[3]})"
-    linhas.append(f"{prefixo}{no.get('papel')}{nome}{ref}{onde}")
+    escreve = "  (escreve aqui)" if str(no.get("acao") or "").strip().lower() in ACAO_DE_TEXTO else ""
+    linhas.append(f"{prefixo}{no.get('papel')}{nome}{ref}{onde}{escreve}")
     for filho in no.get("filhos") or []:
         desenhar(filho, profundidade + 1, linhas)
     return "\n".join(linhas)
 
 
 ACAO_DE_TEXTO = {"escrever", "digitar"}
+
+# Moldura de janela: existe em qualquer programa, tem posição e ação, e não é
+# trabalhar no programa — é fechar, minimizar ou rolar. Os 26 “acionáveis” do
+# Bloco de Notas eram todos disto, e a prontidão dizia que dava para agir.
+PAPEIS_DE_MOLDURA = {1, 3, 4, 23, 39, 48}
+
+NOMES_DE_MOLDURA = {
+    "ime",
+    "minimizar",
+    "maximizar",
+    "fechar",
+    "restaurar",
+    "ajuda de contexto",
+    "sistema",
+    "aplicativo",
+    "uma linha acima",
+    "uma linha abaixo",
+    "uma página acima",
+    "uma página abaixo",
+    "uma coluna à esquerda",
+    "uma coluna à direita",
+    "uma página à esquerda",
+    "uma página à direita",
+    "posição",
+    # Os nomes da nossa própria tabela, para árvore montada à mão nos testes.
+    "barra de título",
+    "barra de rolagem",
+    "barra de status",
+    "alça",
+    "indicador",
+}
+
+
+def e_moldura(no: dict[str, Any]) -> bool:
+    """O elemento é moldura de janela?
+
+    Decide pelo número do papel quando ele veio (`codigo`) e pelo nome quando
+    não veio — o nome é o que sobra para uma árvore já montada à mão.
+    """
+    if _codigo(no.get("codigo")) in PAPEIS_DE_MOLDURA:
+        return True
+    nome = " ".join(str(no.get("nome") or "").split()).lower()
+    return nome in NOMES_DE_MOLDURA
+
+
+def onde_escrever(resultado: dict[str, Any]) -> dict[str, Any] | None:
+    """O elemento onde a digitação entra, se houver — com `ref` e posição."""
+    primeiro: dict[str, Any] | None = None
+    for no in achatar(resultado.get("arvore")):
+        if e_moldura(no):
+            continue
+        if str(no.get("acao") or "").strip().lower() not in ACAO_DE_TEXTO:
+            continue
+        caixa = no.get("caixa")
+        if not (isinstance(caixa, (list, tuple)) and len(caixa) == 4 and int(caixa[2]) > 0):
+            continue
+        if primeiro is None:
+            primeiro = {
+                "ref": no.get("ref") or "",
+                "papel": no.get("papel") or "",
+                "caixa": list(caixa),
+            }
+        # Campo nomeado vale mais do que campo anônimo: é mais fácil de conferir.
+        if no.get("nome"):
+            return {
+                "ref": no.get("ref") or "",
+                "papel": no.get("papel") or "",
+                "nome": no.get("nome"),
+                "caixa": list(caixa),
+            }
+    return primeiro
 
 
 def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
@@ -949,16 +1031,20 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
     sentido”. Isso, escrito como conta, é:
 
     - a árvore tem **conteúdo** (não só barra de título e botão de janela); e
-    - existe pelo menos um elemento acionável **com nome** — ou um campo onde
-      dá para escrever, que é o caso do Bloco de Notas, cujo campo não tem nome.
+    - existe pelo menos um elemento acionável **com nome** que não seja
+      moldura — ou um lugar onde dá para escrever.
 
-    Moldura nunca serve: 600 botões “Minimizar” não valem um link.
+    A primeira versão desta conta somava qualquer acionável com nome. No
+    Bloco de Notas ela deu “26 acionáveis, dá para agir” — e os 26 eram IME,
+    Minimizar, Maximizar, Fechar e os botões da barra de rolagem. O campo onde
+    se escreve não tinha `ref` nenhum. Passar nessa conta era passar errado.
     """
     raiz = resultado.get("arvore")
     total = acionaveis = nomeados = uteis = editaveis = com_posicao = 0
-    pilha = [raiz] if isinstance(raiz, dict) else []
+    de_moldura = 0
+    pilha: list[tuple[dict[str, Any], bool]] = [(raiz, False)] if isinstance(raiz, dict) else []
     while pilha:
-        no = pilha.pop()
+        no, herdada = pilha.pop()
         total += 1
         caixa = no.get("caixa")
         if isinstance(caixa, (list, tuple)) and len(caixa) == 4 and int(caixa[2]) > 0:
@@ -966,21 +1052,36 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
         nome = " ".join(str(no.get("nome") or "").split())
         if nome:
             nomeados += 1
+        # Moldura contamina os filhos: os botões dentro da barra de título são
+        # moldura mesmo que o papel deles seja “botão”.
+        moldura = herdada or e_moldura(no)
+        escreve = str(no.get("acao") or "").strip().lower() in ACAO_DE_TEXTO
+        if moldura:
+            de_moldura += 1
         if no.get("acionavel"):
             acionaveis += 1
-            if nome:
+            if not moldura and nome:
                 uteis += 1
-            if str(no.get("acao") or "").strip().lower() in ACAO_DE_TEXTO:
+            if not moldura and escreve:
                 editaveis += 1
-        pilha.extend(no.get("filhos") or [])
+        for filho in no.get("filhos") or []:
+            if isinstance(filho, dict):
+                pilha.append((filho, moldura))
 
     conteudo = bool(resultado.get("conteudo"))
     pronto = bool(total and conteudo and (uteis or editaveis))
+    campo = onde_escrever(resultado)
     if pronto:
-        motivo = (
-            f"{resultado.get('total', total)} elemento(s) de árvore, {acionaveis} acionável(is) "
-            f"e {uteis + editaveis} com nome ou escrita — dá para agir por `ref`."
-        )
+        partes = [f"{resultado.get('total', total)} elemento(s) de árvore"]
+        if uteis:
+            partes.append(f"{uteis} acionável(is) de verdade")
+        if editaveis:
+            partes.append(f"{editaveis} onde se escreve")
+        motivo = ", ".join(partes) + " — dá para agir por `ref`."
+        if campo:
+            motivo += f" O campo de escrita é {campo['ref'] or '(sem ref)'} em {campo['caixa'][0]},{campo['caixa'][1]}."
+        if de_moldura:
+            motivo += f" ({de_moldura} elemento(s) de moldura ficaram de fora.)"
     elif not total:
         motivo = resultado.get("aviso") or "a janela não publicou árvore."
     elif not conteudo:
@@ -994,6 +1095,12 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
                 f" A posição dela eu sei — {com_posicao} de {total} elemento(s) vieram "
                 "com coordenada; o que não existe é o que está dentro da página."
             )
+    elif acionaveis and not uteis and not editaveis:
+        motivo = (
+            f"tem conteúdo, mas os {acionaveis} acionável(is) são todos de moldura "
+            "(fechar, minimizar, rolagem) e não há campo onde escrever. "
+            "Clicar neles não é trabalhar no programa."
+        )
     else:
         motivo = "tem conteúdo, mas nenhum elemento acionável com nome ainda."
     return {
@@ -1004,7 +1111,9 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
         "nomeados": nomeados,
         "com_nome_acionavel": uteis,
         "editaveis": editaveis,
+        "de_moldura": de_moldura,
         "com_posicao": com_posicao,
+        "onde_escrever": campo,
         "motivo": motivo,
     }
 
@@ -1023,6 +1132,13 @@ def resumo(resultado: dict[str, Any]) -> str:
         cabeca += f" (lido de dentro: {resultado['de_filha']})"
     if not resultado.get("completo", True):
         cabeca += " " + str(resultado.get("aviso") or "Leitura parcial.")
+    lido = resultado.get("pronto") or {}
+    acionaveis = int(resultado.get("acionaveis") or 0)
+    if lido.get("de_moldura") and lido.get("de_moldura") >= acionaveis:
+        cabeca += (
+            f" Todos os acionáveis são moldura (fechar/minimizar/rolagem)"
+            + (f"; o lugar de escrever é {lido['onde_escrever']['ref']}." if lido.get("onde_escrever") else ".")
+        )
     if resultado.get("nota"):
         cabeca += " " + str(resultado["nota"])
     if resultado.get("dica"):

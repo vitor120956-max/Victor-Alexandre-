@@ -145,6 +145,7 @@ def _provados(leitor, args) -> int:
                         "motivo": item["lido"].get("motivo", ""),
                         "fonte": item["fonte"],
                         "acordou": item.get("acordou", False),
+                        "onde_escrever": item["lido"].get("onde_escrever"),
                         "segundos": item["segundos"],
                     }
                     for item in linhas
@@ -174,7 +175,9 @@ def _provados(leitor, args) -> int:
         print("  Acordaram na segunda leitura (o navegador liga a acessibilidade")
         print("  quando percebe alguem lendo — já vem lido, não precisa repetir):")
         for item in acordaram:
-            print(f"    - {item['processo']} — {item['titulo']}")
+            campo = (item["lido"].get("onde_escrever") or {})
+        onde = f" — escreve em {campo['caixa'][0]},{campo['caixa'][1]}" if campo else ""
+        print(f"    - {item['processo']} — {item['titulo']}{onde}")
 
     prontas = [item for item in linhas if item["lido"]["pronto"]]
     print()
@@ -347,9 +350,15 @@ def principal(argv: list[str] | None = None) -> int:
     # A pergunta que importa depois do número: dá para agir aqui? Dizer “47
     # elementos” sem dizer isso foi o que manteve a etapa 2 parada por seis
     # versões — os 47 eram moldura.
-    lido = arvore.prontidao(montada)
+    lido = montada.get("pronto") or arvore.prontidao(montada)
     print()
     print(("  SERVE para agir: " if lido["pronto"] else "  NAO SERVE para agir: ") + lido["motivo"])
+    campo = lido.get("onde_escrever")
+    if campo:
+        print(
+            f"  Onde escrever: {campo.get('ref') or '(sem ref)'} "
+            f"em {campo['caixa'][0]},{campo['caixa'][1]} ({campo['caixa'][2]}x{campo['caixa'][3]})"
+        )
     print()
     print(arvore.desenhar(montada.get("arvore")))
     return 0

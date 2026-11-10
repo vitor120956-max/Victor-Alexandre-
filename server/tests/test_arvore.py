@@ -1184,3 +1184,140 @@ def test_a_varredura_geral_diz_quais_acordaram():
     texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
     assert "Acordaram na segunda leitura" in texto
     assert '"acordou": item.get("acordou", False)' in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.85.0 — os 26 “acionáveis” do Bloco de Notas eram todos moldura
+# ---------------------------------------------------------------------------
+
+NOTEPAD_CRU = {
+    "janela": {
+        "handle": 1,
+        "titulo": "Sem título - Bloco de notas",
+        "classe": "Notepad",
+        "processo": "notepad.exe",
+    },
+    "fonte": "msaa",
+    "raiz": _no(
+        10,
+        "Sem título - Bloco de notas",
+        filhos=[
+            _no(
+                9,
+                "",
+                filhos=[
+                    _no(1, "", filhos=[  # barra de título
+                        _no(43, "IME", "Pressionar"),
+                        _no(43, "Minimizar", "Pressionar"),
+                        _no(43, "Maximizar", "Pressionar"),
+                        _no(43, "Fechar", "Pressionar"),
+                    ]),
+                    _no(42, "", "digitar"),  # o campo onde se escreve
+                    _no(3, "Vertical", filhos=[
+                        _no(43, "Uma linha acima", "Pressionar"),
+                        _no(43, "Uma página abaixo", "Pressionar"),
+                    ]),
+                ],
+            )
+        ],
+    ),
+}
+
+
+def _com_caixa(no: dict[str, Any], caixa: list[int]) -> dict[str, Any]:
+    no = dict(no)
+    no["caixa"] = caixa
+    return no
+
+
+def _bloco_com_posicoes() -> dict[str, Any]:
+    bruto = json.loads(json.dumps(NOTEPAD_CRU))
+    raiz = bruto["raiz"]
+    raiz["caixa"] = [225, 557, 991, 144]
+    janela = raiz["filhos"][0]
+    janela["caixa"] = [225, 557, 991, 144]
+    titulo, texto, rolagem = janela["filhos"]
+    titulo["filhos"][0]["caixa"] = [300, 560, 30, 20]
+    titulo["filhos"][3]["caixa"] = [1180, 560, 30, 20]
+    texto["caixa"] = [227, 559, 970, 140]
+    rolagem["caixa"] = [1197, 559, 17, 140]
+    return bruto
+
+
+def test_o_campo_do_bloco_de_notas_ganha_ref():
+    """Sem `ref` no campo, o JARVIS não tem onde digitar — só botão de janela.
+
+    A leitura real do Bloco de Notas deu 26 acionáveis: IME, Minimizar,
+    Maximizar, Fechar e os botões de rolagem. O `texto` onde se escreve vinha
+    sem `ref`, porque a MSAA não dá ação padrão a ele.
+    """
+    montada = arvore.montar(_bloco_com_posicoes())
+    achados = [no for no in arvore.achatar(montada["arvore"]) if no.get("papel") == "texto"]
+    assert achados, "o campo de texto precisa estar na árvore"
+    assert achados[0]["ref"], "o campo de texto precisa de ref"
+    assert achados[0]["acao"] == "digitar"
+
+
+def test_a_prontidao_aponta_onde_escrever():
+    montada = arvore.montar(_bloco_com_posicoes())
+    lido = montada["pronto"]
+    assert lido["pronto"] is True
+    assert lido["editaveis"] == 1
+    assert lido["onde_escrever"]["caixa"] == [227, 559, 970, 140]
+    assert lido["onde_escrever"]["ref"].startswith("@")
+    # E não conta os botões de moldura como “dá para agir”.
+    assert lido["com_nome_acionavel"] == 0
+
+
+def test_a_prontidao_recusa_janela_so_de_moldura_sem_campo():
+    """Era o furo: 26 botões de moldura passavam como “dá para agir”."""
+    bruto = json.loads(json.dumps(NOTEPAD_CRU))
+    # Tira o campo de escrita: sobra só moldura.
+    del bruto["raiz"]["filhos"][0]["filhos"][1]
+    montada = arvore.montar(bruto)
+    lido = montada["pronto"]
+    assert lido["pronto"] is False
+    assert "moldura" in lido["motivo"]
+    assert lido["onde_escrever"] is None
+
+
+def test_e_moldura_reconhece_botao_de_janela_e_nao_um_link():
+    assert arvore.e_moldura({"papel": "botão", "codigo": 43, "nome": "Fechar"}) is True
+    assert arvore.e_moldura({"papel": "barra de rolagem", "codigo": 3}) is True
+    assert arvore.e_moldura({"papel": "botão", "codigo": 43, "nome": "Salvar"}) is False
+    assert arvore.e_moldura({"papel": "link", "codigo": 30, "nome": "Benchmark"}) is False
+
+
+def test_o_desenho_marca_onde_se_escreve():
+    montada = arvore.montar(_bloco_com_posicoes())
+    desenho = arvore.desenhar(montada["arvore"])
+    assert "(escreve aqui)" in desenho
+    assert "em 227,559 (970x140)" in desenho
+
+
+def test_o_resumo_avisa_quando_todos_os_acionaveis_sao_moldura():
+    montada = arvore.montar(_bloco_com_posicoes())
+    texto = arvore.resumo(montada)
+    assert "Todos os acionáveis são moldura" in texto
+    assert "o lugar de escrever é @" in texto
+
+
+def test_a_msaa_deriva_digitar_do_papel_de_texto_e_respeita_somente_leitura():
+    """Papel de texto nem sempre é lugar de escrever: log também é texto."""
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    assert "PAPEIS_DE_ESCRITA = {15, 42}" in fonte
+    assert "STATE_SYSTEM_READONLY" in fonte
+    assert "GET_ACC_STATE = 14" in fonte
+    inicio = fonte.index("def _acao_de_escrita(")
+    trecho = fonte[inicio : inicio + 500]
+    assert "_somente_leitura(" in trecho
+    assert '"digitar"' in trecho
+
+
+def test_a_uia_escreve_no_documento_e_no_campo_de_edicao():
+    """O documento (50030) não se clica, mas é onde a digitação entra."""
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def _uia_acao(")
+    trecho = fonte[inicio : inicio + 700]
+    assert "50004, 50030" in trecho
+    assert "PADRAO_VALOR" in trecho

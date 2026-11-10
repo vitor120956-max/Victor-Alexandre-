@@ -92,6 +92,8 @@ GET_ACC_NAME = 10
 GET_ACC_ROLE = 13
 GET_ACC_DEFAULT_ACTION = 20
 ACC_LOCATION = 22
+GET_ACC_STATE = 14
+STATE_SYSTEM_READONLY = 0x40
 IUNKNOWN_RELEASE = 2
 
 
@@ -355,6 +357,37 @@ def _papel(ponteiro: int, filho: int) -> int:
         return 0
 
 
+def _somente_leitura(ponteiro: int, filho: int) -> bool:
+    """O elemento é só de leitura? (STATE_SYSTEM_READONLY)
+
+    Precisa existir porque “texto” não quer dizer “onde se escreve”: um painel
+    de log também é papel de texto e recusa a digitação. Prometer escrita ali
+    seria mentira na árvore.
+    """
+    try:
+        funcao = _metodo(ponteiro, GET_ACC_STATE, [VARIANT, ctypes.POINTER(VARIANT)])
+        saida = VARIANT()
+        if funcao(ponteiro, _var_filho(filho), ctypes.byref(saida)) != S_OK:
+            return False
+        return bool(int(saida.valor) & STATE_SYSTEM_READONLY) if saida.vt == VT_I4 else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ROLE_SYSTEM_DOCUMENT e ROLE_SYSTEM_TEXT: onde se escreve, quando a janela
+# deixa. Sem isso o Bloco de Notas fica sem `ref` no lugar que importa — os
+# únicos acionáveis eram Minimizar, Maximizar e Fechar.
+PAPEIS_DE_ESCRITA = {15, 42}
+
+
+def _acao_de_escrita(ponteiro: int, filho: int, papel: int, caixa: list[int]) -> str:
+    if papel not in PAPEIS_DE_ESCRITA or not caixa or caixa[2] <= 0 or caixa[3] <= 0:
+        return ""
+    if _somente_leitura(ponteiro, filho):
+        return ""
+    return "digitar"
+
+
 def _onde(ponteiro: int, filho: int) -> list[int]:
     try:
         funcao = _metodo(
@@ -396,15 +429,19 @@ class _Orcamento:
 # As guardas contra árvore que se repete moram em `arvore.py` — são política,
 # não sistema, e por isso podem ser testadas fora do Windows. Aqui só se lê.
 
-def _atributos(ponteiro: int, filho: int) -> dict[str, Any]:
+def _atributos(ponteiro: int, filho: int, papel: int = 0) -> dict[str, Any]:
     """O que se lê de qualquer elemento, simples ou objeto — só consulta."""
     extras: dict[str, Any] = {}
     acao = _acao(ponteiro, filho)
-    if acao:
-        extras["acao"] = acao
     caixa = _onde(ponteiro, filho)
     if caixa and caixa[2] > 0 and caixa[3] > 0:
         extras["caixa"] = caixa
+    # Sem ação padrão, mas é onde se escreve? Então a ação é digitar. Isto é o
+    # que dá `ref` ao campo do Bloco de Notas.
+    if not acao:
+        acao = _acao_de_escrita(ponteiro, filho, papel, caixa)
+    if acao:
+        extras["acao"] = acao
     return extras
 
 
@@ -418,16 +455,19 @@ def _no(
 ) -> dict[str, Any] | None:
     if not orcamento.gastar():
         return None
+    codigo = _papel(ponteiro, filho)
     no: dict[str, Any] = {
-        "papel": _papel(ponteiro, filho),
+        "papel": codigo,
         "nome": _nome(ponteiro, filho),
     }
     acao = _acao(ponteiro, filho)
-    if acao:
-        no["acao"] = acao
     caixa = _onde(ponteiro, filho)
     if caixa and caixa[2] > 0 and caixa[3] > 0:
         no["caixa"] = caixa
+    if not acao:
+        acao = _acao_de_escrita(ponteiro, filho, codigo, caixa)
+    if acao:
+        no["acao"] = acao
 
     if profundidade >= maxima:
         return no
@@ -456,11 +496,12 @@ def _no(
         # árvore (o nome e o papel são lidos normalmente — isso funciona), mas
         # a descida para ali.
         if not ponteiro_filho:
+            papel_filho = _papel(ponteiro, id_filho)
             no.setdefault("filhos", []).append(
                 {
-                    "papel": _papel(ponteiro, id_filho),
+                    "papel": papel_filho,
                     "nome": _nome(ponteiro, id_filho),
-                    **_atributos(ponteiro, id_filho),
+                    **_atributos(ponteiro, id_filho, papel_filho),
                 }
             )
             continue
@@ -733,10 +774,13 @@ def _uia_aceita(elemento: int, identificador: int) -> bool:
 
 def _uia_acao(elemento: int, tipo: int) -> str:
     """Nome curto do que o elemento aceita — o equivalente ao get_accDefaultAction."""
+    # Onde se escreve: campo de edição e **documento**. O documento não está em
+    # TIPOS_ACIONAVEIS (não se “clica” nele), mas é onde a digitação entra —
+    # foi o que faltou para o campo do Bloco de Notas ganhar `ref`.
+    if tipo in (50004, 50030) and _uia_aceita(elemento, PADRAO_VALOR):
+        return "escrever"
     if tipo not in TIPOS_ACIONAVEIS:
         return ""
-    if tipo == 50004 and _uia_aceita(elemento, PADRAO_VALOR):
-        return "escrever"
     if _uia_aceita(elemento, PADRAO_INVOCAR):
         return "clicar"
     if _uia_aceita(elemento, PADRAO_MARCAR):

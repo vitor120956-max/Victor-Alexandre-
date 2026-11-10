@@ -5,6 +5,61 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Os 26 acionáveis eram moldura (0.85.0)
+
+A leitura do Bloco de Notas, no PC do usuário:
+
+```
+notepad.exe — Sem título - Bloco de notas: 49 elemento(s), 26 acionável(is) — fonte: msaa.
+  SERVE para agir: 49 elemento(s) de árvore, 26 acionável(is) e 26 com nome ou escrita.
+```
+
+26 acionáveis. E olhando a árvore, quais eram: **IME, Minimizar, Maximizar,
+Fechar**, os botões das duas barras de rolagem e uma alça. Moldura inteira.
+
+O campo onde se escreve aparecia assim:
+
+```
+texto  em 227,559 (970x140)
+```
+
+Sem `ref`. A MSAA não dá ação padrão a um campo de texto, e a minha tabela de
+papéis acionáveis não incluía `texto`. Ou seja: **o JARVIS não tinha como
+digitar no Bloco de Notas**, e a prontidão dizia “dá para agir”.
+
+### Duas contas erradas, uma causa
+
+1. **A prontidão contava botão de janela como ação.** 26 botões de moldura
+   passavam no critério “existe acionável com nome”. Agora moldura é
+   reconhecida — por papel (barra de título, rolagem, alça, status, indicador)
+   e por nome (IME, Minimizar, Maximizar, Fechar, “uma linha acima”…) — e
+   **contamina os filhos**: os botões dentro da barra de título são moldura
+   mesmo que o papel deles seja “botão”.
+
+2. **O lugar de escrever não era acionável.** Papel `texto` (42) e `documento`
+   (15) com caixa na tela passam a receber a ação **digitar** — e portanto um
+   `ref`. Só quando a janela deixa: `get_accState` é consultado e
+   `STATE_SYSTEM_READONLY` recusa. Um painel de log também é “texto”, e
+   prometer escrita ali seria mentira.
+
+A leitura do Bloco de Notas agora sai assim:
+
+```
+notepad.exe — Sem título - Bloco de notas: 49 elemento(s), 26 acionável(is) — fonte: msaa.
+Todos os acionáveis são moldura (fechar/minimizar/rolagem); o lugar de escrever é @7625b028:e10.
+
+  SERVE para agir: 49 elemento(s) de árvore, 1 onde se escreve — dá para agir por `ref`.
+  Onde escrever: @7625b028:e10 em 227,559 (970x140)
+
+  texto  @7625b028:e10  em 227,559 (970x140)  (escreve aqui)
+```
+
+E `--provados` diz onde cada janela aceita escrita:
+
+```
+  - notepad.exe — Sem título - Bloco de notas — escreve em 227,559
+```
+
 ## O Chrome acordou (0.84.0)
 
 A medição que virou o quadro, no PC do usuário, dois comandos seguidos sem
@@ -507,6 +562,8 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **diz se serve para agir** | toda leitura termina com serve/não serve e o motivo; `mesa.arvore` devolve `pronto` |
 | **mostra onde fica** | cada elemento sai com `em x,y (largura x altura)`; `--provados` tem a coluna `posicoes` |
 | **não desiste na primeira** | janela que responde só moldura é relida uma vez, 0,4 s depois — navegador acorda ao ser lido |
+| **não confunde moldura com trabalho** | botão de janela, rolagem e alça ficam de fora da conta de “dá para agir” |
+| **sabe onde se escreve** | papel `texto`/`documento` com caixa ganha ação `digitar` e `ref`, salvo se for somente leitura |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |
 | **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |
