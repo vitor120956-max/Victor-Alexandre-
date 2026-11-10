@@ -5,6 +5,52 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A quarta medição: a causa raiz (0.82.4)
+
+`--alvo chrome` passou a achar o Chrome. Mas a árvore continuou repetindo — e
+agora dava para ver **o quê** repetia:
+
+```
+barra de rolagem “Vertical”
+  botão “Uma linha acima”
+    botão “Uma linha acima”
+      botão “Uma página acima”
+        botão “Uma linha acima” ...
+```
+
+Não era a moldura da janela. Era a **barra de rolagem**. E a causa não era o
+Chrome — era uma linha minha:
+
+```python
+usar = ponteiro_filho or ponteiro      # <- o defeito
+```
+
+A MSAA tem dois tipos de filho:
+
+| tipo | o que é | tem filhos? |
+|---|---|---|
+| **objeto** (VT_DISPATCH) | um objeto COM de verdade, com ponteiro próprio | sim |
+| **simples** (VT_I4) | só um número de identificação dentro do pai | **não** |
+
+Para um filho simples, `get_accChildCount` **no pai** devolve os filhos *do
+pai*. Ao reusar o ponteiro do pai, eu pedia ao pai que listasse os próprios
+filhos — de novo, e de novo, até acabar o limite. Cada “botão Uma linha acima”
+era o mesmo botão, lido repetidamente.
+
+O certo: **elemento simples entra na árvore (nome e papel são lidos dele), mas
+não se desce nele.** Uma linha.
+
+Junto com isso, a montagem ganhou a mesma guarda em segundo lugar: mesmo que a
+sonda devolva árvore repetida (versão antiga, programa estranho), o `montar`
+corta antes de chegar ao chat. E a distinção passou a ser explícita:
+
+- **moldura** (Minimizar, Fechar, IME): o nó é real, entra e para ali;
+- **repetição** (o mesmo nó dentro de si mesmo): não é nó novo, **não entra**.
+
+Por fim: navegador (Chrome, Edge, Firefox, VS Code, Slack, Discord…) agora
+**sempre** tenta a UIAutomation, mesmo que a MSAA venha grande. No seu PC a
+MSAA do Chrome devolveu 600 elementos de barra de rolagem e **zero** da página.
+
 ## A terceira medição no seu PC (0.82.3)
 
 A 0.82.2 consertou os índices da UIAutomation — e isso **funcionou**:
@@ -179,6 +225,8 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **não entra em laço** | moldura é folha e nó que repete um ancestral para — o Chrome já provou que sem isso a leitura vira 600 botões falsos |
 | **não escolhe o Windows** | menu Iniciar, barra de tarefas e área de trabalho ficam fora da lista de janelas |
 | **não escolhe a si mesma nem por engano** | a janela que roda a sonda é excluída, e processo vence título — `--alvo chrome` acha o Chrome |
+| **não repete o mesmo elemento** | filho “simples” da MSAA não desce (era a causa de 600 botões falsos), e a montagem corta repetição de qualquer origem |
+| **navegador vai direto na UIA** | Chrome/Edge/Firefox/VS Code publicam a página pela UIAutomation, não pela MSAA |
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 
 ## O que **não** faz (ainda) e por quê

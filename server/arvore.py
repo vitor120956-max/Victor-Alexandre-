@@ -195,8 +195,11 @@ def _normalizar(
     maxima: int,
     contador: list[int],
     limite: int,
+    ancestrais: tuple[Ancestral, ...] = (),
 ) -> dict[str, Any] | None:
     """Transforma o nó cru da sonda no nó público, cortando com honestidade."""
+    if profundidade and e_duplicado(bruto, ancestrais):
+        return None
     if contador[0] >= limite:
         return None
     contador[0] += 1
@@ -224,7 +227,11 @@ def _normalizar(
             pass
 
     filhos: list[dict[str, Any]] = []
-    if profundidade < maxima:
+    # A mesma guarda da leitura, aplicada de novo na montagem: mesmo que a
+    # sonda devolva árvore repetida (versão antiga, programa estranho), o que
+    # chega ao chat já vem cortado. O nó aparece; só a descida para.
+    pode, caminho = pode_descer(bruto, ancestrais)
+    if profundidade < maxima and pode:
         for filho in bruto.get("filhos") or []:
             if not isinstance(filho, dict):
                 continue
@@ -235,9 +242,13 @@ def _normalizar(
                 maxima=maxima,
                 contador=contador,
                 limite=limite,
+                ancestrais=caminho,
             )
             if normalizado is None:
-                break
+                # `None` aqui é duplicado (pula) ou limite atingido (para).
+                if contador[0] >= limite:
+                    break
+                continue
             filhos.append(normalizado)
     if filhos:
         no["filhos"] = filhos
@@ -319,12 +330,24 @@ def repete_ancestral(no: dict[str, Any], ancestrais: tuple[Ancestral, ...]) -> b
 def pode_descer(no: dict[str, Any], ancestrais: tuple[Ancestral, ...]) -> tuple[bool, tuple[Ancestral, ...]]:
     """Descer nesse nó é seguro, ou ele é moldura/ciclo?
 
-    Devolve `(pode, caminho)`. O nó continua aparecendo na árvore — o que para
-    é só a descida, que era o que explodia.
+    Devolve `(pode, caminho)`. Distinção que importa:
+
+    - **moldura** (Minimizar, Fechar, IME): o nó é real, só não tem nada dentro.
+      Ele **entra** na árvore e para ali;
+    - **repetição** (o mesmo nó dentro de si mesmo): não é um nó novo, é o
+      mesmo lido de novo. Ele **não entra** — entregar o mesmo botão duas vezes
+      seria mentir sobre a tela.
     """
-    if de_moldura(no) or repete_ancestral(no, ancestrais):
+    if repete_ancestral(no, ancestrais):
+        return False, ancestrais
+    if de_moldura(no):
         return False, ancestrais
     return True, ancestrais + (chave(no),)
+
+
+def e_duplicado(no: dict[str, Any], ancestrais: tuple[Ancestral, ...]) -> bool:
+    """Este nó já apareceu acima dele na mesma linhagem?"""
+    return repete_ancestral(no, ancestrais)
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +406,27 @@ def de_casca(janela: dict[str, Any] | None) -> bool:
 
 SEGUNDA_FONTE_ABAIXO_DE = 9
 
+# Programas em que a MSAA comprovadamente entrega moldura e nada mais.
+# O Chrome no Windows 10 do usuário devolveu, pela MSAA, a barra de rolagem e
+# a barra de título — e nenhum elemento da página. A árvore de verdade dele
+# está na UIAutomation. Para estes, a segunda leitura é sempre tentada.
+PROCESSOS_SEM_MSAA = {
+    "chrome.exe",
+    "msedge.exe",
+    "brave.exe",
+    "opera.exe",
+    "vivaldi.exe",
+    "firefox.exe",
+    "code.exe",
+    "cursor.exe",
+    "slack.exe",
+    "discord.exe",
+    "spotify.exe",
+    "whatsapp.exe",
+    "notion.exe",
+    "figma.exe",
+}
+
 
 def _total_bruto(bruto: dict[str, Any] | None) -> int:
     """Quantos nós a leitura crua trouxe — sem montar nada."""
@@ -406,6 +450,19 @@ def precisa_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
     janela grande, cada caminhada extra é tempo que o usuário espera.
     """
     return _total_bruto(bruto) < SEGUNDA_FONTE_ABAIXO_DE
+
+
+def e_navegador(bruto: dict[str, Any] | None) -> bool:
+    """O alvo é um programa que só fala pela UIAutomation?"""
+    if not bruto:
+        return False
+    janela = bruto.get("janela") or {}
+    return limpo(janela.get("processo")).lower() in PROCESSOS_SEM_MSAA
+
+
+def quer_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
+    """Tentar a UIAutomation: árvore pobre **ou** programa que só fala por ela."""
+    return precisa_segunda_fonte(bruto) or e_navegador(bruto)
 
 
 def escolher_fonte(msaa: dict[str, Any] | None, uia: dict[str, Any] | None) -> dict[str, Any]:

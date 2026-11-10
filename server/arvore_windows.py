@@ -395,6 +395,18 @@ class _Orcamento:
 # As guardas contra árvore que se repete moram em `arvore.py` — são política,
 # não sistema, e por isso podem ser testadas fora do Windows. Aqui só se lê.
 
+def _atributos(ponteiro: int, filho: int) -> dict[str, Any]:
+    """O que se lê de qualquer elemento, simples ou objeto — só consulta."""
+    extras: dict[str, Any] = {}
+    acao = _acao(ponteiro, filho)
+    if acao:
+        extras["acao"] = acao
+    caixa = _onde(ponteiro, filho)
+    if caixa and caixa[2] > 0 and caixa[3] > 0:
+        extras["caixa"] = caixa
+    return extras
+
+
 def _no(
     ponteiro: int,
     filho: int,
@@ -423,13 +435,40 @@ def _no(
         return no
 
     for ponteiro_filho, id_filho in _filhos(ponteiro, orcamento.restante):
-        usar = ponteiro_filho or ponteiro
-        criado = _no(usar, id_filho, profundidade + 1, maxima, orcamento, caminho)
+        # **Só se desce em filho que tem ponteiro próprio.**
+        #
+        # Isto já esteve errado, e era a causa de TODA a repetição vista no PC
+        # do usuário (0.82.3):
+        #
+        #     botão “Uma linha acima”
+        #       botão “Uma linha acima”
+        #         botão “Uma página acima”
+        #           botão “Uma linha acima” ...
+        #
+        # A MSAA tem dois tipos de filho: os que são um objeto COM de verdade
+        # (VT_DISPATCH, com ponteiro) e os “simples” (VT_I4, só um número). Para
+        # os simples, `get_accChildCount` **no pai** devolve os filhos do pai —
+        # não do filho. Reusar o ponteiro do pai (o `or ponteiro` que estava aqui)
+        # pedia ao pai os próprios filhos, de novo e de novo, até o limite.
+        #
+        # O certo: elemento simples não tem filhos acessíveis. Ele entra na
+        # árvore (o nome e o papel são lidos normalmente — isso funciona), mas
+        # a descida para ali.
+        if not ponteiro_filho:
+            no.setdefault("filhos", []).append(
+                {
+                    "papel": _papel(ponteiro, id_filho),
+                    "nome": _nome(ponteiro, id_filho),
+                    **_atributos(ponteiro, id_filho),
+                }
+            )
+            continue
+        criado = _no(ponteiro_filho, CHILDID_SELF, profundidade + 1, maxima, orcamento, caminho)
         if criado is None:
+            _liberar(ponteiro_filho)
             break
         no.setdefault("filhos", []).append(criado)
-        if ponteiro_filho:
-            _liberar(ponteiro_filho)
+        _liberar(ponteiro_filho)
     return no
 
 
@@ -855,7 +894,7 @@ def ler_janela(
         }
 
     msaa = _ler_msaa(janela, profundidade, limite)
-    if pedido == "msaa" or not arvore.precisa_segunda_fonte(msaa):
+    if pedido == "msaa" or not arvore.quer_segunda_fonte(msaa):
         return msaa
     return arvore.escolher_fonte(msaa, _ler_uia(janela, profundidade, limite))
 

@@ -695,3 +695,111 @@ def test_peso_da_janela_ordena_do_melhor_para_o_pior():
     assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "Chrome - perfil"}, "chrome") == 2
     assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "Abrir no Chrome"}, "chrome") == 3
     assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "outra"}, "chrome") is None
+
+
+# ---------------------------------------------------------------------------
+# 0.82.4 — a causa raiz de TODA a repetição
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário (`--alvo chrome`, 600 elementos):
+#
+#     barra de rolagem “Vertical”
+#       botão “Uma linha acima”
+#         botão “Uma linha acima”
+#           botão “Uma página acima”
+#             botão “Uma linha acima” ...
+#
+# A guarda de moldura não pegava porque a repetição não era a moldura da
+# janela: era a **barra de rolagem** repetindo a si mesma. A causa estava em
+# `arvore_windows._no`: filho “simples” da MSAA (VT_I4) não tem ponteiro
+# próprio, e o código reusava o ponteiro do pai para pedir os filhos — o pai
+# devolvia os próprios filhos, para sempre.
+#
+# A guarda na montagem é a segunda linha de defesa: mesmo que a sonda devolva
+# árvore repetida, o `montar` corta.
+
+def _rolagem(profundidade: int) -> dict[str, Any]:
+    """Uma barra de rolagem que repete a si mesma, como a sonda antiga fazia."""
+    no = {"papel": 3, "nome": "Vertical", "filhos": []}
+    atual = no
+    for _ in range(profundidade):
+        filho = {"papel": 43, "nome": "Uma linha acima", "acao": "Pressionar", "filhos": []}
+        atual["filhos"].append(filho)
+        atual = filho
+    return no
+
+
+def test_montagem_corta_barra_de_rolagem_que_repete():
+    """Era isto que enchia os 600 elementos: o mesmo botão, 200 vezes."""
+    bruto = {
+        "janela": {"handle": 77, "titulo": "Chrome", "processo": "chrome.exe"},
+        "raiz": {"papel": 10, "nome": "área do cliente", "filhos": [_rolagem(40)]},
+        "fonte": "msaa",
+    }
+    resultado = arvore.montar(bruto, 14, 3000)
+    assert resultado["total"] < 10, resultado["total"]
+    nomes = [no["nome"] for no in arvore.achatar(resultado["arvore"])]
+    assert nomes.count("Uma linha acima") == 1
+
+
+def test_montagem_preserva_barra_de_rolagem_normal():
+    """A guarda não pode comer uma barra legítima: 5 botões diferentes."""
+    rolagem = {
+        "papel": 3,
+        "nome": "Vertical",
+        "filhos": [
+            {"papel": 43, "nome": "Uma linha acima", "acao": "Pressionar"},
+            {"papel": 43, "nome": "Uma página acima", "acao": "Pressionar"},
+            {"papel": 51, "nome": "Posição"},
+            {"papel": 43, "nome": "Uma página abaixo", "acao": "Pressionar"},
+            {"papel": 43, "nome": "Uma linha abaixo", "acao": "Pressionar"},
+        ],
+    }
+    bruto = {
+        "janela": {"handle": 78, "titulo": "Chrome", "processo": "chrome.exe"},
+        "raiz": {"papel": 10, "nome": "área do cliente", "filhos": [rolagem]},
+        "fonte": "msaa",
+    }
+    resultado = arvore.montar(bruto, 14, 3000)
+    assert resultado["total"] == 7
+    # quatro botões + o elevador (controle deslizante também é acionável)
+    assert resultado["acionaveis"] == 5
+    assert not resultado.get("dica")
+
+
+def test_a_leitura_nao_reusa_o_ponteiro_do_pai_em_filho_simples():
+    """O defeito exato: `ponteiro_filho or ponteiro` pedia ao pai os filhos dele.
+
+    Sem Windows não dá para chamar o COM, mas dá para prender a regra no
+    código — foi uma linha só, e ela custou três versões.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    assert "ponteiro_filho or ponteiro" not in fonte
+    assert "if not ponteiro_filho:" in fonte
+
+
+def test_filho_simples_entra_na_arvore_sem_descer():
+    """Elemento simples tem nome e papel — só não tem o que descer.
+
+    O que se prende aqui: no ramo do filho simples **não existe chamada
+    recursiva**. Era ela (com o ponteiro do pai) que repetia tudo.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("if not ponteiro_filho:", fonte.index("def _no("))
+    trecho = fonte[inicio : fonte.index("continue", inicio) + len("continue")]
+    assert "_papel(ponteiro, id_filho)" in trecho
+    assert "_nome(ponteiro, id_filho)" in trecho
+    assert "_no(" not in trecho
+    assert "continue" in trecho
+
+
+def test_navegador_sempre_pede_a_segunda_leitura():
+    """O Chrome no Windows 10 do usuário: MSAA devolve moldura, página mora na UIA."""
+    for processo in ("chrome.exe", "msedge.exe", "firefox.exe", "code.exe"):
+        bruto = {"janela": {"processo": processo}, "raiz": _no(9, "janela", filhos=[_no(43, str(n)) for n in range(30)])}
+        assert arvore.quer_segunda_fonte(bruto) is True, processo
+        assert arvore.precisa_segunda_fonte(bruto) is False, processo
+
+
+def test_programa_comum_com_arvore_rica_nao_pede_segunda_leitura():
+    bruto = {"janela": {"processo": "notepad.exe"}, "raiz": _no(9, "janela", filhos=[_no(43, str(n)) for n in range(30)])}
+    assert arvore.quer_segunda_fonte(bruto) is False
