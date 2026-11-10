@@ -254,6 +254,122 @@ def _contar(no: dict[str, Any]) -> tuple[int, int]:
 
 
 # ---------------------------------------------------------------------------
+# Guardas contra árvore que se repete
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário (Chrome, Windows 10 14393), antes da guarda:
+#
+#     chrome.exe — Arena | Benchmark...: 600 elemento(s), 596 acionável(is)
+#     botão “IME” → botão “IME” → botão “IME” → ...
+#     botão “Minimizar” → botão “Minimizar” → ...
+#
+# O Chrome expõe a moldura da janela **dentro de si mesma**: cada botão de
+# moldura devolve os cinco botões de novo. Sem guarda, o limite de 600 acaba
+# antes de chegar ao conteúdo da página — e o JARVIS “vê” 596 botões que não
+# existem. As guardas abaixo são política, não sistema: valem para MSAA e UIA.
+
+NOMES_DE_MOLDURA = {
+    "ime",
+    "minimizar",
+    "maximizar",
+    "restaurar",
+    "restaurar para baixo",
+    "fechar",
+    "fechar janela",
+    "ajuda de contexto",
+    "sistema",
+}
+
+# (papel, nome, posição) — a identidade de um nó numa linhagem.
+Ancestral = tuple[int, str, tuple[Any, ...]]
+
+
+def limpo(nome: Any) -> str:
+    return " ".join(str(nome or "").split())
+
+
+def de_moldura(no: dict[str, Any]) -> bool:
+    """Botão de moldura nunca tem conteúdo dentro — descer nele é laço."""
+    return limpo(no.get("nome")).lower() in NOMES_DE_MOLDURA
+
+
+def chave(no: dict[str, Any]) -> Ancestral:
+    """Identidade do nó: papel, nome e — quando existe — a posição na tela."""
+    caixa = no.get("caixa")
+    posicao: tuple[Any, ...] = tuple(caixa) if isinstance(caixa, (list, tuple)) and len(caixa) == 4 else ()
+    try:
+        papel_numero = int(no.get("papel") or 0)
+    except (TypeError, ValueError):
+        papel_numero = 0
+    return (papel_numero, limpo(no.get("nome")), posicao)
+
+
+def repete_ancestral(no: dict[str, Any], ancestrais: tuple[Ancestral, ...]) -> bool:
+    """O nó é ele mesmo, umas camadas acima? Então é ciclo, não conteúdo."""
+    propria = chave(no)
+    for antigo in ancestrais:
+        if propria == antigo:
+            return True
+        # Nome próprio repetido na mesma linhagem é ciclo, mesmo que a posição
+        # mude um pixel (o Chrome muda).
+        if propria[1] and antigo[1] == propria[1] and antigo[0] == propria[0]:
+            return True
+    return False
+
+
+def pode_descer(no: dict[str, Any], ancestrais: tuple[Ancestral, ...]) -> tuple[bool, tuple[Ancestral, ...]]:
+    """Descer nesse nó é seguro, ou ele é moldura/ciclo?
+
+    Devolve `(pode, caminho)`. O nó continua aparecendo na árvore — o que para
+    é só a descida, que era o que explodia.
+    """
+    if de_moldura(no) or repete_ancestral(no, ancestrais):
+        return False, ancestrais
+    return True, ancestrais + (chave(no),)
+
+
+# ---------------------------------------------------------------------------
+# Janelas que são do Windows, não do usuário
+# ---------------------------------------------------------------------------
+# Sem este filtro, a sonda escolheu o menu **Iniciar** como “a janela de trás”
+# no PC do usuário e leu “Iniciar” em vez do Chrome que estava aberto.
+
+CLASSES_DE_CASCA = {
+    "shell_traywnd",
+    "shell_secondarytraywnd",
+    "progman",
+    "workerw",
+    "windows.ui.core.corewindow",  # menu Iniciar, Central de Ações, pesquisa
+    "taskswitcherwnd",
+    "multitaskingviewframe",
+    "foregroundstaging",
+    "dv2controlhost",
+    "toplevelwindowforoverflowxamlisland",
+    "xamlexplorerhostislandwindow",
+    "windows.internal.shell.tabproxywindow",
+}
+
+TITULOS_DE_CASCA = {
+    "iniciar",
+    "program manager",
+    "cortana",
+    "pesquisar",
+    "central de ações",
+    "visualização de tarefas",
+    "área de trabalho",
+    "area de trabalho",
+}
+
+
+def de_casca(janela: dict[str, Any] | None) -> bool:
+    """A janela é do próprio Windows (menu Iniciar, barra, área de trabalho)?"""
+    if not janela:
+        return True
+    if str(janela.get("classe") or "").strip().lower() in CLASSES_DE_CASCA:
+        return True
+    return limpo(janela.get("titulo")).lower() in TITULOS_DE_CASCA
+
+
+# ---------------------------------------------------------------------------
 # Duas fontes: MSAA e UIAutomation
 # ---------------------------------------------------------------------------
 # A MSAA é de 1996. No seu PC ela devolveu, para um `cmd.exe`:
@@ -325,6 +441,23 @@ def escolher_fonte(msaa: dict[str, Any] | None, uia: dict[str, Any] | None) -> d
     return vazio
 
 
+def repeticao(resultado: dict[str, Any]) -> int:
+    """Quantas vezes o botão mais repetido aparece entre os acionáveis.
+
+    Serve de alarme: na primeira medição no PC do usuário o Chrome devolveu
+    596 acionáveis que eram **o mesmo** punhado de botões de moldura, repetidos
+    dentro de si mesmos. Se isso voltar a acontecer, é melhor avisar do que
+    entregar 596 “botões” que não existem.
+    """
+    contagem: dict[tuple[str, str], int] = {}
+    for no in achatar(resultado.get("arvore")):
+        if not no.get("acionavel"):
+            continue
+        chave = (str(no.get("papel")), str(no.get("nome")))
+        contagem[chave] = contagem.get(chave, 0) + 1
+    return max(contagem.values(), default=0)
+
+
 def dica(resultado: dict[str, Any]) -> str:
     """O que fazer quando a leitura veio quase vazia — em vez de silêncio.
 
@@ -334,6 +467,12 @@ def dica(resultado: dict[str, Any]) -> str:
     total = int(resultado.get("total") or 0)
     if not total:
         return ""
+    acionaveis_total = int(resultado.get("acionaveis") or 0)
+    if acionaveis_total >= 20 and repeticao(resultado) >= 10:
+        return (
+            "esta janela repetiu os mesmos botões dentro deles mesmos (moldura em vez de conteúdo). "
+            "Tente `--fonte uia`, ou clique dentro da área do programa antes de ler."
+        )
     alvo = str(resultado.get("alvo") or "")
     proprio = any(nome in alvo.lower() for nome in ("cmd.exe", "powershell.exe", "python.exe", "conhost.exe"))
     if proprio and int(resultado.get("acionaveis") or 0) == 0:

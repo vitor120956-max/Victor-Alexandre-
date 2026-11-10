@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.82.1.**
+**Versão atual: 0.82.2.**
 
 ## O que ele faz sem chave de IA
 
@@ -52,7 +52,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Aviso de cota:** o JARVIS registra o que o provedor respondeu em cada chave (200, 429, 401) e quanto resta no minuto nos cabeçalhos `x-ratelimit-*`. Com isso avisa — faixa âmbar *“as chaves estão acabando”* e vermelha *“as chaves acabaram”* — e responde no chat *“quantas chaves restam?”*. É medida, não estimativa: quando o provedor não manda o número, o aviso fala do que aconteceu, não de porcentagem inventada. Em [`docs/CHAVES.md`](docs/CHAVES.md) §9.
 
-**Ver os elementos da janela (só leitura).** `mesa.arvore` lê a **árvore de acessibilidade** da janela em foco por **duas fontes** — MSAA (`oleacc`) e UIAutomation (`uiautomationcore`), sem instalar nada — e fica com a que mostrar mais elementos e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` nos acionáveis. **Não clica, não digita, não move o mouse e não tira foto** — e roda numa **sonda separada** (`arvore_sonda.py`), com tempo limite: se o programa alvo travar, cai a sonda e não a API. O corte é dito (`completo: false`), papel desconhecido não ganha nome inventado, e fora do Windows a leitura recusa com frase clara. Detalhes em [`docs/ARVORE.md`](docs/ARVORE.md).
+**Ver os elementos da janela (só leitura).** `mesa.arvore` lê a **árvore de acessibilidade** da janela em foco por **duas fontes** — MSAA (`oleacc`) e UIAutomation (`uiautomationcore`), sem instalar nada — e fica com a que mostrar mais elementos e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` nos acionáveis. **Não clica, não digita, não move o mouse e não tira foto**; moldura de janela é folha e nó que se repete para (sem isso o Chrome devolvia 600 botões falsos) — e roda numa **sonda separada** (`arvore_sonda.py`), com tempo limite: se o programa alvo travar, cai a sonda e não a API. O corte é dito (`completo: false`), papel desconhecido não ganha nome inventado, e fora do Windows a leitura recusa com frase clara. Detalhes em [`docs/ARVORE.md`](docs/ARVORE.md).
 
 **Conectores por token (Notion, Linear, Dropbox, Vercel, Supabase).** O mesmo resultado de OAuth sem registrar aplicativo: você cria a chave no painel do serviço e cola em **Configurações → Conectores**. O token fica só no `.env`, nunca volta numa resposta (só a máscara), e cada serviço tem **Teste** de verdade — uma leitura barata que prova que a porta abre.
 
@@ -750,7 +750,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.82.1", "skills": 320}`.
+`{"version": "0.82.2", "skills": 320}`.
 
 ## Verificações
 

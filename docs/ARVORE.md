@@ -5,6 +5,44 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A segunda medição no seu PC (0.82.2)
+
+Depois da 0.82.1 você rodou de novo, agora com o Chrome aberto:
+
+```
+chrome.exe — Arena | Benchmark...: 600 elemento(s), 596 acionável(is) — fonte: msaa.
+botão “IME” → botão “IME” → botão “IME” → ...
+botão “Minimizar” → botão “Minimizar” → ...
+```
+
+```
+D:\JARVIS>.venv\Scripts\python arvore_sonda.py --fonte uia
+o foco estava neste terminal; li “Iniciar” (explorer.exe) em vez dele.
+a UIAutomation não devolveu árvore para esta janela.
+```
+
+Eram **três defeitos meus**, e nenhum do seu PC:
+
+1. **A árvore se repetia dentro de si mesma.** O Chrome expõe a moldura da
+   janela *dentro* da janela: cada botão de moldura devolve os cinco botões de
+   novo. Sem guarda, os 600 elementos acabaram antes de chegar ao conteúdo da
+   página — 596 “botões” que não existem. Agora **moldura é folha** (não se desce
+   em Minimizar/Maximizar/Fechar/IME) e **quem repete um ancestral para**.
+2. **Os índices da UIAutomation estavam todos +3.** A vtable começa em
+   `CompareElements`, mas QueryInterface/AddRef/Release ocupam as posições 0, 1
+   e 2 — eu tinha esquecido. Na prática, `ElementFromHandle` chamava
+   `GetRootElementBuildCache`. Corrigido e **preso por teste**.
+3. **A troca de janela pegou o menu Iniciar.** “Iniciar” é do Windows, não é um
+   programa seu. Agora a lista de janelas de sistema (menu Iniciar, barra,
+   área de trabalho) fica de fora da escolha.
+
+E o que faltava para não errar de novo em silêncio: `--diagnostico`, que mostra o
+retorno de **cada** passo do COM, em hexadecimal.
+
+```
+.venv\Scripts\python arvore_sonda.py --diagnostico
+```
+
 ## A primeira medição no seu PC (0.82.1)
 
 Você rodou isto no `cmd` e recebeu, três vezes:
@@ -96,6 +134,9 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **fora do Windows** | recusa com frase clara, em vez de devolver vazio |
 | **duas fontes** | MSAA e UIAutomation; quem decide é a que mostrou mais elementos |
 | **não lê a si mesma** | se o foco é o terminal que roda a sonda, ela pega a janela de trás e avisa |
+| **não entra em laço** | moldura é folha e nó que repete um ancestral para — o Chrome já provou que sem isso a leitura vira 600 botões falsos |
+| **não escolhe o Windows** | menu Iniciar, barra de tarefas e área de trabalho ficam fora da lista de janelas |
+| **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 
 ## O que **não** faz (ainda) e por quê
 
@@ -119,6 +160,12 @@ cd /d D:\JARVIS
 ```
 
 3. me diga o que apareceu (ou mande o `--json`).
+
+Se alguma coisa vier estranha, o primeiro comando é sempre:
+
+```
+.venv\Scripts\python arvore_sonda.py --diagnostico
+```
 
 Quer comparar as duas fontes na mesma janela? Rode uma vez com `--fonte msaa` e
 outra com `--fonte uia`. O número de elementos de cada uma é a resposta crua —

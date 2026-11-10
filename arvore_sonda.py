@@ -53,6 +53,13 @@ def _processo(item: dict) -> str:
     return str(item.get("processo") or "").lower()
 
 
+def passo_hex(passo: dict) -> str:
+    valor = passo.get("retorno")
+    if isinstance(valor, int):
+        return f"0x{valor & 0xFFFFFFFF:08X}"
+    return ""
+
+
 def _e_proprio(item: dict | None) -> bool:
     return bool(item) and _processo(item) in PROPRIOS
 
@@ -73,7 +80,8 @@ def _escolher(leitor, alvo: str) -> tuple[dict, str]:
     if not _e_proprio(janela):
         return janela, ""
 
-    candidatas = [item for item in leitor.janelas() if not _e_proprio(item) and item.get("titulo")]
+    reais = getattr(leitor, "janelas_de_programas", leitor.janelas)
+    candidatas = [item for item in reais() if not _e_proprio(item) and item.get("titulo")]
     if not candidatas:
         return janela, (
             "a janela em foco é este terminal e não achei outra aberta — abra o programa "
@@ -99,6 +107,11 @@ def principal(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="Devolve JSON cru para o JARVIS.")
     parser.add_argument("--janelas", action="store_true", help="Só lista as janelas abertas.")
+    parser.add_argument(
+        "--diagnostico",
+        action="store_true",
+        help="Testa a UIAutomation passo a passo e mostra o retorno de cada chamada.",
+    )
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -108,6 +121,18 @@ def principal(argv: list[str] | None = None) -> int:
         from server import arvore_windows as leitor
     except Exception as exc:  # noqa: BLE001 - qualquer falha de import é motivo de saída limpa
         return _falhar(f"não consegui carregar o leitor do Windows ({type(exc).__name__}).")
+
+    if args.diagnostico:
+        quadro = leitor.diagnostico()
+        if args.json:
+            print(json.dumps(quadro, ensure_ascii=False, indent=2))
+            return 0 if quadro.get("ok") else 1
+        for passo in quadro.get("passos", []):
+            marca = "ok  " if passo.get("ok") else "FALHA"
+            print(f"  [{marca}] {passo.get('passo')}  {passo.get('hex')}  {passo.get('detalhe') or ''}".rstrip())
+        print()
+        print(quadro.get("nota") or "")
+        return 0 if quadro.get("ok") else 1
 
     if args.janelas:
         lista = leitor.janelas()

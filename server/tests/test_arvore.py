@@ -467,3 +467,161 @@ def test_a_sonda_manda_a_fonte_para_o_leitor():
     """Sem repassar `fonte`, escolher a fonte não adiantaria nada."""
     fonte = Path("server/arvore.py").read_text(encoding="utf-8")
     assert '"--fonte",' in fonte
+
+
+# ---------------------------------------------------------------------------
+# 0.82.2 — a segunda medição: o Chrome repetindo a moldura
+# ---------------------------------------------------------------------------
+# No PC do usuário (Windows 10 14393) o Chrome devolveu 600 elementos, 596
+# “acionáveis”, todos `IME → IME → IME` e `Minimizar dentro de Minimizar`. Era
+# a moldura da janela exposta dentro dela mesma. Estes testes prendem as duas
+# guardas e o alarme.
+
+def _botao(nome: str, x: int = 0) -> dict[str, Any]:
+    return {"papel": 43, "nome": nome, "caixa": [x, 0, 20, 20]}
+
+
+def test_moldura_nunca_desce():
+    """Minimizar/Fechar/IME são folha: descer neles foi o que explodiu."""
+    for nome in ("IME", "Minimizar", "Maximizar", "Fechar", "Ajuda de contexto", "Sistema"):
+        pode, _ = arvore.pode_descer(_botao(nome), ())
+        assert pode is False, nome
+
+
+def test_botao_repetido_dentro_de_si_mesmo_para():
+    """O padrão exato do Chrome: “Atualizar” dentro de “Atualizar”."""
+    no = {"papel": 43, "nome": "Atualizar", "caixa": [10, 10, 30, 30]}
+    pode, caminho = arvore.pode_descer(no, ())
+    assert pode is True
+    pode_de_novo, _ = arvore.pode_descer({"papel": 43, "nome": "Atualizar", "caixa": [11, 11, 30, 30]}, caminho)
+    assert pode_de_novo is False
+
+
+def test_dois_botoes_irmaos_com_o_mesmo_nome_nao_sao_ciclo():
+    """“Excluir” e “Excluir” lado a lado são dois botões — a guarda não os corta.
+
+    A guarda olha a **linhagem** (pai -> filho), não os irmãos: cada irmão entra
+    com o mesmo caminho de ancestrais, então os dois passam.
+    """
+    primeiro = {"papel": 43, "nome": "Excluir", "caixa": [0, 0, 20, 20]}
+    segundo = {"papel": 43, "nome": "Excluir", "caixa": [40, 0, 20, 20]}
+    tabela = arvore.chave({"papel": 24, "nome": "tabela", "caixa": [0, 0, 400, 300]})
+    caminho_do_pai: tuple = (tabela,)
+    assert arvore.pode_descer(primeiro, caminho_do_pai)[0] is True
+    assert arvore.pode_descer(segundo, caminho_do_pai)[0] is True
+
+
+def test_filho_com_o_mesmo_nome_do_pai_para():
+    """Isso sim é ciclo: “Excluir” dentro de “Excluir”."""
+    pai = {"papel": 43, "nome": "Excluir", "caixa": [0, 0, 20, 20]}
+    _, caminho = arvore.pode_descer(pai, ())
+    filho = {"papel": 43, "nome": "Excluir", "caixa": [40, 0, 20, 20]}
+    assert arvore.pode_descer(filho, caminho)[0] is False
+
+
+def test_painel_vazio_empilhado_com_posicoes_diferentes_desce():
+    """“painel” dentro de “painel” é comum e legítimo — não pode ser cortado."""
+    de_fora = {"papel": 16, "nome": "", "caixa": [0, 0, 800, 600]}
+    de_dentro = {"papel": 16, "nome": "", "caixa": [10, 40, 780, 520]}
+    _, caminho = arvore.pode_descer(de_fora, ())
+    pode, _ = arvore.pode_descer(de_dentro, caminho)
+    assert pode is True
+
+
+def test_painel_vazio_na_mesma_posicao_para():
+    """Mesmo papel, mesmo nome, mesma posição: é o mesmo nó, não um filho."""
+    painel = {"papel": 16, "nome": "", "caixa": [0, 0, 800, 600]}
+    _, caminho = arvore.pode_descer(painel, ())
+    pode, _ = arvore.pode_descer(dict(painel), caminho)
+    assert pode is False
+
+
+def test_a_arvore_repetida_do_chrome_e_denunciada():
+    """É melhor avisar do que entregar 596 “botões” que não existem."""
+    moldura = [_botao("Minimizar" if n % 2 else "IME", x=n) for n in range(30)]
+    bruto = {
+        "janela": {"handle": 5, "titulo": "Arena - Google Chrome", "processo": "chrome.exe"},
+        "raiz": {"papel": 10, "nome": "área do cliente", "filhos": moldura},
+        "fonte": "msaa",
+    }
+    resultado = arvore.montar(bruto, 6, 600)
+    assert resultado["acionaveis"] == 30
+    assert arvore.repeticao(resultado) == 15
+    assert "repetiu os mesmos botões" in resultado["dica"]
+    assert "--fonte uia" in resultado["dica"]
+
+
+def test_arvore_normal_nao_e_denunciada_como_repetida():
+    resultado = arvore.montar(JANELA_CADASTRO, 6, 600)
+    assert arvore.repeticao(resultado) == 1
+    assert not resultado.get("dica")
+
+
+def test_de_casca_reconhece_o_menu_iniciar():
+    """Foi o que a sonda escolheu no PC do usuário: “Iniciar”, do explorer."""
+    assert arvore.de_casca({"classe": "Windows.UI.Core.CoreWindow", "titulo": "Iniciar"}) is True
+    assert arvore.de_casca({"classe": "Shell_TrayWnd", "titulo": ""}) is True
+    assert arvore.de_casca({"classe": "Chrome_WidgetWin_1", "titulo": "Arena"}) is False
+
+
+def test_a_sonda_prefere_janelas_de_programa_ao_escolher_a_de_tras():
+    """Com o filtro, o Chrome — e não o menu Iniciar — é a janela de trás."""
+    import importlib.util
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_casca", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    class LeitorComCasca:
+        def janela_em_foco(self):
+            return {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe"}
+
+        def janelas(self):
+            return [
+                {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe", "classe": "ConsoleWindowClass"},
+                {"handle": 902, "titulo": "Iniciar", "processo": "explorer.exe", "classe": "Windows.UI.Core.CoreWindow"},
+                {"handle": 901, "titulo": "Arena - Google Chrome", "processo": "chrome.exe", "classe": "Chrome_WidgetWin_1"},
+            ]
+
+        def janelas_de_programas(self):
+            return [
+                {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe", "classe": "ConsoleWindowClass"},
+                {"handle": 901, "titulo": "Arena - Google Chrome", "processo": "chrome.exe", "classe": "Chrome_WidgetWin_1"},
+            ]
+
+    janela, troca = modulo._escolher(LeitorComCasca(), "foco")
+    assert janela["handle"] == 901
+    assert "Chrome" in troca
+
+
+def test_os_indices_da_uia_nao_voltam_a_ficar_deslocados():
+    """Os índices errados eram todos +3 (faltava contar IUnknown). Prende os certos."""
+    import ast
+
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    arvore_ast = ast.parse(fonte)
+    valores = {}
+    for no in arvore_ast.body:
+        if isinstance(no, ast.Assign) and len(no.targets) == 1 and isinstance(no.targets[0], ast.Name):
+            if isinstance(no.value, ast.Constant) and isinstance(no.value.value, int):
+                valores[no.targets[0].id] = no.value.value
+
+    assert valores["UIA_ELEMENT_FROM_HANDLE"] == 6
+    assert valores["UIA_CONTROL_VIEW_WALKER"] == 14
+    assert valores["UIA_WALKER_FIRST_CHILD"] == 4
+    assert valores["UIA_WALKER_NEXT_SIBLING"] == 6
+    assert valores["UIA_EL_GET_NAME"] == 23
+    assert valores["UIA_EL_GET_PATTERN"] == 16
+    # Qualquer índice abaixo de 3 invadiria IUnknown.
+    for nome, valor in valores.items():
+        if nome.startswith("UIA_") and nome.isupper():
+            assert valor >= 3, nome
+
+
+def test_a_sonda_tem_diagnostico():
+    """Falhar em silêncio foi o pior da 0.82.1 — agora existe um passo a passo."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--diagnostico"' in texto
+    assert "diagnostico()" in texto

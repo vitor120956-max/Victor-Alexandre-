@@ -39,6 +39,8 @@ if sys.platform != "win32":  # pragma: no cover - importado só no Windows
 
 from ctypes import wintypes  # noqa: E402
 
+from server import arvore  # noqa: E402 - política de leitura, sem dependência circular
+
 # ---------------------------------------------------------------------------
 # Bibliotecas
 # ---------------------------------------------------------------------------
@@ -230,6 +232,16 @@ def janelas() -> list[dict[str, Any]]:
     return achadas
 
 
+def de_casca(janela: dict[str, Any]) -> bool:
+    """A janela é do próprio Windows? A lista mora em `arvore.py`."""
+    return arvore.de_casca(janela)
+
+
+def janelas_de_programas() -> list[dict[str, Any]]:
+    """Só as janelas de programas de verdade — para escolher “a janela de trás”."""
+    return [item for item in janelas() if not arvore.de_casca(item)]
+
+
 def janela_em_foco() -> dict[str, Any] | None:
     try:
         hwnd = user32.GetForegroundWindow()
@@ -380,7 +392,17 @@ class _Orcamento:
         return True
 
 
-def _no(ponteiro: int, filho: int, profundidade: int, maxima: int, orcamento: _Orcamento) -> dict[str, Any] | None:
+# As guardas contra árvore que se repete moram em `arvore.py` — são política,
+# não sistema, e por isso podem ser testadas fora do Windows. Aqui só se lê.
+
+def _no(
+    ponteiro: int,
+    filho: int,
+    profundidade: int,
+    maxima: int,
+    orcamento: _Orcamento,
+    ancestrais: tuple[arvore.Ancestral, ...] = (),
+) -> dict[str, Any] | None:
     if not orcamento.gastar():
         return None
     no: dict[str, Any] = {
@@ -396,10 +418,13 @@ def _no(ponteiro: int, filho: int, profundidade: int, maxima: int, orcamento: _O
 
     if profundidade >= maxima:
         return no
+    pode, caminho = arvore.pode_descer(no, ancestrais)
+    if not pode:
+        return no
 
     for ponteiro_filho, id_filho in _filhos(ponteiro, orcamento.restante):
         usar = ponteiro_filho or ponteiro
-        criado = _no(usar, id_filho, profundidade + 1, maxima, orcamento)
+        criado = _no(usar, id_filho, profundidade + 1, maxima, orcamento, caminho)
         if criado is None:
             break
         no.setdefault("filhos", []).append(criado)
@@ -440,18 +465,39 @@ IID_IUIAutomation = GUID(
     (ctypes.c_ubyte * 8)(0xAB, 0x13, 0x7A, 0xC5, 0xAC, 0x48, 0x25, 0xEE),
 )
 
-# Índices de vtable (IUnknown ocupa 0, 1 e 2).
-UIA_ELEMENT_FROM_HANDLE = 9
-UIA_CONTROL_VIEW_WALKER = 17
-UIA_EL_GET_PATTERN = 19
-UIA_EL_GET_CONTROL_TYPE = 24
-UIA_EL_GET_LOCALIZED_TYPE = 25
-UIA_EL_GET_NAME = 26
-UIA_EL_GET_IS_ENABLED = 31
-UIA_EL_GET_IS_OFFSCREEN = 41
-UIA_EL_GET_RECT = 46
-UIA_WALKER_FIRST_CHILD = 7
-UIA_WALKER_NEXT_SIBLING = 9
+# Índices de vtable. **Estes números já estiveram errados.**
+#
+# A primeira versão contava como se a vtable começasse em `CompareElements`,
+# esquecendo que QueryInterface, AddRef e Release ocupam 0, 1 e 2. O resultado,
+# no PC do usuário, foi:
+#
+#     .venv\Scripts\python arvore_sonda.py --fonte uia
+#     a UIAutomation não devolveu árvore para esta janela.
+#
+# Ou seja: chamava `GetRootElementBuildCache` no lugar de `ElementFromHandle`.
+# O erro era **uniforme** — todos os índices três acima do certo. Conferido
+# contra a ordem de `uiautomationclient.h`:
+#
+#   IUIAutomation:        3 CompareElements, 4 CompareRuntimeIds, 5 GetRootElement,
+#                         6 ElementFromHandle, 7 ElementFromPoint, 8 GetFocusedElement,
+#                         13 CreateTreeWalker, 14 get_ControlViewWalker
+#   IUIAutomationElement: 16 GetCurrentPattern, 21 get_CurrentControlType,
+#                         22 get_CurrentLocalizedControlType, 23 get_CurrentName,
+#                         28 get_CurrentIsEnabled, 38 get_CurrentIsOffscreen,
+#                         43 get_CurrentBoundingRectangle
+#   ...TreeWalker:        3 GetParentElement, 4 GetFirstChildElement,
+#                         5 GetLastChildElement, 6 GetNextSiblingElement
+UIA_ELEMENT_FROM_HANDLE = 6
+UIA_CONTROL_VIEW_WALKER = 14
+UIA_EL_GET_PATTERN = 16
+UIA_EL_GET_CONTROL_TYPE = 21
+UIA_EL_GET_LOCALIZED_TYPE = 22
+UIA_EL_GET_NAME = 23
+UIA_EL_GET_IS_ENABLED = 28
+UIA_EL_GET_IS_OFFSCREEN = 38
+UIA_EL_GET_RECT = 43
+UIA_WALKER_FIRST_CHILD = 4
+UIA_WALKER_NEXT_SIBLING = 6
 
 # PATTERNID é inteiro, não GUID.
 PADRAO_INVOCAR = 10000
@@ -541,7 +587,17 @@ def _uia_obter() -> int:
     _co_iniciar()
     ponteiro = ctypes.c_void_p(0)
     try:
-        ole32.CoCreateInstance(
+        # restype explícito: sem ele o ctypes devolve `int` de 32 bits e um
+        # HRESULT de erro pode parecer sucesso. Custou uma rodada descobrir.
+        ole32.CoCreateInstance.restype = ctypes.c_long
+        ole32.CoCreateInstance.argtypes = [
+            ctypes.POINTER(GUID),
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(GUID),
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        criacao = ole32.CoCreateInstance(
             ctypes.byref(CLSID_CUIAutomation),
             None,
             CLSCTX_INPROC_SERVER,
@@ -549,6 +605,8 @@ def _uia_obter() -> int:
             ctypes.byref(ponteiro),
         )
     except Exception:  # noqa: BLE001 - COM de terceiros: nunca propagar
+        return 0
+    if criacao != S_OK:
         return 0
     _uia = int(ponteiro.value or 0)
     return _uia
@@ -678,6 +736,7 @@ def _uia_no(
     profundidade: int,
     maxima: int,
     orcamento: _Orcamento,
+    ancestrais: tuple[arvore.Ancestral, ...] = (),
 ) -> dict[str, Any] | None:
     """Um nó da árvore UIA — mesma forma do nó MSAA, para o resto não notar."""
     if not orcamento.gastar():
@@ -702,6 +761,10 @@ def _uia_no(
 
     if profundidade >= maxima:
         return no
+    # As mesmas guardas da MSAA: moldura é folha, e ciclo para.
+    pode, caminho = arvore.pode_descer(no, ancestrais)
+    if not pode:
+        return no
 
     filho = _uia_filho(walker, elemento)
     while filho:
@@ -709,7 +772,7 @@ def _uia_no(
         parar = False
         try:
             if _uia_inteiro(filho, UIA_EL_GET_IS_OFFSCREEN) != 1:
-                criado = _uia_no(filho, walker, profundidade + 1, maxima, orcamento)
+                criado = _uia_no(filho, walker, profundidade + 1, maxima, orcamento, caminho)
                 if criado is None:
                     parar = True
                 else:
@@ -774,8 +837,6 @@ def ler_janela(
     `fonte`: `auto` (padrão — MSAA e, se ela vier pobre, UIAutomation), `msaa`
     ou `uia`. No `auto`, quem decide é a leitura que mostrou mais elementos.
     """
-    from server import arvore  # tardio: arvore não depende deste módulo
-
     janela = _janela(int(handle))
     pedido = (fonte or "auto").strip().lower()
 
@@ -787,13 +848,111 @@ def ler_janela(
             "janela": janela,
             "raiz": None,
             "fonte": "uia",
-            "aviso": "a UIAutomation não devolveu árvore para esta janela.",
+            "aviso": (
+                "a UIAutomation não devolveu árvore para esta janela. "
+                "Rode `arvore_sonda.py --diagnostico` para ver em qual passo o COM parou."
+            ),
         }
 
     msaa = _ler_msaa(janela, profundidade, limite)
     if pedido == "msaa" or not arvore.precisa_segunda_fonte(msaa):
         return msaa
     return arvore.escolher_fonte(msaa, _ler_uia(janela, profundidade, limite))
+
+
+def diagnostico() -> dict[str, Any]:
+    """Passo a passo do COM, com o retorno de cada chamada.
+
+    Por que existe: a 0.82.1 falhou na UIA **em silêncio** — a mensagem era
+    “não devolveu árvore”, e isso não dizia se o problema era o COM, o índice
+    de vtable ou a janela. Este relatório responde. É para ser lido por uma
+    pessoa, não só por programa.
+    """
+    passos: list[dict[str, Any]] = []
+
+    def anotar(nome: str, retorno: Any, detalhe: str = "") -> None:
+        codigo = int(retorno) if isinstance(retorno, int) else None
+        passos.append(
+            {
+                "passo": nome,
+                "retorno": codigo if codigo is not None else str(retorno),
+                "hex": f"0x{codigo & 0xFFFFFFFF:08X}" if codigo is not None else "",
+                "ok": codigo == S_OK if codigo is not None else bool(retorno),
+                "detalhe": detalhe,
+            }
+        )
+
+    try:
+        _co_iniciar()
+        anotar("CoInitializeEx(MTA)", S_OK, "já iniciado ou iniciado agora — os dois servem")
+    except Exception as exc:  # noqa: BLE001
+        anotar("CoInitializeEx(MTA)", type(exc).__name__, str(exc))
+
+    ponteiro = ctypes.c_void_p(0)
+    try:
+        ole32.CoCreateInstance.restype = ctypes.c_long
+        criacao = ole32.CoCreateInstance(
+            ctypes.byref(CLSID_CUIAutomation),
+            None,
+            CLSCTX_INPROC_SERVER,
+            ctypes.byref(IID_IUIAutomation),
+            ctypes.byref(ponteiro),
+        )
+    except Exception as exc:  # noqa: BLE001
+        anotar("CoCreateInstance(IUIAutomation)", type(exc).__name__, str(exc))
+        return {"ok": False, "passos": passos, "nota": "o ctypes não conseguiu nem chamar o COM."}
+
+    anotar("CoCreateInstance(IUIAutomation)", criacao, "objeto criado" if ponteiro.value else "sem ponteiro")
+    if criacao != S_OK or not ponteiro.value:
+        return {
+            "ok": False,
+            "passos": passos,
+            "nota": "a UIAutomation não pôde ser criada neste sistema; a leitura fica só na MSAA.",
+        }
+
+    raiz = int(ponteiro.value)
+    walker = ctypes.c_void_p(0)
+    try:
+        funcao = _metodo(raiz, UIA_CONTROL_VIEW_WALKER, [ctypes.POINTER(ctypes.c_void_p)])
+        retorno = funcao(raiz, ctypes.byref(walker))
+    except Exception as exc:  # noqa: BLE001
+        retorno = type(exc).__name__  # type: ignore[assignment]
+    anotar("get_ControlViewWalker (índice 14)", retorno, "percorre a árvore de controles")
+
+    janela = janela_em_foco()
+    if not janela:
+        anotar("GetForegroundWindow", False, "nenhuma janela em foco")
+        return {"ok": False, "passos": passos, "nota": "sem janela em foco para testar."}
+
+    elemento = ctypes.c_void_p(0)
+    try:
+        funcao = _metodo(raiz, UIA_ELEMENT_FROM_HANDLE, [wintypes.HWND, ctypes.POINTER(ctypes.c_void_p)])
+        retorno = funcao(raiz, wintypes.HWND(int(janela["handle"])), ctypes.byref(elemento))
+    except Exception as exc:  # noqa: BLE001
+        retorno = type(exc).__name__  # type: ignore[assignment]
+    anotar(
+        "ElementFromHandle (índice 6)",
+        retorno,
+        f"janela: {janela.get('titulo') or janela.get('processo') or janela.get('handle')}",
+    )
+    if elemento.value:
+        tipo = _uia_inteiro(int(elemento.value), UIA_EL_GET_CONTROL_TYPE)
+        nome = _uia_texto(int(elemento.value), UIA_EL_GET_NAME)
+        anotar("get_CurrentControlType", S_OK if tipo is not None else "falhou", f"tipo={tipo}")
+        anotar("get_CurrentName", S_OK if nome else "vazio", f"nome={nome[:60]!r}")
+        _liberar(int(elemento.value))
+
+    ok = all(passo["ok"] for passo in passos if passo["passo"].startswith(("CoCreate", "get_Control", "ElementFrom")))
+    return {
+        "ok": ok,
+        "passos": passos,
+        "nota": (
+            "todos os passos responderam: a UIAutomation está disponível nesta máquina."
+            if ok
+            else "algum passo falhou — o retorno mostra qual. 0x80004005 = falha genérica; "
+            "0x80070005 = acesso negado (janela elevada)."
+        ),
+    }
 
 
 def estado() -> dict[str, Any]:
