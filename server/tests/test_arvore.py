@@ -289,3 +289,181 @@ def test_a_sonda_existe_e_e_ascii_no_essencial():
     assert caminho.is_file()
     texto = caminho.read_text(encoding="utf-8")
     assert "só leitura" in texto or "Só leitura" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.82.1 — o que a primeira medição no PC ensinou
+# ---------------------------------------------------------------------------
+# O usuário rodou `arvore_sonda.py` dentro de um `cmd.exe` e recebeu:
+#
+#     cmd.exe — ...: 1 elemento(s), 0 acionável(is) — fonte: msaa
+#     área do cliente “C:\Windows\system32\cmd.exe - ...”
+#
+# Duas coisas erradas ali: a sonda leu **a si mesma** (o terminal é a janela em
+# foco) e o console não publica botões pela MSAA. Os testes abaixo prendem as
+# duas correções.
+
+CONSOLE = {
+    "janela": {"handle": 900, "titulo": "cmd.exe - python arvore_sonda.py", "processo": "cmd.exe"},
+    "raiz": _no(10, "C:\\Windows\\system32\\cmd.exe", filhos=[_no(41, "")]),
+    "fonte": "msaa",
+}
+
+BLOCO_DE_NOTAS = {
+    "janela": {"handle": 901, "titulo": "Sem título - Bloco de Notas", "processo": "notepad.exe"},
+    "raiz": _no(9, "Bloco de Notas", filhos=[_no(42, "menu", "clicar"), _no(16, "", filhos=[_no(42, "texto")])]),
+    "fonte": "uia",
+}
+
+
+def test_uma_arvore_pobre_pede_a_segunda_fonte():
+    """1 elemento é moldura, não conteúdo — vale tentar a UIAutomation."""
+    assert arvore.precisa_segunda_fonte(CONSOLE) is True
+    assert arvore.precisa_segunda_fonte({"raiz": None}) is True
+
+
+def test_uma_arvore_com_conteudo_dispensa_a_segunda_leitura():
+    """9 é o piso: abaixo disso a janela não “falou” o suficiente para confiar."""
+    rica = {"raiz": _no(9, "janela", filhos=[_no(43, f"botão {n}", "clicar") for n in range(10)])}
+    assert arvore.precisa_segunda_fonte(rica) is False
+
+
+def test_arvore_rica_nao_paga_a_segunda_leitura():
+    """Janela com muita coisa não é lida duas vezes: o usuário espera."""
+    grande = {"raiz": _no(9, "janela", filhos=[_no(43, f"botão {n}") for n in range(12)])}
+    assert arvore.precisa_segunda_fonte(grande) is False
+
+
+def test_quem_mostrou_mais_vence_e_diz_que_venceu():
+    """“auto” não é chute: fica com a leitura maior e explica a escolha."""
+    escolhida = arvore.escolher_fonte(CONSOLE, BLOCO_DE_NOTAS)
+    assert escolhida["fonte"] == "uia"
+    assert escolhida["janela"]["handle"] == 901
+    assert "UIAutomation" in escolhida["nota"]
+
+
+def test_msaa_vence_quando_da_mais_e_a_nota_diz_isso():
+    """Não é “UIA sempre”: é a leitura maior. E o motivo fica escrito."""
+    rica = {
+        "janela": {"handle": 700, "titulo": "painel", "processo": "app.exe"},
+        "raiz": _no(9, "janela", filhos=[_no(43, f"botão {n}", "clicar") for n in range(8)]),
+        "fonte": "msaa",
+    }
+    escolhida = arvore.escolher_fonte(rica, CONSOLE)
+    assert escolhida["fonte"] == "msaa"
+    assert escolhida["janela"]["handle"] == 700
+    assert "MSAA mostrou mais" in escolhida["nota"]
+
+
+def test_nenhuma_das_duas_trouxe_arvore_explica_o_motivo():
+    """Vazio sem explicação foi o que deixou o usuário sem saber o que fazer."""
+    escolhida = arvore.escolher_fonte({"janela": {"titulo": "jogo"}, "raiz": None}, {"raiz": None})
+    assert escolhida["raiz"] is None
+    assert "nenhuma das duas fontes" in escolhida["aviso"]
+
+
+def test_dica_avisa_quando_o_lido_foi_o_proprio_terminal():
+    """O usuário leu o próprio `cmd` e não sabia — a frase tem de dizer isso."""
+    resultado = arvore.montar(CONSOLE, 6, 600)
+    assert "próprio terminal" in resultado["dica"]
+    assert "--alvo" in resultado["dica"]
+
+
+def test_dica_nao_aparece_quando_a_leitura_e_util():
+    resultado = arvore.montar(JANELA_CADASTRO, 6, 600)
+    assert "dica" not in resultado
+
+
+def test_o_resumo_carrega_a_dica():
+    """Quem só lê a primeira linha (o chat) também precisa do aviso."""
+    texto = arvore.resumo(arvore.montar(CONSOLE, 6, 600))
+    assert "próprio terminal" in texto
+
+
+def test_o_nome_do_papel_da_uia_tem_preferencia():
+    """A UIA já manda “editar”/“botão” traduzido; a nossa tabela é o reserva."""
+    bruto = {
+        "janela": {"handle": 1, "titulo": "x", "processo": "y.exe"},
+        "raiz": {"papel": 42, "papel_nome": "editar", "nome": "Nome", "acao": "escrever"},
+        "fonte": "uia",
+    }
+    no = arvore.montar(bruto, 2, 10)["arvore"]
+    assert no["papel"] == "editar"
+    assert no["ref"]
+
+
+def test_elemento_desativado_nao_ganha_ref():
+    """Botão cinza não é alvo de clique — dar `ref` a ele seria prometer o impossível."""
+    bruto = {
+        "janela": {"handle": 2, "titulo": "x", "processo": "y.exe"},
+        "raiz": {"papel": 43, "nome": "Salvar", "desativado": True},
+        "fonte": "uia",
+    }
+    resultado = arvore.montar(bruto, 2, 10)
+    assert resultado["arvore"]["acionavel"] is False
+    assert resultado["arvore"]["ref"] == ""
+    assert resultado["acionaveis"] == 0
+
+
+def test_a_sonda_troca_o_terminal_pela_janela_de_tras():
+    """O caso do usuário: rodou no `cmd` e queria ver o programa aberto atrás."""
+    import importlib.util
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_troca", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    class LeitorComTerminal:
+        def janela_em_foco(self):
+            return {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe"}
+
+        def janelas(self):
+            return [
+                {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe"},
+                {"handle": 901, "titulo": "Sem título - Bloco de Notas", "processo": "notepad.exe"},
+            ]
+
+    janela, troca = modulo._escolher(LeitorComTerminal(), "foco")
+    assert janela["handle"] == 901
+    assert "terminal" in troca
+    assert "Bloco de Notas" in troca
+
+
+def test_a_sonda_respeita_alvo_explicito_em_vez_de_trocar():
+    """Se o usuário pediu `--alvo`, ele manda — nada de troca silenciosa."""
+    import importlib.util
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_alvo", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    class Leitor:
+        def janela_em_foco(self):
+            return {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe"}
+
+        def janelas(self):
+            return [
+                {"handle": 900, "titulo": "cmd.exe", "processo": "cmd.exe"},
+                {"handle": 901, "titulo": "Bloco de Notas", "processo": "notepad.exe"},
+            ]
+
+    janela, troca = modulo._escolher(Leitor(), "cmd")
+    assert janela["handle"] == 900
+    assert troca == ""
+
+
+def test_a_sonda_oferece_as_duas_fontes():
+    """`--fonte` é o que permite comparar as duas no PC do usuário."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--fonte"' in texto
+    assert '"msaa", "uia"' in texto
+
+
+def test_a_sonda_manda_a_fonte_para_o_leitor():
+    """Sem repassar `fonte`, escolher a fonte não adiantaria nada."""
+    fonte = Path("server/arvore.py").read_text(encoding="utf-8")
+    assert '"--fonte",' in fonte

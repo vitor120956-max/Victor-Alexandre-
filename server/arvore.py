@@ -179,6 +179,8 @@ def papel(numero: Any) -> str:
 
 
 def _acionavel(bruto: dict[str, Any]) -> bool:
+    if bruto.get("desativado"):
+        return False
     try:
         return bool(bruto.get("acao")) or int(bruto.get("papel") or 0) in ACIONAVEIS
     except (TypeError, ValueError):
@@ -207,6 +209,11 @@ def _normalizar(
         "profundidade": profundidade,
         "acionavel": acionavel,
     }
+    # A UIAutomation já manda o nome do papel traduzido pelo Windows (“editar”,
+    # “botão”). Ele é melhor do que a nossa tabela quando existe — usamos ele.
+    localizado = " ".join(str(bruto.get("papel_nome") or "").split())[:40]
+    if localizado:
+        no["papel"] = localizado
     if bruto.get("acao"):
         no["acao"] = str(bruto["acao"])[:60]
     caixa = bruto.get("caixa")
@@ -244,6 +251,102 @@ def _contar(no: dict[str, Any]) -> tuple[int, int]:
         total += t
         acionaveis += a
     return total, acionaveis
+
+
+# ---------------------------------------------------------------------------
+# Duas fontes: MSAA e UIAutomation
+# ---------------------------------------------------------------------------
+# A MSAA é de 1996. No seu PC ela devolveu, para um `cmd.exe`:
+#
+#     cmd.exe — ...: 1 elemento(s), 0 acionável(is) — fonte: msaa
+#     área do cliente “C:\Windows\system32\cmd.exe - ...”
+#
+# Ou seja: a janela publicou só a moldura. O console — e boa parte dos
+# programas atuais — publica a árvore **pela UIAutomation**. Por isso existem
+# duas leituras, e quem decide é a que mostrou mais elementos.
+
+SEGUNDA_FONTE_ABAIXO_DE = 9
+
+
+def _total_bruto(bruto: dict[str, Any] | None) -> int:
+    """Quantos nós a leitura crua trouxe — sem montar nada."""
+    if not bruto or not isinstance(bruto.get("raiz"), dict):
+        return 0
+    pilha = [bruto["raiz"]]
+    total = 0
+    while pilha:
+        no = pilha.pop()
+        total += 1
+        for filho in no.get("filhos") or []:
+            if isinstance(filho, dict):
+                pilha.append(filho)
+    return total
+
+
+def precisa_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
+    """A leitura veio pobre? Então vale tentar a outra fonte.
+
+    Pobre = menos de 9 elementos. Janela rica não paga a segunda leitura: numa
+    janela grande, cada caminhada extra é tempo que o usuário espera.
+    """
+    return _total_bruto(bruto) < SEGUNDA_FONTE_ABAIXO_DE
+
+
+def escolher_fonte(msaa: dict[str, Any] | None, uia: dict[str, Any] | None) -> dict[str, Any]:
+    """Devolve a leitura que mostrou mais elementos, dizendo qual foi.
+
+    A UIA ganha quando a MSAA só trouxe a moldura (era o caso do `cmd`). A MSAA
+    ganha quando dá mais — é mais rápida e não muda o que já funcionava.
+    """
+    msaa = msaa or {}
+    uia = uia or {}
+    total_msaa, total_uia = _total_bruto(msaa), _total_bruto(uia)
+
+    if total_uia and (not total_msaa or total_uia >= total_msaa):
+        escolhida = dict(uia)
+        if total_msaa:
+            escolhida["nota"] = (
+                f"a MSAA mostrou só {total_msaa} elemento(s); a UIAutomation mostrou {total_uia}."
+            )
+        return escolhida
+    if total_msaa:
+        escolhida = dict(msaa)
+        if total_uia:
+            escolhida["nota"] = f"a UIAutomation mostrou {total_uia}; a MSAA mostrou mais ({total_msaa})."
+        return escolhida
+    # Nenhuma das duas trouxe árvore: devolve a da UIA, com o motivo honesto.
+    vazio = dict(uia or msaa)
+    vazio["raiz"] = None
+    vazio["aviso"] = (
+        "esta janela não publicou árvore em nenhuma das duas fontes (MSAA e UIAutomation). "
+        "Costuma acontecer com jogo em tela cheia, instalador antigo e janela elevada "
+        "aberta por um programa que roda como administrador."
+    )
+    return vazio
+
+
+def dica(resultado: dict[str, Any]) -> str:
+    """O que fazer quando a leitura veio quase vazia — em vez de silêncio.
+
+    Foi o que faltou na primeira medição: “1 elemento, 0 acionável” sem dizer
+    que o JARVIS tinha lido **o próprio terminal**.
+    """
+    total = int(resultado.get("total") or 0)
+    if not total:
+        return ""
+    alvo = str(resultado.get("alvo") or "")
+    proprio = any(nome in alvo.lower() for nome in ("cmd.exe", "powershell.exe", "python.exe", "conhost.exe"))
+    if proprio and int(resultado.get("acionaveis") or 0) == 0:
+        return (
+            "o JARVIS leu o próprio terminal — é ele que está em foco. Clique na janela que quer "
+            "examinar e rode de novo, ou peça `--alvo` com parte do título (ex.: `--alvo chrome`)."
+        )
+    if int(resultado.get("acionaveis") or 0) == 0 and total <= 2:
+        return (
+            "a janela publicou só a moldura: este programa pode não expor seus controles. "
+            "Vale repetir com `--alvo` em outra janela para comparar."
+        )
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +405,12 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
         )
     elif bruto.get("aviso"):
         resultado["aviso"] = bruto["aviso"]
+    notas = [str(item) for item in (bruto.get("nota"), bruto.get("nota_escolha")) if item]
+    if notas:
+        resultado["nota"] = " ".join(notas)
+    sugestao = dica(resultado)
+    if sugestao:
+        resultado["dica"] = sugestao
     return resultado
 
 
@@ -312,6 +421,7 @@ def ler(
     limite: int = LIMITE_PADRAO,
     leitor: Leitor | None = None,
     tempo: float = 25.0,
+    fonte: str = "auto",
 ) -> dict[str, Any]:
     """Lê a árvore da janela em foco (ou de um título) — sem colocar a API em risco.
 
@@ -327,7 +437,10 @@ def ler(
             "a leitura da árvore só existe no Windows hoje — no seu sistema o JARVIS continua "
             "com `mesa.status` (títulos de janela)."
         )
-    return _ler_com_sonda(alvo, prof, lim, tempo)
+    escolhida = (fonte or "auto").strip().lower()
+    if escolhida not in {"auto", "msaa", "uia"}:
+        escolhida = "auto"
+    return _ler_com_sonda(alvo, prof, lim, tempo, escolhida)
 
 
 def _ler_com_leitor(leitor: Leitor, alvo: str, profundidade: int, limite: int) -> dict[str, Any]:
@@ -357,7 +470,13 @@ def _escolher_janela(leitor: Leitor, alvo: str) -> dict[str, Any]:
     return achadas[0]
 
 
-def _ler_com_sonda(alvo: str, profundidade: int, limite: int, tempo: float) -> dict[str, Any]:
+def _ler_com_sonda(
+    alvo: str,
+    profundidade: int,
+    limite: int,
+    tempo: float,
+    fonte: str = "auto",
+) -> dict[str, Any]:
     if not SONDA.is_file():
         raise ArvoreError("a sonda de leitura (arvore_sonda.py) não está nesta pasta.")
     comando = [
@@ -370,6 +489,8 @@ def _ler_com_sonda(alvo: str, profundidade: int, limite: int, tempo: float) -> d
         str(profundidade),
         "--limite",
         str(limite),
+        "--fonte",
+        fonte,
     ]
     try:
         saida = subprocess.run(  # noqa: S603 - caminho fixo, sem shell
@@ -463,4 +584,8 @@ def resumo(resultado: dict[str, Any]) -> str:
     )
     if not resultado.get("completo", True):
         cabeca += " " + str(resultado.get("aviso") or "Leitura parcial.")
+    if resultado.get("nota"):
+        cabeca += " " + str(resultado["nota"])
+    if resultado.get("dica"):
+        cabeca += " " + str(resultado["dica"])
     return cabeca

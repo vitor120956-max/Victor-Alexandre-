@@ -408,18 +408,352 @@ def _no(ponteiro: int, filho: int, profundidade: int, maxima: int, orcamento: _O
     return no
 
 
-def ler_janela(handle: int, profundidade: int = 6, limite: int = 600) -> dict[str, Any]:
-    """Lê a árvore de uma janela. Sem árvore, devolve `raiz: None` e o motivo."""
-    janela = _janela(int(handle))
-    ponteiro = _abrir(int(handle))
+# ---------------------------------------------------------------------------
+# UIAutomation — a segunda fonte (0.82.1)
+# ---------------------------------------------------------------------------
+# Por que existe, com a medição na mão: no seu PC a primeira leitura devolveu
+#
+#     cmd.exe — ...: 1 elemento(s), 0 acionável(is) — fonte: msaa
+#     área do cliente “C:\Windows\system32\cmd.exe - ...”
+#
+# O console (e boa parte dos programas de hoje: Bloco de Notas do Windows 11,
+# apps WinUI, pedaços do Chrome) NÃO publica botões pela MSAA — ela é de 1996.
+# Publica pela **UIAutomation**, a árvore nova que o Narrador também usa.
+#
+# Continua só leitura: `GetFirstChildElement`, `GetNextSiblingElement`, `get_*`
+# e `GetCurrentPattern` — este último só para **perguntar** se o elemento aceita
+# ação. Nenhum método de agir é chamado.
+
+ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+
+CLSCTX_INPROC_SERVER = 1
+COINIT_MULTITHREADED = 0
+
+# {FF48DBA4-60EF-4201-AA87-54103EEF594E} — CLSID_CUIAutomation
+CLSID_CUIAutomation = GUID(
+    0xFF48DBA4, 0x60EF, 0x4201,
+    (ctypes.c_ubyte * 8)(0xAA, 0x87, 0x54, 0x10, 0x3E, 0xEF, 0x59, 0x4E),
+)
+# {30CBE57D-D9D0-452A-AB13-7AC5AC4825EE} — IID_IUIAutomation
+IID_IUIAutomation = GUID(
+    0x30CBE57D, 0xD9D0, 0x452A,
+    (ctypes.c_ubyte * 8)(0xAB, 0x13, 0x7A, 0xC5, 0xAC, 0x48, 0x25, 0xEE),
+)
+
+# Índices de vtable (IUnknown ocupa 0, 1 e 2).
+UIA_ELEMENT_FROM_HANDLE = 9
+UIA_CONTROL_VIEW_WALKER = 17
+UIA_EL_GET_PATTERN = 19
+UIA_EL_GET_CONTROL_TYPE = 24
+UIA_EL_GET_LOCALIZED_TYPE = 25
+UIA_EL_GET_NAME = 26
+UIA_EL_GET_IS_ENABLED = 31
+UIA_EL_GET_IS_OFFSCREEN = 41
+UIA_EL_GET_RECT = 46
+UIA_WALKER_FIRST_CHILD = 7
+UIA_WALKER_NEXT_SIBLING = 9
+
+# PATTERNID é inteiro, não GUID.
+PADRAO_INVOCAR = 10000
+PADRAO_VALOR = 10002
+PADRAO_EXPANDIR = 10005
+PADRAO_SELECIONAR = 10008
+PADRAO_MARCAR = 10013
+
+# CONTROLTYPEID → ROLE_SYSTEM_*, para o resto do JARVIS ver o mesmo vocabulário.
+PAPEL_UIA = {
+    50001: 16,  # calendário
+    50002: 44,  # caixa de seleção
+    50003: 46,  # caixa de combinação
+    50004: 42,  # campo de edição
+    50005: 30,  # link
+    50006: 40,  # imagem
+    50007: 34,  # item de lista
+    50008: 33,  # lista
+    50009: 2,   # menu
+    50010: 2,   # barra de menu
+    50011: 12,  # item de menu
+    50012: 48,  # barra de progresso
+    50013: 45,  # botão de opção
+    50014: 3,   # barra de rolagem
+    50015: 51,  # controle deslizante
+    50016: 52,  # botão de giro
+    50017: 23,  # barra de status
+    50018: 60,  # lista de abas
+    50019: 37,  # aba
+    50020: 41,  # texto
+    50021: 22,  # barra de ferramentas
+    50022: 13,  # dica
+    50023: 35,  # estrutura
+    50024: 36,  # item de estrutura
+    50025: 16,  # personalizado
+    50026: 20,  # grupo
+    50027: 4,   # alça
+    50028: 24,  # grade de dados
+    50029: 29,  # item de dados
+    50030: 15,  # documento
+    50031: 62,  # botão dividido
+    50032: 9,   # janela
+    50033: 16,  # painel
+    50034: 25,  # cabeçalho
+    50035: 25,  # item de cabeçalho
+    50036: 24,  # tabela
+    50037: 1,   # barra de título
+    50038: 21,  # separador
+    50000: 43,  # botão
+}
+
+# Só estes tipos valem a pergunta "aceita ação?" — perguntar em texto estático
+# custaria uma chamada por elemento, e janela grande tem centenas.
+TIPOS_ACIONAVEIS = {
+    50000,  # botão
+    50002,  # caixa de seleção
+    50003,  # caixa de combinação
+    50004,  # campo de edição
+    50005,  # link
+    50007,  # item de lista
+    50011,  # item de menu
+    50013,  # botão de opção
+    50015,  # controle deslizante
+    50019,  # aba
+    50024,  # item de estrutura
+    50029,  # item de dados
+    50031,  # botão dividido
+}
+
+_uia: int = 0
+_uia_tentada = False
+
+
+def _co_iniciar() -> None:
+    try:
+        ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+    except Exception:  # noqa: BLE001 - já inicializado ou COM indisponível
+        pass
+
+
+def _uia_obter() -> int:
+    """Ponteiro de IUIAutomation, criado uma vez. 0 quando a UIA não responde."""
+    global _uia, _uia_tentada
+    if _uia or _uia_tentada:
+        return _uia
+    _uia_tentada = True
+    _co_iniciar()
+    ponteiro = ctypes.c_void_p(0)
+    try:
+        ole32.CoCreateInstance(
+            ctypes.byref(CLSID_CUIAutomation),
+            None,
+            CLSCTX_INPROC_SERVER,
+            ctypes.byref(IID_IUIAutomation),
+            ctypes.byref(ponteiro),
+        )
+    except Exception:  # noqa: BLE001 - COM de terceiros: nunca propagar
+        return 0
+    _uia = int(ponteiro.value or 0)
+    return _uia
+
+
+def _uia_da_janela(hwnd: int) -> int:
+    raiz = _uia_obter()
+    if not raiz:
+        return 0
+    elemento = ctypes.c_void_p(0)
+    try:
+        funcao = _metodo(raiz, UIA_ELEMENT_FROM_HANDLE, [wintypes.HWND, ctypes.POINTER(ctypes.c_void_p)])
+        if funcao(raiz, wintypes.HWND(hwnd), ctypes.byref(elemento)) != S_OK:
+            return 0
+    except Exception:  # noqa: BLE001
+        return 0
+    return int(elemento.value or 0)
+
+
+def _uia_walker() -> int:
+    raiz = _uia_obter()
+    if not raiz:
+        return 0
+    ponteiro = ctypes.c_void_p(0)
+    try:
+        funcao = _metodo(raiz, UIA_CONTROL_VIEW_WALKER, [ctypes.POINTER(ctypes.c_void_p)])
+        if funcao(raiz, ctypes.byref(ponteiro)) != S_OK:
+            return 0
+    except Exception:  # noqa: BLE001
+        return 0
+    return int(ponteiro.value or 0)
+
+
+def _uia_texto(elemento: int, indice: int) -> str:
+    try:
+        funcao = _metodo(elemento, indice, [ctypes.POINTER(ctypes.c_void_p)])
+        saida = ctypes.c_void_p(0)
+        if funcao(elemento, ctypes.byref(saida)) != S_OK:
+            return ""
+        return _bstr(saida.value)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _uia_inteiro(elemento: int, indice: int) -> int | None:
+    try:
+        funcao = _metodo(elemento, indice, [ctypes.POINTER(ctypes.c_int)])
+        saida = ctypes.c_int(0)
+        if funcao(elemento, ctypes.byref(saida)) != S_OK:
+            return None
+        return int(saida.value)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _uia_caixa(elemento: int) -> list[int]:
+    try:
+        funcao = _metodo(elemento, UIA_EL_GET_RECT, [ctypes.POINTER(wintypes.RECT)])
+        retangulo = wintypes.RECT()
+        if funcao(elemento, ctypes.byref(retangulo)) != S_OK:
+            return []
+        largura = int(retangulo.right - retangulo.left)
+        altura = int(retangulo.bottom - retangulo.top)
+        if largura <= 0 or altura <= 0:
+            return []
+        return [int(retangulo.left), int(retangulo.top), largura, altura]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _uia_aceita(elemento: int, identificador: int) -> bool:
+    """O elemento aceita este padrão? Só pergunta — não invoca nada."""
+    try:
+        funcao = _metodo(elemento, UIA_EL_GET_PATTERN, [ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)])
+        saida = ctypes.c_void_p(0)
+        if funcao(elemento, identificador, ctypes.byref(saida)) != S_OK:
+            return False
+        if saida.value:
+            _liberar(int(saida.value))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _uia_acao(elemento: int, tipo: int) -> str:
+    """Nome curto do que o elemento aceita — o equivalente ao get_accDefaultAction."""
+    if tipo not in TIPOS_ACIONAVEIS:
+        return ""
+    if tipo == 50004 and _uia_aceita(elemento, PADRAO_VALOR):
+        return "escrever"
+    if _uia_aceita(elemento, PADRAO_INVOCAR):
+        return "clicar"
+    if _uia_aceita(elemento, PADRAO_MARCAR):
+        return "marcar"
+    if _uia_aceita(elemento, PADRAO_EXPANDIR):
+        return "abrir"
+    if _uia_aceita(elemento, PADRAO_SELECIONAR):
+        return "selecionar"
+    return ""
+
+
+def _uia_filho(walker: int, elemento: int) -> int:
+    try:
+        funcao = _metodo(walker, UIA_WALKER_FIRST_CHILD, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)])
+        saida = ctypes.c_void_p(0)
+        if funcao(walker, elemento, ctypes.byref(saida)) != S_OK:
+            return 0
+        return int(saida.value or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _uia_irmao(walker: int, elemento: int) -> int:
+    try:
+        funcao = _metodo(walker, UIA_WALKER_NEXT_SIBLING, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)])
+        saida = ctypes.c_void_p(0)
+        if funcao(walker, elemento, ctypes.byref(saida)) != S_OK:
+            return 0
+        return int(saida.value or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _uia_no(
+    elemento: int,
+    walker: int,
+    profundidade: int,
+    maxima: int,
+    orcamento: _Orcamento,
+) -> dict[str, Any] | None:
+    """Um nó da árvore UIA — mesma forma do nó MSAA, para o resto não notar."""
+    if not orcamento.gastar():
+        return None
+    tipo = _uia_inteiro(elemento, UIA_EL_GET_CONTROL_TYPE) or 0
+    no: dict[str, Any] = {
+        "papel": PAPEL_UIA.get(tipo, 0),
+        "nome": _uia_texto(elemento, UIA_EL_GET_NAME),
+    }
+    # O nome do papel vem traduzido do próprio Windows (“botão”, “editar”).
+    localizado = _uia_texto(elemento, UIA_EL_GET_LOCALIZED_TYPE)
+    if localizado:
+        no["papel_nome"] = localizado
+    if _uia_inteiro(elemento, UIA_EL_GET_IS_ENABLED) == 0:
+        no["desativado"] = True
+    caixa = _uia_caixa(elemento)
+    if caixa:
+        no["caixa"] = caixa
+    acao = _uia_acao(elemento, tipo)
+    if acao:
+        no["acao"] = acao
+
+    if profundidade >= maxima:
+        return no
+
+    filho = _uia_filho(walker, elemento)
+    while filho:
+        proximo = _uia_irmao(walker, filho)
+        parar = False
+        try:
+            if _uia_inteiro(filho, UIA_EL_GET_IS_OFFSCREEN) != 1:
+                criado = _uia_no(filho, walker, profundidade + 1, maxima, orcamento)
+                if criado is None:
+                    parar = True
+                else:
+                    no.setdefault("filhos", []).append(criado)
+            elif orcamento.restante <= 0:
+                parar = True
+        finally:
+            _liberar(filho)
+        if parar:
+            if proximo:
+                _liberar(proximo)
+            break
+        filho = proximo
+    return no
+
+
+def _ler_uia(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any] | None:
+    raiz = _uia_da_janela(int(janela["handle"]))
+    if not raiz:
+        return None
+    walker = _uia_walker()
+    try:
+        if not walker:
+            return None
+        arvore = _uia_no(raiz, walker, 0, max(1, int(profundidade)), _Orcamento(int(limite)))
+    except Exception:  # noqa: BLE001 - COM de terceiros: nunca propagar
+        return None
+    finally:
+        _liberar(raiz)
+        if walker:
+            _liberar(walker)
+    return {"janela": janela, "raiz": arvore, "fonte": "uia"}
+
+
+def _ler_msaa(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any]:
+    ponteiro = _abrir(int(janela["handle"]))
     if not ponteiro:
         return {
             "janela": janela,
             "raiz": None,
             "fonte": "msaa",
             "aviso": (
-                "esta janela não publica árvore de acessibilidade (ou está minimizada). "
-                "Restaurada na tela, a maioria dos programas publica."
+                "esta janela não publica árvore pela MSAA (ou está minimizada). "
+                "A leitura pela UIAutomation foi tentada em seguida."
             ),
         }
     try:
@@ -427,6 +761,39 @@ def ler_janela(handle: int, profundidade: int = 6, limite: int = 600) -> dict[st
     finally:
         _liberar(ponteiro)
     return {"janela": janela, "raiz": raiz, "fonte": "msaa"}
+
+
+def ler_janela(
+    handle: int,
+    profundidade: int = 6,
+    limite: int = 600,
+    fonte: str = "auto",
+) -> dict[str, Any]:
+    """Lê a árvore de uma janela. Sem árvore, devolve `raiz: None` e o motivo.
+
+    `fonte`: `auto` (padrão — MSAA e, se ela vier pobre, UIAutomation), `msaa`
+    ou `uia`. No `auto`, quem decide é a leitura que mostrou mais elementos.
+    """
+    from server import arvore  # tardio: arvore não depende deste módulo
+
+    janela = _janela(int(handle))
+    pedido = (fonte or "auto").strip().lower()
+
+    if pedido == "uia":
+        bruto = _ler_uia(janela, profundidade, limite)
+        if bruto:
+            return bruto
+        return {
+            "janela": janela,
+            "raiz": None,
+            "fonte": "uia",
+            "aviso": "a UIAutomation não devolveu árvore para esta janela.",
+        }
+
+    msaa = _ler_msaa(janela, profundidade, limite)
+    if pedido == "msaa" or not arvore.precisa_segunda_fonte(msaa):
+        return msaa
+    return arvore.escolher_fonte(msaa, _ler_uia(janela, profundidade, limite))
 
 
 def estado() -> dict[str, Any]:
@@ -439,12 +806,14 @@ def estado() -> dict[str, Any]:
     return {
         "sistema": "Windows",
         "build": build,
-        # A MSAA existe desde o Windows 2000; a UIA (usada pelo app do Narrador
-        # mais novo) melhorou muito no 8/10. 1809 é o piso que o agent-desktop
-        # exige — citado aqui como referência, não como exigência nossa.
+        # A MSAA existe desde o Windows 2000; a UIA (a árvore que o Narrador usa)
+        # melhorou muito no 8/10. 1809 é o piso que o agent-desktop exige —
+        # citado como referência, não como exigência nossa.
         "msaa": True,
+        "uia": _uia_obter() != 0,
         "nota": (
-            "leitura pela MSAA (oleacc), sem instalar nada. Programas modernos publicam "
-            "árvore melhor; aplicativos antigos e jogos podem não publicar."
+            "duas fontes, sem instalar nada: MSAA (oleacc) e UIAutomation (uiautomationcore). "
+            "A segunda é a que os programas de hoje publicam — o console, por exemplo, só aparece nela. "
+            "Jogos e instaladores antigos podem não publicar em nenhuma."
         ),
     }

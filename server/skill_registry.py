@@ -2095,6 +2095,7 @@ class MesaArvoreInput(BaseModel):
     alvo: str = Field(default="foco", max_length=120, title="Janela", json_schema_extra={"description": "“foco” para a janela ativa, ou parte do título/processo (ex.: chrome)."})
     profundidade: int = Field(default=6, ge=1, le=14, title="Profundidade")
     limite: int = Field(default=400, ge=1, le=3000, title="Máximo de elementos")
+    fonte: str = Field(default="auto", pattern="^(auto|msaa|uia)$", title="Fonte", json_schema_extra={"description": "auto (as duas, fica a maior), msaa ou uia."})
     so_acionaveis: bool = Field(default=False, title="Só o que dá para clicar")
 
 
@@ -4066,7 +4067,12 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
     def mesa_arvore_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, MesaArvoreInput)
         try:
-            lida = arvore.ler(data.alvo, profundidade=data.profundidade, limite=data.limite)
+            lida = arvore.ler(
+                data.alvo,
+                profundidade=data.profundidade,
+                limite=data.limite,
+                fonte=data.fonte,
+            )
         except arvore.ArvoreError as exc:
             raise SkillError(str(exc)) from exc
         if data.so_acionaveis:
@@ -5582,7 +5588,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.drive-copiar", "Configurar o Drive", "Copia biblioteca e repositórios para `JARVIS-DADOS` dentro do Drive, confere arquivo por arquivo e grava `JARVIS_BIBLIOTECA` e `JARVIS_REPOS` no `.env`. Não apaga nada e não leva o histórico do agente. Com `modo=desfazer`, só tira as linhas do `.env`.", "Armazenamento", ArmazenamentoDriveCopiarInput, armazenamento_drive_copiar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
         SkillDefinition("armazenamento.drive-banda", "Limitar a banda do Drive", "Grava `BandwidthRxKBPS` e `BandwidthTxKBPS` em `HKCU\\Software\\Google\\DriveFS` — o ajuste que o próprio app do Drive lê — e confere lendo de volta. Vale quando o app reiniciar. `0` remove o limite.", "Armazenamento", ArmazenamentoDriveBandaInput, armazenamento_drive_banda_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("armazenamento.drive-app", "Abrir ou fechar o Drive", "Fecha o app do Google Drive (para a sincronização, mas derruba a unidade `G:`) ou abre de novo. No Windows o app não aceita pausa por linha de comando — fechar é o único caminho sem clique. `estado` só informa se ele está rodando.", "Armazenamento", ArmazenamentoDriveAppInput, armazenamento_drive_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
-        SkillDefinition("mesa.arvore", "Ver os elementos da janela", "Lê a **árvore de acessibilidade** da janela em foco (MSAA do Windows) e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` para os acionáveis. **Somente leitura**: não clica, não digita, não move o mouse e não tira foto da tela. Roda numa sonda separada: se o programa travar, quem cai é a sonda.", "Mesa", MesaArvoreInput, mesa_arvore_handler, timeout_seconds=40),
+        SkillDefinition("mesa.arvore", "Ver os elementos da janela", "Lê a **árvore de acessibilidade** da janela em foco (MSAA e UIAutomation; fica com a que mostrar mais) e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` para os acionáveis. **Somente leitura**: não clica, não digita, não move o mouse e não tira foto da tela. Se a janela em foco for o próprio terminal, troca pela janela de trás e avisa. Roda numa sonda separada: se o programa travar, quem cai é a sonda.", "Mesa", MesaArvoreInput, mesa_arvore_handler, timeout_seconds=40),
         SkillDefinition("mesa.status", "Onde está o mouse", "Mostra a posição do cursor, o tamanho da tela e os títulos das janelas abertas. Só olha.", "Mesa", MesaStatusInput, mesa_handler("status"), timeout_seconds=15),
         SkillDefinition("mesa.mover", "Mover o mouse", "Leva o cursor até (x, y) em passos curtos. Se você mexer o mouse no meio, ele para em vez de continuar.", "Mesa", MesaMoverInput, mesa_handler("mover"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("mesa.clicar", "Clicar", "Clica com o botão esquerdo, direito ou do meio — na posição dada ou onde o cursor estiver.", "Mesa", MesaClicarInput, mesa_handler("clicar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
