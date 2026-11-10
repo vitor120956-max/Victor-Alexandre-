@@ -113,10 +113,28 @@ def principal(argv: list[str] | None = None) -> int:
         return _falhar(f"não consegui carregar o leitor do Windows ({type(exc).__name__}).")
 
     if args.diagnostico:
-        quadro = leitor.diagnostico()
+        from server import arvore
+
+        try:
+            janela_diagnostico, _ = _escolher(leitor, args.alvo)
+        except arvore.ArvoreError as exc:
+            return _falhar(str(exc))
+        quadro = leitor.diagnostico(args.alvo, handle=janela_diagnostico["handle"])
         if args.json:
             print(json.dumps(quadro, ensure_ascii=False, indent=2))
             return 0 if quadro.get("ok") else 1
+
+        # Dizer QUAL janela está sendo medida — a medição 6 mostrou a tabela do
+        # terminal quando o pedido era o Chrome, e ninguém percebeu.
+        alvo_medido = quadro.get("janela") or {}
+        if alvo_medido:
+            print(
+                f"  medindo: {alvo_medido.get('processo') or '?'} — "
+                f"{str(alvo_medido.get('titulo') or '')[:60]}"
+            )
+            print(f"  classe:  {alvo_medido.get('classe') or '?'}")
+            print()
+
         for passo in quadro.get("passos", []):
             marca = "ok  " if passo.get("ok") else "FALHA"
             print(f"  [{marca}] {passo.get('passo')}  {passo.get('hex')}  {passo.get('detalhe') or ''}".rstrip())
@@ -127,22 +145,39 @@ def principal(argv: list[str] | None = None) -> int:
         varredura = quadro.get("varredura") or []
         if varredura:
             print()
-            print("  janela                                  msaa  uia   conteudo")
-            print("  " + "-" * 62)
+            print("  janela                            msaa   uia   conteudo  processo")
+            print("  " + "-" * 72)
             for linha in varredura:
-                nome = ("  " if linha.get("filha") else "") + str(linha.get("classe"))[:36]
+                nome = ("  " if linha.get("filha") else "") + str(linha.get("classe"))[:30]
                 conteudo = []
                 if linha.get("msaa_conteudo"):
                     conteudo.append("msaa")
                 if linha.get("uia_conteudo"):
                     conteudo.append("uia")
                 print(
-                    f"  {nome:<38}  {linha.get('msaa', 0):>4}  {linha.get('uia', 0):>4}   "
-                    f"{', '.join(conteudo) or 'nenhum'}"
+                    f"  {nome:<32}  {linha.get('msaa', 0):>4}  {linha.get('uia', 0):>4}   "
+                    f"{', '.join(conteudo) or 'nenhum':<7}  {str(linha.get('processo') or '')[:16]}"
                 )
             print()
             print("  As linhas indentadas sao janelas filhas: e nelas que a pagina")
             print("  do navegador costuma morar.")
+            print("  A coluna 'processo' deve ser a do alvo pedido.")
+
+            veredito = quadro.get("veredito") or {}
+            if veredito:
+                print()
+                if veredito.get("conteudo"):
+                    print(
+                        f"  VEREDITO: a leitura vai funcionar — {veredito.get('total')} elemento(s) "
+                        f"de conteudo, fonte {veredito.get('fonte') or '?'}."
+                    )
+                else:
+                    print(
+                        f"  VEREDITO: {veredito.get('total', 0)} elemento(s), nenhum de conteudo "
+                        f"(fonte {veredito.get('fonte') or '?'})."
+                    )
+                if veredito.get("de_filha"):
+                    print(f"  lido de dentro de: {veredito['de_filha']}")
         return 0 if quadro.get("ok") else 1
 
     if args.janelas:

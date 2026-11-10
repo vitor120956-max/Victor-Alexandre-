@@ -624,7 +624,9 @@ def test_a_sonda_tem_diagnostico():
     """Falhar em silêncio foi o pior da 0.82.1 — agora existe um passo a passo."""
     texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
     assert '"--diagnostico"' in texto
-    assert "diagnostico()" in texto
+    # O diagnóstico precisa saber QUAL janela examinar — já mediu o terminal
+    # por engano quando usava sempre a janela em foco.
+    assert "diagnostico(args.alvo, handle=janela_diagnostico[" in texto
 
 
 # ---------------------------------------------------------------------------
@@ -894,3 +896,64 @@ def test_a_sonda_conhece_as_janelas_filhas_e_a_varredura():
     assert "def janelas_filhas" in fonte
     assert "def varrer_uia" in fonte
     assert '"varredura"' in fonte
+
+
+def test_o_diagnostico_respeita_o_alvo():
+    """`--alvo chrome --diagnostico` mediu o terminal e respondeu “nenhum”.
+
+    O diagnóstico usava sempre `janela_em_foco()`, ignorando o alvo. A tabela
+    que devia decidir a etapa 2 estava medindo a janela errada.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def diagnostico(")
+    trecho = fonte[inicio : inicio + 4000]
+    assert 'alvo: str = "foco"' in trecho
+    assert "handle: int | None = None" in trecho
+    assert "arvore.escolher_janela(alvo" in trecho
+    # A janela em foco só entra como candidata — não como decisão.
+    assert "foco=janela_em_foco()" in trecho
+
+
+def test_a_tabela_do_diagnostico_mostra_o_processo():
+    """Classe “ConsoleWindowClass” não diz nada a quem lê; `cmd.exe` diz."""
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index('linhas: dict[str, Any] = {')
+    trecho = fonte[inicio : inicio + 400]
+    assert '"processo"' in trecho
+
+
+def test_a_sonda_diz_qual_janela_esta_medindo():
+    """A tabela do diagnóstico já mediu o terminal sem avisar ninguém."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert "medindo: " in texto
+    assert "classe:  " in texto
+    # E fecha com um veredito, em vez de deixar a tabela para o usuário interpretar.
+    assert "VEREDITO" in texto
+
+
+def test_o_diagnostico_mede_do_jeito_que_a_leitura_le():
+    """A tabela mede cada janela isolada; a leitura agrega as filhas.
+
+    Sem um veredito medido com as mesmas funções da leitura, o diagnóstico
+    volta a mentir: mostraria “nenhum” na filha que a leitura usa.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def diagnostico(")
+    trecho = fonte[inicio : fonte.index("def estado(", inicio)]
+    assert '"veredito"' in trecho
+    assert "varrer_msaa(" in trecho
+    assert "arvore.escolher_fonte(" in trecho
+
+
+def test_a_varredura_msaa_desce_as_janelas_filhas():
+    """MSAA só na janela de topo nunca alcança a página do navegador."""
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def varrer_msaa(")
+    trecho = fonte[inicio : fonte.index("def _ler_msaa(")]
+    assert "janelas_filhas(" in trecho
+    assert "FILHAS_MAXIMAS" in trecho
+    assert "de_filha" in trecho
+    # Janela já rica não paga 24 leituras: rende o que já tem.
+    assert "melhor_conteudo and melhor_total >= 9" in trecho
+    # Achou conteúdo numa filha, para: não paga as outras 23.
+    assert "if conteudo:\n            break" in trecho

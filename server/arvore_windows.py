@@ -968,6 +968,50 @@ def _ler_uia(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str
     return achada
 
 
+def varrer_msaa(handle: int, profundidade: int, limite: int) -> dict[str, Any]:
+    """MSAA da janela **e** das filhas; fica com a de conteúdo ou a maior.
+
+    A 0.82.5 varria as filhas só na UIA. Mas o Chrome publica a página pela
+    MSAA da janela filha (`Chrome_RenderWidgetHostHWND`) em muitas versões —
+    e a leitura da janela de topo, sozinha, nunca chega lá.
+    """
+    principal = {"handle": int(handle), "titulo": _titulo(int(handle)), "classe": _classe(int(handle))}
+    melhor = _ler_msaa(principal, profundidade, limite)
+    melhor_total = arvore.total_bruto(melhor)
+    melhor_conteudo = arvore.tem_conteudo(melhor)
+    # Janela já rica: não vale pagar a leitura das filhas. Pobre ou só moldura:
+    # é nelas que a página está.
+    if melhor_conteudo and melhor_total >= 9:
+        return melhor
+
+    filhas = janelas_filhas(int(handle))
+    filhas.sort(key=lambda item: 0 if _e_conteudo(item.get("classe", "")) else 1)
+    for filha in filhas[:FILHAS_MAXIMAS]:
+        try:
+            tentativa = _ler_msaa(filha, profundidade, limite)
+        except Exception:  # noqa: BLE001 - COM de terceiros
+            continue
+        total = arvore.total_bruto(tentativa)
+        conteudo = arvore.tem_conteudo(tentativa)
+        # Mesma regra de `arvore.escolher_fonte`: conteúdo vence moldura.
+        if conteudo and not melhor_conteudo:
+            melhor, melhor_total, melhor_conteudo = tentativa, total, True
+        elif not (melhor_conteudo and not conteudo) and total > melhor_total:
+            melhor, melhor_total, melhor_conteudo = tentativa, total, conteudo
+        # Achou conteúdo: não paga a leitura das outras 23 janelas filhas.
+        # As classes de conteúdo vêm primeiro na ordem, então a página é esta.
+        if conteudo:
+            break
+
+    # O alvo continua sendo a janela pedida; só anotamos de onde veio.
+    competente = melhor.get("janela", {}).get("handle")
+    if competente is not None and int(competente) != int(handle):
+        classe_filha = str(melhor.get("janela", {}).get("classe") or "janela filha")
+        melhor["janela"] = dict(principal)
+        melhor["janela"]["de_filha"] = classe_filha
+    return melhor
+
+
 def _ler_msaa(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any]:
     ponteiro = _abrir(int(janela["handle"]))
     if not ponteiro:
@@ -1015,19 +1059,29 @@ def ler_janela(
             ),
         }
 
-    msaa = _ler_msaa(janela, profundidade, limite)
+    msaa = varrer_msaa(int(janela["handle"]), profundidade, limite)
+    msaa["janela"] = dict(janela, **({"de_filha": msaa["janela"]["de_filha"]} if msaa["janela"].get("de_filha") else {}))
     if pedido == "msaa" or not arvore.quer_segunda_fonte(msaa):
         return msaa
     return arvore.escolher_fonte(msaa, _ler_uia(janela, profundidade, limite))
 
 
-def diagnostico() -> dict[str, Any]:
+def diagnostico(alvo: str = "foco", handle: int | None = None) -> dict[str, Any]:
     """Passo a passo do COM, com o retorno de cada chamada.
 
     Por que existe: a 0.82.1 falhou na UIA **em silêncio** — a mensagem era
     “não devolveu árvore”, e isso não dizia se o problema era o COM, o índice
     de vtable ou a janela. Este relatório responde. É para ser lido por uma
     pessoa, não só por programa.
+
+    `alvo` respeita a mesma escolha da leitura. Isto já esteve errado: o
+    diagnóstico usava sempre a janela em foco, e no PC do usuário
+    `--alvo chrome --diagnostico` mediu o **terminal** —
+
+        janela                     msaa  uia   conteudo
+        ConsoleWindowClass            1    12   nenhum
+
+    — e respondeu “nenhum” para o Chrome sem nunca ter olhado o Chrome.
     """
     passos: list[dict[str, Any]] = []
 
@@ -1080,10 +1134,21 @@ def diagnostico() -> dict[str, Any]:
         retorno = type(exc).__name__  # type: ignore[assignment]
     anotar("get_ControlViewWalker (índice 14)", retorno, "percorre a árvore de controles")
 
-    janela = janela_em_foco()
-    if not janela:
-        anotar("GetForegroundWindow", False, "nenhuma janela em foco")
-        return {"ok": False, "passos": passos, "nota": "sem janela em foco para testar."}
+    if handle is not None:
+        # A sonda já escolheu (com a mesma `escolher_janela` da leitura, mais o
+        # desvio do terminal). Escolher de novo aqui poderia cair em outra janela.
+        janela = _janela(int(handle))
+    else:
+        try:
+            janela = arvore.escolher_janela(alvo, janelas=janelas(), foco=janela_em_foco())
+        except arvore.ArvoreError as exc:
+            anotar("escolher janela", False, str(exc)[:120])
+            return {"ok": False, "passos": passos, "nota": str(exc)}
+    anotar(
+        "escolher janela",
+        S_OK,
+        f"alvo “{alvo}” → {janela.get('processo') or '?'} — {str(janela.get('titulo') or '')[:60]}",
+    )
 
     elemento = ctypes.c_void_p(0)
     try:
@@ -1118,6 +1183,7 @@ def diagnostico() -> dict[str, Any]:
         linhas: dict[str, Any] = {
             "classe": item.get("classe") or "(sem classe)",
             "titulo": (item.get("titulo") or "")[:50],
+            "processo": _processo(int(item["handle"])),
             "filha": bool(item.get("filha")),
         }
         for rotulo, funcao in (("msaa", _ler_msaa), ("uia", _ler_uia_da_janela)):
@@ -1146,9 +1212,41 @@ def diagnostico() -> dict[str, Any]:
         }
     )
 
+    # A tabela mede cada janela **isolada**. A leitura de verdade agrega as
+    # filhas — então o veredito é medido do mesmo jeito que a leitura mede,
+    # senão o diagnóstico mente de novo (foi o que aconteceu na medição 6).
+    veredito: dict[str, Any] = {"fonte": "", "total": 0, "conteudo": False, "de_filha": ""}
+    try:
+        escolhida = arvore.escolher_fonte(
+            varrer_msaa(int(janela["handle"]), 6, 400),
+            _ler_uia(janela, 6, 400),
+        )
+        veredito = {
+            "fonte": str(escolhida.get("fonte") or ""),
+            "total": arvore.total_bruto(escolhida),
+            "conteudo": arvore.tem_conteudo(escolhida),
+            "de_filha": str(escolhida.get("janela", {}).get("de_filha") or ""),
+        }
+    except Exception as exc:  # noqa: BLE001 - COM de terceiros
+        veredito["erro"] = type(exc).__name__
+    passos.append(
+        {
+            "passo": "leitura final (como a sonda lê)",
+            "retorno": veredito["total"],
+            "hex": "",
+            "ok": bool(veredito["conteudo"]),
+            "detalhe": (
+                f"fonte: {veredito['fonte'] or '?'} — {veredito['total']} elemento(s)"
+                + (f", lido de dentro: {veredito['de_filha']}" if veredito["de_filha"] else "")
+            ),
+        }
+    )
+
     ok = all(passo["ok"] for passo in passos if passo["passo"].startswith(("CoCreate", "get_Control", "ElementFrom")))
     return {
         "ok": ok,
+        "janela": {chave: janela.get(chave) for chave in ("handle", "titulo", "classe", "processo")},
+        "veredito": veredito,
         "passos": passos,
         "varredura": varredura,
         "nota": (

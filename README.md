@@ -2,7 +2,7 @@
 
 Central local-first com interface React, skills Python reais, consulta a legislação brasileira e camada opcional de IA externa. Conversa por texto ou voz, gerencia tarefas e memórias, controla foco, executa automações e processa arquivos em uma área isolada.
 
-**Versão atual: 0.82.5.**
+**Versão atual: 0.82.6.**
 
 ## O que ele faz sem chave de IA
 
@@ -750,7 +750,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.82.5", "skills": 320}`.
+`{"version": "0.82.6", "skills": 320}`.
 
 ## Verificações
 

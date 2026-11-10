@@ -5,6 +5,61 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A sexta medição: a tabela mediu o terminal (0.82.6)
+
+A 0.82.5 pediu uma tabela e ela veio assim:
+
+```
+  [FALHA] varredura de janelas (1)
+  janela                                  msaa  uia   conteudo
+  ConsoleWindowClass                         1    12   nenhum
+```
+
+`ConsoleWindowClass` é o **terminal**. O comando pedia o Chrome.
+
+**O defeito era meu, não do Chrome.** `diagnostico()` não recebia o handle:
+ignorava o `--alvo` e media sempre a janela em foco. A 0.82.3 tinha corrigido
+exatamente isso na leitura normal e deixou o diagnóstico de fora — o mesmo erro,
+no outro caminho. A tabela que devia decidir a etapa 2 estava olhando para a
+janela errada.
+
+### O que mudou
+
+1. **O diagnóstico escolhe como a leitura escolhe.** A sonda usa o mesmo
+   `_escolher`/`arvore.escolher_janela` e passa o **handle** para
+   `diagnostico(alvo, handle=…)`. Não há segunda escolha para divergir.
+2. **A tabela diz qual janela está medindo**, com processo e classe, antes de
+   qualquer número:
+
+   ```
+   medindo: chrome.exe — Arena | Benchmark...
+   classe:  Chrome_WidgetWin_1
+   ```
+
+3. **A MSAA também desce as filhas.** A 0.82.5 varria as filhas só na UIA. O
+   Chrome publica a página pela MSAA da filha em várias versões; agora
+   `varrer_msaa` percorre até 24 filhas, conteúdo primeiro, com a mesma regra
+   de `escolher_fonte`.
+4. **Há um veredito, e ele é medido como a leitura mede.** A tabela mostra cada
+   janela isolada; a leitura agrega. No fim:
+
+   ```
+   VEREDITO: a leitura vai funcionar — 812 elemento(s) de conteudo, fonte uia.
+   lido de dentro de: Chrome_RenderWidgetHostHWND
+   ```
+   ou `VEREDITO: 12 elemento(s), nenhum de conteudo (fonte uia).` — sem deixar a
+   interpretação para você.
+5. **A coluna `processo`** existe para o engano não se repetir: se a linha não
+   diz `chrome.exe`, a janela não é o Chrome.
+
+### O critério continua o mesmo
+
+Se, **medindo a janela certa**, a tabela do Chrome disser `nenhum` em todas as
+linhas e o veredito não tiver conteúdo, eu encerro a leitura do Chrome neste PC.
+Sem nova rodada, sem nova tentativa: sigo com Explorer, Bloco de Notas e
+instaladores, que publicam árvore clássica — e a etapa 2 (clique por `ref`) é
+medida neles.
+
 ## A quinta medição: moldura não é conteúdo (0.82.5)
 
 A 0.82.4 matou a repetição — **600 para 47 elementos**. Mas o número novo
@@ -286,6 +341,9 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **conteúdo vence moldura** | 47 botões de janela não valem mais do que 3 elementos de página |
 | **lê as janelas filhas** | a página do navegador é uma janela filha (`Chrome_RenderWidgetHostHWND`), não um elemento da janela de topo |
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
+| **mede a janela certa** | o diagnóstico recebe o handle já escolhido — `--alvo chrome` não mede mais o terminal |
+| **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |
+| **varre as filhas nas duas fontes** | MSAA e UIA descem até 24 janelas filhas, conteúdo primeiro |
 
 ## O que **não** faz (ainda) e por quê
 
