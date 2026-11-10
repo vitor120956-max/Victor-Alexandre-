@@ -5,6 +5,76 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## O veredito do Chrome (0.83.0)
+
+A 0.82.6 mediu a janela certa. A resposta:
+
+```
+  medindo: chrome.exe — Arena | Benchmark & Compare the Best AI Models - Google Chro
+  classe:  Chrome_WidgetWin_1
+
+  janela                            msaa   uia   conteudo  processo
+  ------------------------------------------------------------------------
+  Chrome_WidgetWin_1                   4     4   nenhum   chrome.exe
+    Chrome_RenderWidgetHostHWND        1     1   nenhum   chrome.exe
+    Chrome_RenderWidgetHostHWND        1     1   nenhum   chrome.exe
+
+  VEREDITO: 4 elemento(s), nenhum de conteudo (fonte uia).
+```
+
+Duas janelas filhas `Chrome_RenderWidgetHostHWND`, **1 elemento cada**, sem
+conteúdo. A página não é publicada — nem pela MSAA, nem pela UIAutomation.
+
+**Está encerrado o Chrome neste PC.** Era a promessa, e ela vale: não peço
+outra rodada, não mudo a pergunta, não há uma sétima tentativa.
+
+O que isso significa na prática: neste `Windows 10.0.14393`, este Chrome não
+expõe o conteúdo da página para um leitor de acessibilidade. O JARVIS não vai
+adivinhar o que está na tela — sem foto, sem OCR, sem clique às cegas. Ler o
+Chrome **aqui** não é um problema de código meu que mais uma versão resolve.
+
+### O que ficou de aprendizado, e virou código
+
+**1. Número não é resposta.** “47 elementos” manteve a etapa 2 parada por seis
+versões, porque os 47 eram moldura. Agora toda leitura termina com a pergunta
+que importa:
+
+```
+  NAO SERVE para agir: a janela publicou só moldura (barra de título,
+  rolagem, botões de janela). Esta é a mesma parede que o Chrome deu neste PC.
+```
+
+**2. Não perguntar uma janela por vez.** Seis mensagens suas foram gastas
+medindo um programa por vez. Agora existe um comando que mede **todas as
+janelas abertas** de uma vez e responde onde dá para trabalhar:
+
+```
+.venv\Scripts\python arvore_sonda.py --provados
+```
+
+```
+  janela aberta                        elementos  conteudo  serve?  fonte  seg
+  ------------------------------------------------------------------------------
+  notepad.exe        Sem título - B...       31  sim        SIM     uia   0.4
+  explorer.exe       Downloads               88  sim        SIM     msaa  0.9
+  chrome.exe         Arena | Benchmar...      4  nao        nao     uia   1.2
+
+  2 de 3 janela(s) servem para o JARVIS agir:
+    - notepad.exe — Sem título - Bloco de notas
+    - explorer.exe — Downloads
+```
+
+**3. A ordem da medição importa.** Na 0.82.6 a coluna da MSAA do Chrome saiu
+com 4, quando a leitura da 0.82.4 tinha achado 47 na mesma janela — a diferença
+era a UIA já ter aberto a janela antes da medição. O diagnóstico agora mede a
+MSAA **primeiro**, e o veredito é a leitura de verdade (`ler_janela`), não uma
+segunda implementação dela.
+
+**4. A conta da prontidão é explícita.** `arvore.prontidao()` responde com
+números: total, acionáveis, com nome, editáveis, e um motivo em português. Ela
+recusa moldura mesmo com 600 botões, e aceita o campo do Bloco de Notas, que
+não tem nome nenhum — porque é onde se escreve.
+
 ## A sexta medição: a tabela mediu o terminal (0.82.6)
 
 A 0.82.5 pediu uma tabela e ela veio assim:
@@ -342,6 +412,9 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **lê as janelas filhas** | a página do navegador é uma janela filha (`Chrome_RenderWidgetHostHWND`), não um elemento da janela de topo |
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 | **mede a janela certa** | o diagnóstico recebe o handle já escolhido — `--alvo chrome` não mede mais o terminal |
+| **diz se serve para agir** | toda leitura termina com serve/não serve e o motivo; `mesa.arvore` devolve `pronto` |
+| **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
+| **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |
 | **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |
 | **varre as filhas nas duas fontes** | MSAA e UIA descem até 24 janelas filhas, conteúdo primeiro |
 
@@ -367,6 +440,12 @@ cd /d D:\JARVIS
 ```
 
 3. me diga o que apareceu (ou mande o `--json`).
+
+Para saber **em quais programas** dá para trabalhar, sem tentativa e erro:
+
+```
+.venv\Scripts\python arvore_sonda.py --provados
+```
 
 Se alguma coisa vier estranha, o primeiro comando é sempre:
 

@@ -4075,6 +4075,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             )
         except arvore.ArvoreError as exc:
             raise SkillError(str(exc)) from exc
+        # O JARVIS precisa saber se esta janela serve para agir, não só quantos
+        # nós vieram: 47 botões de moldura não valem um link.
+        lida["pronto"] = arvore.prontidao(lida)
         if data.so_acionaveis:
             # A árvore continua no resultado, mas o resumo aponta o essencial.
             lida["resumo"] = "Só os acionáveis: " + ", ".join(

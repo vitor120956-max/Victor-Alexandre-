@@ -12,6 +12,7 @@ Uso (Windows):
     py arvore_sonda.py --alvo chrome        # janela cujo título tem "chrome"
     py arvore_sonda.py --json --limite 200  # JSON para o JARVIS
     py arvore_sonda.py --fonte uia          # força uma das duas fontes
+    py arvore_sonda.py --provados           # quais janelas abertas servem para agir
 
 Só leitura: nada é clicado, digitado ou movido.
 
@@ -84,6 +85,108 @@ def _escolher(leitor, alvo: str) -> tuple[dict, str]:
     )
 
 
+def _provados(leitor, args) -> int:
+    """Passa por todas as janelas abertas e diz em quais dá para trabalhar.
+
+    Por que existe: a pergunta que decide a etapa 2 é “onde os elementos fazem
+    sentido?”. Responder isso com uma rodada por programa custa uma mensagem
+    do usuário por tentativa — e no Chrome ela já custou seis. Esta varredura
+    responde tudo de uma vez, medindo com a leitura de verdade.
+    """
+    import time
+
+    from server import arvore
+
+    try:
+        abertas = leitor.janelas_de_programas()
+    except Exception as exc:  # noqa: BLE001
+        return _falhar(f"não consegui listar as janelas ({type(exc).__name__}).")
+
+    candidatas = [j for j in abertas if not arvore.da_sonda(j) and (j.get("titulo") or "").strip()]
+    if not candidatas:
+        return _falhar("nenhuma janela de programa aberta para medir.")
+
+    linhas: list[dict] = []
+    comeco = time.monotonic()
+    # Teto de tempo: uma janela travada não pode transformar isto numa espera
+    # sem fim. O que não foi medido é dito, não escondido.
+    for janela in candidatas[:12]:
+        if time.monotonic() - comeco > 60:
+            break
+        inicio = time.monotonic()
+        item = {
+            "processo": str(janela.get("processo") or "?"),
+            "titulo": " ".join(str(janela.get("titulo") or "").split())[:44],
+            "janela": janela,
+        }
+        try:
+            bruto = leitor.ler_janela(int(janela["handle"]), 6, 300)
+            montada = arvore.montar(bruto, 6, 300)
+            item["lido"] = arvore.prontidao(montada)
+            item["fonte"] = montada.get("fonte") or "?"
+        except Exception as exc:  # noqa: BLE001 - COM de terceiros
+            item["lido"] = {"pronto": False, "total": 0, "conteudo": False, "motivo": f"a leitura falhou ({type(exc).__name__})."}
+            item["fonte"] = "?"
+        item["segundos"] = round(time.monotonic() - inicio, 1)
+        linhas.append(item)
+
+    if args.json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "processo": item["processo"],
+                        "titulo": item["titulo"],
+                        "pronto": item["lido"]["pronto"],
+                        "total": item["lido"].get("total", 0),
+                        "conteudo": item["lido"].get("conteudo", False),
+                        "motivo": item["lido"].get("motivo", ""),
+                        "fonte": item["fonte"],
+                        "segundos": item["segundos"],
+                    }
+                    for item in linhas
+                ],
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    print("  janela aberta                        elementos  conteudo  serve?  fonte  seg")
+    print("  " + "-" * 78)
+    for item in linhas:
+        lido = item["lido"]
+        print(
+            f"  {item['processo'][:18]:<18} {item['titulo'][:20]:<20} "
+            f"{lido.get('total', 0):>8}  {'sim' if lido.get('conteudo') else 'nao':<7}  "
+            f"{'SIM' if lido.get('pronto') else 'nao':<6}  {item['fonte'][:4]:<4}  {item['segundos']:>4}"
+        )
+
+    prontas = [item for item in linhas if item["lido"]["pronto"]]
+    print()
+    if len(linhas) < len(candidatas):
+        print(f"  medi {len(linhas)} de {len(candidatas)} janelas — parei pelo teto de 60 s.")
+        print()
+    if prontas:
+        print(f"  {len(prontas)} de {len(linhas)} janela(s) servem para o JARVIS agir:")
+        for item in prontas:
+            print(f"    - {item['processo']} — {item['titulo']}")
+        print()
+        print("  A etapa 2 (clicar por `ref`) é medida nessas. Comece pela primeira:")
+        print(f'    .venv\\Scripts\\python arvore_sonda.py --alvo "{prontas[0]["processo"]}"')
+    else:
+        print("  Nenhuma janela aberta publica conteúdo neste PC.")
+        print("  Abra o Bloco de Notas ou uma pasta do Explorer e rode de novo.")
+
+    # As que ficaram de fora: a razão, curta, para não parecer falha da leitura.
+    mudas = [item for item in linhas if not item["lido"].get("conteudo")]
+    if mudas:
+        print()
+        print("  Só moldura (não é falha nossa, é o programa):")
+        for item in mudas:
+            print(f"    - {item['processo']} — {item['lido'].get('motivo', '')[:70]}")
+    return 0
+
+
 def principal(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lê a árvore de acessibilidade de uma janela (somente leitura).")
     parser.add_argument("--alvo", default="foco", help="“foco” (padrão) ou parte do título do processo/janela.")
@@ -102,6 +205,11 @@ def principal(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Testa a UIAutomation passo a passo e mostra o retorno de cada chamada.",
     )
+    parser.add_argument(
+        "--provados",
+        action="store_true",
+        help="Mede todas as janelas abertas e diz em quais o JARVIS consegue trabalhar.",
+    )
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -111,6 +219,9 @@ def principal(argv: list[str] | None = None) -> int:
         from server import arvore_windows as leitor
     except Exception as exc:  # noqa: BLE001 - qualquer falha de import é motivo de saída limpa
         return _falhar(f"não consegui carregar o leitor do Windows ({type(exc).__name__}).")
+
+    if args.provados:
+        return _provados(leitor, args)
 
     if args.diagnostico:
         from server import arvore
@@ -218,6 +329,12 @@ def principal(argv: list[str] | None = None) -> int:
         print(troca)
         print()
     print(arvore.resumo(montada))
+    # A pergunta que importa depois do número: dá para agir aqui? Dizer “47
+    # elementos” sem dizer isso foi o que manteve a etapa 2 parada por seis
+    # versões — os 47 eram moldura.
+    lido = arvore.prontidao(montada)
+    print()
+    print(("  SERVE para agir: " if lido["pronto"] else "  NAO SERVE para agir: ") + lido["motivo"])
     print()
     print(arvore.desenhar(montada.get("arvore")))
     return 0

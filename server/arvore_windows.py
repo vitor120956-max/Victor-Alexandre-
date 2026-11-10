@@ -1082,6 +1082,12 @@ def diagnostico(alvo: str = "foco", handle: int | None = None) -> dict[str, Any]
         ConsoleWindowClass            1    12   nenhum
 
     — e respondeu “nenhum” para o Chrome sem nunca ter olhado o Chrome.
+
+    **A ordem da medição importa.** Na 0.82.6 a tabela media a MSAA *depois*
+    de a UIA já ter aberto a mesma janela, e no Chrome ela veio com 4
+    elementos, não os 47 que a leitura da 0.82.4 encontrou. Agora a MSAA é
+    medida primeiro, e o veredito é a leitura de verdade (`ler_janela`) — as
+    mesmas funções que o JARVIS usa, na mesma ordem.
     """
     passos: list[dict[str, Any]] = []
 
@@ -1097,43 +1103,7 @@ def diagnostico(alvo: str = "foco", handle: int | None = None) -> dict[str, Any]
             }
         )
 
-    try:
-        _co_iniciar()
-        anotar("CoInitializeEx(MTA)", S_OK, "já iniciado ou iniciado agora — os dois servem")
-    except Exception as exc:  # noqa: BLE001
-        anotar("CoInitializeEx(MTA)", type(exc).__name__, str(exc))
-
-    ponteiro = ctypes.c_void_p(0)
-    try:
-        ole32.CoCreateInstance.restype = ctypes.c_long
-        criacao = ole32.CoCreateInstance(
-            ctypes.byref(CLSID_CUIAutomation),
-            None,
-            CLSCTX_INPROC_SERVER,
-            ctypes.byref(IID_IUIAutomation),
-            ctypes.byref(ponteiro),
-        )
-    except Exception as exc:  # noqa: BLE001
-        anotar("CoCreateInstance(IUIAutomation)", type(exc).__name__, str(exc))
-        return {"ok": False, "passos": passos, "nota": "o ctypes não conseguiu nem chamar o COM."}
-
-    anotar("CoCreateInstance(IUIAutomation)", criacao, "objeto criado" if ponteiro.value else "sem ponteiro")
-    if criacao != S_OK or not ponteiro.value:
-        return {
-            "ok": False,
-            "passos": passos,
-            "nota": "a UIAutomation não pôde ser criada neste sistema; a leitura fica só na MSAA.",
-        }
-
-    raiz = int(ponteiro.value)
-    walker = ctypes.c_void_p(0)
-    try:
-        funcao = _metodo(raiz, UIA_CONTROL_VIEW_WALKER, [ctypes.POINTER(ctypes.c_void_p)])
-        retorno = funcao(raiz, ctypes.byref(walker))
-    except Exception as exc:  # noqa: BLE001
-        retorno = type(exc).__name__  # type: ignore[assignment]
-    anotar("get_ControlViewWalker (índice 14)", retorno, "percorre a árvore de controles")
-
+    # 1) Qual janela. Só user32 aqui — nenhum COM foi aberto ainda.
     if handle is not None:
         # A sonda já escolheu (com a mesma `escolher_janela` da leitura, mais o
         # desvio do terminal). Escolher de novo aqui poderia cair em outra janela.
@@ -1150,102 +1120,130 @@ def diagnostico(alvo: str = "foco", handle: int | None = None) -> dict[str, Any]
         f"alvo “{alvo}” → {janela.get('processo') or '?'} — {str(janela.get('titulo') or '')[:60]}",
     )
 
-    elemento = ctypes.c_void_p(0)
-    try:
-        funcao = _metodo(raiz, UIA_ELEMENT_FROM_HANDLE, [wintypes.HWND, ctypes.POINTER(ctypes.c_void_p)])
-        retorno = funcao(raiz, wintypes.HWND(int(janela["handle"])), ctypes.byref(elemento))
-    except Exception as exc:  # noqa: BLE001
-        retorno = type(exc).__name__  # type: ignore[assignment]
-    anotar(
-        "ElementFromHandle (índice 6)",
-        retorno,
-        f"janela: {janela.get('titulo') or janela.get('processo') or janela.get('handle')}",
-    )
-    if elemento.value:
-        tipo = _uia_inteiro(int(elemento.value), UIA_EL_GET_CONTROL_TYPE)
-        nome = _uia_texto(int(elemento.value), UIA_EL_GET_NAME)
-        anotar("get_CurrentControlType", S_OK if tipo is not None else "falhou", f"tipo={tipo}")
-        anotar("get_CurrentName", S_OK if nome else "vazio", f"nome={nome[:60]!r}")
-        _liberar(int(elemento.value))
-
-    # A pergunta que decide: onde está o conteúdo, e quantos nós cada janela
-    # entrega por cada fonte? Sem isso, "a UIA mostrou 4" não diz nada.
-    janelas = [{"handle": int(janela["handle"]), "classe": _classe(int(janela["handle"])), "profundidade": 0}]
-    janelas[0]["filha"] = False
+    # 2) A tabela: a janela pedida e as filhas dela.
+    medidas = [{"handle": int(janela["handle"]), "classe": _classe(int(janela["handle"])), "filha": False}]
     for filha in janelas_filhas(int(janela["handle"]), limite=12):
-        filha = dict(filha)
-        filha["filha"] = True
-        filha["profundidade"] = 1
-        janelas.append(filha)
+        medidas.append({"handle": int(filha["handle"]), "classe": filha.get("classe"), "filha": True})
 
     varredura: list[dict[str, Any]] = []
-    for item in janelas:
-        linhas: dict[str, Any] = {
-            "classe": item.get("classe") or "(sem classe)",
-            "titulo": (item.get("titulo") or "")[:50],
-            "processo": _processo(int(item["handle"])),
-            "filha": bool(item.get("filha")),
-        }
-        for rotulo, funcao in (("msaa", _ler_msaa), ("uia", _ler_uia_da_janela)):
-            try:
-                if rotulo == "msaa":
-                    bruto = funcao({"handle": item["handle"]}, 6, 400)
-                    total = arvore.total_bruto(bruto)
-                    tem = arvore.tem_conteudo(bruto)
-                else:
-                    no = funcao(int(item["handle"]), 6, 400)
-                    total = arvore.total_bruto({"raiz": no}) if no else 0
-                    tem = arvore.tem_conteudo({"raiz": no}) if no else False
-            except Exception:  # noqa: BLE001
-                total, tem = 0, False
-            linhas[rotulo] = total
-            linhas[f"{rotulo}_conteudo"] = tem
-        varredura.append(linhas)
+    for item in medidas:
+        varredura.append(
+            {
+                "classe": item.get("classe") or "(sem classe)",
+                "titulo": _titulo(int(item["handle"]))[:50],
+                "processo": _processo(int(item["handle"])),
+                "filha": bool(item.get("filha")),
+            }
+        )
 
-    passos.append(
-        {
-            "passo": f"varredura de janelas ({len(varredura)})",
-            "retorno": sum(1 for linha in varredura if linha.get("uia_conteudo") or linha.get("msaa_conteudo")),
-            "hex": "",
-            "ok": any(linha.get("uia_conteudo") or linha.get("msaa_conteudo") for linha in varredura),
-            "detalhe": "quantas janelas entregaram conteúdo de verdade (não só moldura)",
-        }
-    )
+    # 3) MSAA de todas elas, antes de a UIA tocar em qualquer uma.
+    try:
+        _co_iniciar()
+    except Exception:  # noqa: BLE001 - a MSAA avisa sozinha se não der
+        pass
+    for linha, item in zip(varredura, medidas):
+        try:
+            bruto = _ler_msaa({"handle": item["handle"]}, 6, 400)
+            linha["msaa"] = arvore.total_bruto(bruto)
+            linha["msaa_conteudo"] = arvore.tem_conteudo(bruto)
+        except Exception:  # noqa: BLE001 - COM de terceiros
+            linha["msaa"], linha["msaa_conteudo"] = 0, False
 
-    # A tabela mede cada janela **isolada**. A leitura de verdade agrega as
-    # filhas — então o veredito é medido do mesmo jeito que a leitura mede,
-    # senão o diagnóstico mente de novo (foi o que aconteceu na medição 6).
+    # 4) O veredito é a leitura de verdade — não uma segunda implementação dela.
     veredito: dict[str, Any] = {"fonte": "", "total": 0, "conteudo": False, "de_filha": ""}
     try:
-        escolhida = arvore.escolher_fonte(
-            varrer_msaa(int(janela["handle"]), 6, 400),
-            _ler_uia(janela, 6, 400),
-        )
+        escolhida = ler_janela(int(janela["handle"]), 6, 400)
         veredito = {
             "fonte": str(escolhida.get("fonte") or ""),
             "total": arvore.total_bruto(escolhida),
             "conteudo": arvore.tem_conteudo(escolhida),
-            "de_filha": str(escolhida.get("janela", {}).get("de_filha") or ""),
+            "de_filha": str((escolhida.get("janela") or {}).get("de_filha") or ""),
         }
     except Exception as exc:  # noqa: BLE001 - COM de terceiros
         veredito["erro"] = type(exc).__name__
-    passos.append(
-        {
-            "passo": "leitura final (como a sonda lê)",
-            "retorno": veredito["total"],
-            "hex": "",
-            "ok": bool(veredito["conteudo"]),
-            "detalhe": (
-                f"fonte: {veredito['fonte'] or '?'} — {veredito['total']} elemento(s)"
-                + (f", lido de dentro: {veredito['de_filha']}" if veredito["de_filha"] else "")
-            ),
-        }
+    anotar(
+        "leitura final (como a sonda lê)",
+        S_OK if veredito["conteudo"] else "sem conteúdo",
+        f"fonte: {veredito['fonte'] or '?'} — {veredito['total']} elemento(s)"
+        + (f", lido de dentro: {veredito['de_filha']}" if veredito.get("de_filha") else ""),
+    )
+
+    # 5) O COM da UIAutomation, passo a passo.
+    try:
+        _co_iniciar()
+        anotar("CoInitializeEx(MTA)", S_OK, "já iniciado ou iniciado agora — os dois servem")
+    except Exception as exc:  # noqa: BLE001
+        anotar("CoInitializeEx(MTA)", type(exc).__name__, str(exc))
+
+    ponteiro = ctypes.c_void_p(0)
+    uia_ok = False
+    criacao: Any = -1
+    try:
+        ole32.CoCreateInstance.restype = ctypes.c_long
+        criacao = ole32.CoCreateInstance(
+            ctypes.byref(CLSID_CUIAutomation),
+            None,
+            CLSCTX_INPROC_SERVER,
+            ctypes.byref(IID_IUIAutomation),
+            ctypes.byref(ponteiro),
+        )
+    except Exception as exc:  # noqa: BLE001
+        anotar("CoCreateInstance(IUIAutomation)", type(exc).__name__, str(exc))
+        criacao = -1
+
+    if criacao == S_OK and ponteiro.value:
+        uia_ok = True
+        anotar("CoCreateInstance(IUIAutomation)", criacao, "objeto criado")
+        raiz = int(ponteiro.value)
+        walker = ctypes.c_void_p(0)
+        try:
+            funcao = _metodo(raiz, UIA_CONTROL_VIEW_WALKER, [ctypes.POINTER(ctypes.c_void_p)])
+            retorno = funcao(raiz, ctypes.byref(walker))
+        except Exception as exc:  # noqa: BLE001
+            retorno = type(exc).__name__  # type: ignore[assignment]
+        anotar("get_ControlViewWalker (índice 14)", retorno, "percorre a árvore de controles")
+
+        elemento = ctypes.c_void_p(0)
+        try:
+            funcao = _metodo(raiz, UIA_ELEMENT_FROM_HANDLE, [wintypes.HWND, ctypes.POINTER(ctypes.c_void_p)])
+            retorno = funcao(raiz, wintypes.HWND(int(janela["handle"])), ctypes.byref(elemento))
+        except Exception as exc:  # noqa: BLE001
+            retorno = type(exc).__name__  # type: ignore[assignment]
+        anotar(
+            "ElementFromHandle (índice 6)",
+            retorno,
+            f"janela: {janela.get('titulo') or janela.get('processo') or janela.get('handle')}",
+        )
+        if elemento.value:
+            tipo = _uia_inteiro(int(elemento.value), UIA_EL_GET_CONTROL_TYPE)
+            nome = _uia_texto(int(elemento.value), UIA_EL_GET_NAME)
+            anotar("get_CurrentControlType", S_OK if tipo is not None else "falhou", f"tipo={tipo}")
+            anotar("get_CurrentName", S_OK if nome else "vazio", f"nome={nome[:60]!r}")
+            _liberar(int(elemento.value))
+    else:
+        anotar("CoCreateInstance(IUIAutomation)", criacao, "sem ponteiro — a leitura fica só na MSAA")
+
+    # 6) A coluna da UIA, agora que ela está aberta.
+    for linha, item in zip(varredura, medidas):
+        try:
+            no = _ler_uia_da_janela(int(item["handle"]), 6, 400)
+            linha["uia"] = arvore.total_bruto({"raiz": no}) if no else 0
+            linha["uia_conteudo"] = arvore.tem_conteudo({"raiz": no}) if no else False
+        except Exception:  # noqa: BLE001 - COM de terceiros
+            linha["uia"], linha["uia_conteudo"] = 0, False
+
+    com_conteudo = [linha for linha in varredura if linha.get("uia_conteudo") or linha.get("msaa_conteudo")]
+    anotar(
+        f"varredura de janelas ({len(varredura)})",
+        S_OK if com_conteudo else "sem conteúdo",
+        f"{len(com_conteudo)} janela(s) entregaram conteúdo de verdade (não só moldura)",
     )
 
     ok = all(passo["ok"] for passo in passos if passo["passo"].startswith(("CoCreate", "get_Control", "ElementFrom")))
     return {
         "ok": ok,
         "janela": {chave: janela.get(chave) for chave in ("handle", "titulo", "classe", "processo")},
+        "uia": uia_ok,
         "veredito": veredito,
         "passos": passos,
         "varredura": varredura,

@@ -462,6 +462,13 @@ def precisa_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
 # nenhum destes.
 PAPEIS_DE_CONTEUDO = {15, 24, 29, 30, 32, 34, 36, 41, 42}
 
+# Papéis que são **superfície de texto**: documento e área de edição. Estes
+# contam mesmo sem nome — o campo do Bloco de Notas não tem nome nenhum, e
+# exigir nome recusaria justamente o programa mais simples que existe. Moldura
+# de janela nunca tem estes papéis, então a regra “conteúdo vence moldura”
+# continua valendo.
+PAPEIS_DE_TEXTO = {15, 42}
+
 
 def tem_conteudo(bruto: dict[str, Any] | None) -> bool:
     """A árvore tem pelo menos um elemento de conteúdo (não só moldura)?"""
@@ -471,7 +478,8 @@ def tem_conteudo(bruto: dict[str, Any] | None) -> bool:
     while pilha:
         no = pilha.pop()
         try:
-            if int(no.get("papel") or 0) in PAPEIS_DE_CONTEUDO and limpo(no.get("nome")):
+            codigo = int(no.get("papel") or 0)
+            if codigo in PAPEIS_DE_CONTEUDO and (limpo(no.get("nome")) or codigo in PAPEIS_DE_TEXTO):
                 return True
         except (TypeError, ValueError):
             pass
@@ -662,6 +670,9 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
     notas = [str(item) for item in (bruto.get("nota"), bruto.get("nota_escolha")) if item]
     if notas:
         resultado["nota"] = " ".join(notas)
+    # Medido na árvore crua, onde o número do papel ainda existe: link, texto,
+    # item de lista, documento. Moldura sozinha não é conteúdo.
+    resultado["conteudo"] = tem_conteudo(bruto)
     sugestao = dica(resultado)
     if sugestao:
         resultado["dica"] = sugestao
@@ -916,6 +927,66 @@ def desenhar(no: dict[str, Any] | None, profundidade: int = 0, linhas: list[str]
     for filho in no.get("filhos") or []:
         desenhar(filho, profundidade + 1, linhas)
     return "\n".join(linhas)
+
+
+ACAO_DE_TEXTO = {"escrever", "digitar"}
+
+
+def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
+    """Esta janela serve para o JARVIS agir? Mede, não opina.
+
+    O critério da etapa 2 sempre foi “uma leitura em que os elementos façam
+    sentido”. Isso, escrito como conta, é:
+
+    - a árvore tem **conteúdo** (não só barra de título e botão de janela); e
+    - existe pelo menos um elemento acionável **com nome** — ou um campo onde
+      dá para escrever, que é o caso do Bloco de Notas, cujo campo não tem nome.
+
+    Moldura nunca serve: 600 botões “Minimizar” não valem um link.
+    """
+    raiz = resultado.get("arvore")
+    total = acionaveis = nomeados = uteis = editaveis = 0
+    pilha = [raiz] if isinstance(raiz, dict) else []
+    while pilha:
+        no = pilha.pop()
+        total += 1
+        nome = " ".join(str(no.get("nome") or "").split())
+        if nome:
+            nomeados += 1
+        if no.get("acionavel"):
+            acionaveis += 1
+            if nome:
+                uteis += 1
+            if str(no.get("acao") or "").strip().lower() in ACAO_DE_TEXTO:
+                editaveis += 1
+        pilha.extend(no.get("filhos") or [])
+
+    conteudo = bool(resultado.get("conteudo"))
+    pronto = bool(total and conteudo and (uteis or editaveis))
+    if pronto:
+        motivo = (
+            f"{resultado.get('total', total)} elemento(s) de árvore, {acionaveis} acionável(is) "
+            f"e {uteis + editaveis} com nome ou escrita — dá para agir por `ref`."
+        )
+    elif not total:
+        motivo = resultado.get("aviso") or "a janela não publicou árvore."
+    elif not conteudo:
+        motivo = (
+            "a janela publicou só moldura (barra de título, rolagem, botões de janela). "
+            "Esta é a mesma parede que o Chrome deu neste PC."
+        )
+    else:
+        motivo = "tem conteúdo, mas nenhum elemento acionável com nome ainda."
+    return {
+        "pronto": pronto,
+        "conteudo": conteudo,
+        "total": total,
+        "acionaveis": acionaveis,
+        "nomeados": nomeados,
+        "com_nome_acionavel": uteis,
+        "editaveis": editaveis,
+        "motivo": motivo,
+    }
 
 
 def resumo(resultado: dict[str, Any]) -> str:

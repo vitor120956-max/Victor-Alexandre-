@@ -917,9 +917,10 @@ def test_o_diagnostico_respeita_o_alvo():
 def test_a_tabela_do_diagnostico_mostra_o_processo():
     """Classe “ConsoleWindowClass” não diz nada a quem lê; `cmd.exe` diz."""
     fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
-    inicio = fonte.index('linhas: dict[str, Any] = {')
+    inicio = fonte.index("varredura: list[dict[str, Any]] = []")
     trecho = fonte[inicio : inicio + 400]
     assert '"processo"' in trecho
+    assert '"classe"' in trecho
 
 
 def test_a_sonda_diz_qual_janela_esta_medindo():
@@ -932,17 +933,32 @@ def test_a_sonda_diz_qual_janela_esta_medindo():
 
 
 def test_o_diagnostico_mede_do_jeito_que_a_leitura_le():
-    """A tabela mede cada janela isolada; a leitura agrega as filhas.
+    """O veredito é a leitura de verdade — não uma segunda implementação dela.
 
-    Sem um veredito medido com as mesmas funções da leitura, o diagnóstico
-    volta a mentir: mostraria “nenhum” na filha que a leitura usa.
+    A 0.82.6 montava o veredito à mão (`varrer_msaa` + `_ler_uia` +
+    `escolher_fonte`) logo depois de a tabela ter tocado na UIA. Duas
+    implementações da mesma pergunta divergem; uma só, não.
     """
     fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
     inicio = fonte.index("def diagnostico(")
     trecho = fonte[inicio : fonte.index("def estado(", inicio)]
     assert '"veredito"' in trecho
-    assert "varrer_msaa(" in trecho
-    assert "arvore.escolher_fonte(" in trecho
+    assert "escolhida = ler_janela(" in trecho
+
+
+def test_o_diagnostico_mede_a_msaa_antes_de_abrir_a_uia():
+    """No Chrome a MSAA deu 47 numa medição e 4 na outra. A diferença era a ordem.
+
+    Abrir a UIA na mesma janela antes de medir a MSAA mudava o número. O
+    diagnóstico não pode medir de um jeito que a leitura nunca usa.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def diagnostico(")
+    trecho = fonte[inicio : fonte.index("def estado(", inicio)]
+    # A primeira passada da tabela é a MSAA...
+    assert trecho.index("_ler_msaa(") < trecho.index("_ler_uia_da_janela(")
+    # ...e o CoCreateInstance só aparece depois dela.
+    assert trecho.index("_ler_msaa(") < trecho.index("CoCreateInstance(IUIAutomation)")
 
 
 def test_a_varredura_msaa_desce_as_janelas_filhas():
@@ -957,3 +973,101 @@ def test_a_varredura_msaa_desce_as_janelas_filhas():
     assert "melhor_conteudo and melhor_total >= 9" in trecho
     # Achou conteúdo numa filha, para: não paga as outras 23.
     assert "if conteudo:\n            break" in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.83.0 — onde o JARVIS consegue trabalhar
+# ---------------------------------------------------------------------------
+
+def test_montar_diz_se_a_arvore_tem_conteudo():
+    """A conta da prontidão precisa do papel **cru**, e ele se perde na montagem."""
+    from server import arvore as mod
+
+    moldura = {
+        "janela": {"handle": 1, "titulo": "Chrome", "processo": "chrome.exe"},
+        "fonte": "msaa",
+        "raiz": _no(9, "Chrome", filhos=[_no(22, "barra de título", filhos=[_no(43, "Fechar", "Clicar")])]),
+    }
+    pagina = {
+        "janela": {"handle": 2, "titulo": "Texto", "processo": "notepad.exe"},
+        "fonte": "uia",
+        "raiz": _no(9, "Bloco de notas", filhos=[_no(42, "texto do documento")]),
+    }
+    assert mod.montar(moldura)["conteudo"] is False
+    assert mod.montar(pagina)["conteudo"] is True
+
+
+def test_prontidao_recusa_moldura_mesmo_com_muitos_botoes():
+    """Os 47 elementos do Chrome eram 47 botões de janela. Não servem."""
+    from server import arvore as mod
+
+    filhos = [_no(43, nome, "Clicar") for nome in ("Fechar", "Minimizar", "Maximizar", "IME")]
+    montada = mod.montar(
+        {
+            "janela": {"handle": 3, "titulo": "Chrome", "processo": "chrome.exe"},
+            "fonte": "msaa",
+            "raiz": _no(9, "Chrome", filhos=[_no(22, "barra de título", filhos=filhos)]),
+        }
+    )
+    lido = mod.prontidao(montada)
+    assert lido["pronto"] is False
+    assert lido["conteudo"] is False
+    assert "moldura" in lido["motivo"]
+
+
+def test_prontidao_aceita_campo_de_texto_sem_nome():
+    """No Bloco de Notas o campo onde se escreve não tem nome — e serve.
+
+    Exigir nome em todo acionável recusaria justamente o programa mais
+    simples de todos, e a etapa 2 nunca começaria.
+    """
+    from server import arvore as mod
+
+    montada = mod.montar(
+        {
+            "janela": {"handle": 4, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"},
+            "fonte": "uia",
+            "raiz": _no(9, "Sem título - Bloco de notas", filhos=[_no(42, "", "escrever")]),
+        }
+    )
+    lido = mod.prontidao(montada)
+    assert lido["pronto"] is True
+    assert lido["editaveis"] == 1
+
+
+def test_prontidao_de_janela_sem_arvore_diz_o_motivo():
+    from server import arvore as mod
+
+    montada = mod.montar({"janela": {"handle": 5, "titulo": "Jogo"}, "raiz": None})
+    lido = mod.prontidao(montada)
+    assert lido["pronto"] is False
+    assert lido["total"] == 0
+    assert lido["motivo"]
+
+
+def test_a_sonda_tem_o_comando_que_mede_todas_as_janelas():
+    """Uma rodada por programa custou seis mensagens no Chrome. Agora é uma."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--provados"' in texto
+    assert "def _provados(" in texto
+    # Mede com a leitura de verdade e com a mesma conta da prontidão.
+    assert "leitor.ler_janela(" in texto
+    assert "arvore.prontidao(" in texto
+    # Não mede a si mesma (o terminal onde o comando foi digitado).
+    assert "arvore.da_sonda(" in texto
+
+
+def test_a_sonda_diz_se_a_janela_serve_para_agir():
+    """O número sozinho enganou: 47 elementos eram 47 botões de janela."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert "SERVE para agir" in texto
+    assert "NAO SERVE para agir" in texto
+    assert "arvore.prontidao(montada)" in texto
+
+
+def test_o_mesa_arvore_entrega_a_prontidao():
+    """O JARVIS tem de saber que a janela não serve — não descobrir depois."""
+    texto = (Path("server") / "skill_registry.py").read_text(encoding="utf-8")
+    inicio = texto.index("def mesa_arvore_handler(")
+    trecho = texto[inicio : inicio + 1400]
+    assert 'lida["pronto"] = arvore.prontidao(lida)' in trecho
