@@ -1359,3 +1359,144 @@ def estado() -> dict[str, Any]:
             "Jogos e instaladores antigos podem não publicar em nenhuma."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Agir por ref — a etapa 2 (0.86.0)
+# ---------------------------------------------------------------------------
+# O que este bloco faz: navega até o elemento pelo **caminho** que a leitura
+# guardou (qual filho, em cada nível) e pede a ação ao próprio elemento.
+#
+# O que ele não faz: mover o mouse. A ação vem de `accDoDefaultAction` (MSAA)
+# ou do padrão de invocação (UIA). No PC do usuário a tela não responde a
+# toque e não há mouse USB — clique por coordenada seria o único caminho que
+# não funciona ali. Quando o elemento só aceita clique físico, a resposta diz
+# isso, em vez de fingir que agiu.
+
+ACC_DO_DEFAULT_ACTION = 21
+ACC_SELECT = 23
+SELFLAG_TAKEFOCUS = 0x1
+SELFLAG_TAKESELECTION = 0x2
+
+
+def _navegar(ponteiro: int, caminho: list[int]) -> tuple[int, int]:
+    """Desce a árvore pelo caminho. Devolve `(ponteiro, child_id)` do alvo.
+
+    O ponteiro devolvido é o **dono** do elemento: para filho simples (VT_I4) é
+    o pai, com o `child_id` do filho — é assim que a MSAA endereça.
+    """
+    atual, filho = int(ponteiro), CHILDID_SELF
+    for posicao in caminho:
+        lista = _filhos(atual, max(1, int(posicao) + 1))
+        if posicao >= len(lista):
+            raise ValueError(f"o caminho saiu da árvore no nível {posicao}.")
+        novo_ponteiro, novo_filho = lista[int(posicao)]
+        if novo_ponteiro:
+            if atual != int(ponteiro) or filho != CHILDID_SELF:
+                _liberar(atual)
+            atual = novo_ponteiro
+            filho = CHILDID_SELF
+        else:
+            # Filho simples: continua endereçado pelo pai.
+            filho = novo_filho
+    return atual, filho
+
+
+def _focar(ponteiro: int, filho: int) -> bool:
+    """Pede o foco ao elemento (accSelect com TAKEFOCUS). Não move o mouse."""
+    try:
+        funcao = _metodo(ponteiro, ACC_SELECT, [ctypes.c_long, VARIANT])
+        return funcao(ponteiro, SELFLAG_TAKEFOCUS | SELFLAG_TAKESELECTION, _var_filho(filho)) == S_OK
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def executar_ref(
+    handle: int,
+    caminho: list[int],
+    acao: str,
+    texto: str = "",
+    caixa: list[int] | None = None,
+) -> dict[str, Any]:
+    """Executa `clicar` ou `digitar` num elemento, pelo caminho da leitura.
+
+    Devolve `executou`, `como` e — quando não deu — `motivo` com a saída.
+    `handle` é a janela de onde o caminho veio: se ela mudou, a navegação não
+    acha o alvo e isso é dito, não improvisado.
+    """
+    pedido = (acao or "clicar").strip().lower()
+    if pedido == "escrever":
+        pedido = "digitar"
+    if not janela_muda(handle):
+        return {"executou": False, "como": "nenhum", "motivo": "a janela não está mais aberta."}
+
+    ponteiro = _abrir(int(handle))
+    if not ponteiro:
+        return {
+            "executou": False,
+            "como": "nenhum",
+            "motivo": "esta janela não publica árvore pela MSAA agora — a leitura pode ter vindo da UIAutomation.",
+        }
+    try:
+        alvo, filho = _navegar(ponteiro, [int(item) for item in caminho])
+    except Exception as exc:  # noqa: BLE001
+        _liberar(ponteiro)
+        return {"executou": False, "como": "nenhum", "motivo": f"não achei o elemento: {exc}"}
+
+    try:
+        nome = _nome(alvo, filho)[:60]
+        if pedido == "digitar":
+            focado = _focar(alvo, filho)
+            if not focado:
+                return {
+                    "executou": False,
+                    "como": "nenhum",
+                    "motivo": "o elemento recusou o foco (accSelect). Sem foco, digitar iria para outra janela — parei.",
+                }
+            from server import mesa
+
+            mesa.digitar(texto)
+            return {
+                "executou": True,
+                "como": "foco + teclado",
+                "elemento": nome,
+                "caracteres": len(" ".join((texto or "").split())),
+            }
+
+        funcao = _metodo(alvo, ACC_DO_DEFAULT_ACTION, [VARIANT])
+        codigo = funcao(alvo, _var_filho(filho))
+        if codigo == S_OK:
+            return {"executou": True, "como": "ação padrão do elemento", "elemento": nome}
+        # Sem ação padrão: tenta dar foco (é o que um clique faria) e diz.
+        if _focar(alvo, filho):
+            return {
+                "executou": True,
+                "como": "foco (o elemento não tem ação padrão)",
+                "elemento": nome,
+            }
+        return {
+            "executou": False,
+            "como": "nenhum",
+            "motivo": (
+                f"“{nome}” não tem ação padrão nem aceita foco"
+                + (f" — o centro dele é {caixa[0] + caixa[2] // 2},{caixa[1] + caixa[3] // 2}." if caixa else ".")
+                + " Um clique físico resolveria; eu não movo o mouse sem você pedir."
+            ),
+        }
+    finally:
+        if alvo != ponteiro:
+            _liberar(alvo)
+        _liberar(ponteiro)
+
+
+def janela_muda(handle: int) -> bool:
+    """A janela ainda existe?"""
+    try:
+        return bool(user32.IsWindow(wintypes.HWND(int(handle))))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def escolher_janela(alvo: str, *, janelas: list[dict[str, Any]], foco: dict[str, Any] | None) -> dict[str, Any]:
+    """Atalho para a escolha de janela de `arvore` — usado pela sonda de agir."""
+    return arvore.escolher_janela(alvo, janelas=janelas, foco=foco)

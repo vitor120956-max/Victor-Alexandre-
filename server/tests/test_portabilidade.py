@@ -581,7 +581,7 @@ def test_registro_publica_sete_skills_de_portabilidade(tmp_path):
 
 def test_registro_total_de_skills_e_169(tmp_path):
     registry = build_registry(tmp_path / "files")
-    assert len(registry.list()) == 320
+    assert len(registry.list()) == 321
 
 
 def test_api_executa_auditoria_e_catalogo(client):

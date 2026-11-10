@@ -13,6 +13,7 @@ Uso (Windows):
     py arvore_sonda.py --json --limite 200  # JSON para o JARVIS
     py arvore_sonda.py --fonte uia          # força uma das duas fontes
     py arvore_sonda.py --provados           # quais janelas abertas servem para agir
+    py arvore_sonda.py --alvo notepad --ref @xxxx:e11 --acao digitar --texto "oi" --executar
 
 Só leitura: nada é clicado, digitado ou movido.
 
@@ -228,6 +229,19 @@ def principal(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Mede todas as janelas abertas e diz em quais o JARVIS consegue trabalhar.",
     )
+    parser.add_argument("--ref", default="", help="Ref do elemento (ex.: @4ab283d9:e11), vindo da leitura.")
+    parser.add_argument(
+        "--acao",
+        default="clicar",
+        choices=("clicar", "digitar", "escrever"),
+        help="O que fazer com o ref. Padrão: clicar.",
+    )
+    parser.add_argument("--texto", default="", help="Texto a digitar (com --acao digitar).")
+    parser.add_argument(
+        "--executar",
+        action="store_true",
+        help="Faz de verdade. Sem esta opção, só mostra o plano e não toca em nada.",
+    )
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -237,6 +251,48 @@ def principal(argv: list[str] | None = None) -> int:
         from server import arvore_windows as leitor
     except Exception as exc:  # noqa: BLE001 - qualquer falha de import é motivo de saída limpa
         return _falhar(f"não consegui carregar o leitor do Windows ({type(exc).__name__}).")
+
+    if args.ref:
+        from server import mesa_agir
+
+        try:
+            feito = mesa_agir.agir(
+                ref=args.ref,
+                acao=args.acao,
+                texto=args.texto,
+                executar=args.executar,
+                leitor=leitor,
+                alvo=args.alvo,
+                profundidade=max(1, min(args.profundidade, 14)),
+                limite=max(1, min(args.limite, 3000)),
+                fonte=args.fonte,
+            )
+        except mesa_agir.AgirError as exc:
+            return _falhar(str(exc))
+        except Exception as exc:  # noqa: BLE001 - COM de terceiros
+            return _falhar(f"a ação falhou ({type(exc).__name__}).")
+
+        if args.json:
+            print(json.dumps(feito, ensure_ascii=False))
+            return 0
+        plano = feito["plano"]
+        print(f"  {feito['resumo']}")
+        print()
+        print(f"  janela:  {plano['processo']} — {plano['janela']}")
+        print(f"  alvo:    {plano['ref']}  {plano['papel']} “{plano['nome']}”")
+        if plano.get("caixa"):
+            caixa = plano["caixa"]
+            print(f"  onde:    {caixa[0]},{caixa[1]} ({caixa[2]}x{caixa[3]})")
+        print(f"  fonte:   {plano['fonte']}   leitura: {plano['leitura']}")
+        if feito.get("como_autorizar"):
+            print()
+            print(f"  {feito['como_autorizar']}")
+        resultado = feito.get("resultado") or {}
+        if resultado.get("como"):
+            print(f"  como:    {resultado['como']}")
+        if resultado.get("motivo"):
+            print(f"  motivo:  {resultado['motivo']}")
+        return 0 if feito.get("ok") else 1
 
     if args.provados:
         return _provados(leitor, args)

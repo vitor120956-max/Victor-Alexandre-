@@ -44,7 +44,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 
 **Repositórios, sem Git:** o JARVIS copia um repositório público do GitHub como `.zip`, extrai em `storage/repos`, mede o que veio (linguagem, dependências, README, árvore) e diz como rodar — `python -m pacote`, `npm run dev`, `make build`. Nada é instalado nem executado sem um “sim, pode” na conversa, e mesmo depois só roda `python`, `node`, `npm`, `npx` ou `make`, sem shell. Em [`docs/REPOSITORIOS.md`](docs/REPOSITORIOS.md).
 
-**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 320, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
+**Agente local, sem modelo:** quando a frase não é um comando conhecido — **com ou sem** IA configurada, desde a 0.79.2 — o JARVIS procura a skill certa nas 321, preenche os campos a partir da própria frase e executa. Errou? Diga “não é essa, é a skill X” e ele aprende; “procure na web sobre isso” busca, guarda a resposta e o mesmo pedido passa a responder da memória. A página **Agente** mostra a fila do que não foi resolvido, as skills criadas e o histórico. Se não achar, monta uma **skill local** a partir de 20 receitas (contar palavras, somar, converter unidades, datas) e executa na hora; guarda o que criou em `storage/agente-local/skills.json`. Se nem receita servir, busca na web e devolve fontes + trecho, sem resumo. Nada disso chama provedor de IA. Detalhes e limites em [`docs/AGENTE-LOCAL.md`](docs/AGENTE-LOCAL.md).
 
 **Modelo na tela:** a chave abre a porta, o modelo é quem responde. Em **Configurações → Inteligência generativa** há o cartão **Modelos de IA** com o custo de cada opção — grande entende melhor e gasta mais cota, pequeno responde rápido e rende muito mais pedidos por dia — e a troca grava no `.env` e vale na hora, sem fechar a janela. Detalhes em [`docs/MODELOS.md`](docs/MODELOS.md).
 
@@ -629,7 +629,7 @@ Mais detalhes em [`docs/CONFIGURAR-IA.md`](docs/CONFIGURAR-IA.md).
 | `legal.article` | Consulta exata de artigo, incluindo milhares e sufixos |
 | `legal.sources` | Catálogo de documentos, origem e fontes oficiais |
 
-São **320 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
+São **321 skills Python**. A página **Skills** gera os formulários a partir dos esquemas Pydantic publicados pela API. As skills jurídicas abrem Legislação; leitura e criação de documentos abrem Documentos; workflows de engenharia abrem Engenharia; planejamento persistente abre Planos; análise reversa abre Reversa; engenharia enxuta abre Enxuto; governo de agentes abre Agentes; estúdio de design abre Estúdio; direção de arte abre Direção; diagramas abrem Diagramas; carreira abre Carreira; navegador abre Navegador; escritório abre Escritório; estação abre Estação; marketing abre Marketing; ciência abre Ciência; confiança abre Confiança; contexto abre Contexto; seleção abre Seleção; revisão abre Revisão; memória abre Memória IA; portabilidade abre Portabilidade; continuidade abre Continuidade; sistema abre Sistema; evolução abre Evolução; agenda abre Agenda; backup abre Backup; leitura do Git abre Git; perfil de pessoa abre Pessoa; mesclagem e organização usam o executor genérico com simulação. Os arquivos ficam em `storage/user-files`; a área reversa usa `storage/user-files/reverse`, separada dos documentos. O confinamento não permite `..`, caminhos absolutos, arquivos ocultos ou fuga por symlink.
 
 ## Como a conversa escolhe a origem
 
@@ -750,7 +750,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.85.0", "skills": 320}`.
+`{"version": "0.86.0", "skills": 321}`.
 
 ## Verificações
 
@@ -841,7 +841,7 @@ server/
 ├── processos.py             # o que está rodando: veredito, comando e desfazer
 ├── portatil.py              # 18 portáteis para o pendrive e 9 que não são portáteis
 ├── limpeza.py               # debloat: app de loja, tarefa, serviço e cache — só gera plano
-├── skill_registry.py        # allowlist, Pydantic e 320 skills
+├── skill_registry.py        # allowlist, Pydantic e 321 skills
 └── tests/                   # API, documentos, corpus e provedor
 scripts/
 ├── python.mjs           # detecta .venv e executa o Python correto

@@ -1321,3 +1321,156 @@ def test_a_uia_escreve_no_documento_e_no_campo_de_edicao():
     trecho = fonte[inicio : inicio + 700]
     assert "50004, 50030" in trecho
     assert "PADRAO_VALOR" in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.86.0 — agir por `ref`: o braço, com freio
+# ---------------------------------------------------------------------------
+
+def _notepad_bruto() -> dict[str, Any]:
+    return {
+        "janela": {
+            "handle": 4242,
+            "titulo": "Sem título - Bloco de notas",
+            "processo": "notepad.exe",
+        },
+        "fonte": "msaa",
+        "raiz": _no(
+            9,
+            "",
+            filhos=[
+                _no(1, "", filhos=[_no(43, "Fechar", "Pressionar")]),
+                _com_caixa(_no(42, "", "digitar"), [227, 559, 970, 140]),
+            ],
+        ),
+    }
+
+
+def _notepad_montado():
+    bruto = _notepad_bruto()
+    montada = arvore.montar(bruto, com_caminho=True)
+    refs = {
+        "campo": [n["ref"] for n in arvore.achatar(montada["arvore"]) if n.get("acao") == "digitar"][0],
+        "fechar": [n["ref"] for n in arvore.achatar(montada["arvore"]) if n.get("nome") == "Fechar"][0],
+    }
+    return montada, refs
+
+
+class LeitorDeAcao:
+    """Dublê de `arvore_windows` para a etapa 2."""
+
+    def __init__(self, bruto: dict[str, Any], falha: str = "") -> None:
+        self._bruto = bruto
+        self._falha = falha
+        self.pedidos: list[tuple] = []
+
+    def janelas(self):
+        return [self._bruto["janela"]]
+
+    def janela_em_foco(self):
+        return self._bruto["janela"]
+
+    def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+        return json.loads(json.dumps(self._bruto))
+
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None):
+        self.pedidos.append((handle, list(caminho), acao, texto))
+        if self._falha:
+            raise RuntimeError(self._falha)
+        return {"executou": True, "como": "ação padrão do elemento"}
+
+
+def test_o_montar_guarda_o_caminho_ate_o_elemento():
+    """`ref` identifica; o caminho é o que localiza na árvore viva."""
+    montada, refs = _notepad_montado()
+    campo = [n for n in arvore.achatar(montada["arvore"]) if n["ref"] == refs["campo"]][0]
+    assert campo["caminho"] == [1]
+
+
+def test_sem_executar_nao_toca_em_nada():
+    """O plano aparece; o leitor não recebe um único pedido de ação."""
+    from server import mesa_agir
+
+    _montada, refs = _notepad_montado()
+    leitor = LeitorDeAcao(json.loads(json.dumps(_notepad_bruto())))
+    # A montagem perde `com_caminho`; o `agir` remonta com caminho a partir do bruto.
+    resposta = mesa_agir.agir(
+        ref=refs["campo"], acao="digitar", texto="olá", executar=False, leitor=leitor
+    )
+    assert resposta["executou"] is False
+    assert plano_ok(resposta)
+    assert leitor.pedidos == []
+
+
+def plano_ok(resposta: dict[str, Any]) -> bool:
+    plano = resposta["plano"]
+    return bool(plano["ref"] and plano["acao"] == "digitar" and plano["texto"] == "olá")
+
+
+def test_com_executar_a_digitacao_chega_ao_elemento_certo():
+    from server import mesa_agir
+
+    _montada, refs = _notepad_montado()
+    leitor = LeitorDeAcao(json.loads(json.dumps(_notepad_bruto())))
+    resposta = mesa_agir.agir(
+        ref=refs["campo"], acao="digitar", texto="olá", executar=True, leitor=leitor
+    )
+    assert resposta["executou"] is True
+    assert leitor.pedidos == [(4242, [1], "digitar", "olá")]
+
+
+def test_ref_de_leitura_anterior_e_recusado():
+    """A tela muda. `ref` antigo não vira alvo por acaso."""
+    from server import mesa_agir
+
+    bruto = {
+        "janela": {"handle": 1, "titulo": "x", "processo": "notepad.exe"},
+        "fonte": "msaa",
+        "raiz": _no(9, "", filhos=[_no(43, "Salvar", "Clicar")]),
+    }
+    with pytest.raises(mesa_agir.AgirError) as erro:
+        mesa_agir.planejar(arvore.montar(bruto, com_caminho=True), "@antigo:e99", "clicar")
+    assert "não existe nesta leitura" in str(erro.value)
+    assert "Refs válidos agora" in str(erro.value)
+
+
+def test_moldura_e_recusada_como_alvo():
+    from server import mesa_agir
+
+    montada, refs = _notepad_montado()
+    with pytest.raises(mesa_agir.AgirError) as erro:
+        mesa_agir.planejar(montada, refs["fechar"], "clicar")
+    assert "moldura" in str(erro.value)
+
+
+def test_digitar_sem_texto_e_recusado():
+    from server import mesa_agir
+
+    montada, refs = _notepad_montado()
+    with pytest.raises(mesa_agir.AgirError) as erro:
+        mesa_agir.planejar(montada, refs["campo"], "digitar", "   ")
+    assert "informe o texto" in str(erro.value)
+
+
+def test_a_sonda_tem_o_comando_de_agir():
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--ref"' in texto
+    assert '"--executar"' in texto
+    assert "mesa_agir.agir(" in texto
+    # Sem `--executar`, o comando diz como autorizar — não age calado.
+    assert "como_autorizar" in texto or "--executar" in texto
+
+
+def test_o_executor_nao_move_o_mouse():
+    """Você não tem mouse USB e a tela dá toque fantasma.
+
+    A ação tem de vir do elemento (ação padrão / foco), nunca de coordenada.
+    Se um dia alguém puser um clique por posição aqui, este teste avisa.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def executar_ref(")
+    trecho = fonte[inicio : inicio + 3000]
+    assert "ACC_DO_DEFAULT_ACTION" in trecho
+    assert "_focar(" in trecho
+    assert "mesa.clicar(" not in trecho
+    assert "mesa.mover(" not in trecho

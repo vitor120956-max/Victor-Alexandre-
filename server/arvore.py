@@ -204,8 +204,15 @@ def _normalizar(
     contador: list[int],
     limite: int,
     ancestrais: tuple[Ancestral, ...] = (),
+    indices: tuple[int, ...] = (),
+    com_caminho: bool = False,
 ) -> dict[str, Any] | None:
-    """Transforma o nó cru da sonda no nó público, cortando com honestidade."""
+    """Transforma o nó cru da sonda no nó público, cortando com honestidade.
+
+    `indices` é a rota até o nó na árvore crua (qual filho, em cada nível). Só
+    entra no resultado quando `com_caminho` — é o que permite agir por `ref`
+    depois: o ref identifica, o caminho localiza.
+    """
     if profundidade and e_duplicado(bruto, ancestrais):
         return None
     if contador[0] >= limite:
@@ -234,6 +241,8 @@ def _normalizar(
             no["caixa"] = [int(valor) for valor in caixa]
         except (TypeError, ValueError):
             pass
+    if com_caminho:
+        no["caminho"] = list(indices)
 
     filhos: list[dict[str, Any]] = []
     # A mesma guarda da leitura, aplicada de novo na montagem: mesmo que a
@@ -241,7 +250,7 @@ def _normalizar(
     # chega ao chat já vem cortado. O nó aparece; só a descida para.
     pode, caminho = pode_descer(bruto, ancestrais)
     if profundidade < maxima and pode:
-        for filho in bruto.get("filhos") or []:
+        for posicao, filho in enumerate(bruto.get("filhos") or []):
             if not isinstance(filho, dict):
                 continue
             normalizado = _normalizar(
@@ -252,6 +261,8 @@ def _normalizar(
                 contador=contador,
                 limite=limite,
                 ancestrais=caminho,
+                indices=indices + (posicao,),
+                com_caminho=com_caminho,
             )
             if normalizado is None:
                 # `None` aqui é duplicado (pula) ou limite atingido (para).
@@ -626,7 +637,13 @@ def _limites(profundidade: int | None, limite: int | None) -> tuple[int, int]:
     return max(1, min(prof, PROFUNDIDADE_MAX)), max(1, min(lim, LIMITE_MAX))
 
 
-def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limite: int = LIMITE_PADRAO) -> dict[str, Any]:
+def montar(
+    bruto: dict[str, Any],
+    profundidade: int = PROFUNDIDADE_PADRAO,
+    limite: int = LIMITE_PADRAO,
+    *,
+    com_caminho: bool = False,
+) -> dict[str, Any]:
     """Monta o resultado público a partir do que a sonda devolveu.
 
     Separado da leitura para poder ser testado sem Windows, sem COM e sem tela.
@@ -652,7 +669,15 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
             "aviso": bruto.get("aviso") or "Esta janela não publicou árvore de acessibilidade.",
         }
 
-    arvore = _normalizar(raiz_bruta, prefixo=prefixo, profundidade=0, maxima=prof, contador=contador, limite=lim)
+    arvore = _normalizar(
+        raiz_bruta,
+        prefixo=prefixo,
+        profundidade=0,
+        maxima=prof,
+        contador=contador,
+        limite=lim,
+        com_caminho=com_caminho,
+    )
     total, acionaveis = _contar(arvore) if arvore else (0, 0)
     truncada = contador[0] >= lim
     resultado = {

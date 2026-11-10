@@ -687,7 +687,7 @@ def test_catalogo_tem_o_vocabulario() -> None:
 def test_api_health_reflete_versao_e_catalogo(client: TestClient) -> None:
     health = client.get("/api/health").json()
     assert health["version"] == VERSAO
-    assert health["skills"] == 320
+    assert health["skills"] == 321
 
 
 def test_api_lista_as_sete_skills(client: TestClient) -> None:

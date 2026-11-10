@@ -5,6 +5,81 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Etapa 2: agir por `ref` (0.86.0)
+
+A leitura do Bloco de Notas entregou o alvo:
+
+```
+texto  @4ab283d9:e11  em 227,559 (970x140)  (escreve aqui)
+Onde escrever: @4ab283d9:e11 em 227,559 (970x140)
+```
+
+Com um alvo que tem nome, posição e `ref`, o braço pode existir:
+
+```
+.venv\Scripts\python arvore_sonda.py --alvo "notepad.exe" --ref @4ab283d9:e11 --acao digitar --texto "oi"
+```
+
+```
+  Ação pronta (nada foi feito): digitar 'oi' em texto em 227,559 (970x140)
+
+  janela:  notepad.exe — Sem título - Bloco de notas
+  alvo:    @4ab283d9:e11  texto “”
+  onde:    227,559 (970x140)
+  fonte:   msaa   leitura: 4ab283d9
+
+  repita o comando com --executar para fazer de verdade.
+```
+
+Sem `--executar`, **nada é tocado**. Com ele:
+
+```
+  Feito: digitar 'oi' em texto em 227,559 (970x140)
+  como:    foco + teclado
+```
+
+### A regra que manda em tudo: `ref` não sobrevive à leitura
+
+`ref` não é o nome do elemento — é o número dele naquela leitura. A tela muda.
+Por isso **todo `agir` relê a janela antes** e procura o ref na leitura nova:
+
+```
+o ref @antigo:e12 não existe nesta leitura — ele deve ser de uma leitura
+anterior, e a tela já mudou. Refs válidos agora: @4ab283d9:e11, ...
+```
+
+Um `ref` velho nunca vira alvo por acaso. É a diferença entre um braço e um
+chute.
+
+### Sem mover o mouse
+
+A ação vem do próprio elemento:
+
+| ação | como |
+|---|---|
+| clicar | `accDoDefaultAction` — a ação que o programa declara |
+| sem ação padrão | `accSelect(TAKEFOCUS)` — o mesmo que um clique faria |
+| digitar | foco no elemento, depois teclado (Unicode) |
+| recusa de foco | **para** e diz; digitar sem foco iria para outra janela |
+
+Isso não é preferência estética: no seu PC a tela não responde a toque e não há
+mouse USB. Clicar por coordenada seria o único caminho que não funciona ali.
+
+### O que é recusado, e por quê
+
+| pedido | resposta |
+|---|---|
+| `ref` de leitura anterior | recusa e lista os refs válidos agora |
+| moldura (Fechar, Minimizar, rolagem) | recusa — não é trabalhar no programa |
+| digitar em botão | recusa com a ação que o elemento aceita |
+| digitar sem texto | recusa |
+| agir sem `--executar` | mostra o plano e para |
+
+### No chat
+
+`mesa.agir` faz o mesmo pelo JARVIS, com `executar` explícito e confirmação.
+A etapa 2 deixou de ser promessa: é a skill `mesa.agir`.
+
 ## Os 26 acionáveis eram moldura (0.85.0)
 
 A leitura do Bloco de Notas, no PC do usuário:
@@ -564,6 +639,8 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **não desiste na primeira** | janela que responde só moldura é relida uma vez, 0,4 s depois — navegador acorda ao ser lido |
 | **não confunde moldura com trabalho** | botão de janela, rolagem e alça ficam de fora da conta de “dá para agir” |
 | **sabe onde se escreve** | papel `texto`/`documento` com caixa ganha ação `digitar` e `ref`, salvo se for somente leitura |
+| **age por `ref`, com freio** | relê antes de agir; ref antigo, moldura e digitar sem texto são recusados; `--executar` é obrigatório |
+| **não move o mouse** | a ação vem do elemento (ação padrão / foco), que é o único caminho que funciona na sua tela |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |
 | **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |

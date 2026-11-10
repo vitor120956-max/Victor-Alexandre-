@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.85.0
+# Biblioteca e armazenamento — 0.86.0
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -271,8 +271,8 @@ Limites, sem enfeite:
 | Testes da primeira execução | **19** (`test_iniciar.py`: `iniciar-jarvis.bat` ASCII/CRLF com `goto` consistente, e o `npm run dev` que explica antes de falhar) | — agora com o `consertar-arquivos.bat` e a armadilha do `>`
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
-| Suíte da API | **3.502** |
-| Skills no registro | **320** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação; 4 em `conectores.*`: estado, triagem da caixa por IMAP somente leitura, link do WhatsApp e leitura de conversa exportada, todos só leem; `mesa.*` ganhou 1: `mesa.arvore`, que lê a árvore de acessibilidade da janela em foco numa sonda separada, sem clicar; 1 em `ia.*`: `ia.local`, que confere, baixa e aponta o `.env` para um modelo sem chave) |
+| Suíte da API | **3.512** |
+| Skills no registro | **321** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação; 4 em `conectores.*`: estado, triagem da caixa por IMAP somente leitura, link do WhatsApp e leitura de conversa exportada, todos só leem; `mesa.*` ganhou 2: `mesa.arvore`, que lê a árvore de acessibilidade da janela numa sonda separada, sem clicar, e `mesa.agir`, que clica ou digita por `ref` **relendo a janela antes** (ref de leitura antiga é recusado) e só age com `executar=true`, sem mover o mouse; 1 em `ia.*`: `ia.local`, que confere, baixa e aponta o `.env` para um modelo sem chave) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 
 **O que não foi medido:** o reconhecimento do Tesseract. Ele não existe na máquina
