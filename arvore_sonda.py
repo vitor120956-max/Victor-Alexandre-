@@ -25,6 +25,13 @@ Só leitura: nada é clicado, digitado ou movido.
 2. **Segunda fonte.** O console não publica botões pela MSAA (é de 1996). Ele
    publica pela **UIAutomation**. A leitura agora tenta as duas e fica com a que
    mostrou mais elementos.
+
+## 0.82.3 — a escolha da janela
+
+Na 0.82.2, `--alvo chrome` leu **o terminal**: a busca procurava primeiro no
+título, e o título do `cmd` é a linha de comando — que contém a palavra
+“chrome”. A janela que roda a sonda é justamente a que sempre carrega o pedido
+escrito nela. Agora ela é excluída das candidatas, e processo vence título.
 """
 from __future__ import annotations
 
@@ -32,56 +39,39 @@ import argparse
 import json
 import sys
 
-# Quem é “o próprio mensageiro”: se o foco estiver aqui, a leitura seria inútil.
-PROPRIOS = (
-    "cmd.exe",
-    "powershell.exe",
-    "pwsh.exe",
-    "python.exe",
-    "pythonw.exe",
-    "conhost.exe",
-    "windowsterminal.exe",
-)
-
 
 def _falhar(mensagem: str, codigo: int = 1) -> int:
     print(json.dumps({"erro": mensagem}, ensure_ascii=False))
     return codigo
 
 
-def _processo(item: dict) -> str:
-    return str(item.get("processo") or "").lower()
-
-
-def passo_hex(passo: dict) -> str:
-    valor = passo.get("retorno")
-    if isinstance(valor, int):
-        return f"0x{valor & 0xFFFFFFFF:08X}"
-    return ""
-
-
-def _e_proprio(item: dict | None) -> bool:
-    return bool(item) and _processo(item) in PROPRIOS
-
-
 def _escolher(leitor, alvo: str) -> tuple[dict, str]:
     """Janela a ler + explicação de eventual troca.
 
-    Com `--alvo foco`, se quem está em foco é o terminal que roda a sonda, pega
-    a primeira janela que **não** é terminal — é o que o usuário quis dizer.
+    Quem decide o alvo é `arvore.escolher_janela` (a mesma da API): processo
+    vence título, e a janela que roda a sonda fica de fora — foi ela que fez
+    `--alvo chrome` ler o terminal na 0.82.2.
+
+    Aqui só fica o caso `foco`: se quem está em foco é o terminal, pega a
+    primeira janela de programa de verdade — é o que o usuário quis dizer.
     """
     from server import arvore
 
     pedido = (alvo or "foco").strip().lower()
     if pedido not in {"foco", "focused", ""}:
-        return arvore._escolher_janela(leitor, alvo), ""  # noqa: SLF001 - a mesma escolha da API
+        return arvore.escolher_janela(alvo, janelas=leitor.janelas(), foco=None), ""
 
-    janela = arvore._escolher_janela(leitor, alvo)  # noqa: SLF001
-    if not _e_proprio(janela):
+    foco = leitor.janela_em_foco()
+    janela = arvore.escolher_janela(alvo, janelas=leitor.janelas(), foco=foco)
+    if not arvore.e_terminal(janela):
         return janela, ""
 
     reais = getattr(leitor, "janelas_de_programas", leitor.janelas)
-    candidatas = [item for item in reais() if not _e_proprio(item) and item.get("titulo")]
+    candidatas = [
+        item
+        for item in reais()
+        if not arvore.e_terminal(item) and not arvore.da_sonda(item) and item.get("titulo")
+    ]
     if not candidatas:
         return janela, (
             "a janela em foco é este terminal e não achei outra aberta — abra o programa "

@@ -589,24 +589,116 @@ def _ler_com_leitor(leitor: Leitor, alvo: str, profundidade: int, limite: int) -
     return montar(bruto, profundidade, limite)
 
 
-def _escolher_janela(leitor: Leitor, alvo: str) -> dict[str, Any]:
-    pedido = (alvo or "foco").strip()
-    if pedido.lower() in {"foco", "focused", ""}:
-        janela = leitor.janela_em_foco()
-        if not janela:
+# ---------------------------------------------------------------------------
+# Escolher a janela certa
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário, 0.82.2:
+#
+#     D:\JARVIS>.venv\Scripts\python arvore_sonda.py --alvo chrome
+#     cmd.exe — C:\Windows\system32\cmd.exe - ... --alvo chrome: 12 elemento(s)...
+#
+# O Chrome nunca foi lido. A busca procurava primeiro no **título**, e o título
+# do terminal é a própria linha de comando — que contém a palavra “chrome”.
+# A janela que roda a sonda é a única que sempre tem o pedido escrito nela.
+#
+# Ordem nova, e a razão de cada passo:
+#
+# 1. janela que roda a sonda **nunca** é candidata (é a que tem o pedido no título);
+# 2. processo manda mais que título: `chrome` casa com `chrome.exe`, não com um
+#    terminal que por acaso mostra a palavra;
+# 3. título só vale quando é janela de programa de verdade.
+
+PROCESSOS_DE_TERMINAL = {
+    "cmd.exe",
+    "powershell.exe",
+    "pwsh.exe",
+    "python.exe",
+    "pythonw.exe",
+    "conhost.exe",
+    "openconsole.exe",
+    "windowsterminal.exe",
+}
+
+
+def e_terminal(janela: dict[str, Any] | None) -> bool:
+    """A janela é um terminal — onde o comando do JARVIS fica escrito?"""
+    return limpo((janela or {}).get("processo")).lower() in PROCESSOS_DE_TERMINAL
+
+
+def da_sonda(janela: dict[str, Any] | None) -> bool:
+    """Esta é a janela que está rodando a leitura agora?
+
+    Reconhecida por dois sinais: título com o nome do arquivo da sonda, ou ser
+    terminal (todos são candidatos a estar executando o comando).
+    """
+    if not janela:
+        return False
+    if "arvore_sonda" in limpo(janela.get("titulo")).lower():
+        return True
+    return False
+
+
+def peso_da_janela(janela: dict[str, Any], pedido: str) -> int | None:
+    """Nota de 0 (melhor) a 3. `None` significa “não é esta”.
+
+    O número é a distância do que o usuário quis: processo igual vence título
+    parecido — sempre.
+    """
+    procurado = limpo(pedido).lower()
+    if not procurado:
+        return None
+    processo = limpo(janela.get("processo")).lower()
+    sem_exe = processo[:-4] if processo.endswith(".exe") else processo
+    titulo = limpo(janela.get("titulo")).lower()
+
+    if sem_exe == procurado or processo == procurado:
+        return 0
+    if procurado in sem_exe:
+        return 1
+    if titulo.startswith(procurado):
+        return 2
+    if procurado in titulo:
+        return 3
+    return None
+
+
+def escolher_janela(
+    alvo: str,
+    *,
+    janelas: list[dict[str, Any]],
+    foco: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """A janela que o pedido designa — com a razão da escolha quando importa."""
+    pedido = limpo(alvo)
+    if not pedido or pedido.lower() in {"foco", "focused"}:
+        if not foco:
             raise ArvoreError("não achei a janela em foco — clique na janela que quer examinar e tente de novo.")
-        return janela
-    janelas = leitor.janelas()
+        return foco
+
     if not janelas:
         raise ArvoreError("não achei nenhuma janela aberta.")
-    procurado = pedido.lower()
-    achadas = [item for item in janelas if procurado in str(item.get("titulo", "")).lower()]
+
+    # A janela da sonda é a que carrega o pedido escrito no título: fora.
+    candidatas = [item for item in janelas if not da_sonda(item)]
+    pontuadas = [(peso_da_janela(item, pedido), item) for item in candidatas]
+    achadas = sorted(
+        ((peso, item) for peso, item in pontuadas if peso is not None),
+        key=lambda par: par[0],
+    )
     if not achadas:
-        achadas = [item for item in janelas if procurado in str(item.get("processo", "")).lower()]
-    if not achadas:
-        titulos = "; ".join(str(item.get("titulo"))[:40] for item in janelas[:8])
-        raise ArvoreError(f"nenhuma janela com “{pedido}”. Abertas agora: {titulos}.")
-    return achadas[0]
+        abertas = "; ".join(limpo(item.get("titulo"))[:40] for item in candidatas if item.get("titulo"))[:400]
+        raise ArvoreError(
+            f"nenhuma janela com “{pedido}”. Abertas agora: {abertas or '(nenhuma)'}."
+        )
+    return achadas[0][1]
+
+
+def _escolher_janela(leitor: Leitor, alvo: str) -> dict[str, Any]:
+    pedido = limpo(alvo)
+    foco = None
+    if not pedido or pedido.lower() in {"foco", "focused"}:
+        foco = leitor.janela_em_foco()
+    return escolher_janela(alvo, janelas=leitor.janelas(), foco=foco)
 
 
 def _ler_com_sonda(

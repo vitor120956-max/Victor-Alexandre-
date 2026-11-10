@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - chave do Google Gemini
 echo.
 echo   JARVIS - usar o Google Gemini
-echo   Versao: 0.82.2
+echo   Versao: 0.82.3
 echo   ----------------------------------------------------------------
 echo   Serve para ter o Gemini de graca, sem cartao.
 echo.

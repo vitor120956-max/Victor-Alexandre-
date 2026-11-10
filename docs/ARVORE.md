@@ -5,6 +5,48 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A terceira medição no seu PC (0.82.3)
+
+A 0.82.2 consertou os índices da UIAutomation — e isso **funcionou**:
+
+```
+D:\JARVIS>.venv\Scripts\python arvore_sonda.py --alvo chrome --diagnostico
+  [ok  ] CoInitializeEx(MTA)                0x00000000
+  [ok  ] CoCreateInstance(IUIAutomation)    0x00000000  objeto criado
+  [ok  ] get_ControlViewWalker (índice 14)  0x00000000
+  [ok  ] ElementFromHandle (índice 6)       0x00000000
+  [ok  ] get_CurrentControlType             0x00000000  tipo=50032
+```
+
+E a leitura pela UIA trouxe conteúdo de verdade onde a MSAA trazia a moldura:
+
+```
+--alvo chrome: 12 elemento(s), 7 acionável(is) — fonte: uia
+  barra de rolagem “Vertical”
+    botão “Uma linha acima”  @93d11915:e3
+    botão “Uma página acima”  @93d11915:e4
+    elevador “Posição”
+```
+
+**Mas `--alvo chrome` leu o terminal, não o Chrome.** O motivo está no título
+daquela janela:
+
+```
+cmd.exe — C:\Windows\system32\cmd.exe - .venv\Scripts\python arvore_sonda.py --alvo chrome
+```
+
+A busca procurava **primeiro no título**, e o título do `cmd` é a linha de
+comando — que contém a palavra “chrome”. A janela que roda a sonda é a **única**
+que sempre carrega o pedido escrito nela. Era o pior lugar possível para
+começar a busca.
+
+Agora:
+
+1. a janela que roda a sonda **nunca** é candidata;
+2. **processo vence título**: `chrome` casa com `chrome.exe` (nota 0) antes de
+   casar com qualquer título que mencione a palavra (nota 3);
+3. quando nada casa, a mensagem lista só janelas de programas de verdade.
+
 ## A segunda medição no seu PC (0.82.2)
 
 Depois da 0.82.1 você rodou de novo, agora com o Chrome aberto:
@@ -136,6 +178,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **não lê a si mesma** | se o foco é o terminal que roda a sonda, ela pega a janela de trás e avisa |
 | **não entra em laço** | moldura é folha e nó que repete um ancestral para — o Chrome já provou que sem isso a leitura vira 600 botões falsos |
 | **não escolhe o Windows** | menu Iniciar, barra de tarefas e área de trabalho ficam fora da lista de janelas |
+| **não escolhe a si mesma nem por engano** | a janela que roda a sonda é excluída, e processo vence título — `--alvo chrome` acha o Chrome |
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 
 ## O que **não** faz (ainda) e por quê

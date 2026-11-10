@@ -625,3 +625,73 @@ def test_a_sonda_tem_diagnostico():
     texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
     assert '"--diagnostico"' in texto
     assert "diagnostico()" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.82.3 — `--alvo chrome` leu o terminal
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário:
+#
+#     D:\JARVIS>.venv\Scripts\python arvore_sonda.py --alvo chrome
+#     cmd.exe — ... --alvo chrome: 12 elemento(s) — fonte: uia
+#
+# O Chrome nunca foi tocado: o título do `cmd` é a linha de comando, e a linha
+# de comando contém “chrome”. A janela que roda a sonda é a única que sempre
+# carrega o pedido escrito nela.
+
+JANELAS_CHROME = [
+    {"handle": 1, "titulo": "cmd.exe - .venv\\Scripts\\python arvore_sonda.py --alvo chrome", "processo": "cmd.exe"},
+    {"handle": 2, "titulo": "Arena | Benchmark - Google Chrome", "processo": "chrome.exe"},
+]
+
+
+def test_alvo_por_processo_nao_pega_o_terminal():
+    """O caso exato do usuário: `chrome` tem de ser o chrome.exe."""
+    escolhida = arvore.escolher_janela("chrome", janelas=JANELAS_CHROME, foco=JANELAS_CHROME[0])
+    assert escolhida["handle"] == 2
+
+
+def test_processo_vence_titulo_mesmo_vindo_depois_na_lista():
+    """Ordem na lista não decide: quem decide é a nota."""
+    invertidas = list(reversed(JANELAS_CHROME))
+    escolhida = arvore.escolher_janela("chrome", janelas=invertidas, foco=None)
+    assert escolhida["processo"] == "chrome.exe"
+
+
+def test_a_janela_da_sonda_nunca_e_candidata():
+    """Sem esta regra, o pedido casa com o próprio comando que o contém."""
+    assert arvore.da_sonda({"titulo": "cmd.exe - python arvore_sonda.py --alvo chrome"}) is True
+    assert arvore.da_sonda({"titulo": "Arena - Google Chrome"}) is False
+
+
+def test_titulo_ainda_serve_quando_nao_ha_processo_com_o_nome():
+    """“Arena” não é nome de processo — aí o título é a única pista."""
+    janelas = [
+        {"handle": 1, "titulo": "cmd.exe - arvore_sonda.py", "processo": "cmd.exe"},
+        {"handle": 3, "titulo": "Arena | Benchmark", "processo": "firefox.exe"},
+    ]
+    assert arvore.escolher_janela("arena", janelas=janelas, foco=None)["handle"] == 3
+
+
+def test_sem_alvo_que_casa_a_mensagem_nao_lista_o_proprio_terminal():
+    with pytest.raises(arvore.ArvoreError) as erro:
+        arvore.escolher_janela("calculadora", janelas=JANELAS_CHROME, foco=None)
+    texto = str(erro.value)
+    assert "Arena | Benchmark" in texto
+    assert "arvore_sonda" not in texto
+
+
+def test_terminal_e_reconhecido_para_a_troca_de_foco():
+    assert arvore.e_terminal({"processo": "cmd.exe"}) is True
+    assert arvore.e_terminal({"processo": "PowerShell.exe"}) is True
+    assert arvore.e_terminal({"processo": "chrome.exe"}) is False
+    assert arvore.e_terminal(None) is False
+
+
+def test_peso_da_janela_ordena_do_melhor_para_o_pior():
+    """0 processo igual, 1 processo parecido, 2 título começa, 3 título contém."""
+    assert arvore.peso_da_janela({"processo": "chrome.exe", "titulo": ""}, "chrome") == 0
+    assert arvore.peso_da_janela({"processo": "chrome_proxy.exe", "titulo": ""}, "chrome") == 1
+    assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "Chrome - perfil"}, "chrome") == 2
+    assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "Abrir no Chrome"}, "chrome") == 3
+    assert arvore.peso_da_janela({"processo": "x.exe", "titulo": "outra"}, "chrome") is None
