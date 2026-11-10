@@ -1071,3 +1071,62 @@ def test_o_mesa_arvore_entrega_a_prontidao():
     inicio = texto.index("def mesa_arvore_handler(")
     trecho = texto[inicio : inicio + 1400]
     assert 'lida["pronto"] = arvore.prontidao(lida)' in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.83.1 — saber ONDE a peça está ≠ saber O QUE ela é
+# ---------------------------------------------------------------------------
+
+def test_desenhar_mostra_onde_fica_cada_elemento():
+    """A posição era medida e nunca impressa — daí a pergunta “ele sabe onde?”."""
+    montada = {
+        "arvore": {
+            "papel": "janela",
+            "nome": "Chrome",
+            "caixa": [0, 0, 1200, 800],
+            "filhos": [
+                {"papel": "botão", "nome": "Fechar", "acao": "Clicar", "caixa": [1180, 5, 30, 20]},
+                {"papel": "texto", "nome": "", "acionavel": False},
+            ],
+        }
+    }
+    desenho = arvore.desenhar(montada["arvore"])
+    assert "em 0,0 (1200x800)" in desenho
+    assert "em 1180,5 (30x20)" in desenho
+    # Elemento sem caixa continua aparecendo, sem inventar coordenada.
+    assert desenho.count("em ") == 2
+
+
+def test_a_prontidao_diz_que_a_posicao_e_conhecida_quando_o_conteudo_nao_e():
+    """Os 4 elementos do Chrome: posição medida, conteúdo nenhum.
+
+    Dizer só “não serve” faz parecer que nada foi reconhecido. A posição foi —
+    e o motivo tem de separar as duas coisas.
+    """
+    montada = {
+        "conteudo": False,
+        "total": 4,
+        "arvore": {
+            "papel": "janela",
+            "nome": "Chrome",
+            "caixa": [0, 0, 1200, 800],
+            "filhos": [
+                {"papel": "botão", "nome": "Fechar", "acionavel": True, "caixa": [1180, 5, 30, 20]},
+                {"papel": "botão", "nome": "Minimizar", "acionavel": True, "caixa": [1140, 5, 30, 20]},
+            ],
+        },
+    }
+    lido = arvore.prontidao(montada)
+    assert lido["pronto"] is False
+    assert lido["com_posicao"] == 3
+    assert "posição dela eu sei" in lido["motivo"]
+    assert "3 de 3" in lido["motivo"]
+
+
+def test_a_varredura_geral_mostra_a_coluna_de_posicoes():
+    """`--provados` responde “onde ele enxerga?” coluna por coluna."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert "posicoes  conteudo" in texto
+    assert "com_posicao" in texto
+    # E diz, em uma linha, a diferença que gerou a dúvida.
+    assert "Saber onde" in texto

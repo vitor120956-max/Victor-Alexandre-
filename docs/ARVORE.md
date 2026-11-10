@@ -5,6 +5,48 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Onde ele enxerga, e onde para (0.83.1)
+
+Pergunta justa depois do veredito: **“mas ele não está reconhecendo onde fica
+cada coisa?”** — sim, para a moldura. E a resposta nunca esteve na tela, o que
+é um defeito meu: a posição era medida (`caixa`: x, y, largura, altura) e o
+desenho não a mostrava.
+
+Agora mostra:
+
+```
+janela “Chrome”  em 0,0 (1200x800)
+  botão “Fechar”  @568600ab:e2  em 1180,5 (30x20)
+  botão “Minimizar”  @568600ab:e3  em 1140,5 (30x20)
+```
+
+E a diferença fica escrita, não deduzida:
+
+| o que | ele sabe? |
+|---|---|
+| a janela existe, e onde ela está na tela | **sim** — coordenada |
+| barra de título, minimizar, fechar, rolagem | **sim** — nome, ação e coordenada |
+| o que está **dentro** da página | **não** — o Chrome não publica |
+
+`--provados` ganhou a coluna `posicoes`:
+
+```
+  janela aberta                    elementos  posicoes  conteudo  serve?  fonte  seg
+  --------------------------------------------------------------------------------------
+  chrome.exe     Arena | Benchmar         4         4  nao       nao     uia    1.2
+  explorer.exe   Downloads               88        88  sim       SIM     msaa   0.9
+```
+
+`posicoes` alto com `conteudo` baixo quer dizer exatamente isto: **ele vê as
+peças e onde estão; não vê o que elas são.** Moldura tem posição e não serve
+para trabalhar; conteúdo é o que serve.
+
+Isso também corrige uma coisa que eu disse rápido demais. “O Chrome não
+publica” é impreciso. O mais provável é que o Chrome só ligue a árvore da
+página quando percebe um programa de acessibilidade, e aqui ela tenha ficado
+desligada. É ajuste do Chrome, não do JARVIS — e não é algo que eu vá pedir
+para você fazer à mão.
+
 ## O veredito do Chrome (0.83.0)
 
 A 0.82.6 mediu a janela certa. A resposta:
@@ -413,6 +455,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 | **mede a janela certa** | o diagnóstico recebe o handle já escolhido — `--alvo chrome` não mede mais o terminal |
 | **diz se serve para agir** | toda leitura termina com serve/não serve e o motivo; `mesa.arvore` devolve `pronto` |
+| **mostra onde fica** | cada elemento sai com `em x,y (largura x altura)`; `--provados` tem a coluna `posicoes` |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |
 | **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |

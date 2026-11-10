@@ -139,6 +139,7 @@ def _provados(leitor, args) -> int:
                         "titulo": item["titulo"],
                         "pronto": item["lido"]["pronto"],
                         "total": item["lido"].get("total", 0),
+                        "com_posicao": item["lido"].get("com_posicao", 0),
                         "conteudo": item["lido"].get("conteudo", False),
                         "motivo": item["lido"].get("motivo", ""),
                         "fonte": item["fonte"],
@@ -151,15 +152,20 @@ def _provados(leitor, args) -> int:
         )
         return 0
 
-    print("  janela aberta                        elementos  conteudo  serve?  fonte  seg")
-    print("  " + "-" * 78)
+    print("  janela aberta                    elementos  posicoes  conteudo  serve?  fonte  seg")
+    print("  " + "-" * 86)
     for item in linhas:
         lido = item["lido"]
         print(
-            f"  {item['processo'][:18]:<18} {item['titulo'][:20]:<20} "
-            f"{lido.get('total', 0):>8}  {'sim' if lido.get('conteudo') else 'nao':<7}  "
+            f"  {item['processo'][:14]:<14} {item['titulo'][:16]:<16} "
+            f"{lido.get('total', 0):>9}  {lido.get('com_posicao', 0):>8}  "
+            f"{'sim' if lido.get('conteudo') else 'nao':<8}  "
             f"{'SIM' if lido.get('pronto') else 'nao':<6}  {item['fonte'][:4]:<4}  {item['segundos']:>4}"
         )
+    print()
+    print("  'posicoes' = elementos que vieram com coordenada na tela. Saber onde")
+    print("  a peca esta nao e o mesmo que saber o que ela e: moldura tem posicao")
+    print("  e nao serve para trabalhar; conteudo e o que serve.")
 
     prontas = [item for item in linhas if item["lido"]["pronto"]]
     print()

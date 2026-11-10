@@ -915,7 +915,13 @@ def procurar(resultado: dict[str, Any], texto: str) -> list[dict[str, Any]]:
 
 
 def desenhar(no: dict[str, Any] | None, profundidade: int = 0, linhas: list[str] | None = None) -> str:
-    """Árvore em texto, para o chat — indentada e com o `ref` quando existe."""
+    """Árvore em texto, para o chat — indentada, com o `ref` e **onde fica**.
+
+    A posição sempre esteve na leitura (`caixa`: x, y, largura, altura) e nunca
+    apareceu aqui. O efeito foi o usuário perguntar, com razão, “mas ele não
+    está reconhecendo onde fica cada coisa?” — e não havia na tela uma linha
+    sequer mostrando que sim, que isto é medido.
+    """
     if linhas is None:
         linhas = []
     if not no:
@@ -923,7 +929,11 @@ def desenhar(no: dict[str, Any] | None, profundidade: int = 0, linhas: list[str]
     prefixo = "  " * profundidade
     nome = f" “{no['nome']}”" if no.get("nome") else ""
     ref = f"  {no['ref']}" if no.get("ref") else ""
-    linhas.append(f"{prefixo}{no.get('papel')}{nome}{ref}")
+    caixa = no.get("caixa")
+    onde = ""
+    if isinstance(caixa, (list, tuple)) and len(caixa) == 4:
+        onde = f"  em {caixa[0]},{caixa[1]} ({caixa[2]}x{caixa[3]})"
+    linhas.append(f"{prefixo}{no.get('papel')}{nome}{ref}{onde}")
     for filho in no.get("filhos") or []:
         desenhar(filho, profundidade + 1, linhas)
     return "\n".join(linhas)
@@ -945,11 +955,14 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
     Moldura nunca serve: 600 botões “Minimizar” não valem um link.
     """
     raiz = resultado.get("arvore")
-    total = acionaveis = nomeados = uteis = editaveis = 0
+    total = acionaveis = nomeados = uteis = editaveis = com_posicao = 0
     pilha = [raiz] if isinstance(raiz, dict) else []
     while pilha:
         no = pilha.pop()
         total += 1
+        caixa = no.get("caixa")
+        if isinstance(caixa, (list, tuple)) and len(caixa) == 4 and int(caixa[2]) > 0:
+            com_posicao += 1
         nome = " ".join(str(no.get("nome") or "").split())
         if nome:
             nomeados += 1
@@ -975,6 +988,12 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
             "a janela publicou só moldura (barra de título, rolagem, botões de janela). "
             "Esta é a mesma parede que o Chrome deu neste PC."
         )
+        if com_posicao:
+            # A distinção que evita a confusão: posição medida ≠ conteúdo lido.
+            motivo += (
+                f" A posição dela eu sei — {com_posicao} de {total} elemento(s) vieram "
+                "com coordenada; o que não existe é o que está dentro da página."
+            )
     else:
         motivo = "tem conteúdo, mas nenhum elemento acionável com nome ainda."
     return {
@@ -985,6 +1004,7 @@ def prontidao(resultado: dict[str, Any]) -> dict[str, Any]:
         "nomeados": nomeados,
         "com_nome_acionavel": uteis,
         "editaveis": editaveis,
+        "com_posicao": com_posicao,
         "motivo": motivo,
     }
 
