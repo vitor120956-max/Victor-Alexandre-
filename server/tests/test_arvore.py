@@ -1130,3 +1130,57 @@ def test_a_varredura_geral_mostra_a_coluna_de_posicoes():
     assert "com_posicao" in texto
     # E diz, em uma linha, a diferença que gerou a dúvida.
     assert "Saber onde" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.84.0 — a janela acorda na segunda leitura
+# ---------------------------------------------------------------------------
+
+def test_ler_janela_tenta_uma_segunda_vez_quando_so_vem_moldura():
+    """Medido no PC: a 1ª leitura do Chrome deu 3 elementos; a 2ª, 104.
+
+    O Chrome liga a árvore da página quando percebe alguém lendo, e não
+    instantaneamente. Ler uma vez e concluir “não tem nada” era mentira — e foi
+    essa mentira que me fez encerrar o Chrome antes da hora.
+    """
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def ler_janela(")
+    trecho = fonte[inicio : fonte.index("def _ler_auto(", inicio)]
+    assert "PAUSA_DE_DESPERTO" in trecho
+    assert "segunda = _ler_auto(" in trecho
+    assert 'segunda["acordou"]' in trecho
+    # E só relê quando não veio conteúdo: janela boa não paga o segundo passe.
+    assert "or arvore.tem_conteudo(resultado)" in trecho
+
+
+def test_a_pausa_do_desperto_e_curta_de_proposito():
+    """0,4 s é janela ligando acessibilidade — não programa carregando.
+
+    Uma pausa longa viraria espera em toda janela morta, e `--provados` mede
+    até 12 de uma vez.
+    """
+    import re
+
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    casa = re.search(r"PAUSA_DE_DESPERTO = ([0-9.]+)", fonte)
+    assert casa, "a pausa precisa de nome e valor"
+    assert float(casa.group(1)) <= 0.5
+
+
+def test_o_resumo_avisa_quando_a_janela_acordou_na_segunda_leitura():
+    montada = arvore.montar(
+        {
+            "janela": {"handle": 77, "titulo": "Arena - Google Chrome", "processo": "chrome.exe"},
+            "fonte": "uia",
+            "acordou": "esta janela só publicou o conteúdo na segunda leitura.",
+            "raiz": _no(9, "Arena", filhos=[_no(30, "Benchmark", "Clicar")]),
+        }
+    )
+    assert "segunda leitura" in arvore.resumo(montada)
+
+
+def test_a_varredura_geral_diz_quais_acordaram():
+    """Para o usuário não achar que precisa rodar duas vezes."""
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert "Acordaram na segunda leitura" in texto
+    assert '"acordou": item.get("acordou", False)' in texto

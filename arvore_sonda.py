@@ -124,6 +124,7 @@ def _provados(leitor, args) -> int:
             montada = arvore.montar(bruto, 6, 300)
             item["lido"] = arvore.prontidao(montada)
             item["fonte"] = montada.get("fonte") or "?"
+            item["acordou"] = bool(bruto.get("acordou"))
         except Exception as exc:  # noqa: BLE001 - COM de terceiros
             item["lido"] = {"pronto": False, "total": 0, "conteudo": False, "motivo": f"a leitura falhou ({type(exc).__name__})."}
             item["fonte"] = "?"
@@ -143,6 +144,7 @@ def _provados(leitor, args) -> int:
                         "conteudo": item["lido"].get("conteudo", False),
                         "motivo": item["lido"].get("motivo", ""),
                         "fonte": item["fonte"],
+                        "acordou": item.get("acordou", False),
                         "segundos": item["segundos"],
                     }
                     for item in linhas
@@ -166,6 +168,13 @@ def _provados(leitor, args) -> int:
     print("  'posicoes' = elementos que vieram com coordenada na tela. Saber onde")
     print("  a peca esta nao e o mesmo que saber o que ela e: moldura tem posicao")
     print("  e nao serve para trabalhar; conteudo e o que serve.")
+    acordaram = [item for item in linhas if item.get("acordou")]
+    if acordaram:
+        print()
+        print("  Acordaram na segunda leitura (o navegador liga a acessibilidade")
+        print("  quando percebe alguem lendo — já vem lido, não precisa repetir):")
+        for item in acordaram:
+            print(f"    - {item['processo']} — {item['titulo']}")
 
     prontas = [item for item in linhas if item["lido"]["pronto"]]
     print()

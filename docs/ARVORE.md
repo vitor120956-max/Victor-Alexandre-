@@ -5,6 +5,51 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## O Chrome acordou (0.84.0)
+
+A medição que virou o quadro, no PC do usuário, dois comandos seguidos sem
+tocar em nada:
+
+```
+1ª rodada:  chrome.exe   Arena | Benchmar     3     3  nao   nao   uia  1.0
+2ª rodada:  chrome.exe   Arena | Benchmar   104   104  sim   SIM   uia  0.9
+```
+
+A mesma janela. **3 elementos sem conteúdo** e, no comando seguinte, **104 com
+conteúdo**. A diferença não foi código: foi o **Chrome ligando a
+acessibilidade** ao perceber que alguém estava lendo.
+
+É o comportamento conhecido dos navegadores: a árvore da página é construída
+sob demanda, quando um programa de acessibilidade aparece. A primeira leitura
+é o que acende a luz; ela chega antes de a luz acender.
+
+### O erro que isso revelou — e que era meu
+
+Eu li **uma vez** e concluí “não publica”. Era o primeiro estado, não o único.
+Foi por isso que encerrei o Chrome na 0.83.0, com toda a convicção e errado.
+Uma leitura não é uma medição quando o objeto muda de estado ao ser tocado.
+
+### O que mudou
+
+- `ler_janela` relê **uma vez**, 0,4 s depois, quando a primeira leitura vem
+  sem conteúdo. Se a segunda trouxer conteúdo (ou mais elementos), ela vence e
+  o resultado diz por quê:
+
+  ```
+  A janela só publicou o conteúdo na segunda leitura — é o caso do navegador,
+  que liga a acessibilidade quando percebe alguém lendo.
+  ```
+
+- Janela que já vem com conteúdo **não paga** a segunda passada.
+- `--provados` avisa quais acordaram, para ninguém achar que precisa rodar
+  duas vezes:
+
+  ```
+  Acordaram na segunda leitura (o navegador liga a acessibilidade quando
+  percebe alguém lendo — já vem lido, não precisa repetir):
+    - chrome.exe — Arena | Benchmark & Compare the Best AI Mode
+  ```
+
 ## Onde ele enxerga, e onde para (0.83.1)
 
 Pergunta justa depois do veredito: **“mas ele não está reconhecendo onde fica
@@ -69,6 +114,11 @@ conteúdo. A página não é publicada — nem pela MSAA, nem pela UIAutomation.
 
 **Está encerrado o Chrome neste PC.** Era a promessa, e ela vale: não peço
 outra rodada, não mudo a pergunta, não há uma sétima tentativa.
+
+> **Correção (0.84.0):** estava errado. O Chrome publica a página sim — ele
+> liga a acessibilidade quando percebe alguém lendo, e a primeira leitura
+> pegou o estado antes disso. Ver “O Chrome acordou”, acima. A promessa de não
+> insistir continua; o que mudou é que agora não há por que insistir: funciona.
 
 O que isso significa na prática: neste `Windows 10.0.14393`, este Chrome não
 expõe o conteúdo da página para um leitor de acessibilidade. O JARVIS não vai
@@ -456,6 +506,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **mede a janela certa** | o diagnóstico recebe o handle já escolhido — `--alvo chrome` não mede mais o terminal |
 | **diz se serve para agir** | toda leitura termina com serve/não serve e o motivo; `mesa.arvore` devolve `pronto` |
 | **mostra onde fica** | cada elemento sai com `em x,y (largura x altura)`; `--provados` tem a coluna `posicoes` |
+| **não desiste na primeira** | janela que responde só moldura é relida uma vez, 0,4 s depois — navegador acorda ao ser lido |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |
 | **diz o que mediu** | a tabela abre com processo e classe da janela, e fecha com veredito medido como a leitura mede |

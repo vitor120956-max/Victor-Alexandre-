@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
 from typing import Any
 
 if sys.platform != "win32":  # pragma: no cover - importado só no Windows
@@ -850,6 +851,10 @@ def _uia_no(
 EnumChildProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 # Teto de janelas filhas examinadas: navegador costuma ter de 3 a 10.
+# Quanto esperar antes de reler uma janela que respondeu só moldura. Curto de
+# propósito: é a janela ligando a acessibilidade, não um programa carregando.
+PAUSA_DE_DESPERTO = 0.4
+
 FILHAS_MAXIMAS = 24
 
 
@@ -1059,8 +1064,41 @@ def ler_janela(
             ),
         }
 
+    resultado = _ler_auto(janela, profundidade, limite, pedido)
+    if pedido != "auto" or arvore.tem_conteudo(resultado):
+        return resultado
+
+    # A janela respondeu só moldura. Em navegador isso costuma ser o
+    # **primeiro** estado: o Chrome liga a árvore da página quando percebe um
+    # programa de acessibilidade olhando, e não instantaneamente. Medido no PC
+    # do usuário: a primeira leitura deu 3 elementos sem conteúdo; a segunda,
+    # na mesma janela e sem tocar em nada, deu 104 com conteúdo.
+    #
+    # Pagar uma segunda leitura (0,4 s) é barato perto de dizer que a janela
+    # não tem nada.
+    time.sleep(PAUSA_DE_DESPERTO)
+    segunda = _ler_auto(janela, profundidade, limite, pedido)
+    if arvore.tem_conteudo(segunda) or arvore.total_bruto(segunda) > arvore.total_bruto(resultado):
+        segunda["acordou"] = (
+            "esta janela só publicou o conteúdo na segunda leitura — é o caso do "
+            "navegador, que liga a acessibilidade quando percebe alguém lendo."
+        )
+        return segunda
+    return resultado
+
+
+def _ler_auto(
+    janela: dict[str, Any],
+    profundidade: int,
+    limite: int,
+    pedido: str,
+) -> dict[str, Any]:
+    """Uma passada da leitura automática: MSAA e, se valer, UIAutomation."""
     msaa = varrer_msaa(int(janela["handle"]), profundidade, limite)
-    msaa["janela"] = dict(janela, **({"de_filha": msaa["janela"]["de_filha"]} if msaa["janela"].get("de_filha") else {}))
+    msaa["janela"] = dict(
+        janela,
+        **({"de_filha": msaa["janela"]["de_filha"]} if msaa["janela"].get("de_filha") else {}),
+    )
     if pedido == "msaa" or not arvore.quer_segunda_fonte(msaa):
         return msaa
     return arvore.escolher_fonte(msaa, _ler_uia(janela, profundidade, limite))

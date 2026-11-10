@@ -667,7 +667,7 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
     # lá). O alvo continua sendo a janela que o usuário pediu, mas vale dizer.
     if janela.get("de_filha"):
         resultado["de_filha"] = str(janela["de_filha"])[:60]
-    notas = [str(item) for item in (bruto.get("nota"), bruto.get("nota_escolha")) if item]
+    notas = [str(item) for item in (bruto.get("nota"), bruto.get("nota_escolha"), bruto.get("acordou")) if item]
     if notas:
         resultado["nota"] = " ".join(notas)
     # Medido na árvore crua, onde o número do papel ainda existe: link, texto,
