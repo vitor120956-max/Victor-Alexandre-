@@ -443,6 +443,11 @@ def _total_bruto(bruto: dict[str, Any] | None) -> int:
     return total
 
 
+def total_bruto(bruto: dict[str, Any] | None) -> int:
+    """Quantos nós uma leitura crua trouxe. Público: a sonda usa para comparar."""
+    return _total_bruto(bruto)
+
+
 def precisa_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
     """A leitura veio pobre? Então vale tentar a outra fonte.
 
@@ -450,6 +455,30 @@ def precisa_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
     janela grande, cada caminhada extra é tempo que o usuário espera.
     """
     return _total_bruto(bruto) < SEGUNDA_FONTE_ABAIXO_DE
+
+
+# Papéis que só existem quando o programa publica **conteúdo**: texto de
+# página, link, item de lista, célula de tabela. Moldura de janela não tem
+# nenhum destes.
+PAPEIS_DE_CONTEUDO = {15, 24, 29, 30, 32, 34, 36, 41, 42}
+
+
+def tem_conteudo(bruto: dict[str, Any] | None) -> bool:
+    """A árvore tem pelo menos um elemento de conteúdo (não só moldura)?"""
+    if not bruto or not isinstance(bruto.get("raiz"), dict):
+        return False
+    pilha = [bruto["raiz"]]
+    while pilha:
+        no = pilha.pop()
+        try:
+            if int(no.get("papel") or 0) in PAPEIS_DE_CONTEUDO and limpo(no.get("nome")):
+                return True
+        except (TypeError, ValueError):
+            pass
+        for filho in no.get("filhos") or []:
+            if isinstance(filho, dict):
+                pilha.append(filho)
+    return False
 
 
 def e_navegador(bruto: dict[str, Any] | None) -> bool:
@@ -466,14 +495,39 @@ def quer_segunda_fonte(bruto: dict[str, Any] | None) -> bool:
 
 
 def escolher_fonte(msaa: dict[str, Any] | None, uia: dict[str, Any] | None) -> dict[str, Any]:
-    """Devolve a leitura que mostrou mais elementos, dizendo qual foi.
+    """Devolve a leitura mais útil, dizendo qual foi e por quê.
 
-    A UIA ganha quando a MSAA só trouxe a moldura (era o caso do `cmd`). A MSAA
-    ganha quando dá mais — é mais rápida e não muda o que já funcionava.
+    A regra **não** é “quem tem mais elementos”. No Chrome do usuário a MSAA
+    deu 47 e a UIA 4 — e os 47 eram todos moldura:
+
+        47 elemento(s), 26 acionável(is) — fonte: msaa
+        botão “Uma linha acima”, botão “Uma página abaixo”, alça...
+
+    Medir “quem tem mais” premiava justamente a leitura que não tem conteúdo.
+    A ordem passou a ser:
+
+    1. **conteúdo vence moldura**: se uma das duas trouxe elementos de
+       conteúdo (link, texto, item de lista) e a outra só moldura, ganha a de
+       conteúdo — mesmo com menos elementos;
+    2. **navegador vai de UIA**: Chrome/Edge/Firefox publicam a página pela
+       UIAutomation;
+    3. empate técnico: quem mostrou mais.
     """
     msaa = msaa or {}
     uia = uia or {}
     total_msaa, total_uia = _total_bruto(msaa), _total_bruto(uia)
+
+    if total_uia and tem_conteudo(uia) and not tem_conteudo(msaa):
+        escolhida = dict(uia)
+        escolhida["nota"] = (
+            f"a MSAA trouxe {total_msaa} elemento(s), todos de moldura; "
+            f"a UIAutomation trouxe conteúdo ({total_uia} elemento(s))."
+        )
+        return escolhida
+    if total_msaa and e_navegador(msaa) and total_uia:
+        escolhida = dict(uia)
+        escolhida["nota"] = f"navegador: a página fala pela UIAutomation ({total_uia} elemento(s))."
+        return escolhida
 
     if total_uia and (not total_msaa or total_uia >= total_msaa):
         escolhida = dict(uia)
@@ -601,6 +655,10 @@ def montar(bruto: dict[str, Any], profundidade: int = PROFUNDIDADE_PADRAO, limit
         )
     elif bruto.get("aviso"):
         resultado["aviso"] = bruto["aviso"]
+    # A árvore pode ter vindo de uma janela filha (a página do navegador mora
+    # lá). O alvo continua sendo a janela que o usuário pediu, mas vale dizer.
+    if janela.get("de_filha"):
+        resultado["de_filha"] = str(janela["de_filha"])[:60]
     notas = [str(item) for item in (bruto.get("nota"), bruto.get("nota_escolha")) if item]
     if notas:
         resultado["nota"] = " ".join(notas)
@@ -870,6 +928,8 @@ def resumo(resultado: dict[str, Any]) -> str:
         f"{resultado.get('alvo') or 'janela'}: {total} elemento(s), "
         f"{acionaveis_total} acionável(is) — fonte: {resultado.get('fonte') or '?'}."
     )
+    if resultado.get("de_filha"):
+        cabeca += f" (lido de dentro: {resultado['de_filha']})"
     if not resultado.get("completo", True):
         cabeca += " " + str(resultado.get("aviso") or "Leitura parcial.")
     if resultado.get("nota"):

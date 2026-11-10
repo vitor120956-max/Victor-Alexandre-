@@ -122,6 +122,27 @@ def principal(argv: list[str] | None = None) -> int:
             print(f"  [{marca}] {passo.get('passo')}  {passo.get('hex')}  {passo.get('detalhe') or ''}".rstrip())
         print()
         print(quadro.get("nota") or "")
+
+        # A tabela que decide: quantos nós e se tem CONTEÚDO (não só moldura).
+        varredura = quadro.get("varredura") or []
+        if varredura:
+            print()
+            print("  janela                                  msaa  uia   conteudo")
+            print("  " + "-" * 62)
+            for linha in varredura:
+                nome = ("  " if linha.get("filha") else "") + str(linha.get("classe"))[:36]
+                conteudo = []
+                if linha.get("msaa_conteudo"):
+                    conteudo.append("msaa")
+                if linha.get("uia_conteudo"):
+                    conteudo.append("uia")
+                print(
+                    f"  {nome:<38}  {linha.get('msaa', 0):>4}  {linha.get('uia', 0):>4}   "
+                    f"{', '.join(conteudo) or 'nenhum'}"
+                )
+            print()
+            print("  As linhas indentadas sao janelas filhas: e nelas que a pagina")
+            print("  do navegador costuma morar.")
         return 0 if quadro.get("ok") else 1
 
     if args.janelas:

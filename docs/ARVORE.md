@@ -5,6 +5,62 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A quinta medição: moldura não é conteúdo (0.82.5)
+
+A 0.82.4 matou a repetição — **600 para 47 elementos**. Mas o número novo
+denunciou outra coisa:
+
+```
+chrome.exe — Arena | Benchmark...: 47 elemento(s), 26 acionável(is) — fonte: msaa.
+a UIAutomation mostrou 4; a MSAA mostrou mais (47).
+```
+
+Os 47 eram **todos moldura**: barra de título, barra de rolagem, “alça”.
+Nenhum item da página. E a regra “ganha quem mostrou mais” premiava exatamente
+a leitura sem conteúdo — 47 pedaços de moldura venciam 4 elementos de página.
+
+Três correções:
+
+### 1. Conteúdo vence moldura
+
+A escolha entre fontes parou de contar elementos e passou a perguntar **o que**
+eles são. Papéis de conteúdo — link, texto, item de lista, célula, documento —
+valem mais do que qualquer quantidade de botão de janela.
+
+| situação | quem ganha |
+|---|---|
+| uma tem conteúdo, a outra só moldura | a que tem conteúdo |
+| navegador (Chrome, Edge, Firefox…) | UIAutomation, mesmo com menos nós |
+| nenhuma tem conteúdo | quem mostrou mais (regra antiga) |
+
+### 2. A página mora numa janela **filha**
+
+A página do Chrome não é um elemento da janela principal: é a janela filha
+`Chrome_RenderWidgetHostHWND` — outro processo. Ler só a janela de topo dá a
+moldura; é por isso que a UIA “mostrava 4”.
+
+Agora a leitura varre as janelas filhas (até 24), começando pelas classes que
+carregam conteúdo, e fica com a que tiver mais nós. O resumo diz de onde veio:
+
+```
+(lido de dentro: Chrome_RenderWidgetHostHWND)
+```
+
+### 3. O diagnóstico passou a medir isso
+
+`--diagnostico` agora mostra uma tabela por janela e por fonte:
+
+```
+  janela                                  msaa  uia   conteudo
+  --------------------------------------------------------------
+  Chrome_WidgetWin_1                        47     4   nenhum
+    Chrome_RenderWidgetHostHWND              0   812   uia
+```
+
+Essa tabela é a resposta definitiva. Se a linha indentada mostrar `uia` com
+conteúdo, a leitura funciona. Se mostrar `nenhum` em tudo, o Windows 10 do seu
+PC não expõe a página — e aí eu paro, em vez de te fazer rodar de novo.
+
 ## A quarta medição: a causa raiz (0.82.4)
 
 `--alvo chrome` passou a achar o Chrome. Mas a árvore continuou repetindo — e
@@ -227,6 +283,8 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **não escolhe a si mesma nem por engano** | a janela que roda a sonda é excluída, e processo vence título — `--alvo chrome` acha o Chrome |
 | **não repete o mesmo elemento** | filho “simples” da MSAA não desce (era a causa de 600 botões falsos), e a montagem corta repetição de qualquer origem |
 | **navegador vai direto na UIA** | Chrome/Edge/Firefox/VS Code publicam a página pela UIAutomation, não pela MSAA |
+| **conteúdo vence moldura** | 47 botões de janela não valem mais do que 3 elementos de página |
+| **lê as janelas filhas** | a página do navegador é uma janela filha (`Chrome_RenderWidgetHostHWND`), não um elemento da janela de topo |
 | **falha com endereço** | `--diagnostico` mostra o retorno de cada passo do COM, não só “não devolveu” |
 
 ## O que **não** faz (ainda) e por quê

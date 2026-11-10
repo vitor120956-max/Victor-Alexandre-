@@ -828,22 +828,144 @@ def _uia_no(
     return no
 
 
-def _ler_uia(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any] | None:
-    raiz = _uia_da_janela(int(janela["handle"]))
+# ---------------------------------------------------------------------------
+# Janelas filhas — onde a página do navegador realmente mora (0.82.5)
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário (Chrome, Windows 10 14393), depois de consertar a
+# repetição:
+#
+#     chrome.exe — Arena | Benchmark...: 47 elemento(s), 26 acionável(is) — fonte: msaa.
+#     a UIAutomation mostrou 4; a MSAA mostrou mais (47).
+#
+# Os 47 são todos moldura: barra de título, barra de rolagem, “alça”. Nenhum
+# item da página. E a UIA, lida a partir do HWND de topo, deu 4.
+#
+# O motivo é a arquitetura do Chrome: a página não é um elemento da janela de
+# topo, é uma **janela filha** (`Chrome_RenderWidgetHostHWND`) — outro processo,
+# outro modelo de acessibilidade. `ElementFromHandle` na janela de topo enxerga
+# a moldura; quem tem a página é a janela filha.
+#
+# Por isso a leitura da UIA agora também desce nas janelas filhas.
+
+EnumChildProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+# Teto de janelas filhas examinadas: navegador costuma ter de 3 a 10.
+FILHAS_MAXIMAS = 24
+
+
+def janelas_filhas(handle: int, limite: int = FILHAS_MAXIMAS) -> list[dict[str, Any]]:
+    """Janelas filhas de uma janela — onde vivem páginas, editores e documentos."""
+    achadas: list[dict[str, Any]] = []
+
+    def visitar(hwnd: int, _parametro: int) -> bool:
+        if len(achadas) >= limite:
+            return False
+        try:
+            classe = _classe(hwnd)
+            titulo = _titulo(hwnd)
+            if not classe and not titulo:
+                return True
+            achadas.append({"handle": int(hwnd), "classe": classe, "titulo": titulo})
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+
+    try:
+        user32.EnumChildWindows(wintypes.HWND(int(handle)), EnumChildProc(visitar), 0)
+    except Exception:  # noqa: BLE001
+        return achadas
+    return achadas
+
+
+# Classes conhecidas por carregar o conteúdo de um programa. Ler estas primeiro
+# evita gastar o orçamento de nós com a moldura.
+CLASSES_DE_CONTEUDO = (
+    "chrome_renderwidgethosthwnd",
+    "chrome_widgetwin_0",
+    "mozillawindowclass",
+    "internet explorer_server",
+    "richedit",
+    "scintilla",
+    "edit",
+    "webview",
+    "document",
+)
+
+
+def _e_conteudo(classe: str) -> bool:
+    limpa = (classe or "").strip().lower()
+    return any(marca in limpa for marca in CLASSES_DE_CONTEUDO)
+
+
+def _ler_uia_da_janela(hwnd: int, profundidade: int, limite: int) -> dict[str, Any] | None:
+    """Lê a UIA de **um** HWND. Separado para poder ser somado na varredura."""
+    raiz = _uia_da_janela(int(hwnd))
     if not raiz:
         return None
     walker = _uia_walker()
     try:
         if not walker:
             return None
-        arvore = _uia_no(raiz, walker, 0, max(1, int(profundidade)), _Orcamento(int(limite)))
+        arvore_no = _uia_no(raiz, walker, 0, max(1, int(profundidade)), _Orcamento(int(limite)))
     except Exception:  # noqa: BLE001 - COM de terceiros: nunca propagar
         return None
     finally:
         _liberar(raiz)
         if walker:
             _liberar(walker)
-    return {"janela": janela, "raiz": arvore, "fonte": "uia"}
+    return arvore_no
+
+
+def varrer_uia(handle: int, profundidade: int, limite: int) -> dict[str, Any] | None:
+    """Lê a UIA da janela **e** das filhas; fica com a que tem conteúdo.
+
+    Ler só a janela de topo devolvia 4 elementos no Chrome. A página está na
+    janela filha — esta função é o que a traz.
+    """
+    janelas = [{"handle": int(handle), "classe": _classe(int(handle)), "titulo": _titulo(int(handle))}]
+    filhas = janelas_filhas(int(handle))
+    # Conteúdo primeiro: o orçamento de nós vai para a página, não para a moldura.
+    filhas.sort(key=lambda item: 0 if _e_conteudo(item.get("classe", "")) else 1)
+    janelas.extend(filhas)
+
+    melhor: dict[str, Any] | None = None
+    melhor_total = 0
+    examinadas = 0
+    for candidata in janelas:
+        if examinadas >= FILHAS_MAXIMAS:
+            break
+        examinadas += 1
+        arvore_no = _ler_uia_da_janela(int(candidata["handle"]), profundidade, max(1, int(limite)))
+        if arvore_no is None:
+            continue
+        total = arvore.total_bruto({"raiz": arvore_no})
+        if total > melhor_total:
+            melhor_total = total
+            melhor = {
+                "janela": {
+                    "handle": int(candidata["handle"]),
+                    "titulo": candidata.get("titulo") or _titulo(int(handle)),
+                    "classe": candidata.get("classe") or "",
+                    "processo": _processo(int(handle)),
+                },
+                "raiz": arvore_no,
+                "fonte": "uia",
+            }
+    return melhor
+
+
+def _ler_uia(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any] | None:
+    """UIA da janela e das filhas — a página do navegador está na filha."""
+    achada = varrer_uia(int(janela["handle"]), profundidade, limite)
+    if not achada:
+        return None
+    # O usuário pediu a janela X: o `alvo` continua sendo X, mesmo que a árvore
+    # tenha vindo de uma janela filha dela.
+    janela_final = dict(janela)
+    if achada["janela"].get("handle") != janela.get("handle"):
+        janela_final["de_filha"] = achada["janela"].get("classe") or "janela filha"
+    achada["janela"] = janela_final
+    return achada
 
 
 def _ler_msaa(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any]:
@@ -981,10 +1103,54 @@ def diagnostico() -> dict[str, Any]:
         anotar("get_CurrentName", S_OK if nome else "vazio", f"nome={nome[:60]!r}")
         _liberar(int(elemento.value))
 
+    # A pergunta que decide: onde está o conteúdo, e quantos nós cada janela
+    # entrega por cada fonte? Sem isso, "a UIA mostrou 4" não diz nada.
+    janelas = [{"handle": int(janela["handle"]), "classe": _classe(int(janela["handle"])), "profundidade": 0}]
+    janelas[0]["filha"] = False
+    for filha in janelas_filhas(int(janela["handle"]), limite=12):
+        filha = dict(filha)
+        filha["filha"] = True
+        filha["profundidade"] = 1
+        janelas.append(filha)
+
+    varredura: list[dict[str, Any]] = []
+    for item in janelas:
+        linhas: dict[str, Any] = {
+            "classe": item.get("classe") or "(sem classe)",
+            "titulo": (item.get("titulo") or "")[:50],
+            "filha": bool(item.get("filha")),
+        }
+        for rotulo, funcao in (("msaa", _ler_msaa), ("uia", _ler_uia_da_janela)):
+            try:
+                if rotulo == "msaa":
+                    bruto = funcao({"handle": item["handle"]}, 6, 400)
+                    total = arvore.total_bruto(bruto)
+                    tem = arvore.tem_conteudo(bruto)
+                else:
+                    no = funcao(int(item["handle"]), 6, 400)
+                    total = arvore.total_bruto({"raiz": no}) if no else 0
+                    tem = arvore.tem_conteudo({"raiz": no}) if no else False
+            except Exception:  # noqa: BLE001
+                total, tem = 0, False
+            linhas[rotulo] = total
+            linhas[f"{rotulo}_conteudo"] = tem
+        varredura.append(linhas)
+
+    passos.append(
+        {
+            "passo": f"varredura de janelas ({len(varredura)})",
+            "retorno": sum(1 for linha in varredura if linha.get("uia_conteudo") or linha.get("msaa_conteudo")),
+            "hex": "",
+            "ok": any(linha.get("uia_conteudo") or linha.get("msaa_conteudo") for linha in varredura),
+            "detalhe": "quantas janelas entregaram conteúdo de verdade (não só moldura)",
+        }
+    )
+
     ok = all(passo["ok"] for passo in passos if passo["passo"].startswith(("CoCreate", "get_Control", "ElementFrom")))
     return {
         "ok": ok,
         "passos": passos,
+        "varredura": varredura,
         "nota": (
             "todos os passos responderam: a UIAutomation está disponível nesta máquina."
             if ok

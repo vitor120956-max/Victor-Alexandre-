@@ -1,6 +1,6 @@
 {
- "versao": "0.82.4",
- "gerado": "2026-11-10T00:59:12+00:00",
+ "versao": "0.82.5",
+ "gerado": "2026-11-10T01:10:20+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -298,16 +298,20 @@
    "sha256": "499702533ac107f9eab3275ed4034358c8cc9d430f60c0ad9b78e3e7cfa23863",
    "bytes": 3664
   },
+  "NOVO-0.82.5.md": {
+   "sha256": "e130b54535c934565a9f4a841ec23440f2be39eec8a4bccd4a22af251c65ae30",
+   "bytes": 3154
+  },
   "README.md": {
-   "sha256": "116afba2e13db09039847195e917fd2432c9c552ae3c743f42a47940c788b964",
+   "sha256": "1b9933e83cc25bbdd31cf1952f79b97a4e5e18137268e5292af4366ad4407ba1",
    "bytes": 118947
   },
   "acesso-celular.bat": {
-   "sha256": "b2c3beab6107e21e9354a4ff47000d101831b3d3655b6e7ef54cbf67059a2077",
+   "sha256": "cd79629d39ac8e6d371e9e567cf9008070bd665e0a657e250a5f81cadcdb9ddd",
    "bytes": 692
   },
   "acesso-celular.ps1": {
-   "sha256": "1dd9c93b20b803a10f1213521c634eb482794c39c1c330a38c022bd703ae7ef9",
+   "sha256": "278b0f7e1c6a5047153d750d889d5a3a658eb14008a13a947ecde1fcbebe49a9",
    "bytes": 6147
   },
   "arrumar-pc.bat": {
@@ -315,8 +319,8 @@
    "bytes": 3748
   },
   "arvore_sonda.py": {
-   "sha256": "b2bb7c7157a82f28cdad3508a01fabdc5773e914b42f247100b72bd86f186b25",
-   "bytes": 6740
+   "sha256": "f73ed5b9e3f44ec3f6a1ebe39cd6530c26b13a77a259c6c6d00554606cee56bb",
+   "bytes": 7719
   },
   "atualizar-baixar.ps1": {
    "sha256": "bd36335c2b431dd760a50f24145b20b554ff0cf4869d9eb5fc3f1cc328886fd1",
@@ -327,7 +331,7 @@
    "bytes": 8423
   },
   "conferir-versao.bat": {
-   "sha256": "50a37012b796377e6cc10ffa5a498f66f1dc3a4ac848f7bafced73afc7a9da7c",
+   "sha256": "14473d58168b798676410573825fd48045f917fb46d8e09c161962d054fa82e6",
    "bytes": 761
   },
   "configurar-celular.py": {
@@ -375,15 +379,15 @@
    "bytes": 45900
   },
   "docs/ARVORE.md": {
-   "sha256": "a7e3c6e6567e20894e35f4823bb1184c1bfd70e06fdb41ccad27213de2f84747",
-   "bytes": 11898
+   "sha256": "81703ce9854344f67e3c41446fe5c45e73500e45f37cc2c63936b902e4fb512a",
+   "bytes": 14296
   },
   "docs/ATUALIZACAO.md": {
    "sha256": "89ea6bca324814835e2242dab1ca302b28812d4cb8399511c4d82aeb8b7e1b76",
    "bytes": 8125
   },
   "docs/BIBLIOTECA.md": {
-   "sha256": "a9a7ed293b26a29c866ad6f8200d96ba78e0de19ccfd039e25c2abcbcc79a63f",
+   "sha256": "b667caa4f8ae85c2c441d13351b9cda564a3890d00af0b23b9241185157dc433",
    "bytes": 14817
   },
   "docs/CARREIRA.md": {
@@ -671,11 +675,11 @@
    "bytes": 2552
   },
   "formatar-celular.bat": {
-   "sha256": "f3a38ddcd1a6ddd79428036ac812473d88934a751d64158f01cb4845e4b44440",
+   "sha256": "e03b641c870d7ab34b3b5430d3a03298a5dae47cc897144b61a125bbdde01ac9",
    "bytes": 1324
   },
   "formatar-celular.ps1": {
-   "sha256": "1b27d1fa187600f664052bf60d99a73f49f1574c5b50c9ab02f13bb2b77c31b8",
+   "sha256": "ef073fc16b06d966014a57802c87b5b07094df069a4cab9498fbb2161f72cedb",
    "bytes": 13112
   },
   "index.html": {
@@ -703,11 +707,11 @@
    "bytes": 13450
   },
   "package-lock.json": {
-   "sha256": "9fddbc0f3d0fa5f39f32dc2f50108dd6afa1df96856dbd02c5affeec8f97b5dc",
+   "sha256": "1995c4bb8d431403af72b19e7138b2527606f6205c25e1028b20478ffcb23216",
    "bytes": 81798
   },
   "package.json": {
-   "sha256": "8e67d093ed7c6096f2d2b89c51bf15d2f0f03fd6bad0ce48a4d6f2182725f95d",
+   "sha256": "d791799e6131b7210eb592cd85fc7819c1293bb77eea0f6f58ac9eabc1d07004",
    "bytes": 1350
   },
   "parar-jarvis.bat": {
@@ -735,11 +739,11 @@
    "bytes": 750
   },
   "resgatar-cartao.bat": {
-   "sha256": "f421d7c4dbc4025ca487c43f32b41d2eb37f8efa3672cee3e767d423508a94da",
+   "sha256": "71b3fbc01996d7caf8b3cc6a88380a637fd445813beb262a572de1aa2a4227c7",
    "bytes": 1400
   },
   "resgatar-cartao.ps1": {
-   "sha256": "fef06e3dedebff6807602631a742c0473efca58afcf98a383c9397bc255fe965",
+   "sha256": "5796cce2358b155d6c788e30bd884d42a3215573ab3c41d698a3bd9acfd4012a",
    "bytes": 13022
   },
   "scripts/checar-pendrive.mjs": {
@@ -799,15 +803,15 @@
    "bytes": 37004
   },
   "server/arvore.py": {
-   "sha256": "d633c520e2e45e45de0b036be4869b4ed15b953e3fbccb428aaa5682bce3a1a2",
-   "bytes": 31543
+   "sha256": "411ea6e52abbbeaa43bb8d96868622cdbf4ed8da2c7fb674320c3c763eadefa6",
+   "bytes": 33999
   },
   "server/arvore_windows.py": {
-   "sha256": "ac7b2118ba0164396d6fe9a3ec8e17e7936de92ed7785ce231c50dd01202e8f9",
-   "bytes": 34609
+   "sha256": "9449fb5facb2ca3fa1bfba09fe2002dab8044345d0baefc4bc5d718804121c48",
+   "bytes": 41298
   },
   "server/atualizacao.py": {
-   "sha256": "a380d321f4565d16c0d8b684ca09438d5662c04585543771bb165d2c3e3d46df",
+   "sha256": "465becf3b9a99cc9f14eb75ba677ce57848a40170c50626c84f559f884420055",
    "bytes": 31348
   },
   "server/backup.py": {
@@ -1143,8 +1147,8 @@
    "bytes": 30484
   },
   "server/tests/test_arvore.py": {
-   "sha256": "4a7e14a123a1b5e382d520ed1eca697bf3ea8b78103adbdb52ac7545dd307849",
-   "bytes": 33420
+   "sha256": "3a74b6c143deb60d813622557091a0396d0b80b761e1e83047b5f6886be537ee",
+   "bytes": 36948
   },
   "server/tests/test_atualizacao.py": {
    "sha256": "98ec0a53880f51fa51b14a301a2f27a059d2d2755a54327f65e01d2d207ed615",
@@ -1471,7 +1475,7 @@
    "bytes": 1743
   },
   "sonda-otg.bat": {
-   "sha256": "6bb9933ec5dbf10b9da99618b8acb55bb742379c2a52cfcb42c9bf3a11f38bed",
+   "sha256": "a25ad130165437bc2845c50100da09e22fe497564397c7df8aa20e965276fbf9",
    "bytes": 1580
   },
   "sonda-otg.ps1": {
@@ -1927,11 +1931,11 @@
    "bytes": 38
   },
   "teclado-pelo-pc.bat": {
-   "sha256": "3b7461266d436cbbc526b0038cb71205506255a6d16e71d9643a7b03a2b512a3",
+   "sha256": "f2bf49dcd034b99066554088010eabbc0c0dd8e6abcf0817f7139ef5047fce7f",
    "bytes": 5844
   },
   "teste-cabo.bat": {
-   "sha256": "10dfc985168858436507c43f6b60be07f221d2e21f2e9211bcd683b7b6d47198",
+   "sha256": "31a37369789e4f171db5ed07a58e4b7bb76d1421d7ef37de116f820ae35f34f5",
    "bytes": 1262
   },
   "teste-cabo.ps1": {
@@ -1971,11 +1975,11 @@
    "bytes": 677
   },
   "usar-google.bat": {
-   "sha256": "68a3e085f608c89745aa3bae380e412691b60de2885a209f6e798f8dcc1a4996",
+   "sha256": "cd7ba8ad10240964367cc33432fb2c0cb892b2a733e8d4e2d06c0ae912a50f7f",
    "bytes": 1490
   },
   "usar-openrouter.bat": {
-   "sha256": "bbe2b1808fa29f718be2c2921b6b120eccafa718bec6f7f59c1ad1c376145bd0",
+   "sha256": "1e6413300c481e75605d168d91d12c8942c57be4cb2f851d9164cde387ce3d02",
    "bytes": 1316
   },
   "verificar_versao.py": {
@@ -1983,7 +1987,7 @@
    "bytes": 6267
   },
   "vigiar-cabo.bat": {
-   "sha256": "0d282cbdbb61ce5810defc847bda4cf16c80beb1eea8421082f3639e325a6f07",
+   "sha256": "b75d08b9e965d79a16dd7912e938bdffee73f2598ab7203bf326fdf8e4426b3b",
    "bytes": 1561
   },
   "vigiar-usb-atento.bat": {
@@ -2083,7 +2087,7 @@
    "bytes": 645
   },
   "web-dist/versao.json": {
-   "sha256": "3340dc3246e984ae65cbf6540991e8bfd646bd6fca0b7e07881169bd7d1f7e09",
+   "sha256": "b9ad57c25660e8dc113b85d84510ddecf9aaab952b690fe31de3468dabfe7088",
    "bytes": 67
   }
  }

@@ -803,3 +803,94 @@ def test_navegador_sempre_pede_a_segunda_leitura():
 def test_programa_comum_com_arvore_rica_nao_pede_segunda_leitura():
     bruto = {"janela": {"processo": "notepad.exe"}, "raiz": _no(9, "janela", filhos=[_no(43, str(n)) for n in range(30)])}
     assert arvore.quer_segunda_fonte(bruto) is False
+
+
+# ---------------------------------------------------------------------------
+# 0.82.5 — moldura != conteúdo, e a página mora na janela filha
+# ---------------------------------------------------------------------------
+# Medição no PC do usuário, depois de consertar a repetição:
+#
+#     chrome.exe — Arena | Benchmark...: 47 elemento(s), 26 acionável(is) — fonte: msaa.
+#     a UIAutomation mostrou 4; a MSAA mostrou mais (47).
+#
+# Os 47 eram todos moldura. A regra "quem mostrou mais" premiava justamente a
+# leitura sem conteúdo. E a página do Chrome não é um elemento da janela de
+# topo: é uma janela filha (Chrome_RenderWidgetHostHWND).
+
+MOLDURA_DO_CHROME = {
+    "janela": {"handle": 10, "titulo": "Arena - Google Chrome", "processo": "chrome.exe"},
+    "raiz": _no(
+        10,
+        "área do cliente",
+        filhos=[
+            _no(43, "IME", "Pressionar"),
+            _no(43, "Minimizar", "Pressionar"),
+            _no(3, "Vertical", filhos=[_no(43, "Uma linha acima", "Pressionar"), _no(43, "Uma página abaixo", "Pressionar")]),
+            _no(4, "alça"),
+        ],
+    ),
+    "fonte": "msaa",
+}
+
+PAGINA_DO_CHROME = {
+    "janela": {"handle": 11, "titulo": "Arena - Google Chrome", "processo": "chrome.exe", "de_filha": "Chrome_RenderWidgetHostHWND"},
+    "raiz": _no(
+        15,
+        "Arena | Benchmark",
+        filhos=[
+            _no(30, "Entrar", "Clicar"),
+            _no(41, "Compare the best AI models"),
+        ],
+    ),
+    "fonte": "uia",
+}
+
+
+def test_moldura_nao_conta_como_conteudo():
+    assert arvore.tem_conteudo(MOLDURA_DO_CHROME) is False
+    assert arvore.tem_conteudo(PAGINA_DO_CHROME) is True
+
+
+def test_conteudo_vence_moldura_mesmo_com_menos_elementos():
+    """47 elementos de moldura perdem para 3 de conteúdo — é o caso do usuário."""
+    escolhida = arvore.escolher_fonte(MOLDURA_DO_CHROME, PAGINA_DO_CHROME)
+    assert escolhida["fonte"] == "uia"
+    assert "conteúdo" in escolhida["nota"]
+
+
+def test_navegador_prefere_uia_mesmo_com_empate_de_moldura():
+    moldura_uia = {
+        "janela": {"handle": 10, "processo": "chrome.exe"},
+        "raiz": _no(43, "Minimizar"),
+        "fonte": "uia",
+    }
+    escolhida = arvore.escolher_fonte(MOLDURA_DO_CHROME, moldura_uia)
+    assert escolhida["fonte"] == "uia"
+    assert "navegador" in escolhida.get("nota", "")
+
+
+def test_programa_comum_sem_conteudo_mantem_quem_tem_mais():
+    """A regra nova não pode quebrar o caso simples: janela de app Win32."""
+    maior = {
+        "janela": {"handle": 20, "processo": "app.exe"},
+        "raiz": _no(9, "app", filhos=[_no(43, f"botão {n}") for n in range(6)]),
+        "fonte": "msaa",
+    }
+    menor = {"janela": {"handle": 20, "processo": "app.exe"}, "raiz": _no(9, "app"), "fonte": "uia"}
+    assert arvore.escolher_fonte(maior, menor)["fonte"] == "msaa"
+
+
+def test_o_resumo_diz_quando_a_leitura_veio_de_uma_janela_filha():
+    """“De onde veio” importa: a página não é a janela, é a filha dela."""
+    resultado = arvore.montar(PAGINA_DO_CHROME, 6, 600)
+    assert resultado["de_filha"] == "Chrome_RenderWidgetHostHWND"
+    assert "lido de dentro" in arvore.resumo(resultado)
+
+
+def test_a_sonda_conhece_as_janelas_filhas_e_a_varredura():
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    assert "EnumChildWindows" in fonte
+    assert "Chrome_RenderWidgetHostHWND".lower() in fonte.lower()
+    assert "def janelas_filhas" in fonte
+    assert "def varrer_uia" in fonte
+    assert '"varredura"' in fonte
