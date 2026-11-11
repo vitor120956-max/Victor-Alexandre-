@@ -13,7 +13,8 @@ Uso (Windows):
     py arvore_sonda.py --json --limite 200  # JSON para o JARVIS
     py arvore_sonda.py --fonte uia          # força uma das duas fontes
     py arvore_sonda.py --provados           # quais janelas abertas servem para agir
-    py arvore_sonda.py --alvo notepad --ref @xxxx:e11 --acao digitar --texto "oi" --executar
+    py arvore_sonda.py --alvo notepad --escrever "oi, mundo"              # acha o campo e mostra o plano
+    py arvore_sonda.py --alvo notepad --escrever "oi, mundo" --executar   # escreve de verdade
 
 Só leitura: nada é clicado, digitado ou movido.
 
@@ -42,8 +43,17 @@ import json
 import sys
 
 
-def _falhar(mensagem: str, codigo: int = 1) -> int:
-    print(json.dumps({"erro": mensagem}, ensure_ascii=False))
+def _falhar(mensagem: str, codigo: int = 1, *, json_sim: bool = False) -> int:
+    """Erro legível por gente; JSON só quando foi pedido JSON.
+
+    O erro do ref saía como `{"erro": "..."}` numa linha só, e quem lê no
+    terminal não merece JSON sem ter pedido. O `--json` continua instalando o
+    formato de máquina.
+    """
+    if json_sim:
+        print(json.dumps({"erro": mensagem}, ensure_ascii=False))
+        return codigo
+    print(f"  NÃO DEU: {mensagem}")
     return codigo
 
 
@@ -206,6 +216,31 @@ def _provados(leitor, args) -> int:
     return 0
 
 
+def _mostrar_acao(feito: dict, args) -> int:
+    """O plano (e o resultado) na tela — em texto, ou JSON se foi pedido."""
+    if args.json:
+        print(json.dumps(feito, ensure_ascii=False))
+        return 0
+    plano = feito["plano"]
+    print(f"  {feito['resumo']}")
+    print()
+    print(f"  janela:  {plano['processo']} — {plano['janela']}")
+    print(f"  alvo:    {plano['ref']}  {plano['papel']} “{plano['nome']}”")
+    if plano.get("caixa"):
+        caixa = plano["caixa"]
+        print(f"  onde:    {caixa[0]},{caixa[1]} ({caixa[2]}x{caixa[3]})")
+    print(f"  fonte:   {plano['fonte']}   leitura: {plano['leitura']}")
+    if feito.get("como_autorizar"):
+        print()
+        print(f"  {feito['como_autorizar']}")
+    resultado = feito.get("resultado") or {}
+    if resultado.get("como"):
+        print(f"  como:    {resultado['como']}")
+    if resultado.get("motivo"):
+        print(f"  motivo:  {resultado['motivo']}")
+    return 0 if feito.get("ok") else 1
+
+
 def principal(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lê a árvore de acessibilidade de uma janela (somente leitura).")
     parser.add_argument("--alvo", default="foco", help="“foco” (padrão) ou parte do título do processo/janela.")
@@ -238,6 +273,12 @@ def principal(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--texto", default="", help="Texto a digitar (com --acao digitar).")
     parser.add_argument(
+        "--escrever",
+        default="",
+        metavar="TEXTO",
+        help="Acha o lugar de escrever na janela e digita ali — sem precisar copiar ref nenhum.",
+    )
+    parser.add_argument(
         "--executar",
         action="store_true",
         help="Faz de verdade. Sem esta opção, só mostra o plano e não toca em nada.",
@@ -245,15 +286,34 @@ def principal(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
-        return _falhar("a leitura da árvore só existe no Windows hoje.")
+        return _falhar("a leitura da árvore só existe no Windows hoje.", json_sim=args.json)
 
     try:
         from server import arvore_windows as leitor
     except Exception as exc:  # noqa: BLE001 - qualquer falha de import é motivo de saída limpa
-        return _falhar(f"não consegui carregar o leitor do Windows ({type(exc).__name__}).")
+        return _falhar(
+            f"não consegui carregar o leitor do Windows ({type(exc).__name__}).", json_sim=args.json
+        )
 
-    if args.ref:
+    if args.escrever or args.ref:
         from server import mesa_agir
+
+        if args.escrever and not args.ref:
+            try:
+                feito = mesa_agir.escrever_na_janela(
+                    texto=args.escrever,
+                    executar=args.executar,
+                    leitor=leitor,
+                    alvo=args.alvo,
+                    profundidade=max(1, min(args.profundidade, 14)),
+                    limite=max(1, min(args.limite, 3000)),
+                    fonte=args.fonte,
+                )
+            except mesa_agir.AgirError as exc:
+                return _falhar(str(exc), json_sim=args.json)
+            except Exception as exc:  # noqa: BLE001 - COM de terceiros
+                return _falhar(f"a escrita falhou ({type(exc).__name__}).", json_sim=args.json)
+            return _mostrar_acao(feito, args)
 
         try:
             feito = mesa_agir.agir(
@@ -268,31 +328,11 @@ def principal(argv: list[str] | None = None) -> int:
                 fonte=args.fonte,
             )
         except mesa_agir.AgirError as exc:
-            return _falhar(str(exc))
+            return _falhar(str(exc), json_sim=args.json)
         except Exception as exc:  # noqa: BLE001 - COM de terceiros
-            return _falhar(f"a ação falhou ({type(exc).__name__}).")
+            return _falhar(f"a ação falhou ({type(exc).__name__}).", json_sim=args.json)
 
-        if args.json:
-            print(json.dumps(feito, ensure_ascii=False))
-            return 0
-        plano = feito["plano"]
-        print(f"  {feito['resumo']}")
-        print()
-        print(f"  janela:  {plano['processo']} — {plano['janela']}")
-        print(f"  alvo:    {plano['ref']}  {plano['papel']} “{plano['nome']}”")
-        if plano.get("caixa"):
-            caixa = plano["caixa"]
-            print(f"  onde:    {caixa[0]},{caixa[1]} ({caixa[2]}x{caixa[3]})")
-        print(f"  fonte:   {plano['fonte']}   leitura: {plano['leitura']}")
-        if feito.get("como_autorizar"):
-            print()
-            print(f"  {feito['como_autorizar']}")
-        resultado = feito.get("resultado") or {}
-        if resultado.get("como"):
-            print(f"  como:    {resultado['como']}")
-        if resultado.get("motivo"):
-            print(f"  motivo:  {resultado['motivo']}")
-        return 0 if feito.get("ok") else 1
+        return _mostrar_acao(feito, args)
 
     if args.provados:
         return _provados(leitor, args)
@@ -303,7 +343,7 @@ def principal(argv: list[str] | None = None) -> int:
         try:
             janela_diagnostico, _ = _escolher(leitor, args.alvo)
         except arvore.ArvoreError as exc:
-            return _falhar(str(exc))
+            return _falhar(str(exc), json_sim=args.json)
         quadro = leitor.diagnostico(args.alvo, handle=janela_diagnostico["handle"])
         if args.json:
             print(json.dumps(quadro, ensure_ascii=False, indent=2))
@@ -379,7 +419,7 @@ def principal(argv: list[str] | None = None) -> int:
     try:
         janela, troca = _escolher(leitor, args.alvo)
     except arvore.ArvoreError as exc:
-        return _falhar(str(exc))
+        return _falhar(str(exc), json_sim=args.json)
 
     try:
         bruto = leitor.ler_janela(
@@ -389,7 +429,7 @@ def principal(argv: list[str] | None = None) -> int:
             fonte=args.fonte,
         )
     except Exception as exc:  # noqa: BLE001 - COM de terceiros: nunca vazar stack
-        return _falhar(f"a leitura da janela falhou ({type(exc).__name__}).")
+        return _falhar(f"a leitura da janela falhou ({type(exc).__name__}).", json_sim=args.json)
     bruto.setdefault("janela", janela)
     if troca:
         bruto["nota_escolha"] = troca

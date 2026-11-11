@@ -5,6 +5,53 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Escrever sem copiar ref nenhum (0.87.0)
+
+A etapa 2 pediu um `ref`, e o usuário colou o marcador que eu tinha escrito:
+
+```
+--ref @SEU_REF_AQUI
+```
+
+A recusa funcionou (o ref não existia) — mas o erro era do comando: pedir para
+copiar um código de uma saída para a linha seguinte é trabalho que não devia
+existir. O JARVIS já sabe apontar onde se escreve.
+
+Agora:
+
+```
+.venv\Scripts\python arvore_sonda.py --alvo "notepad.exe" --escrever "oi, mundo"
+```
+
+```
+  Ação pronta (nada foi feito): digitar 'oi, mundo' em texto em 445,577 (970x140)
+
+  janela:  notepad.exe — Sem título - Bloco de notas
+  alvo:    @c7aa400c:e11  texto “”
+  onde:    445,577 (970x140)
+
+  repita o comando com --executar para fazer de verdade.
+```
+
+E com `--executar`, escreve. O `--ref` continua existindo para quem quer
+apontar um elemento específico (clicar num botão, por exemplo) — mas para
+escrever, ninguém precisa mais dele.
+
+`mesa.agir` no chat ficou igual: `ref` em branco na ação digitar, e ele acha o
+campo.
+
+### O erro agora fala português
+
+O erro do ref saía como `{"erro": "..."}` numa linha só. Quem lê no terminal
+não merece JSON sem ter pedido:
+
+```
+  NÃO DEU: não achei lugar para escrever nesta janela. a janela publicou só
+  moldura... Rode `--provados` para ver quais janelas aceitam escrita.
+```
+
+`--json` continua entregando o formato de máquina para quem é máquina.
+
 ## Etapa 2: agir por `ref` (0.86.0)
 
 A leitura do Bloco de Notas entregou o alvo:
@@ -640,6 +687,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **não confunde moldura com trabalho** | botão de janela, rolagem e alça ficam de fora da conta de “dá para agir” |
 | **sabe onde se escreve** | papel `texto`/`documento` com caixa ganha ação `digitar` e `ref`, salvo se for somente leitura |
 | **age por `ref`, com freio** | relê antes de agir; ref antigo, moldura e digitar sem texto são recusados; `--executar` é obrigatório |
+| **acha o campo sozinho** | `--escrever "texto"` — sem copiar ref de uma saída para outra |
 | **não move o mouse** | a ação vem do elemento (ação padrão / foco), que é o único caminho que funciona na sua tela |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |

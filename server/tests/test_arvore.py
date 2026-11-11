@@ -1474,3 +1474,79 @@ def test_o_executor_nao_move_o_mouse():
     assert "_focar(" in trecho
     assert "mesa.clicar(" not in trecho
     assert "mesa.mover(" not in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.87.0 — escrever sem pedir ref para ninguém
+# ---------------------------------------------------------------------------
+
+def test_escrever_acha_o_campo_sozinho():
+    """O usuário colou o marcador `@SEU_REF_AQUI` — a culpa foi do comando.
+
+    Copiar código de uma saída para a linha seguinte é trabalho que não devia
+    existir: o JARVIS já sabe apontar onde se escreve.
+    """
+    from server import mesa_agir
+
+    leitor = LeitorDeAcao(json.loads(json.dumps(_notepad_bruto())))
+    resposta = mesa_agir.escrever_na_janela(texto="oi, mundo", executar=False, leitor=leitor)
+    plano = resposta["plano"]
+    assert plano["acao"] == "digitar"
+    assert plano["texto"] == "oi, mundo"
+    assert plano["caixa"] == [227, 559, 970, 140]
+    assert leitor.pedidos == [], "sem executar, nada é tocado"
+
+
+def test_escrever_com_executar_digita_no_campo_certo():
+    from server import mesa_agir
+
+    leitor = LeitorDeAcao(json.loads(json.dumps(_notepad_bruto())))
+    resposta = mesa_agir.escrever_na_janela(texto="oi", executar=True, leitor=leitor)
+    assert resposta["executou"] is True
+    assert leitor.pedidos == [(4242, [1], "digitar", "oi")]
+
+
+def test_escrever_em_janela_sem_campo_explica_em_vez_de_falhar_mudo():
+    from server import mesa_agir
+
+    bruto = {
+        "janela": {"handle": 3, "titulo": "Chrome", "processo": "chrome.exe"},
+        "fonte": "msaa",
+        "raiz": _no(9, "Chrome", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])]),
+    }
+    leitor = LeitorDeAcao(json.loads(json.dumps(bruto)))
+    with pytest.raises(mesa_agir.AgirError) as erro:
+        mesa_agir.escrever_na_janela(texto="oi", leitor=leitor)
+    assert "não achei lugar para escrever" in str(erro.value)
+    assert "provados" in str(erro.value)
+
+
+def test_a_sonda_tem_o_atalho_de_escrever():
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--escrever"' in texto
+    assert "mesa_agir.escrever_na_janela(" in texto
+
+
+def test_erro_na_sonda_sai_legivel_quando_nao_e_json(capsys):
+    """`{"erro": ...}` numa linha só é formato de máquina, não de gente."""
+    import importlib.util
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_2", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+    assert modulo.principal(["--ref", "@x"]) == 1
+    saida = capsys.readouterr().out
+    assert saida.strip().startswith("NÃO DEU:")
+    assert not saida.strip().startswith("{")
+
+
+def test_a_skill_mesa_agir_aceita_ref_em_branco():
+    texto = (Path("server") / "skill_registry.py").read_text(encoding="utf-8")
+    inicio = texto.index("class MesaAgirInput")
+    trecho = texto[inicio : inicio + 900]
+    assert 'ref: str = Field(default=""' in trecho
+    inicio = texto.index("def mesa_agir_handler(")
+    trecho = texto[inicio : inicio + 2000]
+    assert "escrever_na_janela(" in trecho

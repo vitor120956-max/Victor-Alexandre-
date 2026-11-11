@@ -2103,7 +2103,7 @@ class MesaAgirInput(BaseModel):
     """Agir por `ref`: clicar ou digitar num elemento da última leitura."""
 
     model_config = ConfigDict(extra="forbid")
-    ref: str = Field(min_length=3, max_length=40, title="Ref do elemento", json_schema_extra={"description": "O `ref` que veio de `mesa.arvore` (ex.: @4ab283d9:e11)."})
+    ref: str = Field(default="", max_length=40, title="Ref do elemento", json_schema_extra={"description": "O `ref` que veio de `mesa.arvore` (ex.: @4ab283d9:e11). Em branco: o JARVIS acha o lugar de escrever sozinho."})
     acao: str = Field(default="clicar", pattern="^(clicar|digitar|escrever)$", title="O que fazer")
     texto: str = Field(default="", max_length=500, title="Texto", json_schema_extra={"description": "Só para a ação digitar."})
     alvo: str = Field(default="foco", max_length=120, title="Janela")
@@ -4107,12 +4107,28 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             from server import mesa_agir
         except Exception as exc:  # noqa: BLE001 - fora do Windows não há braço
             raise SkillError(f"agir por ref só existe no Windows hoje ({type(exc).__name__}).") from exc
+        executar = bool(data.executar) and not _dry_run
         try:
+            # Sem `ref`: o JARVIS acha o campo sozinho, como na sonda com
+            # `--escrever`. Copiar código de uma leitura para outra é trabalho
+            # que não devia sobrar para quem usa.
+            if not data.ref.strip():
+                if data.acao not in {"digitar", "escrever"}:
+                    raise mesa_agir.AgirError(
+                        "para clicar eu preciso do `ref` (veio de `mesa.arvore`). "
+                        "Sem ref, só sei achar o lugar de escrever."
+                    )
+                return mesa_agir.escrever_na_janela(
+                    texto=data.texto,
+                    executar=executar,
+                    leitor=leitor,
+                    alvo=data.alvo,
+                )
             return mesa_agir.agir(
                 ref=data.ref,
                 acao=data.acao,
                 texto=data.texto,
-                executar=bool(data.executar) and not _dry_run,
+                executar=executar,
                 leitor=leitor,
                 alvo=data.alvo,
             )
@@ -5622,7 +5638,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.drive-banda", "Limitar a banda do Drive", "Grava `BandwidthRxKBPS` e `BandwidthTxKBPS` em `HKCU\\Software\\Google\\DriveFS` — o ajuste que o próprio app do Drive lê — e confere lendo de volta. Vale quando o app reiniciar. `0` remove o limite.", "Armazenamento", ArmazenamentoDriveBandaInput, armazenamento_drive_banda_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("armazenamento.drive-app", "Abrir ou fechar o Drive", "Fecha o app do Google Drive (para a sincronização, mas derruba a unidade `G:`) ou abre de novo. No Windows o app não aceita pausa por linha de comando — fechar é o único caminho sem clique. `estado` só informa se ele está rodando.", "Armazenamento", ArmazenamentoDriveAppInput, armazenamento_drive_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("mesa.arvore", "Ver os elementos da janela", "Lê a **árvore de acessibilidade** da janela em foco (MSAA e UIAutomation; fica com a que mostrar mais) e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` para os acionáveis. **Somente leitura**: não clica, não digita, não move o mouse e não tira foto da tela. Se a janela em foco for o próprio terminal, troca pela janela de trás e avisa. Roda numa sonda separada: se o programa travar, quem cai é a sonda.", "Mesa", MesaArvoreInput, mesa_arvore_handler, timeout_seconds=40),
-        SkillDefinition("mesa.agir", "Clicar ou digitar por ref", "Age num elemento pelo `ref` que veio de `mesa.arvore` — **relê a janela antes**, então um `ref` de leitura antiga é recusado. Mostra o plano (o que, onde, como) e só executa com `executar=true`. A ação vem do próprio elemento (ação padrão ou foco), **sem mover o mouse**; moldura (fechar/minimizar/rolar) é recusada como alvo.", "Mesa", MesaAgirInput, mesa_agir_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=40),
+        SkillDefinition("mesa.agir", "Clicar ou digitar por ref", "Age num elemento pelo `ref` que veio de `mesa.arvore` — ou, sem `ref` na ação digitar, **acha o lugar de escrever sozinho**. **Relê a janela antes**, então um `ref` de leitura antiga é recusado. Mostra o plano (o que, onde, como) e só executa com `executar=true`. A ação vem do próprio elemento (ação padrão ou foco), **sem mover o mouse**; moldura (fechar/minimizar/rolar) é recusada como alvo.", "Mesa", MesaAgirInput, mesa_agir_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=40),
         SkillDefinition("mesa.status", "Onde está o mouse", "Mostra a posição do cursor, o tamanho da tela e os títulos das janelas abertas. Só olha.", "Mesa", MesaStatusInput, mesa_handler("status"), timeout_seconds=15),
         SkillDefinition("mesa.mover", "Mover o mouse", "Leva o cursor até (x, y) em passos curtos. Se você mexer o mouse no meio, ele para em vez de continuar.", "Mesa", MesaMoverInput, mesa_handler("mover"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("mesa.clicar", "Clicar", "Clica com o botão esquerdo, direito ou do meio — na posição dada ou onde o cursor estiver.", "Mesa", MesaClicarInput, mesa_handler("clicar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),

@@ -171,21 +171,8 @@ def agir(
     if leitor is None:
         raise AgirError("agir por ref só existe no Windows hoje — aqui a leitura é só leitura.")
 
-    from server import arvore as _arq
-
-    try:
-        # `escolher_janela` vem de `arvore` — a mesma da leitura. O leitor só
-        # empresta a lista de janelas e o foco.
-        janela = _arq_escolher(alvo, leitor)
-    except Exception as exc:  # noqa: BLE001 - escolha de janela é dele
-        raise AgirError(f"não achei a janela: {exc}") from exc
-
-    try:
-        bruto = leitor.ler_janela(int(janela["handle"]), profundidade, limite, fonte=fonte)
-    except TypeError:
-        bruto = leitor.ler_janela(int(janela["handle"]), profundidade, limite)
-    bruto.setdefault("janela", janela)
-    montada = _arq.montar(bruto, profundidade, limite, com_caminho=True)
+    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte)
+    montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
 
     plano = planejar(montada, ref, acao, texto)
     resposta: dict[str, Any] = {
@@ -216,3 +203,69 @@ def agir(
     if feito.get("motivo"):
         resposta["resumo"] += f" — {feito['motivo']}"
     return resposta
+
+
+def escrever_na_janela(
+    *,
+    texto: str,
+    executar: bool = False,
+    leitor: Any = None,
+    alvo: str = "foco",
+    profundidade: int = arvore.PROFUNDIDADE_PADRAO,
+    limite: int = arvore.LIMITE_PADRAO,
+    fonte: str = "auto",
+) -> dict[str, Any]:
+    """Acha o lugar de escrever **sozinho** e digita. Sem ref, sem cópia.
+
+    Por que existe: o comando com `--ref` obrigava a pessoa a copiar um código
+    da saída anterior. O usuário colou o marcador `@SEU_REF_AQUI` — e a recusa
+    estava certa, mas o trabalho de copiar não devia existir. O JARVIS já sabe
+    apontar onde se escreve (`prontidao().onde_escrever`); agora ele usa isso.
+
+    Continua igual em tudo o mais: relê a janela, mostra o plano, e só age com
+    `executar=True`.
+    """
+    if leitor is None:
+        raise AgirError("escrever na janela só existe no Windows hoje.")
+
+    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte)
+    montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
+    lido = montada.get("pronto") or arvore.prontidao(montada)
+    campo = lido.get("onde_escrever")
+    if not campo or not campo.get("ref"):
+        raise AgirError(
+            "não achei lugar para escrever nesta janela. "
+            + str(lido.get("motivo") or "")
+            + " Rode `--provados` para ver quais janelas aceitam escrita."
+        )
+    return agir(
+        ref=campo["ref"],
+        acao="digitar",
+        texto=texto,
+        executar=executar,
+        leitor=leitor,
+        alvo=alvo,
+        profundidade=profundidade,
+        limite=limite,
+        fonte=fonte,
+    )
+
+
+def _ler_agora(
+    leitor: Any,
+    alvo: str,
+    profundidade: int,
+    limite: int,
+    fonte: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Escolhe a janela e lê. Uma regra de escolha, a mesma do resto."""
+    try:
+        janela = _arq_escolher(alvo, leitor)
+    except Exception as exc:  # noqa: BLE001
+        raise AgirError(f"não achei a janela: {exc}") from exc
+    try:
+        bruto = leitor.ler_janela(int(janela["handle"]), profundidade, limite, fonte=fonte)
+    except TypeError:
+        bruto = leitor.ler_janela(int(janela["handle"]), profundidade, limite)
+    bruto.setdefault("janela", janela)
+    return bruto, janela
