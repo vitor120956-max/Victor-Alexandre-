@@ -5,6 +5,53 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## O foco que nunca foi pedido (0.87.1)
+
+Na primeira tentativa de verdade, a tela do usuário disse:
+
+```
+Não foi feito: digitar 'oi, mundo' em texto em 339,298 (970x69) — o elemento
+recusou o foco (accSelect). Sem foco, digitar iria para outra janela — parei.
+```
+
+O Bloco de Notas não recusou nada. **O índice da vtable estava errado.**
+`IAccessible` tem, depois dos métodos de `IDispatch`:
+
+| índice | método |
+|---|---|
+| 20 | `get_accDefaultAction` |
+| **21** | **`accSelect`** |
+| 22 | `accLocation` |
+| 23 | `accNavigate` |
+| **25** | **`accDoDefaultAction`** |
+| 27 | `put_accValue` |
+
+A 0.86.0 usava **21** para `accDoDefaultAction` e **23** para `accSelect` — um
+a mais, outro a menos. Ou seja: o "pedido de foco" chamava `accNavigate`, que
+devolve `S_FALSE`, e o JARVIS contava isso como recusa do programa. Um erro de
+diagnóstico apresentado como se fosse do Bloco de Notas.
+
+### E a escrita agora tem três degraus
+
+1. **foco no elemento exato** (`accSelect`) + teclado;
+2. **foco no dono** — o campo inteiro, quando o texto é filho simples;
+3. **`put_accValue`** — escreve no valor do campo, sem teclado e sem foco.
+
+O teclado só é usado quando o Windows confirma que o foco está **dentro da
+janela alvo** (`GetGUIThreadInfo` → `hwndFocus` → sobe pelos pais). Se não
+está, ele não digita às cegas: dizer "digitei" e ter digitado noutro programa
+seria pior do que não fazer nada.
+
+E depois de digitar, ele **lê o campo de volta** e diz o que viu:
+
+```
+  Feito: digitar 'oi, mundo' em texto em 445,577 (970x140) (conferi: o texto está no campo)
+```
+
+`put_accValue` substitui o conteúdo, então só é usado quando o campo está
+vazio — sobrescrever o que a pessoa escreveu para "dar certo" é destruir
+trabalho.
+
 ## Escrever sem copiar ref nenhum (0.87.0)
 
 A etapa 2 pediu um `ref`, e o usuário colou o marcador que eu tinha escrito:

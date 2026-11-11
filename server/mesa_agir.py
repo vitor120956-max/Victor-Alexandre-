@@ -120,7 +120,13 @@ def planejar(
                 f"(ação do elemento: {no.get('acao') or 'nenhuma'})."
             )
 
+    # `montar` não devolve a janela no topo, devolve `alvo` ("notepad.exe — Sem
+    # título") — e a 0.87.0 imprimia `janela: —` por causa disso.
     janela = resultado.get("janela") or {}
+    titulo = str(janela.get("titulo") or resultado.get("alvo") or "")
+    processo = str(janela.get("processo") or "")
+    if not processo and " — " in titulo:
+        processo = titulo.split(" — ", 1)[0]
     plano = {
         "ref": ref,
         "acao": pedido,
@@ -129,8 +135,8 @@ def planejar(
         "nome": no.get("nome") or "",
         "caixa": caixa,
         "caminho": [int(item) for item in caminho],
-        "janela": str(janela.get("titulo") or ""),
-        "processo": str(janela.get("processo") or ""),
+        "janela": titulo,
+        "processo": processo,
         "fonte": str(resultado.get("fonte") or ""),
         "leitura": str(resultado.get("id") or ""),
     }
@@ -202,6 +208,13 @@ def agir(
     resposta["resumo"] = ("Feito: " if resposta["executou"] else "Não foi feito: ") + plano["o_que_vai_fazer"]
     if feito.get("motivo"):
         resposta["resumo"] += f" — {feito['motivo']}"
+    # "mandei as teclas" não é "o texto entrou": quando o campo publica o seu
+    # valor, a resposta diz o que foi visto, não o que foi tentado.
+    if resposta["executou"]:
+        if feito.get("conferido") is True:
+            resposta["resumo"] += " (conferi: o texto está no campo)"
+        elif feito.get("conferido") is False:
+            resposta["resumo"] += " (atenção: o campo não mostrou o texto — confira na tela)"
     return resposta
 
 

@@ -238,6 +238,10 @@ def _mostrar_acao(feito: dict, args) -> int:
         print(f"  como:    {resultado['como']}")
     if resultado.get("motivo"):
         print(f"  motivo:  {resultado['motivo']}")
+    if resultado.get("conferido") is True:
+        print("  conferi: o texto está no campo.")
+    elif resultado.get("conferido") is False:
+        print("  atenção: digitei, mas o campo não mostrou o texto — confira na tela.")
     return 0 if feito.get("ok") else 1
 
 

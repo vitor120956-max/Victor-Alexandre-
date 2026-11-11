@@ -1550,3 +1550,77 @@ def test_a_skill_mesa_agir_aceita_ref_em_branco():
     inicio = texto.index("def mesa_agir_handler(")
     trecho = texto[inicio : inicio + 2000]
     assert "escrever_na_janela(" in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.87.1 — o índice da vtable estava errado, e o JARVIS culpou o Bloco de Notas
+# ---------------------------------------------------------------------------
+
+def _fonte_windows() -> str:
+    return (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+
+
+def test_os_indices_da_msaa_sao_os_da_oleacc():
+    """A 0.86.0 chamava `accNavigate` achando que era `accSelect`.
+
+    Ordem real (oleacc.h): get_accDefaultAction 20, accSelect 21,
+    accLocation 22, accNavigate 23, accDoDefaultAction 25, put_accValue 27.
+    Um índice trocado vira "o elemento recusou o foco" na tela do usuário —
+    mentira com cara de diagnóstico.
+    """
+    fonte = _fonte_windows()
+    assert "ACC_SELECT = 21" in fonte
+    assert "ACC_DO_DEFAULT_ACTION = 25" in fonte
+    assert "PUT_ACC_VALUE = 27" in fonte
+    assert "ACC_SELECT = 23" not in fonte
+    assert "ACC_DO_DEFAULT_ACTION = 21" not in fonte
+    # accLocation continua 22 — esse sempre esteve certo.
+    assert "ACC_LOCATION = 22" in fonte
+
+
+def test_digitar_tem_tres_degraus_e_nao_digita_as_cegas():
+    fonte = _fonte_windows()
+    inicio = fonte.index("def _digitar_em(")
+    fim = fonte.index("def executar_ref(")
+    trecho = fonte[inicio:fim]
+    # na ordem: elemento → campo inteiro → valor
+    um = trecho.index("_selecionar(alvo, filho)")
+    dois = trecho.index("_selecionar(alvo, CHILDID_SELF)")
+    tres = trecho.index("_por_valor(alvo, filho, texto)")
+    assert um < dois < tres
+    # teclado só depois de confirmar que o foco é da janela alvo
+    assert trecho.count("_teclado_esta_na_janela(handle)") >= 2
+    for posicao in [i for i in range(len(trecho)) if trecho.startswith("mesa.digitar(", i)]:
+        assert trecho.rfind("_teclado_esta_na_janela", 0, posicao) != -1
+    # e não sobrescreve campo com texto
+    assert "não sobrescrevo o que não escrevi" in trecho
+
+
+def test_o_plano_mostra_o_nome_da_janela():
+    """Saía `janela: —` na tela: `montar` devolve `alvo`, não `janela`."""
+    from server import mesa_agir
+
+    montada, refs = _notepad_montado()
+    assert "janela" not in montada
+    plano = mesa_agir.planejar(montada, refs["campo"], "digitar", "oi")
+    assert plano["janela"] == montada["alvo"]
+    assert "notepad.exe" in plano["processo"]
+
+
+def test_a_resposta_nao_diz_feito_sem_ter_visto_o_texto():
+    """"Mandei as teclas" não é "o texto entrou"."""
+    from server import mesa_agir
+
+    class LeitorCego(LeitorDeAcao):
+        def __init__(self, bruto, conferido):
+            super().__init__(bruto)
+            self.conferido = conferido
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None):
+            self.pedidos.append((handle, list(caminho), acao, texto))
+            return {"executou": True, "como": "foco + teclado", "conferido": self.conferido}
+
+    for conferido, esperado in [(True, "conferi"), (False, "não mostrou o texto"), (None, "Feito")]:
+        leitor = LeitorCego(json.loads(json.dumps(_notepad_bruto())), conferido)
+        resposta = mesa_agir.escrever_na_janela(texto="oi", executar=True, leitor=leitor)
+        assert esperado in resposta["resumo"]

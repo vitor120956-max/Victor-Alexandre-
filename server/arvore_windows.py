@@ -1373,10 +1373,21 @@ def estado() -> dict[str, Any]:
 # não funciona ali. Quando o elemento só aceita clique físico, a resposta diz
 # isso, em vez de fingir que agiu.
 
-ACC_DO_DEFAULT_ACTION = 21
-ACC_SELECT = 23
+# Índices da vtable de IAccessible, conferidos contra oleacc.h:
+#   get_accDefaultAction 20, accSelect 21, accLocation 22, accNavigate 23,
+#   accHitTest 24, accDoDefaultAction 25, put_accName 26, put_accValue 27.
+#
+# A 0.86.0 usava 21 para `accDoDefaultAction` e 23 para `accSelect` — um a mais
+# e outro a menos. Resultado: o "foco" chamava `accNavigate` (que devolve
+# S_FALSE) e o JARVIS dizia "o elemento recusou o foco". Não era o Bloco de
+# Notas recusando: era o número errado. Corrigido na 0.87.1.
+ACC_SELECT = 21
+ACC_DO_DEFAULT_ACTION = 25
+PUT_ACC_VALUE = 27
+GET_ACC_VALUE = 11
 SELFLAG_TAKEFOCUS = 0x1
 SELFLAG_TAKESELECTION = 0x2
+VT_BSTR = 8
 
 
 def _navegar(ponteiro: int, caminho: list[int]) -> tuple[int, int]:
@@ -1402,13 +1413,199 @@ def _navegar(ponteiro: int, caminho: list[int]) -> tuple[int, int]:
     return atual, filho
 
 
-def _focar(ponteiro: int, filho: int) -> bool:
-    """Pede o foco ao elemento (accSelect com TAKEFOCUS). Não move o mouse."""
+def _selecionar(ponteiro: int, filho: int) -> int:
+    """`accSelect(TAKEFOCUS|TAKESELECTION)` — devolve o HRESULT cru.
+
+    Não move o mouse. S_OK é sucesso; S_FALSE quer dizer "fez, mas não como eu
+    pedi", e é tratado como tentativa a confirmar pelo foco real.
+    """
     try:
         funcao = _metodo(ponteiro, ACC_SELECT, [ctypes.c_long, VARIANT])
-        return funcao(ponteiro, SELFLAG_TAKEFOCUS | SELFLAG_TAKESELECTION, _var_filho(filho)) == S_OK
+        return int(funcao(ponteiro, SELFLAG_TAKEFOCUS | SELFLAG_TAKESELECTION, _var_filho(filho)))
+    except Exception:  # noqa: BLE001
+        return -1
+
+
+def _focar(ponteiro: int, filho: int) -> bool:
+    """Pede o foco ao elemento. Não move o mouse."""
+    return _selecionar(ponteiro, filho) in (S_OK, 1)
+
+
+class _INFO_GUI(ctypes.Structure):
+    """`GUITHREADINFO`: onde o teclado está indo, de verdade."""
+
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("hwndActive", wintypes.HWND),
+        ("hwndFocus", wintypes.HWND),
+        ("hwndCapture", wintypes.HWND),
+        ("hwndMenuOwner", wintypes.HWND),
+        ("hwndMoveSize", wintypes.HWND),
+        ("hwndCaret", wintypes.HWND),
+        ("rcCaret", ctypes.c_long * 4),
+    ]
+
+
+def foco_de_agora(handle: int) -> int:
+    """HWND que está com o teclado na thread da janela. 0 quando não dá para ver.
+
+    Existe porque "pedi o foco" e "o foco veio" são coisas diferentes. Antes de
+    digitar, o JARVIS confere de quem é o teclado — se não for da janela alvo,
+    ele não digita nada em vez de escrever no programa errado.
+    """
+    try:
+        thread = user32.GetWindowThreadProcessId(wintypes.HWND(int(handle)), None)
+        if not thread:
+            return 0
+        info = _INFO_GUI()
+        info.cbSize = ctypes.sizeof(_INFO_GUI)
+        if not user32.GetGUIThreadInfo(thread, ctypes.byref(info)):
+            return 0
+        return int(info.hwndFocus or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _pertence(hwnd: int, ascendente: int) -> bool:
+    """`hwnd` é a janela `ascendente` ou está dentro dela?"""
+    atual = int(hwnd)
+    for _ in range(64):
+        if not atual:
+            return False
+        if atual == int(ascendente):
+            return True
+        atual = int(user32.GetParent(wintypes.HWND(atual)) or 0)
+    return False
+
+
+def _teclado_esta_na_janela(handle: int) -> bool:
+    """Confirma que o teclado está dentro da janela alvo antes de digitar."""
+    hwnd = foco_de_agora(handle)
+    return bool(hwnd) and _pertence(hwnd, handle)
+
+
+def _valor(ponteiro: int, filho: int) -> str:
+    """Texto que o elemento publica como valor (o conteúdo do campo)."""
+    try:
+        funcao = _metodo(ponteiro, GET_ACC_VALUE, [VARIANT, ctypes.POINTER(ctypes.c_void_p)])
+        saida = ctypes.c_void_p(0)
+        if funcao(ponteiro, _var_filho(filho), ctypes.byref(saida)) != S_OK:
+            return ""
+        return _bstr(saida.value)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _por_valor(ponteiro: int, filho: int, texto: str) -> bool:
+    """`put_accValue` — escreve no valor do campo, sem teclado e sem foco.
+
+    É o terceiro degrau: quando o campo não aceita foco nem seleção, a MSAA
+    ainda deixa escrever no valor. Substitui o conteúdo, por isso só é usado
+    quando o campo está vazio — sobrescrever o que a pessoa escreveu seria
+    "dar certo" destruindo trabalho.
+    """
+    bstr = None
+    try:
+        oleaut32.SysAllocString.restype = ctypes.c_void_p
+        oleaut32.SysAllocString.argtypes = [ctypes.c_wchar_p]
+        bstr = oleaut32.SysAllocString(texto)
+        if not bstr:
+            return False
+        valor = VARIANT()
+        valor.vt = VT_BSTR
+        valor.valor = int(bstr)
+        funcao = _metodo(ponteiro, PUT_ACC_VALUE, [VARIANT, ctypes.c_void_p])
+        return int(funcao(ponteiro, _var_filho(filho), ctypes.c_void_p(int(bstr)))) == S_OK
     except Exception:  # noqa: BLE001
         return False
+    finally:
+        if bstr:
+            try:
+                oleaut32.SysFreeString(ctypes.c_void_p(int(bstr)))
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _conferir(alvo: int, filho: int, texto: str) -> bool | None:
+    """Depois de digitar, o campo mostra o texto? `None` = não publica valor.
+
+    "Mandei as teclas" e "o texto entrou" são coisas diferentes. Sem esta
+    conferência, o JARVIS diria "Feito" sem saber — e quem está na frente da
+    tela descobre sozinho que não era verdade.
+    """
+    try:
+        time.sleep(0.2)
+        visto = _valor(alvo, filho)
+    except Exception:  # noqa: BLE001
+        return None
+    if not visto:
+        return None
+    return texto.strip() in " ".join(visto.split())
+
+
+def _digitar_em(alvo: int, filho: int, handle: int, texto: str) -> dict[str, Any]:
+    """Os três degraus da escrita, do mais natural ao mais direto.
+
+    1. foco no elemento exato (accSelect) e teclado — é o que um humano faz;
+    2. foco no dono (o campo inteiro) e teclado — quando o texto é filho simples;
+    3. `put_accValue` no valor do campo — sem foco, só quando ele está vazio.
+
+    O teclado só é usado quando o próprio Windows confirma que o foco está
+    dentro da janela alvo. Se não está, o JARVIS não digita às cegas.
+    """
+    limites: list[str] = []
+
+    estado = _selecionar(alvo, filho)
+    if estado in (S_OK, 1):
+        if _teclado_esta_na_janela(handle):
+            from server import mesa
+
+            mesa.digitar(texto)
+            return {
+                "executou": True,
+                "como": "foco + teclado",
+                "caracteres": len(texto),
+                "conferido": _conferir(alvo, filho, texto),
+            }
+        limites.append("o foco não veio (o Windows diz que o teclado está em outra janela)")
+    elif estado >= 0:
+        limites.append(f"accSelect devolveu 0x{estado & 0xFFFFFFFF:08X}")
+    else:
+        limites.append("accSelect falhou")
+
+    if filho != CHILDID_SELF:
+        estado = _selecionar(alvo, CHILDID_SELF)
+        if estado in (S_OK, 1) and _teclado_esta_na_janela(handle):
+            from server import mesa
+
+            mesa.digitar(texto)
+            return {
+                "executou": True,
+                "como": "foco no campo + teclado",
+                "caracteres": len(texto),
+                "conferido": _conferir(alvo, filho, texto),
+            }
+        limites.append("o campo inteiro também não aceitou foco")
+
+    atual = _valor(alvo, filho)
+    if atual.strip():
+        limites.append("o campo já tem texto e eu não sobrescrevo o que não escrevi")
+    elif _por_valor(alvo, filho, texto) and _valor(alvo, filho).strip():
+        return {
+            "executou": True,
+            "como": "valor do campo (put_accValue, sem teclado)",
+            "caracteres": len(texto),
+            "conferido": True,
+        }
+    else:
+        limites.append("o campo não aceita escrita por valor (put_accValue)")
+
+    return {
+        "executou": False,
+        "como": "nenhum",
+        "motivo": "; ".join(limites) + ". Nada foi digitado.",
+    }
 
 
 def executar_ref(
@@ -1446,22 +1643,9 @@ def executar_ref(
     try:
         nome = _nome(alvo, filho)[:60]
         if pedido == "digitar":
-            focado = _focar(alvo, filho)
-            if not focado:
-                return {
-                    "executou": False,
-                    "como": "nenhum",
-                    "motivo": "o elemento recusou o foco (accSelect). Sem foco, digitar iria para outra janela — parei.",
-                }
-            from server import mesa
-
-            mesa.digitar(texto)
-            return {
-                "executou": True,
-                "como": "foco + teclado",
-                "elemento": nome,
-                "caracteres": len(" ".join((texto or "").split())),
-            }
+            feito = _digitar_em(alvo, filho, int(handle), texto)
+            feito["elemento"] = nome
+            return feito
 
         funcao = _metodo(alvo, ACC_DO_DEFAULT_ACTION, [VARIANT])
         codigo = funcao(alvo, _var_filho(filho))
@@ -1478,7 +1662,7 @@ def executar_ref(
             "executou": False,
             "como": "nenhum",
             "motivo": (
-                f"“{nome}” não tem ação padrão nem aceita foco"
+                f"“{nome}” não tem ação padrão nem aceita foco (accDoDefaultAction devolveu 0x{codigo & 0xFFFFFFFF:08X})"
                 + (f" — o centro dele é {caixa[0] + caixa[2] // 2},{caixa[1] + caixa[3] // 2}." if caixa else ".")
                 + " Um clique físico resolveria; eu não movo o mouse sem você pedir."
             ),
