@@ -5,6 +5,36 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A janela que não era a janela (0.89.1)
+
+A primeira tentativa real de `--programa` morreu assim:
+
+```
+NÃO DEU: não achei lugar para escrever nesta janela. a janela publicou só
+moldura (barra de título, rolagem, botões de janela)... 12 de 12 elemento(s)
+vieram com coordenada
+```
+
+Não era o Bloco de Notas. Havia **duas janelas `notepad.exe`** vivas — uma que
+publica o campo e outra que publica só moldura — e o código pegava a
+**primeira da lista**. Depois, para agir, **escolhia de novo** pela regra de
+peso, podendo cair na outra. Escolher duas vezes é escolher errado uma vez.
+
+Três correções:
+
+1. **Quem acha, decide.** `ditar` passa o `handle` da janela que achou; a ação
+   não escolhe outra. Janela que sumiu no meio vira erro claro, não sorteio.
+2. **Várias janelas, uma serve.** Com mais de uma candidata, uma leitura em
+   cada uma descobre qual publica campo antes de esperar 15 s na errada. E
+   `escrever_na_janela` sem `handle` também tenta as outras janelas do mesmo
+   processo antes de desistir.
+3. **Esperar o campo, não a janela.** A janela do programa aparece antes de o
+   campo existir. Reler até o campo nascer (até 15 s) evita dizer “esta janela
+   não aceita escrita” meio segundo antes de ela aceitar.
+
+O erro final agora repete o que a janela respondeu, em vez de só dizer “não
+deu”.
+
 ## Do zero: abrir, esperar, escrever e conferir (0.89.0)
 
 Até aqui o JARVIS escrevia numa janela **que já estava aberta**. Quem abria o

@@ -202,3 +202,202 @@ def test_a_skill_mesa_ditar_existe_e_pede_confirmacao():
     assert "programa" in (ditar.get("inputSchema") or {}).get("properties", {})
     # a descrição tem de dizer que sem executar nada acontece
     assert "executar" in ditar["description"]
+
+
+# ---------------------------------------------------------------------------
+# 0.89.1 — a janela existe antes do campo: esperar o campo, não a janela
+# ---------------------------------------------------------------------------
+
+class LeitorQueDemora:
+    """A janela aparece na hora; o campo só nasce depois de N leituras.
+
+    Foi o que aconteceu na medição real da 0.89.0: janela achada, leitura
+    devolvendo 12 elementos de moldura, e o comando morrendo com "não achei
+    lugar para escrever" — que era verdade por meio segundo e mentira no
+    segundo seguinte.
+    """
+
+    def __init__(self, bruto: dict[str, Any], leituras_ate_o_campo: int) -> None:
+        self._bruto = bruto
+        self._restantes = leituras_ate_o_campo
+        self.leituras = 0
+        self.pedidos: list[tuple] = []
+
+    def janelas(self):
+        return [self._bruto["janela"]]
+
+    def janela_em_foco(self):
+        return self._bruto["janela"]
+
+    def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+        self.leituras += 1
+        bruto = json.loads(json.dumps(self._bruto))
+        if self._restantes > 0:
+            self._restantes -= 1
+            # Só a moldura da janela: nada de campo de escrita.
+            bruto["raiz"] = _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])])
+        return bruto
+
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        self.pedidos.append((handle, list(caminho), acao, texto, acrescentar))
+        return {"executou": True, "como": "valor do campo", "conferido": True}
+
+
+def test_espera_o_campo_aparecer_em_vez_de_desistir_da_janela():
+    leitor = LeitorQueDemora(_bruto_notepad(), leituras_ate_o_campo=3)
+    resposta = mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi, mundo",
+        executar=True,
+        leitor=leitor,
+        abrir=lambda _nome: None,
+        dormir=_sem_espera,
+    )
+    assert resposta["executou"] is True
+    assert leitor.leituras >= 4, "tinha de reler até o campo existir"
+    assert leitor.pedidos and leitor.pedidos[0][3] == "oi, mundo"
+
+
+def test_campo_que_nunca_aparece_diz_que_esperou_e_para():
+    leitor = LeitorQueDemora(_bruto_notepad(), leituras_ate_o_campo=999)
+    with pytest.raises(mesa_ditar.DitarError) as erro:
+        mesa_ditar.ditar(
+            programa="bloco de notas",
+            texto="oi",
+            executar=True,
+            leitor=leitor,
+            abrir=lambda _nome: None,
+            espera_campo=0,
+            dormir=_sem_espera,
+        )
+    mensagem = str(erro.value)
+    assert "não publicou nenhum lugar de escrever" in mensagem
+    assert "--provados" in mensagem
+    assert leitor.pedidos == [], "nada pode ser executado sem campo"
+
+
+def test_sem_executar_espera_o_campo_e_mostra_o_plano():
+    leitor = LeitorQueDemora(_bruto_notepad(), leituras_ate_o_campo=2)
+    resposta = mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi",
+        executar=False,
+        leitor=leitor,
+        dormir=_sem_espera,
+    )
+    assert resposta["executou"] is False
+    assert resposta["plano"]["acao"] == "digitar"
+    assert leitor.pedidos == []
+
+
+def test_janela_sem_titulo_nao_e_a_janela_do_programa():
+    """Processo nascendo ≠ janela pronta: sem título, é o vazio."""
+    janelas = [
+        {"handle": 1, "titulo": "", "processo": "notepad.exe"},
+        {"handle": 2, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"},
+    ]
+    assert mesa_ditar.janela_do_programa(janelas, "notepad.exe", "Bloco de notas")["handle"] == 2
+    assert mesa_ditar.janela_do_programa(janelas[:1], "notepad.exe", "Bloco de notas") is None
+
+
+def test_com_dois_blocos_de_notas_o_texto_vai_para_a_janela_certa():
+    """Escolher duas vezes é escolher errado uma vez.
+
+    Havia dois `notepad.exe`: um aberto e vazio, outro com o texto. O `ditar`
+    achava um e a ação escolhia o outro pela mesma regra de novo — e o texto
+    caía no primeiro da lista.
+    """
+    vazio = {
+        "janela": {"handle": 100, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"},
+        "fonte": "msaa",
+        "raiz": _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])]),
+    }
+    cheio = _bruto_notepad()
+    cheio["janela"] = {"handle": 200, "titulo": "notas.txt - Bloco de notas", "processo": "notepad.exe"}
+
+    class DoisBlocos:
+        def __init__(self):
+            self.pedidos = []
+
+        def janelas(self):
+            return [vazio["janela"], cheio["janela"]]
+
+        def janela_em_foco(self):
+            return vazio["janela"]
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            return json.loads(json.dumps(cheio if int(handle) == 200 else vazio))
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+            self.pedidos.append((handle, texto))
+            return {"executou": True, "como": "valor do campo", "conferido": True}
+
+    leitor = DoisBlocos()
+    resposta = mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi",
+        executar=True,
+        leitor=leitor,
+        abrir=lambda _nome: None,
+        dormir=_sem_espera,
+    )
+    # Havia duas janelas do mesmo processo e só uma publica campo: escrever na
+    # primeira que aparece é sorteio, e o sorteio deu errado na medição real.
+    assert leitor.pedidos == [(200, "oi")], "o texto tem de ir para a janela que publica o campo"
+    assert resposta["executou"] is True
+
+
+def test_aguentar_janela_fechada_no_meio_da_espera():
+    from server import mesa_agir
+
+    class Sumiu:
+        def janelas(self):
+            return []
+
+        def janela_em_foco(self):
+            return None
+
+        def ler_janela(self, *a, **k):
+            raise AssertionError("não devia ler")
+
+    with pytest.raises(mesa_agir.AgirError) as erro:
+        mesa_agir.escrever_na_janela(texto="oi", leitor=Sumiu(), handle=999)
+    assert "não está mais aberta" in str(erro.value)
+
+
+def test_escrever_sem_handle_tenta_a_outra_janela_do_mesmo_programa():
+    """Com `--alvo notepad.exe` e dois Blocos de Notas, tentar só o primeiro é meio caminho."""
+    vazio = {
+        "janela": {"handle": 100, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"},
+        "fonte": "msaa",
+        "raiz": _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])]),
+    }
+    cheio = _bruto_notepad()
+    cheio["janela"] = {"handle": 200, "titulo": "notas.txt - Bloco de notas", "processo": "notepad.exe"}
+
+    class DoisBlocos:
+        def __init__(self):
+            self.leituras = []
+            self.pedidos = []
+
+        def janelas(self):
+            return [vazio["janela"], cheio["janela"]]
+
+        def janela_em_foco(self):
+            return vazio["janela"]
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            self.leituras.append(int(handle))
+            return json.loads(json.dumps(cheio if int(handle) == 200 else vazio))
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+            self.pedidos.append((handle, texto))
+            return {"executou": True, "como": "valor do campo", "conferido": True}
+
+    leitor = DoisBlocos()
+    resposta = mesa_agir.escrever_na_janela(
+        texto="oi", executar=True, leitor=leitor, alvo="notepad.exe"
+    )
+    assert 100 in leitor.leituras and 200 in leitor.leituras, "tinha de olhar as duas"
+    assert leitor.pedidos == [(200, "oi")]
+    assert resposta["executou"] is True

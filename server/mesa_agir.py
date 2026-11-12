@@ -179,6 +179,7 @@ def agir(
     limite: int = arvore.LIMITE_PADRAO,
     fonte: str = "auto",
     acrescentar: bool = False,
+    handle: int | None = None,
 ) -> dict[str, Any]:
     """Lê de novo, confere o ref e — só com `executar` — age.
 
@@ -188,7 +189,7 @@ def agir(
     if leitor is None:
         raise AgirError("agir por ref só existe no Windows hoje — aqui a leitura é só leitura.")
 
-    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte)
+    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte, handle)
     montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
 
     plano = planejar(montada, ref, acao, texto)
@@ -232,6 +233,26 @@ def agir(
     return resposta
 
 
+def _outras_janelas(alvo: str, leitor: Any, ja_tentada: int) -> list[dict[str, Any]]:
+    """As outras janelas que casam com o alvo, da mais provável à menos.
+
+    Só entra o que `peso_da_janela` reconhece: pedir “notepad.exe” nunca vai
+    tentar escrever no Chrome.
+    """
+    try:
+        janelas = leitor.janelas() or []
+    except Exception:  # noqa: BLE001
+        return []
+    boas: list[tuple[int, dict[str, Any]]] = []
+    for janela in janelas:
+        if int(janela.get("handle") or 0) == int(ja_tentada):
+            continue
+        peso = arvore.peso_da_janela(janela, alvo)
+        if peso is not None:
+            boas.append((peso, janela))
+    return [janela for _peso, janela in sorted(boas, key=lambda par: par[0])]
+
+
 def escrever_na_janela(
     *,
     texto: str,
@@ -242,6 +263,7 @@ def escrever_na_janela(
     limite: int = arvore.LIMITE_PADRAO,
     fonte: str = "auto",
     acrescentar: bool = False,
+    handle: int | None = None,
 ) -> dict[str, Any]:
     """Acha o lugar de escrever **sozinho** e digita. Sem ref, sem cópia.
 
@@ -256,10 +278,25 @@ def escrever_na_janela(
     if leitor is None:
         raise AgirError("escrever na janela só existe no Windows hoje.")
 
-    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte)
+    bruto, janela = _ler_agora(leitor, alvo, profundidade, limite, fonte, handle)
     montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
     lido = montada.get("pronto") or arvore.prontidao(montada)
     campo = lido.get("onde_escrever")
+
+    # Um programa pode ter mais de uma janela e só uma servir. Se a escolhida
+    # não publica campo, as outras que casam com o mesmo alvo são tentadas —
+    # sem mexer na regra de escolha, que continua valendo para o resto.
+    if (not campo or not campo.get("ref")) and not handle:
+        for outra in _outras_janelas(alvo, leitor, int(janela.get("handle") or 0)):
+            bruto, janela = _ler_agora(
+                leitor, alvo, profundidade, limite, fonte, int(outra.get("handle") or 0) or None
+            )
+            montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
+            lido = montada.get("pronto") or arvore.prontidao(montada)
+            campo = lido.get("onde_escrever")
+            if campo and campo.get("ref"):
+                break
+
     if not campo or not campo.get("ref"):
         raise AgirError(
             "não achei lugar para escrever nesta janela. "
@@ -277,6 +314,23 @@ def escrever_na_janela(
         limite=limite,
         fonte=fonte,
         acrescentar=acrescentar,
+        handle=janela.get("handle"),
+    )
+
+
+def _janela_por_handle(leitor: Any, handle: int) -> dict[str, Any]:
+    """A janela exata que já foi escolhida antes — sem escolher de novo.
+
+    Existe porque escolher duas vezes é escolher errado uma vez: `ditar` acha a
+    janela do programa e, se a ação escolhesse outra, com dois Blocos de Notas
+    abertos o texto iria para o primeiro que aparecesse na lista. Quem decide
+    é quem achou.
+    """
+    for janela in leitor.janelas() or []:
+        if int(janela.get("handle") or 0) == int(handle):
+            return janela
+    raise AgirError(
+        f"a janela {handle} não está mais aberta — ela foi fechada ou trocou de identidade."
     )
 
 
@@ -286,10 +340,13 @@ def _ler_agora(
     profundidade: int,
     limite: int,
     fonte: str,
+    handle: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Escolhe a janela e lê. Uma regra de escolha, a mesma do resto."""
     try:
-        janela = _arq_escolher(alvo, leitor)
+        janela = _janela_por_handle(leitor, handle) if handle else _arq_escolher(alvo, leitor)
+    except AgirError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise AgirError(f"não achei a janela: {exc}") from exc
     try:
