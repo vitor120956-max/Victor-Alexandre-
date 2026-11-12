@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.89.5"
+VERSAO = "0.89.6"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`

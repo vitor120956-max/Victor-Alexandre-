@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - conferir versao
 echo.
 echo   JARVIS - conferir versao e tela
-echo   Versao deste arquivo: 0.89.5
+echo   Versao deste arquivo: 0.89.6
 echo.
 echo   Nao instala, nao baixa e nao altera nada: so le e responde.
 echo   Use quando a tela parecer velha ou faltar algum cartao.

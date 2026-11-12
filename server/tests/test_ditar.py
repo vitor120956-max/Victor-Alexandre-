@@ -834,3 +834,61 @@ def test_o_diagnostico_diz_se_o_programa_esta_instalado(monkeypatch):
 
     monkeypatch.setattr(pc, "caminho_do_programa", lambda exe: "")
     assert modulo._janelas_do_programa(Leitor(), Args(), mesa_ditar) == 1
+
+
+def test_a_janela_aberta_nao_e_trocada_por_uma_antiga_com_campo():
+    """Havia um Bloco de Notas velho com campo; o novo tem de vencer.
+
+    Trocar a janela recém-aberta por uma antiga do mesmo programa é escrever
+    no arquivo errado — e o arquivo errado pode ser o documento de alguém.
+    """
+    class Processo:
+        pid = 777
+
+    class DoisVelhos:
+        def __init__(self):
+            self._abriu = False
+            self.pedidos = []
+
+        def janelas(self):
+            if not self._abriu:
+                return []
+            return [
+                {"handle": 10, "titulo": "relatorio - Bloco de notas", "processo": "notepad.exe", "pid": 111},
+                {"handle": 20, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "pid": 777},
+            ]
+
+        def abrir(self, _nome):
+            self._abriu = True
+            return Processo()
+
+        def janela_em_foco(self):
+            return None
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            bruto = json.loads(json.dumps(_bruto_notepad()))
+            bruto["janela"] = {"handle": int(handle), "titulo": "Sem título - Bloco de notas"}
+            return bruto
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
+            self.pedidos.append((handle, texto))
+            return {"executou": True, "como": "valor do campo", "conferido": True}
+
+    leitor = DoisVelhos()
+    mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi",
+        executar=True,
+        leitor=leitor,
+        abrir=leitor.abrir,
+        dormir=_sem_espera,
+    )
+    assert leitor.pedidos == [(20, "oi")]
+
+
+def test_lista_de_janelas_e_relembrada_depois_de_abrir():
+    """A lista de antes de abrir fala de um programa que ainda não existia."""
+    fonte = (Path("server") / "mesa_ditar.py").read_text(encoding="utf-8")
+    inicio = fonte.index("abriu = True")
+    trecho = fonte[inicio : inicio + 900]
+    assert "candidatas = janelas_do_programa(leitor.janelas()" in trecho

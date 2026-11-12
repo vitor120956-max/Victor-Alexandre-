@@ -317,10 +317,15 @@ def ditar(
         janela = esperar_janela(
             leitor, executavel, rotulo, segundos=espera, dormir=dormir, pid=novo_pid or None
         )
+        # A lista de antes de abrir não serve mais: ela foi lida quando o
+        # programa ainda não existia. Sem reler aqui, o plano seguinte e o
+        # retrato do erro falam de uma janela que não é a que acabou de nascer.
+        candidatas = janelas_do_programa(leitor.janelas(), executavel, rotulo)
         if janela is None:
             raise DitarError(
                 f"abri o {rotulo} ({executavel}), mas nenhuma janela dele apareceu em {espera:.0f}s. "
-                "Se a janela estiver na barra de tarefas, clique nela uma vez e rode de novo."
+                + _retrato(leitor, candidatas, profundidade, limite, fonte)
+                + " Se o programa já estava aberto atrás, feche-o e rode de novo."
             )
 
     restaurada = False
@@ -365,7 +370,11 @@ def ditar(
     # Se o programa tem mais de uma janela, a que serve é a que publica campo
     # — e descobrir isso relendo é barato. Antes de esperar 15s numa janela
     # que nunca vai servir, uma sondagem de uma leitura em cada candidata.
-    if len(candidatas) > 1:
+    # A sondagem serve para escolher entre janelas **que já existiam**. Se eu
+    # acabei de abrir o programa, a janela certa é a que eu abri — trocá-la por
+    # um Bloco de Notas velho que também tem campo seria escrever no arquivo
+    # errado. O teste pegou exatamente isso.
+    if len(candidatas) > 1 and not abriu:
         for tentativa in candidatas:
             rapido, _ = _esperar_campo(
                 texto=texto,

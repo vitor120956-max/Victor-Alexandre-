@@ -5,6 +5,26 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Depois de abrir, reler — e não trocar a janela nova pela velha (0.89.6)
+
+Com o caminho do executável certo (0.89.5), faltavam dois furos que só
+aparecem no momento exato em que o programa nasce:
+
+1. **A lista de janelas ficava velha.** Ela era lida **antes** de abrir o
+   programa — quando ele não existia. Depois de abrir, o plano e o retrato do
+   erro falavam de uma janela que não era a que acabou de nascer. Agora a lista
+   é relida depois da abertura.
+
+2. **A sondagem roubava a janela recém-aberta.** Com mais de uma janela do
+   programa, uma leitura em cada decide qual serve. Mas se um Bloco de Notas
+   **antigo** também tem campo, ele vencia — e o texto iria para o arquivo
+   errado, que pode ser o documento de alguém. A sondagem agora só vale para
+   janelas que já existiam: **se eu acabei de abrir, a janela é a que eu abri.**
+
+O teste `test_a_janela_aberta_nao_e_trocada_por_uma_antiga_com_campo` fixa
+essa regra: dois Blocos de Notas, um com `relatorio`, outro recém-aberto — o
+texto vai para o recém-aberto.
+
 ## Nome de gente × nome de arquivo (0.89.5)
 
 O erro seguinte foi:
