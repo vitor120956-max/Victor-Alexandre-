@@ -203,12 +203,36 @@ def _caixa(hwnd: int) -> list[int]:
     return []
 
 
+def _pid(hwnd: int) -> int:
+    """Dono da janela. É o que separa o Bloco de Notas que eu abri dos antigos."""
+    valor = wintypes.DWORD(0)
+    try:
+        user32.GetWindowThreadProcessId(wintypes.HWND(int(hwnd)), ctypes.byref(valor))
+    except Exception:  # noqa: BLE001
+        return 0
+    return int(valor.value)
+
+
+def _minimizada(hwnd: int) -> bool:
+    """Janela minimizada publica só moldura — 12 elementos, nenhum campo.
+
+    Foi o que a 0.89.1 leu na máquina do usuário e chamou de “esta janela não
+    aceita escrita”: o Bloco de Notas estava na barra de tarefas.
+    """
+    try:
+        return bool(user32.IsIconic(wintypes.HWND(int(hwnd))))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _janela(hwnd: int) -> dict[str, Any]:
     return {
         "handle": int(hwnd),
         "titulo": _titulo(hwnd),
         "classe": _classe(hwnd),
         "processo": _processo(hwnd),
+        "pid": _pid(hwnd),
+        "minimizada": _minimizada(hwnd),
         "caixa": _caixa(hwnd),
     }
 
@@ -1689,6 +1713,23 @@ def executar_ref(
         if alvo != ponteiro:
             _liberar(alvo)
         _liberar(ponteiro)
+
+
+SW_RESTORE = 9
+SW_SHOWNOACTIVATE = 4
+
+
+def restaurar(handle: int) -> bool:
+    """Tira a janela da barra de tarefas — sem mouse, sem coordenada.
+
+    Janela minimizada publica só moldura (12 elementos, nenhum campo). Em vez
+    de pedir que a pessoa clique nela, o programa é que é mostrado. Isto não
+    move o ponteiro nem toca em nada que a pessoa esteja usando.
+    """
+    try:
+        return bool(user32.ShowWindow(wintypes.HWND(int(handle)), SW_RESTORE))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def janela_muda(handle: int) -> bool:

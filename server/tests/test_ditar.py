@@ -401,3 +401,186 @@ def test_escrever_sem_handle_tenta_a_outra_janela_do_mesmo_programa():
     assert 100 in leitor.leituras and 200 in leitor.leituras, "tinha de olhar as duas"
     assert leitor.pedidos == [(200, "oi")]
     assert resposta["executou"] is True
+
+
+# ---------------------------------------------------------------------------
+# 0.89.2 — a janela minimizada publica só moldura (12 elementos)
+# ---------------------------------------------------------------------------
+
+def test_minimizada_vai_para_o_fim_da_lista():
+    """Minimizada publica 12 elementos de moldura — não é a que serve."""
+    janelas = [
+        {"handle": 1, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "minimizada": True},
+        {"handle": 2, "titulo": "notas.txt - Bloco de notas", "processo": "notepad.exe", "minimizada": False},
+    ]
+    achadas = mesa_ditar.janelas_do_programa(janelas, "notepad.exe", "Bloco de notas")
+    assert [j["handle"] for j in achadas] == [2, 1]
+    assert mesa_ditar.janela_do_programa(janelas, "notepad.exe", "Bloco de notas")["handle"] == 2
+
+
+def test_programa_aberto_usa_o_pid_que_nasceu_da_abertura():
+    """O que eu abri é a janela nova — não o Bloco de Notas velho da tarefa."""
+    class Processo:
+        pid = 777
+
+    class LeitorComVelho:
+        """Antes de abrir não havia janela; depois, a velha e a nova."""
+
+        def __init__(self):
+            self._abriu = False
+            self.leituras = []
+            self.pedidos = []
+
+        def janelas(self):
+            if not self._abriu:
+                return []
+            velho = {"handle": 10, "titulo": "velho - Bloco de notas", "processo": "notepad.exe", "pid": 111}
+            novo = {"handle": 20, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "pid": 777}
+            return [velho, novo]
+
+        def abrir(self, _nome):
+            self._abriu = True
+            return Processo()
+
+        def janela_em_foco(self):
+            return None
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            self.leituras.append(int(handle))
+            bruto = json.loads(json.dumps(_bruto_notepad()))
+            bruto["janela"] = {"handle": int(handle), "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"}
+            return bruto
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+            self.pedidos.append((handle, texto))
+            return {"executou": True, "como": "valor do campo", "conferido": True}
+
+    leitor = LeitorComVelho()
+    resposta = mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi",
+        executar=True,
+        leitor=leitor,
+        abrir=leitor.abrir,
+        dormir=_sem_espera,
+    )
+    assert resposta["abriu"] is True
+    assert leitor.pedidos == [(20, "oi")], "o pid novo é a janela que eu abri"
+
+
+def test_o_erro_mostra_o_retrato_de_cada_janela():
+    """“não achei lugar para escrever” sozinho não diz o que olhar."""
+    somente_moldura = {
+        "janela": {"handle": 10, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "minimizada": True},
+        "fonte": "msaa",
+        "raiz": _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])]),
+    }
+
+    class SoMoldura(LeitorAberto):
+        def __init__(self):
+            super().__init__(somente_moldura)
+
+        def abrir(self, nome):
+            return None
+
+    leitor = SoMoldura()
+    with pytest.raises(mesa_ditar.DitarError) as erro:
+        mesa_ditar.ditar(
+            programa="bloco de notas",
+            texto="oi",
+            executar=True,
+            leitor=leitor,
+            abrir=leitor.abrir,
+            espera_campo=0,
+            dormir=_sem_espera,
+        )
+    mensagem = str(erro.value)
+    assert "Janelas que eu vi" in mensagem
+    assert "minimizada" in mensagem
+    assert "sem campo" in mensagem
+
+
+def test_a_sonda_mostra_as_janelas_do_programa_sem_escrever():
+    import importlib.util
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_prog", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    class Leitor:
+        def janelas(self):
+            return [
+                {"handle": 10, "titulo": "velho - Bloco de notas", "processo": "notepad.exe", "pid": 1, "minimizada": True},
+                {"handle": 20, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "pid": 2, "minimizada": False},
+            ]
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            if int(handle) == 10:
+                return {
+                    "janela": {"handle": 10, "titulo": "velho - Bloco de notas"},
+                    "fonte": "msaa",
+                    "raiz": _no(9, "velho", filhos=[_no(43, "Fechar", "Pressionar")]),
+                }
+            return json.loads(json.dumps(_bruto_notepad()))
+
+    class Args:
+        programa = "bloco de notas"
+        profundidade = 6
+        limite = 600
+        fonte = "auto"
+        json = False
+
+    codigo = modulo._janelas_do_programa(Leitor(), Args(), mesa_ditar)
+    assert codigo == 0
+
+
+def test_janela_minimizada_e_restaurada_sem_mouse():
+    """Minimizada publica 12 elementos — e não é preciso clicar nela."""
+    mini = {
+        "janela": {"handle": 10, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "minimizada": True},
+        "fonte": "msaa",
+        "raiz": _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])]),
+    }
+    normal = _bruto_notepad()
+    normal["janela"] = {"handle": 10, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"}
+
+    class LeitorMinimizado(LeitorAberto):
+        def __init__(self):
+            super().__init__(mini)
+            self.restaurado = []
+
+        def restaurar(self, handle):
+            self.restaurado.append(int(handle))
+            return True
+
+        def ler_janela(self, handle, profundidade, limite, fonte="auto"):
+            consta = self.restaurado
+            return json.loads(json.dumps(normal if consta else mini))
+
+    leitor = LeitorMinimizado()
+    resposta = mesa_ditar.ditar(
+        programa="bloco de notas",
+        texto="oi",
+        executar=True,
+        leitor=leitor,
+        dormir=_sem_espera,
+    )
+    assert leitor.restaurado == [10], "tinha de restaurar a janela, não abrir outra"
+    assert resposta["restaurada"] is True
+    assert resposta["resumo"].startswith("Restaurei a janela do Bloco de notas.")
+    assert leitor.pedidos and leitor.pedidos[0][3] == "oi"
+
+
+def test_sem_executar_so_avisa_que_restauraria():
+    mini = {
+        "janela": {"handle": 10, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "minimizada": True},
+        "fonte": "msaa",
+        "raiz": _no(9, "x", filhos=[_no(43, "Fechar", "Pressionar")]),
+    }
+    leitor = LeitorAberto(mini)
+    resposta = mesa_ditar.ditar(programa="bloco de notas", texto="oi", executar=False, leitor=leitor)
+    assert resposta["precisa_restaurar"] is True
+    assert "restauraria" in resposta["resumo"]
+    assert leitor.pedidos == []

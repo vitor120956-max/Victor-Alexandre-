@@ -59,7 +59,14 @@ def janela_do_programa(janelas: list[dict[str, Any]], executavel: str, rotulo: s
     # Janela sem título é janela que ainda está nascendo: o processo já existe,
     # mas o Windows ainda não desenhou nada. Casar com ela é casar com o vazio.
     achadas = janelas_do_programa(janelas, executavel, rotulo)
-    return achadas[0] if achadas else None
+    if not achadas:
+        return None
+    # Minimizada publica só moldura: entre uma minimizada e uma aberta, a
+    # aberta é a que serve — mesmo que a minimizada seja a primeira da lista.
+    for janela in achadas:
+        if not janela.get("minimizada"):
+            return janela
+    return achadas[0]
 
 
 def janelas_do_programa(
@@ -76,13 +83,13 @@ def janelas_do_programa(
     nome = _norm(rotulo)
     vivas = [janela for janela in (janelas or []) if _norm(janela.get("titulo"))]
     por_processo = [janela for janela in vivas if _norm(janela.get("processo")) == exe]
-    if por_processo:
-        return por_processo
-    return [
+    achadas = por_processo or [
         janela
         for janela in vivas
         if nome and (nome == _norm(janela.get("titulo")) or nome in _norm(janela.get("titulo")))
     ]
+    # Ordem estável e útil: as abertas antes das minimizadas.
+    return sorted(achadas, key=lambda item: bool(item.get("minimizada")))
 
 
 def esperar_janela(
@@ -93,6 +100,7 @@ def esperar_janela(
     segundos: float = ESPERA_PADRAO,
     dormir: Callable[[float], Any] = DORMIR,
     intervalo: float = INTERVALO,
+    pid: int | None = None,
 ) -> dict[str, Any] | None:
     """Espera a janela do programa aparecer — sem laço infinito.
 
@@ -102,15 +110,19 @@ def esperar_janela(
     """
     limite = time.monotonic() + max(0.0, float(segundos))
     while True:
-        janela = janela_do_programa(leitor.janelas(), executavel, rotulo)
-        if janela:
-            return janela
+        achadas = janelas_do_programa(leitor.janelas(), executavel, rotulo)
+        if pid:
+            # A janela que eu abri é a do pid novo — não a antiga do mesmo
+            # programa, que pode estar atrás, minimizada ou publicando nada.
+            achadas = [janela for janela in achadas if int(janela.get("pid") or 0) == int(pid)]
+        if achadas:
+            return achadas[0]
         if time.monotonic() >= limite:
             return None
         dormir(intervalo)
 
 
-def abrir_direto(executavel: str) -> Any:
+def abrir_direto(executavel: str, nome: str = "") -> Any:
     """Abre sem a trava da API — só para a sonda, onde a linha é a autorização.
 
     Continua valendo a lista fechada: o executável vem de `pc.PROGRAMAS`, nunca
@@ -222,19 +234,52 @@ def ditar(
             )
             return base
         acao_abrir = abrir or (lambda exe: pc.abrir_programa(exe))
+        aberto = None
         try:
-            acao_abrir(executavel if abrir is None else programa)
+            aberto = acao_abrir(executavel if abrir is None else programa)
         except pc.PcError as exc:
             raise DitarError(str(exc)) from exc
         except OSError as exc:
             raise DitarError(f"o Windows recusou abrir {executavel}: {exc}") from exc
         abriu = True
-        janela = esperar_janela(leitor, executavel, rotulo, segundos=espera, dormir=dormir)
+        novo_pid = int(getattr(aberto, "pid", 0) or 0)
+        janela = esperar_janela(
+            leitor, executavel, rotulo, segundos=espera, dormir=dormir, pid=novo_pid or None
+        )
         if janela is None:
             raise DitarError(
                 f"abri o {rotulo} ({executavel}), mas nenhuma janela dele apareceu em {espera:.0f}s. "
                 "Se a janela estiver na barra de tarefas, clique nela uma vez e rode de novo."
             )
+
+    restaurada = False
+    if janela.get("minimizada"):
+        # “Minimizada” e “não aceita escrita” parecem a mesma coisa na leitura:
+        # as duas devolvem só moldura. Antes de abrir uma segunda janela ou de
+        # desistir, a janela que existe é restaurada — sem mouse.
+        if not executar:
+            base.update(
+                {
+                    "ok": True,
+                    "executou": False,
+                    "precisa_restaurar": True,
+                    "resumo": (
+                        f"o {rotulo} está minimizado: eu restauraria a janela e escreveria "
+                        f"{_cita(texto)}. Nada foi feito."
+                    ),
+                    "como_autorizar": "repita o comando com --executar para fazer de verdade.",
+                }
+            )
+            return base
+        acao_restaurar = getattr(leitor, "restaurar", None)
+        if callable(acao_restaurar):
+            restaurada = bool(acao_restaurar(int(janela.get("handle") or 0)))
+            if restaurada:
+                dormir(INTERVALO_CAMPO)
+                atualizada = janela_do_programa(leitor.janelas(), executavel, rotulo)
+                if atualizada:
+                    janela = atualizada
+                    candidatas = [atualizada] + [j for j in candidatas if j is not atualizada]
 
     alvo_final = alvo or executavel
     # Se o programa tem mais de uma janela, a que serve é a que publica campo
@@ -275,9 +320,8 @@ def ditar(
     if plano is None:
         raise DitarError(
             f"a janela do {rotulo} está aberta, mas em {espera_campo:.0f}s ela não publicou nenhum "
-            f"lugar de escrever. O que ela respondeu: {motivo or '(sem detalhe)'} "
-            "Se ela aparecer servível em `--provados`, repita o comando; se não aparecer, o "
-            "programa abre numa janela que não publica conteúdo."
+            f"lugar de escrever. {_retrato(leitor, candidatas, profundidade, limite, fonte)} "
+            f"O que ela respondeu: {motivo or '(sem detalhe)'}"
         )
     if not executar:
         plano.update(base)
@@ -299,9 +343,49 @@ def ditar(
     )
     resposta.update(base)
     resposta["abriu"] = abriu
+    resposta["restaurada"] = restaurada
+    if restaurada:
+        resposta["resumo"] = f"Restaurei a janela do {rotulo}. " + str(resposta.get("resumo") or "")
     if abriu:
         resposta["resumo"] = f"Abri o {rotulo}. " + str(resposta.get("resumo") or "")
     return resposta
+
+
+def _retrato(
+    leitor: Any,
+    candidatas: list[dict[str, Any]],
+    profundidade: int,
+    limite: int,
+    fonte: str,
+) -> str:
+    """Uma linha por janela do programa: o que cada uma publica.
+
+    Sem isso, “não achei lugar para escrever” deixa a pessoa sem saber se o
+    problema é o programa, a janela minimizada ou uma janela velha sobrando.
+    """
+    linhas: list[str] = []
+    for janela in candidatas:
+        titulo = str(janela.get("titulo") or "")[:40]
+        marcas: list[str] = []
+        if janela.get("minimizada"):
+            marcas.append("minimizada")
+        try:
+            bruto = leitor.ler_janela(
+                int(janela.get("handle") or 0), profundidade, limite, fonte=fonte
+            )
+            bruto.setdefault("janela", janela)
+            montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
+            lido = montada.get("pronto") or arvore.prontidao(montada)
+            elementos = int(montada.get("total") or 0)
+            tem_campo = bool((lido.get("onde_escrever") or {}).get("ref"))
+            marcas.append(f"{elementos} elemento(s)")
+            marcas.append("tem campo" if tem_campo else "sem campo")
+        except Exception as exc:  # noqa: BLE001
+            marcas.append(f"não deu para ler ({type(exc).__name__})")
+        linhas.append(f"“{titulo}” — " + ", ".join(marcas))
+    if not linhas:
+        return ""
+    return "Janelas que eu vi: " + "; ".join(linhas) + ". "
 
 
 def _cita(texto: str) -> str:

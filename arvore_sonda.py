@@ -97,6 +97,75 @@ def _escolher(leitor, alvo: str) -> tuple[dict, str]:
     )
 
 
+def _janelas_do_programa(leitor, args, mesa_ditar) -> int:
+    """Todas as janelas do programa, com o que cada uma publica.
+
+    Uma linha por janela: título, se está minimizada, quantos elementos e se
+    tem lugar para escrever. É o bastante para saber se o problema é o
+    programa, a janela minimizada ou uma janela velha sobrando.
+    """
+    from server import arvore
+
+    try:
+        info = mesa_ditar.pc.resolver(args.programa)
+    except Exception as exc:  # noqa: BLE001
+        return _falhar(str(exc), json_sim=args.json)
+    janelas = mesa_ditar.janelas_do_programa(
+        leitor.janelas(), info["executavel"], info["rotulo"]
+    )
+    itens: list[dict] = []
+    for janela in janelas:
+        item = {
+            "handle": janela.get("handle"),
+            "titulo": janela.get("titulo"),
+            "pid": janela.get("pid"),
+            "minimizada": bool(janela.get("minimizada")),
+        }
+        try:
+            bruto = leitor.ler_janela(
+                int(janela.get("handle") or 0),
+                max(1, min(args.profundidade, 14)),
+                max(1, min(args.limite, 3000)),
+                fonte=args.fonte,
+            )
+            bruto.setdefault("janela", janela)
+            montada = arvore.montar(bruto, max(1, min(args.profundidade, 14)), max(1, min(args.limite, 3000)), com_caminho=True)
+            lido = montada.get("pronto") or arvore.prontidao(montada)
+            campo = lido.get("onde_escrever") or {}
+            item["elementos"] = int(montada.get("total") or 0)
+            item["tem_campo"] = bool(campo.get("ref"))
+            item["onde_escrever"] = campo.get("ref") or ""
+        except Exception as exc:  # noqa: BLE001
+            item["erro"] = f"{type(exc).__name__}: {exc}"
+        itens.append(item)
+
+    if args.json:
+        print(json.dumps({"programa": info, "janelas": itens}, ensure_ascii=False))
+        return 0
+    if not itens:
+        print(f"  O {info['rotulo']} ({info['executavel']}) não está aberto.")
+        return 1
+    print(f"  {info['rotulo']} ({info['executavel']}) — {len(itens)} janela(s):")
+    for item in itens:
+        marcas = []
+        if item.get("minimizada"):
+            marcas.append("minimizada")
+        if "erro" in item:
+            marcas.append(f"não deu para ler ({item['erro']})")
+        else:
+            marcas.append(f"{item['elementos']} elemento(s)")
+            marcas.append("tem campo " + str(item["onde_escrever"]) if item.get("tem_campo") else "sem campo")
+        print(f"    {item['titulo']}  —  " + ", ".join(marcas))
+    escreviveis = [item for item in itens if item.get("tem_campo")]
+    print()
+    if escreviveis:
+        print(f"  {len(escreviveis)} aceita(m) escrita. Uma delas é a que o JARVIS usa.")
+    else:
+        print("  Nenhuma aceita escrita agora. Minimizada publica só moldura:")
+        print("  restaure a janela e rode de novo.")
+    return 0
+
+
 def _provados(leitor, args) -> int:
     """Passa por todas as janelas abertas e diz em quais dá para trabalhar.
 
@@ -244,6 +313,8 @@ def _mostrar_acao(feito: dict, args) -> int:
         print(f"  como:    {resultado['como']}")
     if resultado.get("motivo"):
         print(f"  motivo:  {resultado['motivo']}")
+    if feito.get("restaurada"):
+        print("  janela:  estava minimizada; eu restaurei (sem mouse).")
     if resultado.get("conferido") is True:
         print("  conferi: o texto está no campo.")
     elif resultado.get("conferido") is False:
@@ -299,7 +370,8 @@ def principal(argv: list[str] | None = None) -> int:
         metavar="NOME",
         help=(
             "Da lista fechada (bloco de notas, calculadora, paint, cmd…): abre o programa se ele "
-            "não estiver aberto, espera a janela e escreve com --escrever."
+            "não estiver aberto, espera a janela e escreve com --escrever. Sem --escrever, "
+            "mostra as janelas dele e qual aceita escrita."
         ),
     )
     parser.add_argument(
@@ -318,6 +390,13 @@ def principal(argv: list[str] | None = None) -> int:
         return _falhar(
             f"não consegui carregar o leitor do Windows ({type(exc).__name__}).", json_sim=args.json
         )
+
+    if args.programa and not args.escrever:
+        # `--programa X` sozinho responde a pergunta que importa quando falha:
+        # quantas janelas esse programa tem, e qual delas publica campo?
+        from server import mesa_ditar
+
+        return _janelas_do_programa(leitor, args, mesa_ditar)
 
     if args.programa:
         if not args.escrever:

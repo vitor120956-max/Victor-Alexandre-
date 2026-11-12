@@ -5,6 +5,51 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## A janela minimizada publica 12 elementos (0.89.2)
+
+Depois da 0.89.1, o usuário viu:
+
+```
+NÃO DEU: a janela do Bloco de notas está aberta, mas em 15s ela não publicou
+nenhum lugar de escrever. ... 12 de 12 elemento(s) vieram com coordenada
+```
+
+Doze elementos, todos de moldura. Esse número tem nome: **janela minimizada**.
+Na barra de tarefas o Windows só descreve a moldura — o campo não existe para a
+leitura enquanto a janela está recolhida. Some-se a isso um Bloco de Notas
+antigo, aberto desde as tentativas anteriores, e o JARVIS tinha duas janelas
+do mesmo programa: uma recolhida, uma servindo, e nenhuma informação para
+saber qual era qual.
+
+Quatro correções:
+
+1. **`pid` na lista de janelas.** Cada janela passa a dizer de que processo
+   veio. Quando o JARVIS abre o programa, ele guarda o `pid` do processo que
+   acabou de nascer e só aceita janela daquele `pid` — é a janela que ele
+   abriu, não a antiga.
+2. **`minimizada` na lista.** `IsIconic` é perguntado direto ao Windows. A
+   escolha põe as abertas antes das recolhidas, em vez de pegar a primeira.
+3. **Restaurar em vez de pedir clique.** Janela recolhida é restaurada com
+   `ShowWindow(SW_RESTORE)` — sem mouse, sem coordenada, sem pedir nada a
+   ninguém. Depois disso a leitura acha o campo.
+4. **O erro mostra o retrato.** Em vez de “não achei lugar para escrever”, ele
+   lista cada janela do programa: título, se está minimizada, quantos elementos
+   e se tem campo.
+
+E a sonda ganhou um diagnóstico direto:
+
+```
+.venv\Scripts\python arvore_sonda.py --programa "bloco de notas"
+```
+
+```
+  Bloco de notas (notepad.exe) — 2 janela(s):
+    Sem título - Bloco de notas  —  49 elemento(s), tem campo @f14b5235:e11
+    velho - Bloco de notas  —  minimizada, 12 elemento(s), sem campo
+
+  1 aceita(m) escrita. Uma delas é a que o JARVIS usa.
+```
+
 ## A janela que não era a janela (0.89.1)
 
 A primeira tentativa real de `--programa` morreu assim:
