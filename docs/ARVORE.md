@@ -5,6 +5,42 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## “O Windows recusou abrir notepad.exe” — mentira minha (0.89.4)
+
+Depois da 0.89.3 o terminal parou de ser confundido com o Bloco de Notas, e o
+erro seguinte foi:
+
+```
+NÃO DEU: o Windows recusou abrir notepad.exe: [WinError 2] O sistema não pode
+encontrar o arquivo especificado
+```
+
+Duas coisas erradas nessa frase:
+
+1. **“o Windows recusou”** — ele não recusou nada. `FileNotFoundError` é
+   subclasse de `OSError`, e o `except OSError` genérico veio antes: qualquer
+   “não achei o arquivo” era reportado como recusa.
+2. **“notepad.exe” sozinho não basta** — `subprocess.Popen(["notepad.exe"])`
+   depende do PATH do processo. Neste Windows (10.0.14393) voltou WinError 2.
+
+A correção é `caminho_do_programa`, que procura em três degraus:
+
+| degrau | onde | por quê |
+|---|---|---|
+| 1 | `shutil.which` | respeita o PATH quando ele está certo |
+| 2 | `%SystemRoot%\System32`, `SysWOW64`, raiz | onde o Windows guarda os próprios programas |
+| 3 | registro `App Paths` | onde os instaladores registram o que não vai no PATH |
+
+E se nada for achado, `abrir_sem_shell` cai para `os.startfile` — o mesmo
+mecanismo do duplo clique (`ShellExecute`), que acha pelo App Paths. Nenhum
+shell de verdade é usado: não existe linha digitada nesse caminho.
+
+O plano também passou a mostrar **qual caminho** foi aberto:
+
+```
+  abri:    C:\Windows\System32\notepad.exe
+```
+
 ## O terminal não é o programa (0.89.3)
 
 O diagnóstico da 0.89.2 entregou o culpado na primeira linha:

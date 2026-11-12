@@ -675,3 +675,55 @@ def test_a_sonda_e_a_skill_tem_a_opcao_mouse():
     registro = (Path("server") / "skill_registry.py").read_text(encoding="utf-8")
     assert "mouse: bool = Field(default=False" in registro
     assert "mouse=bool(data.mouse)" in registro
+
+
+# ---------------------------------------------------------------------------
+# 0.89.4 — Popen("notepad.exe") devolveu WinError 2 no PC do usuário
+# ---------------------------------------------------------------------------
+
+def test_o_caminho_do_programa_e_procurado_antes_de_abrir(tmp_path, monkeypatch):
+    """O Windows do usuário não achou `notepad.exe` só pelo nome."""
+    from server import pc
+
+    pasta = tmp_path / "System32"
+    pasta.mkdir()
+    alvo = pasta / "notepad.exe"
+    alvo.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+    monkeypatch.setattr(pc.shutil, "which", lambda _nome: None)
+    assert pc.caminho_do_programa("notepad.exe") == str(alvo)
+
+
+def test_which_vence_quando_o_path_esta_certo(monkeypatch):
+    from server import pc
+
+    monkeypatch.setattr(pc.shutil, "which", lambda nome: r"C:\Windows\notepad.exe")
+    assert pc.caminho_do_programa("notepad.exe") == r"C:\Windows\notepad.exe"
+
+
+def test_sem_caminho_nenhum_devolve_vazio(monkeypatch):
+    from server import pc
+
+    monkeypatch.setenv("SystemRoot", "/nao/existe")
+    monkeypatch.setattr(pc.shutil, "which", lambda _nome: None)
+    assert pc.caminho_do_programa("inexistente.exe") == ""
+
+
+def test_arquivo_nao_encontrado_nao_e_reportado_como_recusa():
+    """FileNotFoundError é OSError — a ordem dos `except` decide a mensagem."""
+    fonte = (Path("server") / "mesa_ditar.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def ditar(")
+    trecho = fonte[inicio:]
+    pos_file = trecho.index("except FileNotFoundError")
+    pos_os = trecho.index("except OSError as exc:", pos_file)
+    assert pos_file < pos_os, "o específico tem de vir antes do genérico"
+    assert "não achei o" in trecho[pos_file:pos_os]
+
+
+def test_abrir_direto_usa_o_resolvedor():
+    fonte = (Path("server") / "mesa_ditar.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def abrir_direto(")
+    trecho = fonte[inicio : fonte.index("def ditar(")]
+    assert "pc.abrir_sem_shell(" in trecho
+    assert "subprocess.Popen([executavel]" not in trecho

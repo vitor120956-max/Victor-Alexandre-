@@ -170,6 +170,74 @@ def _resolver(nome: str) -> str:
     )
 
 
+RAIZ_DO_WINDOWS = ("System32", "SysWOW64", "")
+
+
+def caminho_do_programa(executavel: str) -> str:
+    """Caminho completo de um executável do Windows — ou "".
+
+    Por que não basta `Popen(["notepad.exe"])`: em teoria o Windows procura no
+    PATH, mas no PC do usuário (Windows 10.0.14393) a chamada voltou
+    **WinError 2 — arquivo não encontrado**. Depender do PATH do processo é
+    depender de uma variável que ninguém aqui controla.
+
+    Ordem da busca, da mais direta à mais indireta:
+
+    1. `shutil.which` — respeita o PATH quando ele está certo;
+    2. as pastas do próprio Windows (`System32`, `SysWOW64`, a raiz);
+    3. o registro do Windows (`App Paths`), que é onde os instaladores
+       registram o caminho de programas que não ficam no PATH.
+    """
+    if not executavel:
+        return ""
+    achado = shutil.which(executavel)
+    if achado:
+        return achado
+    raiz = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or "C:\\Windows"
+    for pasta in RAIZ_DO_WINDOWS:
+        candidato = Path(raiz) / pasta / executavel if pasta else Path(raiz) / executavel
+        try:
+            if candidato.is_file():
+                return str(candidato)
+        except OSError:
+            continue
+    try:
+        import winreg
+
+        chave = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{executavel}"
+        for raiz_reg in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                with winreg.OpenKey(raiz_reg, chave) as aberta:
+                    valor, _tipo = winreg.QueryValueEx(aberta, "")
+            except OSError:
+                continue
+            if valor and Path(str(valor).strip('"')).is_file():
+                return str(valor).strip('"')
+    except Exception:  # noqa: BLE001 - registro é palpite, não obrigação
+        pass
+    return ""
+
+
+def abrir_sem_shell(executavel: str) -> Any:
+    """Abre o programa pelo caminho resolvido; sem caminho, pelo ShellExecute.
+
+    `os.startfile` é `ShellExecute`: ele usa o mesmo mecanismo do duplo clique,
+    que acha o programa pelo App Paths mesmo quando o PATH do processo não
+    ajuda. Nada de shell de verdade — não existe linha digitada aqui.
+    """
+    caminho = caminho_do_programa(executavel)
+    if caminho:
+        return subprocess.Popen([caminho], shell=False, close_fds=True)
+    try:
+        os.startfile(executavel)  # type: ignore[attr-defined]
+    except OSError as exc:
+        raiz = os.environ.get("SystemRoot") or "C:\\Windows"
+        raise FileNotFoundError(
+            f"não achei {executavel} no PATH, em {raiz} nem no App Paths ({exc})."
+        ) from exc
+    return None
+
+
 def resolver(nome: str) -> dict[str, str]:
     """Nome falado → chave, executável e rótulo. Não abre nada.
 
@@ -190,17 +258,20 @@ def abrir_programa(
     _exigir_ligado()
     chave = _resolver(nome)
     executavel, rotulo = PROGRAMAS[chave]
-    acao = abrir or (lambda exe: subprocess.Popen([exe], shell=False, close_fds=True))
     _exigir_windows("Abrir programa")
+    acao = abrir or abrir_sem_shell
     tentativas = [executavel]
     if chave == "powershell" and shutil.which("pwsh"):
         tentativas.append("pwsh.exe")
-    erro = ""
+    problemas: list[str] = []
     for exe in tentativas:
         try:
             acao(exe)
-        except FileNotFoundError:
-            erro = exe
+        except FileNotFoundError as exc:
+            # FileNotFoundError é OSError: se a ordem dos `except` trocar, o
+            # erro vira “o Windows recusou abrir”, que é mentira — o arquivo
+            # simplesmente não foi achado.
+            problemas.append(str(exc))
             continue
         except OSError as exc:
             raise PcError(f"O Windows recusou abrir {exe}: {exc}") from exc
@@ -208,10 +279,13 @@ def abrir_programa(
             "programa": chave,
             "rotulo": rotulo,
             "executavel": exe,
+            "caminho": caminho_do_programa(exe) or exe,
             "aberto": True,
             "resposta": f"Abri o {rotulo} ({exe}). Se a janela não aparecer, veja a barra de tarefas.",
         }
-    raise PcError(f"Não achei o executável ({erro}). Ele está instalado neste PC?")
+    raise PcError(
+        "Não achei o executável: " + "; ".join(problemas or tentativas) + ". Ele está instalado neste PC?"
+    )
 
 
 def _raizes_permitidas() -> list[Path]:

@@ -313,6 +313,8 @@ def _mostrar_acao(feito: dict, args) -> int:
         print(f"  como:    {resultado['como']}")
     if resultado.get("motivo"):
         print(f"  motivo:  {resultado['motivo']}")
+    if feito.get("caminho"):
+        print(f"  abri:    {feito['caminho']}")
     if feito.get("restaurada"):
         print("  janela:  estava minimizada; eu restaurei (sem mouse).")
     if resultado.get("conferido") is True:

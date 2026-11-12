@@ -169,8 +169,12 @@ def abrir_direto(executavel: str, nome: str = "") -> Any:
 
     Continua valendo a lista fechada: o executável vem de `pc.PROGRAMAS`, nunca
     de um caminho digitado.
+
+    E passa pelo resolvedor de caminho: `Popen(["notepad.exe"])` sozinho voltou
+    **WinError 2** no PC do usuário. O caminho de verdade é procurado no PATH,
+    nas pastas do Windows e no App Paths.
     """
-    return subprocess.Popen([executavel], shell=False, close_fds=True)
+    return pc.abrir_sem_shell(executavel)
 
 
 def _esperar_campo(
@@ -282,6 +286,13 @@ def ditar(
             aberto = acao_abrir(executavel if abrir is None else programa)
         except pc.PcError as exc:
             raise DitarError(str(exc)) from exc
+        except FileNotFoundError as exc:
+            # Antes de `except OSError`: FileNotFoundError É um OSError, e dizer
+            # “o Windows recusou” quando o arquivo não foi achado é diagnóstico
+            # errado — foi o que apareceu na tela do usuário.
+            raise DitarError(
+                f"não achei o {executavel} neste PC. {exc}"
+            ) from exc
         except OSError as exc:
             raise DitarError(f"o Windows recusou abrir {executavel}: {exc}") from exc
         abriu = True
@@ -396,6 +407,10 @@ def ditar(
     )
     resposta.update(base)
     resposta["abriu"] = abriu
+    if abriu:
+        caminho = pc.caminho_do_programa(executavel)
+        if caminho:
+            resposta["caminho"] = caminho
     resposta["restaurada"] = restaurada
     resposta["trouxe_para_frente"] = trouxe
     if restaurada:
