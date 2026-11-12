@@ -170,6 +170,17 @@ def _resolver(nome: str) -> str:
     )
 
 
+def resolver(nome: str) -> dict[str, str]:
+    """Nome falado → chave, executável e rótulo. Não abre nada.
+
+    Existe separado de `abrir_programa` porque quem só quer saber *qual
+    processo procurar na tela* não deve precisar abrir o programa para isso.
+    """
+    chave = _resolver(nome)
+    executavel, rotulo = PROGRAMAS[chave]
+    return {"chave": chave, "executavel": executavel, "rotulo": rotulo}
+
+
 def abrir_programa(
     nome: str,
     *,

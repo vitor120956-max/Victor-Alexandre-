@@ -5,6 +5,50 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Do zero: abrir, esperar, escrever e conferir (0.89.0)
+
+Até aqui o JARVIS escrevia numa janela **que já estava aberta**. Quem abria o
+Bloco de Notas era você — e pedir isso é pedir trabalho a quem pediu que ele
+fizesse o trabalho.
+
+A 0.89.0 junta as duas peças que já existiam:
+
+1. `pc.abrir_programa` — lista fechada (bloco de notas, paint, calculadora,
+   cmd, powershell…), sem caminho livre;
+2. `mesa_agir.escrever_na_janela` — acha o campo, escreve, confere.
+
+E acrescenta o que faltava: **esperar a janela aparecer**. Abrir um programa e
+ler a tela no mesmo instante é ler o vazio.
+
+```
+.venv\Scripts\python arvore_sonda.py --programa "bloco de notas" --escrever "oi, mundo" --executar
+```
+
+```
+  Abri o Bloco de notas. Feito: digitar 'oi, mundo' em texto em 476,472 (970x69) (conferi: o texto está no campo)
+
+  janela:  notepad.exe — Sem título - Bloco de notas
+  alvo:    @da9f5b32:e11  texto “”
+  onde:    476,472 (970x69)
+  fonte:   msaa   leitura: da9f5b32
+  como:    valor do campo (put_accValue, sem teclado)
+  conferi: o texto está no campo.
+```
+
+Se o programa já estiver aberto, ele usa a janela que existe e **não abre uma
+segunda**. Se a janela não aparecer em 12 segundos, ele diz isso e para — não
+fica esperando para sempre diante de uma tela parada.
+
+### O que continua valendo
+
+- **sem `--executar`, nada é aberto e nada é escrito** — abrir programa já é
+  agir, e o plano diz o que faria;
+- a lista de programas é fechada; o executável vem dela, nunca de um caminho
+  digitado;
+- **pela API**, `mesa.ditar` exige `JARVIS_HOST_PC=1` (quem chama é o modelo).
+  Na sonda, quem autoriza é a linha que a pessoa digitou;
+- nada de mouse, nada de foto da tela, e a leitura de volta sempre.
+
 ## Escreveu de verdade — pelo terceiro degrau (0.88.0)
 
 Na máquina do usuário, a 0.87.1 escreveu:
@@ -776,6 +820,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **age por `ref`, com freio** | relê antes de agir; ref antigo, moldura e digitar sem texto são recusados; `--executar` é obrigatório |
 | **acha o campo sozinho** | `--escrever "texto"` — sem copiar ref de uma saída para outra |
 | **acrescenta sem apagar** | `--acrescentar`: campo com texto ganha o novo no fim, não por cima |
+| **abre o programa sozinho** | `--programa "bloco de notas"`: abre se não estiver aberto, espera a janela e escreve |
 | **não move o mouse** | a ação vem do elemento (ação padrão / foco), que é o único caminho que funciona na sua tela |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |

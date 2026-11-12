@@ -15,6 +15,7 @@ Uso (Windows):
     py arvore_sonda.py --provados           # quais janelas abertas servem para agir
     py arvore_sonda.py --alvo notepad --escrever "oi, mundo"              # acha o campo e mostra o plano
     py arvore_sonda.py --alvo notepad --escrever "oi, mundo" --executar   # escreve de verdade
+    py arvore_sonda.py --programa "bloco de notas" --escrever "oi" --executar  # abre se preciso
 
 Só leitura: nada é clicado, digitado ou movido.
 
@@ -221,8 +222,13 @@ def _mostrar_acao(feito: dict, args) -> int:
     if args.json:
         print(json.dumps(feito, ensure_ascii=False))
         return 0
-    plano = feito["plano"]
     print(f"  {feito['resumo']}")
+    plano = feito.get("plano")
+    if not plano:
+        if feito.get("como_autorizar"):
+            print()
+            print(f"  {feito['como_autorizar']}")
+        return 0 if feito.get("ok") else 1
     print()
     print(f"  janela:  {plano['processo']} — {plano['janela']}")
     print(f"  alvo:    {plano['ref']}  {plano['papel']} “{plano['nome']}”")
@@ -288,6 +294,15 @@ def principal(argv: list[str] | None = None) -> int:
         help="Faz de verdade. Sem esta opção, só mostra o plano e não toca em nada.",
     )
     parser.add_argument(
+        "--programa",
+        default="",
+        metavar="NOME",
+        help=(
+            "Da lista fechada (bloco de notas, calculadora, paint, cmd…): abre o programa se ele "
+            "não estiver aberto, espera a janela e escreve com --escrever."
+        ),
+    )
+    parser.add_argument(
         "--acrescentar",
         action="store_true",
         help="Se o campo já tiver texto, escreve no fim dele em vez de recusar.",
@@ -303,6 +318,32 @@ def principal(argv: list[str] | None = None) -> int:
         return _falhar(
             f"não consegui carregar o leitor do Windows ({type(exc).__name__}).", json_sim=args.json
         )
+
+    if args.programa:
+        if not args.escrever:
+            return _falhar("com --programa, informe o texto em --escrever \"texto\".", json_sim=args.json)
+        from server import mesa_agir, mesa_ditar
+
+        try:
+            feito = mesa_ditar.ditar(
+                programa=args.programa,
+                texto=args.escrever,
+                executar=args.executar,
+                acrescentar=args.acrescentar,
+                leitor=leitor,
+                alvo=args.alvo,
+                abrir=mesa_ditar.abrir_direto,
+                profundidade=max(1, min(args.profundidade, 14)),
+                limite=max(1, min(args.limite, 3000)),
+                fonte=args.fonte,
+            )
+        except mesa_ditar.DitarError as exc:
+            return _falhar(str(exc), json_sim=args.json)
+        except mesa_agir.AgirError as exc:
+            return _falhar(str(exc), json_sim=args.json)
+        except Exception as exc:  # noqa: BLE001 - COM de terceiros
+            return _falhar(f"a escrita falhou ({type(exc).__name__}).", json_sim=args.json)
+        return _mostrar_acao(feito, args)
 
     if args.escrever or args.ref:
         from server import mesa_agir

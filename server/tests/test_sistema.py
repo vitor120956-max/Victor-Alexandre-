@@ -1366,7 +1366,7 @@ def client(tmp_path):
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
     assert dados["version"] == VERSAO
-    assert dados["skills"] == 321
+    assert dados["skills"] == 322
 
 
 def test_api_lista_as_dezesseis_skills_de_sistema(client):

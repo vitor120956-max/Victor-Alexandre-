@@ -2111,6 +2111,29 @@ class MesaAgirInput(BaseModel):
     executar: bool = Field(default=False, title="Executar de verdade", json_schema_extra={"description": "Sem isto, só mostra o plano e não toca em nada."})
 
 
+class MesaDitarInput(BaseModel):
+    """Ditar num programa: abre se preciso, acha o campo, escreve e confere."""
+
+    model_config = ConfigDict(extra="forbid")
+    programa: str = Field(
+        min_length=2,
+        max_length=40,
+        title="Programa",
+        json_schema_extra={"description": "Da lista fechada: `bloco de notas`, `paint`, `calculadora`, `cmd`…"},
+    )
+    texto: str = Field(min_length=1, max_length=500, title="Texto")
+    acrescentar: bool = Field(
+        default=False,
+        title="Acrescentar",
+        json_schema_extra={"description": "Se o campo já tiver texto, escreve no fim dele em vez de recusar."},
+    )
+    executar: bool = Field(
+        default=False,
+        title="Executar de verdade",
+        json_schema_extra={"description": "Sem isto, só mostra o plano: nada é aberto e nada é escrito."},
+    )
+
+
 class MesaMoverInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     x: int = Field(ge=0, le=100_000, title="X")
@@ -4137,6 +4160,26 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except mesa_agir.AgirError as exc:
             raise SkillError(str(exc)) from exc
 
+    def mesa_ditar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MesaDitarInput)
+        try:
+            from server import arvore_windows as leitor
+            from server import mesa_agir, mesa_ditar
+        except Exception as exc:  # noqa: BLE001 - fora do Windows não há braço
+            raise SkillError(f"ditar num programa só existe no Windows hoje ({type(exc).__name__}).") from exc
+        try:
+            return mesa_ditar.ditar(
+                programa=data.programa,
+                texto=data.texto,
+                executar=bool(data.executar) and not _dry_run,
+                acrescentar=bool(data.acrescentar),
+                leitor=leitor,
+            )
+        except mesa_ditar.DitarError as exc:
+            raise SkillError(str(exc)) from exc
+        except mesa_agir.AgirError as exc:
+            raise SkillError(str(exc)) from exc
+
     def mesa_handler(acao: str):
         def executar(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
             try:
@@ -5641,6 +5684,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("armazenamento.drive-app", "Abrir ou fechar o Drive", "Fecha o app do Google Drive (para a sincronização, mas derruba a unidade `G:`) ou abre de novo. No Windows o app não aceita pausa por linha de comando — fechar é o único caminho sem clique. `estado` só informa se ele está rodando.", "Armazenamento", ArmazenamentoDriveAppInput, armazenamento_drive_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("mesa.arvore", "Ver os elementos da janela", "Lê a **árvore de acessibilidade** da janela em foco (MSAA e UIAutomation; fica com a que mostrar mais) e devolve papel, nome, posição e ação padrão de cada elemento, com um `ref` para os acionáveis. **Somente leitura**: não clica, não digita, não move o mouse e não tira foto da tela. Se a janela em foco for o próprio terminal, troca pela janela de trás e avisa. Roda numa sonda separada: se o programa travar, quem cai é a sonda.", "Mesa", MesaArvoreInput, mesa_arvore_handler, timeout_seconds=40),
         SkillDefinition("mesa.agir", "Clicar ou digitar por ref", "Age num elemento pelo `ref` que veio de `mesa.arvore` — ou, sem `ref` na ação digitar, **acha o lugar de escrever sozinho**. **Relê a janela antes**, então um `ref` de leitura antiga é recusado. Mostra o plano (o que, onde, como) e só executa com `executar=true`. A ação vem do próprio elemento (ação padrão ou foco), **sem mover o mouse**; moldura (fechar/minimizar/rolar) é recusada como alvo.", "Mesa", MesaAgirInput, mesa_agir_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=40),
+        SkillDefinition("mesa.ditar", "Escrever num programa", "Abre o programa (**lista fechada**: bloco de notas, paint, calculadora, cmd…) se ele não estiver aberto, espera a janela aparecer, acha o campo de escrita e digita — **conferindo a leitura de volta**. Com `acrescentar`, escreve no fim do que já existe em vez de recusar. Só executa com `executar=true` (sem isso, nada é aberto e nada é escrito); pela API exige `JARVIS_HOST_PC=1`, porque quem chama é o modelo. Não move o mouse e não tira foto da tela.", "Mesa", MesaDitarInput, mesa_ditar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
         SkillDefinition("mesa.status", "Onde está o mouse", "Mostra a posição do cursor, o tamanho da tela e os títulos das janelas abertas. Só olha.", "Mesa", MesaStatusInput, mesa_handler("status"), timeout_seconds=15),
         SkillDefinition("mesa.mover", "Mover o mouse", "Leva o cursor até (x, y) em passos curtos. Se você mexer o mouse no meio, ele para em vez de continuar.", "Mesa", MesaMoverInput, mesa_handler("mover"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("mesa.clicar", "Clicar", "Clica com o botão esquerdo, direito ou do meio — na posição dada ou onde o cursor estiver.", "Mesa", MesaClicarInput, mesa_handler("clicar"), side_effects=True, requires_confirmation=True, timeout_seconds=30),
