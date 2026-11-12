@@ -1544,7 +1544,13 @@ def _conferir(alvo: int, filho: int, texto: str) -> bool | None:
     return texto.strip() in " ".join(visto.split())
 
 
-def _digitar_em(alvo: int, filho: int, handle: int, texto: str) -> dict[str, Any]:
+def _digitar_em(
+    alvo: int,
+    filho: int,
+    handle: int,
+    texto: str,
+    acrescentar: bool = False,
+) -> dict[str, Any]:
     """Os três degraus da escrita, do mais natural ao mais direto.
 
     1. foco no elemento exato (accSelect) e teclado — é o que um humano faz;
@@ -1589,16 +1595,27 @@ def _digitar_em(alvo: int, filho: int, handle: int, texto: str) -> dict[str, Any
         limites.append("o campo inteiro também não aceitou foco")
 
     atual = _valor(alvo, filho)
-    if atual.strip():
-        limites.append("o campo já tem texto e eu não sobrescrevo o que não escrevi")
-    elif _por_valor(alvo, filho, texto) and _valor(alvo, filho).strip():
-        return {
-            "executou": True,
-            "como": "valor do campo (put_accValue, sem teclado)",
-            "caracteres": len(texto),
-            "conferido": True,
-        }
+    # `put_accValue` **substitui** o conteúdo. Escrever por cima do que já está
+    # lá apaga o que a pessoa fez — então, com texto no campo, ou se pediu para
+    # acrescentar, escreve-se o que já existe + o novo, e a resposta diz isso.
+    if atual.strip() and not acrescentar:
+        limites.append(
+            "o campo já tem texto e eu não sobrescrevo o que não escrevi "
+            "(use --acrescentar para escrever no fim dele)"
+        )
     else:
+        final = (atual + texto) if atual.strip() else texto
+        if _por_valor(alvo, filho, final) and _valor(alvo, filho).strip() == " ".join(final.split()):
+            feito: dict[str, Any] = {
+                "executou": True,
+                "como": "valor do campo (put_accValue, sem teclado)",
+                "caracteres": len(texto),
+                "conferido": True,
+            }
+            if atual.strip():
+                feito["como"] = "valor do campo, acrescentado ao que já havia"
+                feito["acrescentou"] = True
+            return feito
         limites.append("o campo não aceita escrita por valor (put_accValue)")
 
     return {
@@ -1614,6 +1631,7 @@ def executar_ref(
     acao: str,
     texto: str = "",
     caixa: list[int] | None = None,
+    acrescentar: bool = False,
 ) -> dict[str, Any]:
     """Executa `clicar` ou `digitar` num elemento, pelo caminho da leitura.
 
@@ -1643,7 +1661,7 @@ def executar_ref(
     try:
         nome = _nome(alvo, filho)[:60]
         if pedido == "digitar":
-            feito = _digitar_em(alvo, filho, int(handle), texto)
+            feito = _digitar_em(alvo, filho, int(handle), texto, bool(acrescentar))
             feito["elemento"] = nome
             return feito
 

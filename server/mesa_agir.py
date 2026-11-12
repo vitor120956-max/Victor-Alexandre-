@@ -107,9 +107,12 @@ def planejar(
         )
 
     caixa = no.get("caixa") if isinstance(no.get("caixa"), list) else None
-    escrito = " ".join((texto or "").split())
+    # O texto vai como veio: colapsar espaços transformaria " de novo" em
+    # "de novo" e, ao acrescentar num campo que já tem conteúdo, as palavras
+    # colariam uma na outra. Só o teste de "está vazio?" apara.
+    escrito = str(texto or "")
     if pedido == "digitar":
-        if not escrito:
+        if not escrito.strip():
             raise AgirError("para digitar, informe o texto.")
         if len(escrito) > 500:
             raise AgirError("texto grande demais para uma vez (limite de 500 caracteres).")
@@ -123,10 +126,17 @@ def planejar(
     # `montar` não devolve a janela no topo, devolve `alvo` ("notepad.exe — Sem
     # título") — e a 0.87.0 imprimia `janela: —` por causa disso.
     janela = resultado.get("janela") or {}
-    titulo = str(janela.get("titulo") or resultado.get("alvo") or "")
+    titulo = str(janela.get("titulo") or "")
     processo = str(janela.get("processo") or "")
-    if not processo and " — " in titulo:
-        processo = titulo.split(" — ", 1)[0]
+    if not titulo:
+        # `montar` devolve `alvo` já com o processo na frente ("notepad.exe —
+        # Sem título"); a tela mostra `processo — janela`, então o prefixo sai
+        # aqui — senão vira "notepad.exe — notepad.exe — Sem título".
+        titulo = str(resultado.get("alvo") or "")
+        if not processo and " — " in titulo:
+            processo, titulo = titulo.split(" — ", 1)
+        elif processo and titulo.startswith(processo + " — "):
+            titulo = titulo[len(processo) + 3 :]
     plano = {
         "ref": ref,
         "acao": pedido,
@@ -168,6 +178,7 @@ def agir(
     profundidade: int = arvore.PROFUNDIDADE_PADRAO,
     limite: int = arvore.LIMITE_PADRAO,
     fonte: str = "auto",
+    acrescentar: bool = False,
 ) -> dict[str, Any]:
     """Lê de novo, confere o ref e — só com `executar` — age.
 
@@ -199,6 +210,7 @@ def agir(
             plano["acao"],
             plano["texto"],
             plano.get("caixa"),
+            acrescentar=acrescentar,
         )
     except Exception as exc:  # noqa: BLE001 - COM de terceiros
         raise AgirError(f"a ação falhou: {type(exc).__name__}: {exc}") from exc
@@ -210,6 +222,8 @@ def agir(
         resposta["resumo"] += f" — {feito['motivo']}"
     # "mandei as teclas" não é "o texto entrou": quando o campo publica o seu
     # valor, a resposta diz o que foi visto, não o que foi tentado.
+    if resposta["executou"] and feito.get("acrescentou"):
+        resposta["resumo"] += " (o campo já tinha texto; escrevi no fim dele)"
     if resposta["executou"]:
         if feito.get("conferido") is True:
             resposta["resumo"] += " (conferi: o texto está no campo)"
@@ -227,6 +241,7 @@ def escrever_na_janela(
     profundidade: int = arvore.PROFUNDIDADE_PADRAO,
     limite: int = arvore.LIMITE_PADRAO,
     fonte: str = "auto",
+    acrescentar: bool = False,
 ) -> dict[str, Any]:
     """Acha o lugar de escrever **sozinho** e digita. Sem ref, sem cópia.
 
@@ -261,6 +276,7 @@ def escrever_na_janela(
         profundidade=profundidade,
         limite=limite,
         fonte=fonte,
+        acrescentar=acrescentar,
     )
 
 

@@ -5,6 +5,46 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Escreveu de verdade — pelo terceiro degrau (0.88.0)
+
+Na máquina do usuário, a 0.87.1 escreveu:
+
+```
+  Feito: digitar 'oi, mundo' em texto em 378,542 (970x69) (conferi: o texto está no campo)
+  como:    valor do campo (put_accValue, sem teclado)
+  conferi: o texto está no campo.
+```
+
+O `oi, mundo` estava no Bloco de Notas. Mas o caminho vencedor foi o
+**terceiro**: `put_accValue`. Nem `accSelect` no elemento, nem no campo inteiro,
+deram foco neste Bloco de Notas — e o JARVIS não digitou às cegas: escreveu
+direto no valor e **conferiu lendo de volta**.
+
+Isso também explica por que a 0.86.0 falhava: não era o programa recusando
+foco, era o índice trocado; mas mesmo com o índice certo o foco não vem neste
+controle. Quem depende de teclado teria ficado sem escrever.
+
+### O problema que aparece na segunda vez
+
+`put_accValue` **substitui** o conteúdo. Na primeira vez o campo estava vazio.
+Na segunda, ele já tem `oi, mundo` — e escrever por cima apagaria o que já
+estava lá.
+
+Antes, o JARVIS recusava: *"o campo já tem texto e eu não sobrescrevo o que não
+escrevi"*. Recusar está certo, mas não resolve — a pessoa quer continuar
+escrevendo.
+
+Agora ele lê o que existe e escreve `o que existe + o novo`, e diz o que fez:
+
+```
+  Feito: digitar ' de novo' em texto em ... (conferi: o texto está no campo)
+  como:    valor do campo, acrescentado ao que já havia
+```
+
+Isso só acontece com `--acrescentar`. Sem a opção, continua recusando — porque
+**acrescentar por conta própria mudaria o significado do que está escrito**, e
+isso é decisão de quem escreveu, não minha.
+
 ## O foco que nunca foi pedido (0.87.1)
 
 Na primeira tentativa de verdade, a tela do usuário disse:
@@ -735,6 +775,7 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **sabe onde se escreve** | papel `texto`/`documento` com caixa ganha ação `digitar` e `ref`, salvo se for somente leitura |
 | **age por `ref`, com freio** | relê antes de agir; ref antigo, moldura e digitar sem texto são recusados; `--executar` é obrigatório |
 | **acha o campo sozinho** | `--escrever "texto"` — sem copiar ref de uma saída para outra |
+| **acrescenta sem apagar** | `--acrescentar`: campo com texto ganha o novo no fim, não por cima |
 | **não move o mouse** | a ação vem do elemento (ação padrão / foco), que é o único caminho que funciona na sua tela |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |

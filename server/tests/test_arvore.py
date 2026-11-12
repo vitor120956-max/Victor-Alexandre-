@@ -1373,7 +1373,7 @@ class LeitorDeAcao:
     def ler_janela(self, handle, profundidade, limite, fonte="auto"):
         return json.loads(json.dumps(self._bruto))
 
-    def executar_ref(self, handle, caminho, acao, texto="", caixa=None):
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
         self.pedidos.append((handle, list(caminho), acao, texto))
         if self._falha:
             raise RuntimeError(self._falha)
@@ -1586,14 +1586,15 @@ def test_digitar_tem_tres_degraus_e_nao_digita_as_cegas():
     # na ordem: elemento → campo inteiro → valor
     um = trecho.index("_selecionar(alvo, filho)")
     dois = trecho.index("_selecionar(alvo, CHILDID_SELF)")
-    tres = trecho.index("_por_valor(alvo, filho, texto)")
+    tres = trecho.index("_por_valor(alvo, filho, final)")
     assert um < dois < tres
     # teclado só depois de confirmar que o foco é da janela alvo
     assert trecho.count("_teclado_esta_na_janela(handle)") >= 2
     for posicao in [i for i in range(len(trecho)) if trecho.startswith("mesa.digitar(", i)]:
         assert trecho.rfind("_teclado_esta_na_janela", 0, posicao) != -1
-    # e não sobrescreve campo com texto
+    # e não sobrescreve campo com texto sem permissão explícita
     assert "não sobrescrevo o que não escrevi" in trecho
+    assert "if atual.strip() and not acrescentar:" in trecho
 
 
 def test_o_plano_mostra_o_nome_da_janela():
@@ -1603,7 +1604,8 @@ def test_o_plano_mostra_o_nome_da_janela():
     montada, refs = _notepad_montado()
     assert "janela" not in montada
     plano = mesa_agir.planejar(montada, refs["campo"], "digitar", "oi")
-    assert plano["janela"] == montada["alvo"]
+    assert plano["janela"], "a janela aparecia como — na tela"
+    assert plano["janela"] in montada["alvo"], "o título tem de vir do alvo lido"
     assert "notepad.exe" in plano["processo"]
 
 
@@ -1616,7 +1618,7 @@ def test_a_resposta_nao_diz_feito_sem_ter_visto_o_texto():
             super().__init__(bruto)
             self.conferido = conferido
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
             self.pedidos.append((handle, list(caminho), acao, texto))
             return {"executou": True, "como": "foco + teclado", "conferido": self.conferido}
 
@@ -1624,3 +1626,67 @@ def test_a_resposta_nao_diz_feito_sem_ter_visto_o_texto():
         leitor = LeitorCego(json.loads(json.dumps(_notepad_bruto())), conferido)
         resposta = mesa_agir.escrever_na_janela(texto="oi", executar=True, leitor=leitor)
         assert esperado in resposta["resumo"]
+
+
+# ---------------------------------------------------------------------------
+# 0.88.0 — na segunda vez o campo já tem texto
+# ---------------------------------------------------------------------------
+
+def test_o_terceiro_degrau_preserva_o_que_ja_estava_no_campo():
+    """`put_accValue` **substitui**. Escrever por cima apaga o trabalho da pessoa."""
+    # Não se importa `arvore_windows` aqui: ele é Windows puro, e a regra mora
+    # no texto do arquivo — que é o que se pode conferir fora do Windows.
+    fonte = _fonte_windows()
+    inicio = fonte.index("def _digitar_em(")
+    trecho = fonte[inicio : fonte.index("def executar_ref(")]
+    assert "final = (atual + texto) if atual.strip() else texto" in trecho
+    assert "_por_valor(alvo, filho, final)" in trecho
+    assert "acrescentou" in trecho
+    # o executor precisa aceitar a opção, senão o caminho morre em TypeError
+    assert "def executar_ref(" in fonte
+    assert "acrescentar: bool = False" in fonte
+
+
+def test_acrescentar_pede_licenca_antes_de_mexer_em_campo_com_texto():
+    from server import mesa_agir
+
+    class LeitorDeCampoCheio(LeitorDeAcao):
+        """Simula o Bloco de Notas com “oi, mundo” já escrito."""
+
+        def __init__(self, bruto):
+            super().__init__(bruto)
+            self.recebido: dict = {}
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+            self.pedidos.append((handle, list(caminho), acao, texto))
+            self.recebido = {"texto": texto, "acrescentar": acrescentar}
+            return {"executou": True, "como": "valor do campo", "conferido": True}
+
+    leitor = LeitorDeCampoCheio(json.loads(json.dumps(_notepad_bruto())))
+    mesa_agir.escrever_na_janela(texto=" de novo", executar=True, leitor=leitor, acrescentar=True)
+    assert leitor.recebido == {"texto": " de novo", "acrescentar": True}
+
+
+def test_a_sonda_tem_a_opcao_de_acrescentar():
+    texto = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--acrescentar"' in texto
+    assert "acrescentar=args.acrescentar" in texto
+
+
+def test_a_skill_mesa_agir_tem_acrescentar():
+    texto = (Path("server") / "skill_registry.py").read_text(encoding="utf-8")
+    inicio = texto.index("class MesaAgirInput")
+    assert "acrescentar: bool" in texto[inicio : inicio + 1200]
+    inicio = texto.index("def mesa_agir_handler(")
+    assert "acrescentar=bool(data.acrescentar)" in texto[inicio : inicio + 2000]
+
+
+def test_o_nome_da_janela_nao_sai_duplicado():
+    """Na tela saiu `notepad.exe — notepad.exe — Sem título - Bloco de notas`."""
+    from server import mesa_agir
+
+    montada, refs = _notepad_montado()
+    plano = mesa_agir.planejar(montada, refs["campo"], "digitar", "oi")
+    assert plano["processo"] == "notepad.exe"
+    assert not plano["janela"].startswith("notepad.exe")
+    assert plano["janela"] == "Sem título - Bloco de notas"

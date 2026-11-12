@@ -287,6 +287,11 @@ def principal(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Faz de verdade. Sem esta opção, só mostra o plano e não toca em nada.",
     )
+    parser.add_argument(
+        "--acrescentar",
+        action="store_true",
+        help="Se o campo já tiver texto, escreve no fim dele em vez de recusar.",
+    )
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -312,6 +317,7 @@ def principal(argv: list[str] | None = None) -> int:
                     profundidade=max(1, min(args.profundidade, 14)),
                     limite=max(1, min(args.limite, 3000)),
                     fonte=args.fonte,
+                    acrescentar=args.acrescentar,
                 )
             except mesa_agir.AgirError as exc:
                 return _falhar(str(exc), json_sim=args.json)
@@ -330,6 +336,7 @@ def principal(argv: list[str] | None = None) -> int:
                 profundidade=max(1, min(args.profundidade, 14)),
                 limite=max(1, min(args.limite, 3000)),
                 fonte=args.fonte,
+                acrescentar=args.acrescentar,
             )
         except mesa_agir.AgirError as exc:
             return _falhar(str(exc), json_sim=args.json)
