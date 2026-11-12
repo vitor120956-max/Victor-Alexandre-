@@ -174,7 +174,16 @@ def abrir_direto(executavel: str, nome: str = "") -> Any:
     **WinError 2** no PC do usuário. O caminho de verdade é procurado no PATH,
     nas pastas do Windows e no App Paths.
     """
-    return pc.abrir_sem_shell(executavel)
+    alvo = executavel
+    if alvo and not alvo.lower().endswith(".exe"):
+        # Tolerância de propósito: se chegar o nome falado em vez do
+        # executável, resolve em vez de falhar. Nome e caminho são coisas
+        # diferentes, e quem chama nem sempre sabe qual tem em mãos.
+        try:
+            alvo = pc.resolver(alvo)["executavel"]
+        except pc.PcError:
+            pass
+    return pc.abrir_sem_shell(alvo)
 
 
 def _esperar_campo(
@@ -280,10 +289,18 @@ def ditar(
                 }
             )
             return base
-        acao_abrir = abrir or (lambda exe: pc.abrir_programa(exe))
         aberto = None
         try:
-            aberto = acao_abrir(executavel if abrir is None else programa)
+            # Dois mundos, dois nomes. `pc.abrir_programa` é a camada da API e
+            # fala **nome de gente** (“bloco de notas”) — ela resolve por
+            # dentro e respeita JARVIS_HOST_PC. Quem injeta `abrir` (a sonda)
+            # precisa do **executável** (“notepad.exe”).
+            #
+            # A 0.89.4 trocou os dois: passou “bloco de notas” para quem
+            # esperava executável, e o erro na tela foi
+            # “não achei bloco de notas no PATH”. Argumento invertido com cara
+            # de programa ausente.
+            aberto = pc.abrir_programa(programa) if abrir is None else abrir(executavel)
         except pc.PcError as exc:
             raise DitarError(str(exc)) from exc
         except FileNotFoundError as exc:

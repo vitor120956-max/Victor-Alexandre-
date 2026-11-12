@@ -727,3 +727,110 @@ def test_abrir_direto_usa_o_resolvedor():
     trecho = fonte[inicio : fonte.index("def ditar(")]
     assert "pc.abrir_sem_shell(" in trecho
     assert "subprocess.Popen([executavel]" not in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.89.5 — nome falado × executável: os dois foram trocados
+# ---------------------------------------------------------------------------
+
+def test_quem_injeta_abrir_recebe_o_executavel_e_nao_o_nome_falado():
+    """O erro na tela foi “não achei bloco de notas no PATH”.
+
+    Ele mandou o nome de gente (“bloco de notas”) para quem procurar arquivo
+    por nome de executável. Argumento trocado, não programa ausente.
+    """
+    recebidos: list[str] = []
+
+    class Leitor:
+        def janelas(self):
+            return []
+
+        def janela_em_foco(self):
+            return None
+
+    class Processo:
+        pid = 0
+
+    def abrir(alvo):
+        recebidos.append(alvo)
+        raise OSError("parei aqui: o que importava era o argumento")
+
+    with pytest.raises(mesa_ditar.DitarError):
+        mesa_ditar.ditar(
+            programa="bloco de notas",
+            texto="oi",
+            executar=True,
+            leitor=Leitor(),
+            abrir=abrir,
+            dormir=_sem_espera,
+        )
+    assert recebidos == ["notepad.exe"]
+
+
+def test_a_camada_da_api_recebe_o_nome_falado(monkeypatch):
+    """`pc.abrir_programa` resolve por dentro e respeita JARVIS_HOST_PC."""
+    from server import pc
+
+    recebidos: list[str] = []
+
+    def abrir_programa(nome):
+        recebidos.append(nome)
+        raise pc.PcError("parei aqui: o que importava era o argumento")
+
+    monkeypatch.setattr(pc, "abrir_programa", abrir_programa)
+
+    class Leitor:
+        def janelas(self):
+            return []
+
+        def janela_em_foco(self):
+            return None
+
+    with pytest.raises(mesa_ditar.DitarError):
+        mesa_ditar.ditar(
+            programa="bloco de notas",
+            texto="oi",
+            executar=True,
+            leitor=Leitor(),
+            dormir=_sem_espera,
+        )
+    assert recebidos == ["bloco de notas"]
+
+
+def test_abrir_direto_tolera_nome_falado():
+    """Receber “bloco de notas” e resolver é melhor que falhar por preciosismo."""
+    fonte = (Path("server") / "mesa_ditar.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def abrir_direto(")
+    trecho = fonte[inicio : fonte.index("def ditar(")]
+    assert "endswith(\".exe\")" in trecho
+    assert "pc.resolver(alvo)" in trecho
+
+
+def test_o_diagnostico_diz_se_o_programa_esta_instalado(monkeypatch):
+    """Uma rodada, duas respostas: está aberto? está instalado?"""
+    import importlib.util
+
+    from server import pc
+
+    caminho = RAIZ / "arvore_sonda.py"
+    spec = importlib.util.spec_from_file_location("arvore_sonda_prog2", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    class Leitor:
+        def janelas(self):
+            return []
+
+    class Args:
+        programa = "bloco de notas"
+        profundidade = 6
+        limite = 600
+        fonte = "auto"
+        json = False
+
+    monkeypatch.setattr(pc, "caminho_do_programa", lambda exe: r"C:\Windows\System32\notepad.exe")
+    assert modulo._janelas_do_programa(Leitor(), Args(), mesa_ditar) == 1
+
+    monkeypatch.setattr(pc, "caminho_do_programa", lambda exe: "")
+    assert modulo._janelas_do_programa(Leitor(), Args(), mesa_ditar) == 1

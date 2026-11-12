@@ -5,6 +5,52 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Nome de gente × nome de arquivo (0.89.5)
+
+O erro seguinte foi:
+
+```
+não achei bloco de notas no PATH, em C:\Windows nem no App Paths
+([WinError 2] ...: 'bloco de notas')
+```
+
+`'bloco de notas'` — com aspas e tudo: **o nome falado usado como nome de
+arquivo**. Duas camadas, dois vocabulários:
+
+| camada | recebe | exemplo |
+|---|---|---|
+| `pc.abrir_programa` (API) | nome de gente | `bloco de notas` |
+| `abrir` injetado (sonda) | executável | `notepad.exe` |
+
+A 0.89.4 passou cada um para o lado errado. Não era programa ausente: era
+argumento trocado — e a mensagem acusava o PC.
+
+Agora cada camada recebe o que entende, e `abrir_direto` **tolera** o nome
+falado (resolve em vez de falhar, porque quem chama nem sempre sabe o que tem
+em mãos).
+
+### O diagnóstico passou a responder duas perguntas
+
+```
+.venv\Scripts\python arvore_sonda.py --programa "bloco de notas"
+```
+
+Se o programa não estiver aberto, ele diz **e** diz se está instalado:
+
+```
+  O Bloco de notas (notepad.exe) não está aberto.
+  Instalado em: C:\Windows\System32\notepad.exe
+```
+
+ou
+
+```
+  E não achei notepad.exe no PATH, em %SystemRoot% nem no App Paths —
+  o programa pode não estar instalado neste PC.
+```
+
+Uma rodada, as duas respostas. Sem precisar adivinhar qual metade falhou.
+
 ## “O Windows recusou abrir notepad.exe” — mentira minha (0.89.4)
 
 Depois da 0.89.3 o terminal parou de ser confundido com o Bloco de Notas, e o

@@ -142,9 +142,23 @@ def _janelas_do_programa(leitor, args, mesa_ditar) -> int:
     if args.json:
         print(json.dumps({"programa": info, "janelas": itens}, ensure_ascii=False))
         return 0
+    caminho = ""
+    try:
+        caminho = mesa_ditar.pc.caminho_do_programa(info["executavel"])
+    except Exception:  # noqa: BLE001
+        caminho = ""
     if not itens:
         print(f"  O {info['rotulo']} ({info['executavel']}) não está aberto.")
+        if caminho:
+            print(f"  Instalado em: {caminho}")
+        else:
+            print(
+                f"  E não achei {info['executavel']} no PATH, em %SystemRoot% nem no App Paths — "
+                "o programa pode não estar instalado neste PC."
+            )
         return 1
+    if caminho:
+        print(f"  programa: {caminho}")
     print(f"  {info['rotulo']} ({info['executavel']}) — {len(itens)} janela(s):")
     for item in itens:
         marcas = []
