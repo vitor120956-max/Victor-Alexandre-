@@ -2105,6 +2105,7 @@ class MesaAgirInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ref: str = Field(default="", max_length=40, title="Ref do elemento", json_schema_extra={"description": "O `ref` que veio de `mesa.arvore` (ex.: @4ab283d9:e11). Em branco: o JARVIS acha o lugar de escrever sozinho."})
     acrescentar: bool = Field(default=False, title="Acrescentar", json_schema_extra={"description": "Se o campo já tiver texto, escreve no fim dele em vez de recusar."})
+    mouse: bool = Field(default=False, title="Usar o mouse", json_schema_extra={"description": "Último recurso: se o elemento não aceitar ação nem foco, clicar fisicamente no centro medido dele. Sem isto, o mouse não é tocado."})
     acao: str = Field(default="clicar", pattern="^(clicar|digitar|escrever)$", title="O que fazer")
     texto: str = Field(default="", max_length=500, title="Texto", json_schema_extra={"description": "Só para a ação digitar."})
     alvo: str = Field(default="foco", max_length=120, title="Janela")
@@ -2126,6 +2127,11 @@ class MesaDitarInput(BaseModel):
         default=False,
         title="Acrescentar",
         json_schema_extra={"description": "Se o campo já tiver texto, escreve no fim dele em vez de recusar."},
+    )
+    mouse: bool = Field(
+        default=False,
+        title="Usar o mouse",
+        json_schema_extra={"description": "Último recurso: clicar fisicamente no centro do campo se ele não aceitar foco."},
     )
     executar: bool = Field(
         default=False,
@@ -4148,6 +4154,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                     leitor=leitor,
                     alvo=data.alvo,
                     acrescentar=bool(data.acrescentar),
+                    mouse=bool(data.mouse),
                 )
             return mesa_agir.agir(
                 ref=data.ref,
@@ -4156,6 +4163,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                 executar=executar,
                 leitor=leitor,
                 alvo=data.alvo,
+                mouse=bool(data.mouse),
             )
         except mesa_agir.AgirError as exc:
             raise SkillError(str(exc)) from exc
@@ -4173,6 +4181,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
                 texto=data.texto,
                 executar=bool(data.executar) and not _dry_run,
                 acrescentar=bool(data.acrescentar),
+                mouse=bool(data.mouse),
                 leitor=leitor,
             )
         except mesa_ditar.DitarError as exc:

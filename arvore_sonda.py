@@ -375,6 +375,14 @@ def principal(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--mouse",
+        action="store_true",
+        help=(
+            "Último recurso: se o elemento não aceitar ação nem foco, clicar fisicamente no "
+            "centro dele (move o ponteiro). Sem esta opção, o JARVIS não mexe no mouse."
+        ),
+    )
+    parser.add_argument(
         "--acrescentar",
         action="store_true",
         help="Se o campo já tiver texto, escreve no fim dele em vez de recusar.",
@@ -438,6 +446,7 @@ def principal(argv: list[str] | None = None) -> int:
                     limite=max(1, min(args.limite, 3000)),
                     fonte=args.fonte,
                     acrescentar=args.acrescentar,
+                    mouse=args.mouse,
                 )
             except mesa_agir.AgirError as exc:
                 return _falhar(str(exc), json_sim=args.json)
@@ -457,6 +466,7 @@ def principal(argv: list[str] | None = None) -> int:
                 limite=max(1, min(args.limite, 3000)),
                 fonte=args.fonte,
                 acrescentar=args.acrescentar,
+                mouse=args.mouse,
             )
         except mesa_agir.AgirError as exc:
             return _falhar(str(exc), json_sim=args.json)

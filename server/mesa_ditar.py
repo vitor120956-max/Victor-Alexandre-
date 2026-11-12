@@ -69,25 +69,67 @@ def janela_do_programa(janelas: list[dict[str, Any]], executavel: str, rotulo: s
     return achadas[0]
 
 
+# O título de um terminal é a **linha de comando inteira**. Isso faz dele o
+# falso positivo perfeito: rodar `--programa "bloco de notas"` põe “bloco de
+# notas” no título do cmd, e procurar por título achava o cmd. Foi o que a
+# 0.89.2 mostrou na máquina do usuário — a “janela do Bloco de notas” era o
+# terminal onde o comando rodava, com 12 elementos de moldura.
+PROCESSOS_DE_TERMINAL = {
+    "cmd.exe",
+    "conhost.exe",
+    "powershell.exe",
+    "pwsh.exe",
+    "windowsterminal.exe",
+    "wt.exe",
+    "bash.exe",
+    "mintty.exe",
+    "putty.exe",
+}
+
+# Títulos que denunciam “esta janela está rodando o meu comando”.
+MARCAS_DA_SONDA = ("arvore_sonda", "jardeson", "--programa", "--escrever")
+
+
+def _e_terminal(janela: dict[str, Any]) -> bool:
+    return _norm(janela.get("processo")) in PROCESSOS_DE_TERMINAL
+
+
+def _e_a_sonda(janela: dict[str, Any]) -> bool:
+    """A janela que está executando este comando (não é o alvo, é o mensageiro)."""
+    titulo = _norm(janela.get("titulo"))
+    return any(marca in titulo for marca in MARCAS_DA_SONDA)
+
+
 def janelas_do_programa(
     janelas: list[dict[str, Any]], executavel: str, rotulo: str
 ) -> list[dict[str, Any]]:
     """Todas as janelas daquele programa, na ordem em que apareceram.
 
-    Existe porque um programa pode ter **mais de uma** janela viva — e só uma
-    delas publica o campo. Na medição da 0.89.0 havia duas `notepad.exe` e a
-    escolhida era a que só publicava moldura; o JARVIS então dizia “não achei
-    lugar para escrever” olhando para a janela errada.
+    Prefere o **processo** (`notepad.exe`) ao título, sempre. O título só serve
+    de pista quando o processo não veio — e nunca para terminal, nunca para a
+    janela que está rodando o comando.
     """
     exe = _norm(executavel)
     nome = _norm(rotulo)
-    vivas = [janela for janela in (janelas or []) if _norm(janela.get("titulo"))]
-    por_processo = [janela for janela in vivas if _norm(janela.get("processo")) == exe]
-    achadas = por_processo or [
+    vivas = [
         janela
-        for janela in vivas
-        if nome and (nome == _norm(janela.get("titulo")) or nome in _norm(janela.get("titulo")))
+        for janela in (janelas or [])
+        if _norm(janela.get("titulo")) and not _e_a_sonda(janela)
     ]
+    por_processo = [janela for janela in vivas if _norm(janela.get("processo")) == exe]
+    if por_processo:
+        achadas = por_processo
+    else:
+        # Sem processo: só título **que começa ou termina** com o rótulo, e
+        # nunca terminal. “bloco de notas” no meio de uma linha de comando não
+        # é o Bloco de notas.
+        achadas = []
+        for janela in vivas:
+            if _e_terminal(janela):
+                continue
+            titulo = _norm(janela.get("titulo"))
+            if nome and (titulo == nome or titulo.startswith(nome) or titulo.endswith(nome)):
+                achadas.append(janela)
     # Ordem estável e útil: as abertas antes das minimizadas.
     return sorted(achadas, key=lambda item: bool(item.get("minimizada")))
 
@@ -188,6 +230,7 @@ def ditar(
     texto: str,
     executar: bool = False,
     acrescentar: bool = False,
+    mouse: bool = False,
     leitor: Any = None,
     alvo: str = "",
     abrir: Callable[[str], Any] | None = None,
@@ -282,6 +325,15 @@ def ditar(
                     candidatas = [atualizada] + [j for j in candidatas if j is not atualizada]
 
     alvo_final = alvo or executavel
+    trouxe = False
+    if executar and not janela.get("minimizada"):
+        # Chegar na janela não precisa de mouse: o Windows tem API para isso.
+        # É a resposta à pergunta “por que não vai com o mouse até a janela?”.
+        acao_frente = getattr(leitor, "trazer_para_frente", None)
+        if callable(acao_frente):
+            trouxe = bool(acao_frente(int(janela.get("handle") or 0)))
+            if trouxe:
+                dormir(INTERVALO_CAMPO)
     # Se o programa tem mais de uma janela, a que serve é a que publica campo
     # — e descobrir isso relendo é barato. Antes de esperar 15s numa janela
     # que nunca vai servir, uma sondagem de uma leitura em cada candidata.
@@ -340,10 +392,12 @@ def ditar(
         fonte=fonte,
         acrescentar=acrescentar,
         handle=handle_escolhido,
+        mouse=mouse,
     )
     resposta.update(base)
     resposta["abriu"] = abriu
     resposta["restaurada"] = restaurada
+    resposta["trouxe_para_frente"] = trouxe
     if restaurada:
         resposta["resumo"] = f"Restaurei a janela do {rotulo}. " + str(resposta.get("resumo") or "")
     if abriu:

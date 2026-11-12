@@ -5,6 +5,60 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## O terminal não é o programa (0.89.3)
+
+O diagnóstico da 0.89.2 entregou o culpado na primeira linha:
+
+```
+Bloco de notas (notepad.exe) — 1 janela(s):
+  C:\Windows\system32\cmd.exe - .venv\Scripts\python arvore_sonda.py
+  --programa "bloco de notas"  —  12 elemento(s), sem campo
+```
+
+A “janela do Bloco de notas” era **o próprio terminal**. O título do `cmd` é a
+linha de comando, e a linha de comando dizia `"bloco de notas"`. O casamento
+por título achava o mensageiro e chamava de alvo.
+
+Corrigido em três regras:
+
+1. **processo vence título, sempre** — e o título só é usado quando o processo
+   não veio;
+2. **terminal nunca casa por título** (`cmd.exe`, `powershell.exe`,
+   `conhost.exe`, `wt.exe`… o título deles é o comando);
+3. **título só casa inteiro** — igual, começando ou terminando com o rótulo.
+   “Como abrir o Bloco de notas” é um artigo, não o programa.
+
+## A pergunta do mouse: três degraus, e o mouse é o último
+
+“Por que ele não usa o mouse para ir na janela e clicar no Bloco de Notas?”
+
+**Para chegar na janela, mouse não é necessário.** `trazer_para_frente` usa
+`SetForegroundWindow` + `BringWindowToTop` — com o truque de
+`AttachThreadInput` que o Alt+Tab usa por dentro. A janela vem para a frente
+sem mover o ponteiro, e isso agora acontece sozinho antes de escrever.
+
+**Para apertar algo, o mouse é o último degrau**, nesta ordem:
+
+| grau | o que faz | precisa de mouse? | confere? |
+|---|---|---|---|
+| 1 | ação padrão do elemento (`accDoDefaultAction`) | não | não |
+| 2 | foco no elemento e teclado (`accSelect`) | não | sim, lê de volta |
+| 3 | foco no campo inteiro e teclado | não | sim |
+| 4 | `put_accValue` no valor do campo | não | sim |
+| 5 | **clique físico no centro medido** (`--mouse`) | **sim** | sim |
+
+O degrau 5 existe desde a 0.89.3, com o nome certo: `clicar_fisico`. Ele só
+entra quando pedido (`--mouse`), porque:
+
+- mover o ponteiro mexe na máquina de quem está usando;
+- a tela deste PC dá **toque fantasma** — o ponteiro pode ser levado embora
+  entre o `mover` e o `clicar`;
+- clique errado numa tela que a pessoa está usando pode apagar trabalho.
+
+E a coordenada nunca é inventada: é o **centro da caixa que a leitura mediu**
+(`caixa[0] + caixa[2] // 2`). Sem caixa medida, ele não clica — diz que não tem
+posição.
+
 ## A janela minimizada publica 12 elementos (0.89.2)
 
 Depois da 0.89.1, o usuário viu:
@@ -896,6 +950,8 @@ Ou direto no terminal do PC (não precisa do JARVIS aberto):
 | **acha o campo sozinho** | `--escrever "texto"` — sem copiar ref de uma saída para outra |
 | **acrescenta sem apagar** | `--acrescentar`: campo com texto ganha o novo no fim, não por cima |
 | **abre o programa sozinho** | `--programa "bloco de notas"`: abre se não estiver aberto, espera a janela e escreve |
+| **chega na janela sem mouse** | `SetForegroundWindow` antes de agir |
+| **mouse como último recurso** | `--mouse`: clique físico no centro medido, só se a ação e o foco falharem |
 | **não move o mouse** | a ação vem do elemento (ação padrão / foco), que é o único caminho que funciona na sua tela |
 | **mede todas as janelas de uma vez** | `--provados` varre o que está aberto, com teto de 60 s, e diz onde dá para trabalhar |
 | **mede na ordem da leitura** | MSAA antes de a UIA tocar na mesma janela; o veredito é a própria `ler_janela` |

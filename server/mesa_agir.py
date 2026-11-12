@@ -180,6 +180,7 @@ def agir(
     fonte: str = "auto",
     acrescentar: bool = False,
     handle: int | None = None,
+    mouse: bool = False,
 ) -> dict[str, Any]:
     """Lê de novo, confere o ref e — só com `executar` — age.
 
@@ -212,6 +213,7 @@ def agir(
             plano["texto"],
             plano.get("caixa"),
             acrescentar=acrescentar,
+            mouse=mouse,
         )
     except Exception as exc:  # noqa: BLE001 - COM de terceiros
         raise AgirError(f"a ação falhou: {type(exc).__name__}: {exc}") from exc
@@ -264,6 +266,7 @@ def escrever_na_janela(
     fonte: str = "auto",
     acrescentar: bool = False,
     handle: int | None = None,
+    mouse: bool = False,
 ) -> dict[str, Any]:
     """Acha o lugar de escrever **sozinho** e digita. Sem ref, sem cópia.
 
@@ -315,6 +318,7 @@ def escrever_na_janela(
         fonte=fonte,
         acrescentar=acrescentar,
         handle=janela.get("handle"),
+        mouse=mouse,
     )
 
 

@@ -1373,7 +1373,7 @@ class LeitorDeAcao:
     def ler_janela(self, handle, profundidade, limite, fonte="auto"):
         return json.loads(json.dumps(self._bruto))
 
-    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
         self.pedidos.append((handle, list(caminho), acao, texto))
         if self._falha:
             raise RuntimeError(self._falha)
@@ -1618,7 +1618,7 @@ def test_a_resposta_nao_diz_feito_sem_ter_visto_o_texto():
             super().__init__(bruto)
             self.conferido = conferido
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
             self.pedidos.append((handle, list(caminho), acao, texto))
             return {"executou": True, "como": "foco + teclado", "conferido": self.conferido}
 
@@ -1657,7 +1657,7 @@ def test_acrescentar_pede_licenca_antes_de_mexer_em_campo_com_texto():
             super().__init__(bruto)
             self.recebido: dict = {}
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
             self.pedidos.append((handle, list(caminho), acao, texto))
             self.recebido = {"texto": texto, "acrescentar": acrescentar}
             return {"executou": True, "como": "valor do campo", "conferido": True}

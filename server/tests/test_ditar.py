@@ -61,7 +61,7 @@ class LeitorAberto:
     def abrir(self, nome) -> None:  # pragma: no cover - não é chamado aqui
         raise AssertionError(f"não devia abrir {nome!r}: já está aberto")
 
-    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
         self.pedidos.append((handle, list(caminho), acao, texto, acrescentar))
         return {"executou": True, "como": "valor do campo", "conferido": True}
 
@@ -238,7 +238,7 @@ class LeitorQueDemora:
             bruto["raiz"] = _no(9, "Sem título - Bloco de notas", filhos=[_no(1, "", filhos=[_no(43, "Fechar", "Pressionar")])])
         return bruto
 
-    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
         self.pedidos.append((handle, list(caminho), acao, texto, acrescentar))
         return {"executou": True, "como": "valor do campo", "conferido": True}
 
@@ -328,7 +328,7 @@ def test_com_dois_blocos_de_notas_o_texto_vai_para_a_janela_certa():
         def ler_janela(self, handle, profundidade, limite, fonte="auto"):
             return json.loads(json.dumps(cheio if int(handle) == 200 else vazio))
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
             self.pedidos.append((handle, texto))
             return {"executou": True, "como": "valor do campo", "conferido": True}
 
@@ -390,7 +390,7 @@ def test_escrever_sem_handle_tenta_a_outra_janela_do_mesmo_programa():
             self.leituras.append(int(handle))
             return json.loads(json.dumps(cheio if int(handle) == 200 else vazio))
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
             self.pedidos.append((handle, texto))
             return {"executou": True, "como": "valor do campo", "conferido": True}
 
@@ -451,7 +451,7 @@ def test_programa_aberto_usa_o_pid_que_nasceu_da_abertura():
             bruto["janela"] = {"handle": int(handle), "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe"}
             return bruto
 
-        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, acrescentar=False, mouse=False):
             self.pedidos.append((handle, texto))
             return {"executou": True, "como": "valor do campo", "conferido": True}
 
@@ -584,3 +584,94 @@ def test_sem_executar_so_avisa_que_restauraria():
     assert resposta["precisa_restaurar"] is True
     assert "restauraria" in resposta["resumo"]
     assert leitor.pedidos == []
+
+
+# ---------------------------------------------------------------------------
+# 0.89.3 — a “janela do Bloco de notas” era o próprio terminal
+# ---------------------------------------------------------------------------
+
+def test_o_terminal_que_roda_o_comando_nao_e_o_programa():
+    """O título do cmd é a linha de comando — e a linha diz “bloco de notas”.
+
+    Na 0.89.2 o JARVIS abriu a janela do cmd, leu 12 elementos de moldura e
+    disse que o Bloco de notas não aceita escrita. O Bloco de notas nem estava
+    aberto: o que existia era o comando com o nome dele escrito no título.
+    """
+    janelas = [
+        {
+            "handle": 1,
+            "titulo": 'C:\\Windows\\system32\\cmd.exe - .venv\\Scripts\\python arvore_sonda.py --programa "bloco de notas"',
+            "processo": "cmd.exe",
+            "pid": 10,
+        }
+    ]
+    assert mesa_ditar.janelas_do_programa(janelas, "notepad.exe", "Bloco de notas") == []
+    assert mesa_ditar.janela_do_programa(janelas, "notepad.exe", "Bloco de notas") is None
+
+
+def test_titulo_que_apenas_contem_o_rotulo_nao_serve():
+    """“bloco de notas” no meio de um título não é o programa."""
+    janelas = [
+        {"handle": 1, "titulo": "Como abrir o Bloco de notas mais rápido", "processo": "chrome.exe", "pid": 10},
+        {"handle": 2, "titulo": "Bloco de notas", "processo": "", "pid": 11},
+    ]
+    achadas = mesa_ditar.janelas_do_programa(janelas, "notepad.exe", "Bloco de notas")
+    assert [j["handle"] for j in achadas] == [2]
+
+
+def test_processo_vence_titulo_sempre():
+    janelas = [
+        {"handle": 1, "titulo": "Bloco de notas — artigo", "processo": "chrome.exe", "pid": 10},
+        {"handle": 2, "titulo": "qualquer coisa", "processo": "notepad.exe", "pid": 11},
+    ]
+    achadas = mesa_ditar.janelas_do_programa(janelas, "notepad.exe", "Bloco de notas")
+    assert [j["handle"] for j in achadas] == [2], "o processo é a prova; o título é pista"
+
+
+def test_a_janela_da_propria_sonda_e_ignorada():
+    janelas = [
+        {"handle": 1, "titulo": 'cmd.exe - python arvore_sonda.py --programa "bloco de notas"', "processo": "cmd.exe", "pid": 10},
+        {"handle": 2, "titulo": "Sem título - Bloco de notas", "processo": "notepad.exe", "pid": 11},
+    ]
+    achadas = mesa_ditar.janelas_do_programa(janelas, "notepad.exe", "Bloco de notas")
+    assert [j["handle"] for j in achadas] == [2]
+
+
+# ---------------------------------------------------------------------------
+# 0.89.3 — mouse como último recurso, e chegar na janela sem mouse
+# ---------------------------------------------------------------------------
+
+def test_trazer_para_a_frente_existe_e_nao_usa_mouse():
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def trazer_para_frente(")
+    trecho = fonte[inicio : fonte.index("def clicar_fisico(")]
+    assert "SetForegroundWindow" in trecho
+    assert "BringWindowToTop" in trecho
+    assert "mesa.mover" not in trecho and "mesa.clicar" not in trecho
+
+
+def test_clique_fisico_usa_o_centro_da_caixa_medida():
+    """Clique por coordenada só vale se a coordenada foi **medida**, não chutada."""
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def clicar_fisico(")
+    trecho = fonte[inicio : fonte.index("def restaurar(")]
+    assert "int(caixa[0]) + int(caixa[2]) // 2" in trecho
+    assert "int(caixa[1]) + int(caixa[3]) // 2" in trecho
+    assert "mesa.clicar(x, y)" in trecho
+    # sem posição medida, não clica: coordenada inventada é pior que não agir
+    assert "não tem posição medida" in trecho
+
+
+def test_sem_mouse_o_erro_ensina_a_ligar_o_mouse():
+    fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
+    assert "Repita com --mouse e eu clico ali fisicamente." in fonte
+    assert "if mouse and caixa:" in fonte
+
+
+def test_a_sonda_e_a_skill_tem_a_opcao_mouse():
+    sonda = (RAIZ / "arvore_sonda.py").read_text(encoding="utf-8")
+    assert '"--mouse"' in sonda
+    assert "mouse=args.mouse" in sonda
+    registro = (Path("server") / "skill_registry.py").read_text(encoding="utf-8")
+    assert "mouse: bool = Field(default=False" in registro
+    assert "mouse=bool(data.mouse)" in registro

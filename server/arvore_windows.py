@@ -1574,6 +1574,8 @@ def _digitar_em(
     handle: int,
     texto: str,
     acrescentar: bool = False,
+    mouse: bool = False,
+    caixa: list[int] | None = None,
 ) -> dict[str, Any]:
     """Os três degraus da escrita, do mais natural ao mais direto.
 
@@ -1642,6 +1644,22 @@ def _digitar_em(
             return feito
         limites.append("o campo não aceita escrita por valor (put_accValue)")
 
+    if mouse and caixa:
+        # Último degrau, e o único que usa o mouse: clicar no campo medido e
+        # então usar o teclado. Só quando pedido com `--mouse`.
+        clique = clicar_fisico(caixa)
+        if clique.get("executou") and _teclado_esta_na_janela(handle):
+            from server import mesa
+
+            mesa.digitar(texto)
+            return {
+                "executou": True,
+                "como": "clique físico no campo + teclado",
+                "caracteres": len(texto),
+                "conferido": _conferir(alvo, filho, texto),
+            }
+        limites.append("o clique físico não devolveu o teclado para a janela")
+
     return {
         "executou": False,
         "como": "nenhum",
@@ -1656,6 +1674,7 @@ def executar_ref(
     texto: str = "",
     caixa: list[int] | None = None,
     acrescentar: bool = False,
+    mouse: bool = False,
 ) -> dict[str, Any]:
     """Executa `clicar` ou `digitar` num elemento, pelo caminho da leitura.
 
@@ -1685,7 +1704,9 @@ def executar_ref(
     try:
         nome = _nome(alvo, filho)[:60]
         if pedido == "digitar":
-            feito = _digitar_em(alvo, filho, int(handle), texto, bool(acrescentar))
+            feito = _digitar_em(
+                alvo, filho, int(handle), texto, bool(acrescentar), bool(mouse), caixa
+            )
             feito["elemento"] = nome
             return feito
 
@@ -1700,13 +1721,18 @@ def executar_ref(
                 "como": "foco (o elemento não tem ação padrão)",
                 "elemento": nome,
             }
+        if mouse and caixa:
+            clique = clicar_fisico(caixa)
+            if clique.get("executou"):
+                return {**clique, "elemento": nome}
+            return {"executou": False, "como": "nenhum", "motivo": str(clique.get("motivo") or "")}
         return {
             "executou": False,
             "como": "nenhum",
             "motivo": (
                 f"“{nome}” não tem ação padrão nem aceita foco (accDoDefaultAction devolveu 0x{codigo & 0xFFFFFFFF:08X})"
                 + (f" — o centro dele é {caixa[0] + caixa[2] // 2},{caixa[1] + caixa[3] // 2}." if caixa else ".")
-                + " Um clique físico resolveria; eu não movo o mouse sem você pedir."
+                + " Repita com --mouse e eu clico ali fisicamente."
             ),
         }
     finally:
@@ -1717,6 +1743,60 @@ def executar_ref(
 
 SW_RESTORE = 9
 SW_SHOWNOACTIVATE = 4
+
+
+def trazer_para_frente(handle: int) -> bool:
+    """Traz a janela para a frente — **sem tocar no mouse**.
+
+    Era a pergunta certa do usuário: “por que não usa o mouse para ir na janela
+    do Windows?”. Para *chegar* na janela, o mouse não é necessário: o Windows
+    tem `SetForegroundWindow`. O mouse só é necessário para apertar algo que
+    não se anuncia — e para isso existe o `--mouse`.
+    """
+    try:
+        hwnd = wintypes.HWND(int(handle))
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        if user32.GetForegroundWindow() == int(handle):
+            return True
+        # Se a janela está atrás, o Windows recusa `SetForegroundWindow` de
+        # processo em segundo plano. Trocar o foco da thread resolve sem
+        # clique: é a mesma coisa que o Alt+Tab faz por dentro.
+        thread_alvo = user32.GetWindowThreadProcessId(hwnd, None)
+        thread_atual = kernel32.GetCurrentThreadId()
+        ligado = False
+        if thread_alvo and thread_atual and thread_alvo != thread_atual:
+            ligado = bool(user32.AttachThreadInput(thread_atual, thread_alvo, True))
+        try:
+            user32.BringWindowToTop(hwnd)
+            ok = bool(user32.SetForegroundWindow(hwnd))
+        finally:
+            if ligado:
+                user32.AttachThreadInput(thread_atual, thread_alvo, False)
+        return ok or user32.GetForegroundWindow() == int(handle)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def clicar_fisico(caixa: list[int]) -> dict[str, Any]:
+    """Clica no centro da caixa medida do elemento.
+
+    Este é o degrau que o usuário perguntou: mouse de verdade. Só entra quando
+    pedido (`--mouse`), porque mover o ponteiro mexe na máquina de quem está
+    usando, e porque a tela dele dá toque fantasma. Mas quando o elemento não
+    aceita ação nem foco, é o único caminho que existe.
+    """
+    from server import mesa
+
+    if not caixa or len(caixa) != 4 or int(caixa[2]) <= 0 or int(caixa[3]) <= 0:
+        return {"executou": False, "como": "nenhum", "motivo": "o elemento não tem posição medida."}
+    x = int(caixa[0]) + int(caixa[2]) // 2
+    y = int(caixa[1]) + int(caixa[3]) // 2
+    try:
+        feito = mesa.clicar(x, y)
+    except Exception as exc:  # noqa: BLE001
+        return {"executou": False, "como": "nenhum", "motivo": f"o clique físico falhou: {exc}"}
+    return {"executou": True, "como": f"clique físico em {x},{y}", "clique": feito}
 
 
 def restaurar(handle: int) -> bool:
