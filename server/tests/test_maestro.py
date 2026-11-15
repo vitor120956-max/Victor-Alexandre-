@@ -252,7 +252,7 @@ def test_sem_autorizacao_para_antes_do_passo_com_efeito(registry):
     assert resultado["parou_em"] == 2
     assert resultado["parou_motivo"] == "precisa_autorizacao"
     assert "parei no passo 2" in resultado["resumo"]
-    assert "1 passo(s) antes disso foram concluídos" in resultado["resumo"]
+    assert "1 passo(s) antes deram certo" in resultado["resumo"]
 
 
 def test_com_autorizacao_roda_em_ordem_e_passa_o_resultado_adiante(registry):
@@ -535,5 +535,44 @@ def test_o_erro_do_pedido_comeca_no_traceback():
     assert "conserta esse erro" not in erro
 
 
-def test_erro_de_uma_linha_vai_inteiro():
-    assert maestro.slots_do_pedido("conserta o erro KeyError: 'a'")["erro"] == "conserta o erro KeyError: 'a'"
+def test_erro_de_uma_linha_vai_sem_a_frase_do_pedido():
+    assert maestro.slots_do_pedido("conserta o erro KeyError: 'a'")["erro"] == "KeyError: 'a'"
+
+
+def test_pedido_sem_erro_nao_inventa_erro():
+    """0.91.3: “conserta o erro do meu programa” virava `fonte: colado` com exceção vazia."""
+    for pedido in ["conserta o erro do meu programa", "arruma o erro", "corrige o erro que apareceu"]:
+        assert maestro.slots_do_pedido(pedido)["erro"] == "", pedido
+
+
+def test_o_passo_3_do_conserto_nao_pode_dizer_feito_sem_propor(registry):
+    """Medido no PC: o provedor falhou e o maestro escreveu “3. conserto.propor — feito”."""
+    plano = _plano("conserta o erro do meu programa", registry)
+    assert plano["passos"][2]["exigir"] == "proposto"
+
+    async def sem_chave(skill, campos, dry):
+        if skill == "conserto.diagnosticar":
+            return {"lido": True, "fonte": "colado"}
+        if skill == "conserto.dossie":
+            return {"lido": True, "texto": "# Dossiê"}
+        return {"lido": True, "proposto": False, "motivo": "Sem chave de IA configurada."}
+
+    resultado = asyncio.run(maestro.executar(plano, registry=registry, autorizar=True, executador=sem_chave))
+    assert resultado["parou_em"] == 3
+    assert resultado["parou_motivo"] == "nao_confirmado"
+    assert "Sem chave de IA configurada" in resultado["motivo"]
+    assert len(resultado["passos"]) == 2
+
+
+def test_a_parada_diz_o_que_fazer(registry):
+    """Quando o passo declara uma dica, ela vai junto — não só o erro."""
+    plano = _plano("conserta o erro do meu programa", registry)
+
+    async def vazio(skill, campos, dry):
+        return {"lido": False, "motivo": "Não há erro no diário."}
+
+    resultado = asyncio.run(maestro.executar(plano, registry=registry, autorizar=True, executador=vazio))
+    dica = resultado["passo_que_parou"]["dica"]
+    assert "Cole o traceback" in dica
+    assert dica in resultado["resumo"]
+    assert "O que fazer: " + dica in maestro.texto_da_execucao(resultado)

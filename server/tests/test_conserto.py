@@ -167,6 +167,19 @@ def test_o_dossie_tem_o_que_falta_para_corrigir_de_primeira():
     assert achado["bytes"] < 12_000
 
 
+def test_o_dossie_diz_a_versao_do_jarvis_e_nao_a_em_que_o_modulo_nasceu():
+    """Medido no PC em 0.91.2: o dossiê dizia “versão: 0.75.0”.
+
+    O `VERSAO = "0.75.0"` do módulo é a versão em que ele foi escrito; o
+    relatório é sobre a instalação de agora. Eram dois números com o mesmo nome.
+    """
+    from server import atualizacao
+
+    achado = conserto.dossie(erro=RASTRO_KEYERROR)
+    assert f"- versão: {atualizacao.VERSAO}" in achado["texto"]
+    assert "0.75.0" not in achado["texto"]
+
+
 def test_o_dossie_sem_erro_nao_inventa_texto(tmp_path):
     achado = conserto.dossie(raiz=tmp_path)
     assert achado["lido"] is False

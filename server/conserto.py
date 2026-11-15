@@ -45,7 +45,13 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.75.0"
+# A versão que aparece no dossiê é a do JARVIS **agora**, não a em que este
+# módulo nasceu. Medido em 0.91.2 no PC do usuário: o dossiê dizia “versão:
+# 0.75.0” com o JARVIS em 0.91.2, e o número ainda era usado para decidir se o
+# relatório era da mesma instalação.
+from .atualizacao import VERSAO as VERSAO_DO_JARVIS  # noqa: E402
+
+VERSAO = VERSAO_DO_JARVIS
 
 MAX_ERRO = 20_000
 MAX_TRECHO = 9

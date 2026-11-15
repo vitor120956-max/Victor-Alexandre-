@@ -59,6 +59,9 @@ class Passo:
     # que "rodou" e devolveu `lido: false` não leu nada — seguir para o
     # seguinte é construir em cima de vazio. Fica declarado, não adivinhado.
     exigir: str = ""
+    # O que dizer à pessoa quando **este** passo barra a fila. Declarado junto
+    # do passo porque só ele sabe qual é a saída.
+    dica: str = ""
 
 
 @dataclass(frozen=True)
@@ -146,6 +149,10 @@ PROCEDIMENTOS: tuple[Procedimento, ...] = (
                 campos={"erro": "$erro"},
                 porque="dizer onde quebrou e por quê, antes de propor conserto",
                 exigir="lido",
+                dica=(
+                    "o diário de erros não tinha nada e o pedido não trouxe erro. "
+                    "Cole o traceback junto com o pedido, ou deixe o JARVIS registrar a falha antes."
+                ),
             ),
             Passo(
                 skill="conserto.dossie",
@@ -157,6 +164,7 @@ PROCEDIMENTOS: tuple[Procedimento, ...] = (
                 skill="conserto.propor",
                 campos={"erro": "$erro"},
                 porque="propor o patch — este passo tem efeito, então pede autorização",
+                exigir="proposto",
             ),
         ),
         limites=(
@@ -231,19 +239,41 @@ def _texto_do_pedido(pedido: str) -> str:
 
 
 _RE_TRACEBACK = re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE)
+# Um erro de uma linha: `KeyError: 'a'`, `ValueError: ...`, `Exception in ...`.
+_RE_ERRO_UMA_LINHA = re.compile(
+    r"\b(?:[A-Z][A-Za-z]*(?:Error|Exception)|Exception|Error)\b\s*[:\-]?",
+)
+# Como o pedido costuma começar quando o erro vem depois dele.
+_RE_COMANDO = re.compile(
+    r"^\s*(?:por favor\s+)?(?:conserta|consertar|arruma|arrumar|corrige|corrigir|"
+    r"resolve|resolver|diagnostica|diagnosticar|ve|ver|olha|ver\s+esse)\s+"
+    r"(?:o\s+|a\s+|esse\s+|este\s+|isso\s+)*(?:erro\s+)?",
+    re.IGNORECASE,
+)
 
 
 def erro_do_pedido(pedido: str) -> str:
-    """O erro em si, sem a frase do pedido em volta.
+    """O erro em si — **vazio** quando o pedido não traz erro nenhum.
 
-    “conserta esse erro: <traceback>” mandava a frase inteira para o
-    diagnóstico. Se há traceback, ele começa ali — o resto antes é conversa.
-    Sem traceback, o texto vai como veio: um erro de uma linha só é legítimo.
+    Duas coisas erradas antes da 0.91.3, as duas medidas no PC do usuário:
+
+    1. “conserta o erro do meu programa” chegava ao diagnóstico como se fosse
+       um traceback colado. A skill respondia `lido: true, fonte: colado`, o
+       maestro aceitava, e o dossiê saía com `exceção: :` — vazio.
+    2. “conserta esse erro: <traceback>” mandava a frase junto.
+
+    Devolver vazio é o certo: a skill cai no diário de erros, que é onde os
+    erros de verdade estão. Se o diário também estiver vazio, ela responde
+    `lido: false` e o maestro para no passo 1 em vez de inventar dossiê.
     """
-    achado = _RE_TRACEBACK.search(pedido or "")
+    texto = (pedido or "").strip()
+    achado = _RE_TRACEBACK.search(texto)
     if achado:
-        return (pedido or "")[achado.start():].strip()
-    return (pedido or "").strip()
+        return texto[achado.start():].strip()
+    sem_comando = _RE_COMANDO.sub("", texto).strip()
+    if _RE_ERRO_UMA_LINHA.search(sem_comando):
+        return sem_comando
+    return ""
 
 
 def slots_do_pedido(pedido: str) -> dict[str, str]:
@@ -360,6 +390,7 @@ def planejar(pedido: str, *, registry: Any, procedimento: Procedimento | None = 
                 "campos": campos,
                 "efeito": _efeito(registry, passo.skill),
                 "exigir": passo.exigir,
+                "dica": passo.dica,
                 "obrigatorios": obrigatorios,
                 "faltando": sorted(set(faltando)),
                 "vem_do_passo": vindos,
@@ -594,7 +625,7 @@ async def executar(
             motivo_da_skill = _linha_da_saida(normalizada) or "sem detalhe na saída"
             return _parada(
                 plano, feitos, saidas, passo, "nao_confirmado",
-                f"a skill rodou mas devolveu {exigir}={normalizada.get(exigir)!r}: {motivo_da_skill}",
+                f"a skill rodou mas não concluiu ({exigir}=false): {motivo_da_skill}",
             )
         saidas.append(normalizada)
         feitos.append({"n": passo["n"], "skill": passo["skill"], "campos": campos, "saida": saidas[-1]})
@@ -632,6 +663,16 @@ def _linha_da_saida(saida: dict[str, Any], limite: int = 160) -> str:
     return linha if len(linha) <= limite else linha[: limite - 1] + "…"
 
 
+def _resumo_da_parada(passo: dict[str, Any], motivo: str, feitos: int) -> str:
+    """Frase única da parada — com a dica quando o passo declarou uma."""
+    if feitos:
+        base = f"parei no passo {passo['n']} ({passo['skill']}): {motivo} ({feitos} passo(s) antes deram certo)"
+    else:
+        base = f"parei antes de fazer qualquer coisa, no passo {passo['n']} ({passo['skill']}): {motivo}"
+    dica = (passo.get("dica") or "").strip()
+    return f"{base} — o que fazer: {dica}" if dica else base
+
+
 def _parada(
     plano: dict[str, Any],
     feitos: list[dict[str, Any]],
@@ -647,14 +688,14 @@ def _parada(
         "passos": feitos,
         "parou_em": passo["n"],
         "parou_motivo": tipo,
-        "passo_que_parou": {"n": passo["n"], "skill": passo["skill"], "porque": passo["porque"]},
+        "passo_que_parou": {
+            "n": passo["n"],
+            "skill": passo["skill"],
+            "porque": passo["porque"],
+            "dica": passo.get("dica") or "",
+        },
         "motivo": motivo,
-        "resumo": (
-            f"parei no passo {passo['n']} ({passo['skill']}): {motivo} "
-            f"{len(feitos)} passo(s) antes disso foram concluídos."
-            if feitos
-            else f"parei antes de fazer qualquer coisa: {motivo}"
-        ),
+        "resumo": _resumo_da_parada(passo, motivo, len(feitos)),
         "ultimo": saidas[-1] if saidas else {},
     }
 
@@ -739,6 +780,9 @@ def texto_da_execucao(resultado: dict[str, Any]) -> str:
     if resultado.get("parou_em"):
         alvo = resultado["passo_que_parou"]
         linhas.append(f"Parei no passo {alvo['n']} ({alvo['skill']}): {resultado['motivo']}")
+        dica = (alvo.get("dica") or "").strip()
+        if dica:
+            linhas.append(f"O que fazer: {dica}")
     else:
         linhas.append(f"Todos os {len(resultado['passos'])} passos rodaram.")
     return "\n".join(linhas)

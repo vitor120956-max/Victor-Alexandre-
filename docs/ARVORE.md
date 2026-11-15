@@ -74,6 +74,25 @@ avisa `só vale se voltar lido=true`, e o `$erro` do conserto corta no
 `Traceback` quando você cola o erro junto com a frase.
 
 
+### 0.91.3 — a primeira execução no PC do dono
+
+Medido no `D:\JARVIS`, em 0.91.2. Três defeitos, os três reais:
+
+| o que apareceu | por que era defeito | correção |
+|---|---|---|
+| `fonte=colado` sem erro colado, `exceção: :` | o pedido inteiro ia como traceback; a skill dizia `lido: true` e o dossiê saía vazio | `erro_do_pedido` só devolve algo que **pareça** erro; senão vazio, e a skill cai no diário |
+| `versão: 0.75.0` no dossiê | `conserto.VERSAO` era a versão em que o módulo nasceu | dossiê usa `atualizacao.VERSAO`; teste recusa o `0.75.0` |
+| `3. conserto.propor — feito` sem propor | o provedor falhou dentro da skill, sem exceção | passo declara `exigir="proposto"` |
+
+E a parada ganhou **dica declarada no passo**, para a resposta dizer o que fazer
+e não só o que faltou:
+
+```
+Parei no passo 1 (conserto.diagnosticar): a skill rodou mas não concluiu (lido=false): …
+O que fazer: o diário de erros não tinha nada e o pedido não trouxe erro. Cole o traceback junto com o pedido.
+```
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:
