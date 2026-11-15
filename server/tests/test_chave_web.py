@@ -325,3 +325,76 @@ def test_so_a_marca_de_campo_sem_nome_precisa_do_create():
         "filhos": [_no("Key limit: 1000 credits"), _no("Create")],
     }}
     assert chave_web.e_dialogo_de_criacao(com_create) is True
+
+
+# ---------------------------------------- o campo do nome (0.91.19)
+#
+# No painel de verdade “Name” e a caixa de texto são **dois nós**: o rótulo é
+# texto, a caixa é onde se escreve. Clicar no rótulo e mandar as teclas não
+# escreve nada — foi o que deixou o campo vazio no PC do dono.
+
+def _caixa(nome: str, x: int, y: int, *, papel: int = 42, acao: str = "escrever") -> dict[str, Any]:
+    return {
+        "nome": nome,
+        "papel": papel,
+        "codigo": papel,
+        "caixa": [x, y, 300, 30],
+        "acionavel": True,
+        "acao": acao,
+    }
+
+
+def _painel(*nos: dict[str, Any]) -> dict[str, Any]:
+    return {"alvo": "chrome — Keys", "fonte": "uia", "arvore": {"nome": "página", "papel": 1, "filhos": list(nos)}}
+
+
+def test_campo_do_nome_e_a_caixa_e_nao_o_rotulo():
+    painel = _painel(
+        _caixa("Create API key", 400, 180, papel=1, acao=""),
+        _caixa("Name *", 400, 300, papel=41, acao="clicar"),  # rótulo
+        _caixa("e.g. “ChatbotKey”", 400, 330),  # a caixa
+        _caixa("Select expiration", 400, 400, acao="abrir"),
+    )
+
+    campo = chave_web.campo_do_nome(painel)
+
+    assert campo is not None
+    assert campo["nome"] == "e.g. “ChatbotKey”", "quem recebe o texto é a caixa"
+
+
+def test_campo_do_nome_ignora_a_busca_da_pagina_atras_do_painel():
+    """A página tem “Search by name or paste a key…” lá em cima — não é o nome."""
+    painel = _painel(
+        _caixa("Search by name or paste a key…", 60, 100),  # busca da página
+        _caixa("Create API key", 400, 180, papel=1, acao=""),
+        _caixa("Name *", 400, 300, papel=41, acao="clicar"),
+        _caixa("e.g. “ChatbotKey”", 400, 330),
+        _caixa("Select expiration", 400, 400, acao="abrir"),
+    )
+
+    campo = chave_web.campo_do_nome(painel)
+
+    assert campo is not None
+    assert campo["caixa"][1] == 330
+
+
+def test_sem_nome_nenhum_a_caixa_acima_da_expiracao_e_a_do_nome():
+    """Caixa sem nome publicado: quem decide é a posição no painel."""
+    painel = _painel(
+        _caixa("Create API key", 400, 180, papel=1, acao=""),
+        _caixa("Name *", 400, 300, papel=41, acao="clicar"),
+        _caixa("", 400, 330),  # a caixa sem nome
+        _caixa("Select expiration", 400, 400, acao="abrir"),
+        _caixa("Choose a credit limit", 400, 500, acao="abrir"),
+    )
+
+    campo = chave_web.campo_do_nome(painel)
+
+    assert campo is not None
+    assert campo["caixa"][1] == 330
+
+
+def test_rotulo_nao_conta_como_campo_de_escrita():
+    rotulo = {"nome": "Name *", "papel": 41, "codigo": 41, "caixa": [400, 300, 300, 30], "acionavel": True, "acao": "clicar"}
+
+    assert chave_web.e_campo_de_escrita(rotulo) is False

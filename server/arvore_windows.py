@@ -1578,6 +1578,29 @@ def _conferir(alvo: int, filho: int, texto: str) -> bool | None:
     return texto.strip() in " ".join(visto.split())
 
 
+def _conferir_pelo_caminho(handle: int, caminho: list[int], texto: str) -> bool | None:
+    """Relê o valor do campo pelo caminho da leitura. `None` = não publica valor.
+
+    Existe porque o degrau do clique físico digita por teclado e não passava por
+    nenhuma conferência: dizia “digitei” sem saber. Medido no PC do dono: o
+    clique caiu no **rótulo** “Name”, as teclas foram para o nada, e o script
+    seguiu como se o campo estivesse preenchido.
+    """
+    try:
+        ponteiro = _abrir(int(handle))
+    except Exception:  # noqa: BLE001 - conferir não pode derrubar a digitação
+        return None
+    if not ponteiro:
+        return None
+    try:
+        alvo, filho = _navegar(ponteiro, [int(item) for item in caminho])
+        return _conferir(alvo, filho, texto)
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        _liberar(ponteiro)
+
+
 def _digitar_em(
     alvo: int,
     filho: int,
@@ -1721,6 +1744,7 @@ def executar_ref(
                 "como": "clique físico no campo + teclado",
                 "caracteres": len(texto),
                 "cursor_voltou": clique.get("cursor_voltou", False),
+                "conferido": _conferir_pelo_caminho(int(handle), caminho, texto),
                 "motivo_do_degrau": motivo_do_degrau,
             }
         return {**clique, "elemento": "", "motivo_do_degrau": motivo_do_degrau}

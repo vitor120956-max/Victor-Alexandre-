@@ -174,6 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.19 — o clique acertou o botão, e o nome não foi digitado
+
+Depois da 0.91.18 o painel **abriu** (o clique de mouse resolveu). E o campo
+“Name” ficou vazio. O script procurava o campo pelo **nome** — e no painel do
+OpenRouter “Name” e a caixa de texto são **dois nós**: o rótulo é texto (papel
+41), a caixa é edição (papel 42, ação “escrever”). Ele achava o rótulo,
+clicava nele e mandava as teclas para o nada — e seguia dizendo “escrevendo…”.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| `e_campo_de_escrita` | quem recebe texto é quem **aceita escrever** (`escrever`/`digitar`), não o rótulo ao lado |
+| `campo_do_nome` | quatro regras: nome do campo → acima da expiração → abaixo do rótulo “Name” → a caixa mais alta do painel |
+| filtro por posição | o que está acima do título “Create API key” é a página (a busca “Search by name…”), não o painel |
+| `_escrever_no_campo` | três degraus com **conferência**: clique + teclado → foco pela árvore → teclado com a janela na frente |
+| `conferido` | relê o valor do campo (MSAA) mesmo no degrau do clique físico — antes ele dizia “digitei” sem saber |
+| botão apagado | o “Create” desabilitado é a prova final: não se clica nele, e a mensagem diz **qual** campo faltou |
+| reescrita | botão apagado + nome sem confirmação → reescreve o nome do zero, com `Ctrl+A` antes (senão vira “nome nome”) |
+| `_botao_de_criar` | “Create” exato, não o título “Create API key” — o título também contém “create” e passava na frente quando o botão estava apagado |
+
+Duas decisões que valem registro:
+
+- **`conferido=None` não é falha.** Campo que não publica valor não prova nada;
+  tentar digitar de novo escreveria o nome duas vezes. Quem decide é o botão;
+- **botão apagado não se clica.** Clicar num botão desabilitado não gera erro,
+  não cria nada e deixa o dono olhando uma tela parada — foi o que aconteceu
+  duas vezes.
+
 ### 0.91.18 — a ação do elemento devolve sucesso e não faz nada
 
 Depois da 0.91.17 a página passou a ser lida inteira — 43 elementos, o botão

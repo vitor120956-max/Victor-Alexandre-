@@ -39,9 +39,16 @@ def _script():
 
 
 def _no(nome: str, caixa: list[int] | None = None, papel: int = 43) -> dict[str, Any]:
-    no: dict[str, Any] = {"nome": nome, "papel": papel, "caminho": [0, 1]}
+    """Um nó como a leitura de verdade devolve: papel **e** código, ação e caixa.
+
+    O `codigo` importa: é por ele (e pela ação) que o script separa a caixa de
+    texto do rótulo ao lado — “Name” e a caixa são dois nós no painel real.
+    """
+    no: dict[str, Any] = {"nome": nome, "papel": papel, "codigo": papel, "caminho": [0, 1]}
     if caixa:
         no["caixa"] = caixa
+        no["acionavel"] = True
+        no["acao"] = "escrever" if papel == 42 else "clicar"
     return no
 
 
@@ -174,7 +181,15 @@ class Mundo:
 
     # ------------------------------------------------------------ leitura
     def _no(self, nome: str, caixa: list[int], papel: int = 43) -> dict[str, Any]:
-        return {"nome": nome, "papel": papel, "caixa": list(caixa), "acionavel": True, "caminho": [0, 1]}
+        return {
+            "nome": nome,
+            "papel": papel,
+            "codigo": papel,
+            "caixa": list(caixa),
+            "acionavel": True,
+            "acao": "escrever" if papel == 42 else "clicar",
+            "caminho": [0, 1],
+        }
 
     def montar(self) -> dict[str, Any]:
         if self.tela == "chaves":
@@ -1491,3 +1506,204 @@ def test_pegar_chave_nova_grava_como_sempre(monkeypatch, capsys):
     assert script.passo_pegar(_args()) == 0
     assert gravadas == [CHAVE_NOVA]
     assert "MESMA" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# 0.91.19 — “apertou em New key mas não digitou o nome”
+#
+# No painel de verdade, “Name” é um rótulo e a caixa de texto é outro nó. O
+# script procurava por nome, achava o **rótulo**, clicava nele e mandava as
+# teclas para o nada — e seguia dizendo que tinha escrito.
+
+CAIXA_NOME_REAL = [400, 330, 300, 30]
+CAIXA_BUSCA = [60, 100, 300, 30]
+
+
+class PainelReal(Mundo):
+    """O painel como o Chrome publica: rótulo separado da caixa, busca na página."""
+
+    def montar(self) -> dict[str, Any]:
+        if self.tela == "chaves":
+            return {
+                "alvo": "chrome — Keys | Settings | OpenRouter",
+                "fonte": "uia",
+                "arvore": {
+                    "nome": "OpenRouter",
+                    "filhos": [
+                        self._no("Search by name or paste a key…", CAIXA_BUSCA),
+                        self._no("New key", CAIXA_NEW_KEY),
+                    ],
+                },
+            }
+        filhos = [
+            self._no("Create API key", [400, 180, 300, 30], papel=1),
+            self._no("Name *", [400, 300, 300, 30], papel=41),
+            self._no("e.g. “ChatbotKey”", CAIXA_NOME_REAL, papel=42),  # caixa de edição
+            self._no(self.expira or "Select expiration", CAIXA_EXPIRACAO),
+            self._no(self.limite or "Choose a credit limit", CAIXA_LIMITE),
+            # Como no site: o Create só acende com os três campos preenchidos.
+            # É essa luz que serve de prova quando o campo não publica o valor.
+            self._no("Create", CAIXA_CREATE),
+        ]
+        create = next(no for no in filhos if no["nome"] == "Create")
+        if not (self.nome and self.expira and self.limite):
+            create["acionavel"] = False
+        if self.lista_aberta == "expiracao":
+            filhos += [
+                self._no(opcao, [500, 400 + indice * 30, 200, 30])
+                for indice, opcao in enumerate(self.opcoes_expiracao)
+            ]
+        if self.lista_aberta == "limite":
+            filhos += [
+                self._no(opcao, [500, 600 + indice * 30, 200, 30])
+                for indice, opcao in enumerate(self.opcoes_limite)
+            ]
+        if self.criada:
+            filhos = [self._no("Copy", CAIXA_COPIAR), self._no("API keys", [100, 100, 120, 30], papel=1)]
+        return {
+            "alvo": "chrome — Keys | Settings | OpenRouter",
+            "fonte": "uia",
+            "arvore": {"nome": "OpenRouter", "filhos": filhos},
+        }
+
+
+def test_o_nome_vai_para_a_caixa_e_nao_para_o_rotulo(monkeypatch, capsys):
+    mundo = PainelReal()
+    script, config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args()) == 0
+    saida = capsys.readouterr().out
+
+    digitou_em = [p["caixa"] for p in mundo.pedidos if p["caixa"] == CAIXA_NOME_REAL]
+    assert digitou_em, "o texto tem de ir para a caixa de texto"
+    assert [400, 300, 300, 30] not in [p["caixa"] for p in mundo.pedidos], "o rótulo não recebe clique de escrita"
+    assert CAIXA_BUSCA not in [p["caixa"] for p in mundo.pedidos], "a busca da página não é o campo do nome"
+    assert mundo.nome == "jarvis-teste"
+    assert "nome: digitado" in saida
+    assert config.gravadas == [config.chave]
+
+
+def test_sem_caixa_de_texto_na_leitura_o_script_nao_finge_que_digitou(monkeypatch, capsys, tmp_path):
+    class SemCaixa(PainelReal):
+        def montar(self):
+            arvore = super().montar()
+            if self.tela == "dialogo":
+                arvore["arvore"]["filhos"] = [
+                    no for no in arvore["arvore"]["filhos"] if no["nome"] != "e.g. “ChatbotKey”"
+                ]
+            return arvore
+
+    mundo = SemCaixa()
+    script, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script, "_digitar_na_janela", lambda _janela, _texto: False)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    codigo = script.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert codigo == 1, "sem nome o Create fica apagado: não pode dizer que criou"
+    assert "nenhuma caixa de texto" in saida
+    assert "APAGADO" in saida, "botão apagado não se clica — e o dono tem de saber"
+    assert config.gravadas == []
+
+
+def test_quando_o_campo_diz_que_nao_recebeu_o_texto_ele_tenta_outro_degrau(monkeypatch, capsys):
+    """`conferido=False` é a única prova direta de que as teclas não entraram."""
+    class Confere(Mundo):
+        def __init__(self) -> None:
+            super().__init__()
+            self.tentativas_de_escrita = 0
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            if acao == "digitar":
+                self.tentativas_de_escrita += 1
+                self.cliques.append(list(caixa or []))
+                self.pedidos.append({"mouse": mouse, "primeiro_mouse": primeiro_mouse, "caixa": caixa})
+                if self.tentativas_de_escrita == 1:
+                    # o clique caiu fora: o campo publica valor e continua vazio
+                    return {"executou": True, "como": "clique físico no campo + teclado", "conferido": False}
+                self.nome = texto
+                return {"executou": True, "como": "foco + teclado", "conferido": True}
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = Confere()
+    script, config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args()) == 0
+    saida = capsys.readouterr().out
+
+    assert mundo.tentativas_de_escrita >= 2, "conferido=False tem de levar a uma segunda tentativa"
+    assert "não mostra o texto" in saida
+    assert config.gravadas == [config.chave]
+
+
+def test_create_apagado_e_o_sinal_de_que_o_nome_nao_entrou(monkeypatch, capsys, tmp_path):
+    """O campo não publica valor: quem diz se o nome entrou é o botão acender.
+
+    Se ele continua apagado, o script reescreve o nome do zero (com Ctrl+A, para
+    não virar “jarvis-testejarvis-teste”) — uma vez só.
+    """
+    class NaoPega(Mundo):
+        """O clique no campo não escreve nada na primeira vez."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.escritas = 0
+
+        def montar(self):
+            arvore = super().montar()
+            if self.tela == "dialogo":
+                create = next(no for no in arvore["arvore"]["filhos"] if no["nome"] == "Create")
+                if not (self.nome and self.expira and self.limite):
+                    create["acionavel"] = False
+            return arvore
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            if acao == "digitar":
+                self.escritas += 1
+                self.cliques.append(list(caixa or []))
+                self.pedidos.append({"mouse": mouse, "primeiro_mouse": primeiro_mouse, "caixa": caixa})
+                # a primeira escrita "sai" mas não entra no campo
+                if self.escritas > 2:
+                    self.nome = texto
+                return {"executou": True, "como": "clique físico no campo + teclado", "conferido": None}
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = NaoPega()
+    script, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+    reescritas: list[str] = []
+    monkeypatch.setattr(
+        script, "_digitar_substituindo", lambda _janela, texto: (reescritas.append(texto), True)[1]
+    )
+
+    codigo = script.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert "continua apagado" in saida
+    assert reescritas == ["jarvis-teste"], "reescreve uma vez, do zero"
+    # a reescrita aqui é o dublê: o botão continua apagado e o script para sem gravar
+    assert codigo == 1
+    assert config.gravadas == []
+
+
+def test_botao_de_criar_nao_e_o_titulo_do_painel():
+    script = _script()
+    from server import chave_web
+
+    painel = {
+        "alvo": "chrome — Keys",
+        "arvore": {
+            "nome": "página",
+            "filhos": [
+                {"nome": "Create API key", "papel": 1, "codigo": 1, "caixa": [400, 180, 300, 30], "acionavel": True},
+                {"nome": "Create", "papel": 43, "codigo": 43, "caixa": [700, 640, 80, 28], "acionavel": False},
+            ],
+        },
+    }
+
+    botao = script._botao_de_criar(painel)
+
+    assert botao is not None
+    assert botao["nome"] == "Create", "o título também contém “create” — e não é botão"
+    assert chave_web.normalizar(botao["nome"]) in script.ROTULOS_DO_CRIAR

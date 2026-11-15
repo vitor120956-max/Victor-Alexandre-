@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.91.18
+echo   Versao: 0.91.19
 echo   ----------------------------------------------------------------
 echo   Um duplo clique e o JARVIS abre a pagina, entra se preciso,
 echo   cria a chave, copia e grava no .env dele.

@@ -156,7 +156,14 @@ def nomes_novos(antes: dict[str, Any], depois: dict[str, Any], limite: int = 60)
         and len(str(no.get("nome") or "").strip()) <= limite
     ]
     return novos
-PADROES_NOME = ("key name", "nome da chave", "name", "nome")
+# O rótulo do campo é “Name”; dentro da caixa há o exemplo “e.g. “ChatbotKey””.
+# Os dois entram: em uns Chrome a caixa se apresenta pelo rótulo, em outros pelo
+# texto de exemplo — e quem digita é a caixa, não o rótulo.
+PADROES_NOME = ("key name", "nome da chave", "chatbotkey", "digite o nome", "name", "nome")
+
+# Ações que significam “aqui se escreve”. A MSAA diz “digitar”; a UIAutomation
+# diz “escrever” — é o mesmo campo.
+ACOES_DE_ESCRITA = ("escrever", "digitar")
 
 # O que a página de chaves tem escrito, independentemente do idioma.
 # Nada de `keys`/`chaves` sozinhos: qualquer página pode ter a palavra, e um
@@ -224,6 +231,114 @@ def elementos(arvore_montada: dict[str, Any]) -> list[dict[str, Any]]:
     """Todos os nós com nome — o que a página publica de legível."""
     raiz = arvore_montada.get("arvore")
     return [no for no in _achatar(raiz) if str(no.get("nome") or "").strip()]
+
+
+def todos(arvore_montada: dict[str, Any]) -> list[dict[str, Any]]:
+    """Todos os nós montados, inclusive os **sem nome** — o campo costuma ser um deles."""
+    return _achatar(arvore_montada.get("arvore"))
+
+
+def e_campo_de_escrita(no: dict[str, Any]) -> bool:
+    """Este nó é onde se digita — e não o rótulo ao lado dele?
+
+    Medido no painel do OpenRouter: “Name” e a caixa de texto são **dois nós**.
+    Clicar no rótulo e mandar as teclas escreve no nada — o campo fica vazio e o
+    script achava que tinha escrito. O que separa um do outro é a **ação**: só
+    a caixa aceita escrever.
+    """
+    if not isinstance(no, dict) or no.get("desativado"):
+        return False
+    acao = normalizar(str(no.get("acao") or ""))
+    if any(marca in acao for marca in ACOES_DE_ESCRITA):
+        return True
+    # Sem ação declarada, o papel de caixa de texto ainda serve — mas só com
+    # posição medida: sem caixa não há como clicar nela.
+    try:
+        codigo = int(no.get("codigo") or 0)
+    except (TypeError, ValueError):
+        codigo = 0
+    # Papel de caixa de texto com posição medida. Não se exige ação declarada:
+    # há campo de edição que não publica `ValuePattern` e mesmo assim recebe
+    # teclas quando é clicado — recusá-lo deixaria o nome sem onde ser escrito.
+    return codigo in (42, 15) and caixa_de(no) is not None
+
+
+def campos_de_escrita(arvore_montada: dict[str, Any]) -> list[dict[str, Any]]:
+    """Onde dá para digitar, na ordem da leitura."""
+    return [no for no in todos(arvore_montada) if e_campo_de_escrita(no)]
+
+
+def _e_rotulo_de_nome(texto: str) -> bool:
+    """“Name”, “Name *”, “Nome”: rótulo curto, não a frase de busca da página."""
+    limpo = normalizar(texto).rstrip("*· ").strip()
+    return limpo in {"name", "nome", "key name", "nome da chave"}
+
+
+def campo_do_nome(arvore_montada: dict[str, Any]) -> dict[str, Any] | None:
+    """A **caixa** onde vai o nome da chave, dentro do painel de criação.
+
+    Quatro regras, da mais direta à mais grosseira:
+
+    1. uma caixa de escrita cujo nome/texto casa com o campo de nome
+       (“Name”, “nome da chave”, o exemplo “ChatbotKey”);
+    2. a caixa de escrita mais próxima **acima** da lista de expiração — é a
+       ordem do painel (Name, Expiration, Credit limit);
+    3. a caixa de escrita logo **abaixo** do rótulo “Name”;
+    4. a caixa mais alta do painel.
+
+    A página continua atrás do painel na mesma leitura, e ela tem uma caixa de
+    busca (“Search by name or paste a key…”). Por isso a lista é filtrada por
+    posição quando o título do painel tem posição medida: o que está acima dele
+    não é do painel.
+    """
+    campos = campos_de_escrita(arvore_montada)
+    if not campos:
+        return None
+
+    # Fora do painel não serve: se o título mede, o campo tem de estar abaixo.
+    titulo = next(
+        (
+            no
+            for no in todos(arvore_montada)
+            if "create api key" in normalizar(str(no.get("nome") or "")) or "criar chave de api" in normalizar(str(no.get("nome") or ""))
+        ),
+        None,
+    )
+    caixa_titulo = caixa_de(titulo or {})
+    if caixa_titulo:
+        dentro = [no for no in campos if (c := caixa_de(no)) and c[1] >= caixa_titulo[1] - 10]
+        if dentro:
+            campos = dentro
+
+    alvos = [normalizar(padrao) for padrao in PADROES_NOME]
+    for no in campos:  # 1
+        if any(alvo in normalizar(str(no.get("nome") or "")) for alvo in alvos):
+            return no
+
+    expiracao = next(
+        (
+            no
+            for no in elementos(arvore_montada)
+            if any(padrao in normalizar(str(no.get("nome") or "")) for padrao in ("select expiration", "selecione a expiracao"))
+            and caixa_de(no)
+        ),
+        None,
+    )
+    caixa_expiracao = caixa_de(expiracao or {})
+    if caixa_expiracao:  # 2
+        acima = [no for no in campos if (c := caixa_de(no)) and c[1] < caixa_expiracao[1]]
+        if acima:
+            return max(acima, key=lambda no: caixa_de(no)[1])
+
+    for rotulo in todos(arvore_montada):  # 3
+        if _e_rotulo_de_nome(str(rotulo.get("nome") or "")) and caixa_de(rotulo):
+            base = caixa_de(rotulo)[1]
+            abaixo = [no for no in campos if (c := caixa_de(no)) and c[1] >= base]
+            if abaixo:
+                return min(abaixo, key=lambda no: caixa_de(no)[1])
+
+    com_caixa = [no for no in campos if caixa_de(no)]
+    return min(com_caixa, key=lambda no: caixa_de(no)[1]) if com_caixa else campos[0]
 
 
 def procurar(arvore_montada: dict[str, Any], padroes: tuple[str, ...]) -> list[dict[str, Any]]:

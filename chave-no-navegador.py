@@ -788,6 +788,39 @@ def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
     return texto
 
 
+ROTULOS_DO_CRIAR = ("create", "criar", "confirmar", "confirm", "salvar", "save")
+
+
+def _botao_de_criar(montada: dict) -> dict | None:
+    """O botão que cria, e **não** o título do painel.
+
+    “Create API key” também contém “create”. Quando o botão está apagado (o
+    caso em que ele é justamente o que interessa), o título passava na frente na
+    ordenação — e o script “clicava” no título e dizia que tinha tentado criar.
+    Aqui o rótulo tem de ser **exatamente** criar/confirmar/salvar.
+    """
+    from server import chave_web
+
+    for no in chave_web.procurar(montada, chave_web.PADROES_CONFIRMAR):
+        if chave_web.normalizar(str(no.get("nome") or "")) in ROTULOS_DO_CRIAR:
+            return no
+    return None
+
+
+def _esperar_botao_criar(janela: dict, segundos: float = 8.0):
+    """Relê até o botão de criar aparecer. Devolve (janela, botão, árvore)."""
+    fim = time.time() + segundos
+    while True:
+        janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        botao = _botao_de_criar(montada)
+        if botao is not None:
+            return janela, botao, montada
+        if time.time() >= fim:
+            ultima = _diagnostico_da_leitura(montada)
+            raise PassoError(f"não achei o botão “Create” nesta leitura. {ultima}")
+        time.sleep(0.8)
+
+
 def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 18.0):
     """Espera a página parar de mudar antes de clicar em “New key”.
 
@@ -897,6 +930,27 @@ def _preencher_uma_lista(
     return _reler(janela, PROFUNDA, TETO_FUNDO)[1], escolha
 
 
+def _digitar_substituindo(janela: dict, texto: str) -> bool:
+    """`Ctrl+A` e depois digita — troca o conteúdo do campo em vez de somar.
+
+    Serve para o caso em que a primeira escrita pode ter ido para outro lugar:
+    sem o `Ctrl+A`, tentar de novo escreveria “jarvis-testejarvis-teste”.
+    """
+    from server import arvore_windows, mesa
+
+    handle = int(janela.get("handle") or 0)
+    if not handle or not _garantir_na_frente(janela):
+        return False
+    try:
+        if not arvore_windows.teclado_na_janela(handle):
+            return False
+        mesa.teclar("ctrl+a")
+        mesa.digitar(texto)
+        return True
+    except Exception:  # noqa: BLE001 - último degrau, não requisito
+        return False
+
+
 def _digitar_na_janela(janela: dict, texto: str) -> bool:
     """Digita com o teclado na janela **depois de conferir que ela está na frente**.
 
@@ -918,6 +972,72 @@ def _digitar_na_janela(janela: dict, texto: str) -> bool:
         return False
 
 
+def _nome_aparece(montada: dict, texto: str) -> bool:
+    """O nome digitado aparece na leitura? (uns Chrome publicam o valor, outros não)"""
+    from server import chave_web
+
+    alvo = chave_web.normalizar(texto)
+    if not alvo:
+        return False
+    return any(alvo in chave_web.normalizar(str(no.get("nome") or "")) for no in chave_web.elementos(montada))
+
+
+def _escrever_no_campo(
+    janela: dict, campo: dict, texto: str, *, mouse: bool
+) -> tuple[bool, str, bool | None]:
+    """Digita num campo e **confere**. Devolve (deu certo, como, conferido).
+
+    Três degraus, e o segundo só existe porque o primeiro pode mentir:
+
+    1. **clique no campo + teclado** — é o que uma pessoa faz;
+    2. **foco pela árvore** (`accSelect`/`put_accValue`) — quando o clique cai
+       num lugar que não aceita foco;
+    3. **teclado com a janela na frente** — último recurso, com o diálogo que
+       nasce com o cursor no campo.
+
+    Cada degrau devolve `conferido`: `True` (o campo mostra o texto), `False`
+    (o campo publica valor e ele é outro) ou `None` (o campo não publica valor).
+    Sem esta conferência, o script dizia “escrevendo…” e seguia com o campo
+    vazio — foi o que aconteceu no PC do dono.
+    """
+    tentativas = [
+        ("clique no campo + teclado", {"mouse": mouse, "primeiro_mouse": mouse}),
+        ("foco pela árvore", {"mouse": False, "primeiro_mouse": False}),
+    ]
+    for rotulo, opcoes in tentativas:
+        try:
+            feito = _clicar(janela, campo, "digitar", texto, **opcoes)
+        except PassoError as exc:
+            print(f"     ({rotulo} não deu: {exc})")
+            continue
+        conferido = feito.get("conferido")
+        if conferido is True:
+            return True, rotulo, True
+        print(f"     ({rotulo}: {_descrever_clique(feito)}"
+              + ("" if conferido is None else " — mas o campo não mostra o texto") + ")")
+        if conferido is None:
+            # O campo não publica valor: a leitura é o único juiz que sobrou.
+            # Se nem ela mostra o texto, **não se repete**: digitar de novo com o
+            # cursor no fim do campo escreveria o nome duas vezes. Fica a prova
+            # que existe no fim do painel — o botão “Create” acender.
+            try:
+                _janela, depois = _reler(janela, PROFUNDA, TETO_FUNDO)
+            except PassoError:
+                depois = None
+            if depois is not None and _nome_aparece(depois, texto):
+                return True, rotulo, True
+            return True, rotulo, None
+    if _digitar_na_janela(janela, texto):
+        try:
+            _janela, depois = _reler(janela, PROFUNDA, TETO_FUNDO)
+        except PassoError:
+            depois = None
+        if depois is not None and _nome_aparece(depois, texto):
+            return True, "teclado com a janela na frente", True
+        return True, "teclado com a janela na frente", None
+    return False, "", False
+
+
 def _preencher_dialogo(
     janela: dict, montada: dict, nome: str, *, mouse: bool, primeiro_mouse: bool
 ) -> tuple[dict, dict[str, str]]:
@@ -926,33 +1046,37 @@ def _preencher_dialogo(
     Medido na tela do dono: o botão “Create” fica desabilitado enquanto a
     expiração (que tem asterisco) está vazia. Escrever só o nome e clicar em
     Create não cria nada — e antes da 0.91.15 o script dizia que tinha dado
-    certo. Aqui cada campo devolve o que foi realmente escolhido.
+    certo. Aqui cada campo devolve o que foi **conferido**, não o que foi
+    tentado.
     """
     from server import chave_web
 
     preenchidos: dict[str, str] = {}
+    nome_conferido = False
 
-    # 1. nome
-    campos = chave_web.procurar(montada, chave_web.PADROES_NOME)
-    if campos:
-        print(f"     nome: escrevendo “{nome}”…")
-        try:
-            _clicar(janela, campos[0], "digitar", nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
+    # 1. nome — na **caixa**, não no rótulo ao lado
+    campo = chave_web.campo_do_nome(montada)
+    if campo is not None:
+        print(f"     nome: escrevendo “{nome}” no campo…")
+        deu, como, conferido = _escrever_no_campo(janela, campo, nome, mouse=mouse)
+        if deu:
             preenchidos["nome"] = nome
-            time.sleep(0.4)
-        except PassoError as exc:
-            print(f"     nome: não deu pelo campo ({exc}) — tentando pelo teclado.")
+            nome_conferido = bool(conferido)
+            if conferido:
+                print(f"     nome: digitado e conferido ({como}).")
+            else:
+                print(f"     nome: digitado ({como}) — o campo não publica o valor, então")
+                print("           quem confirma é o botão “Create” acender no fim.")
+        else:
+            print("     nome: NÃO consegui escrever no campo.")
     else:
-        print("     nome: o campo não apareceu na leitura — tentando pelo teclado.")
-    if "nome" not in preenchidos:
-        # O diálogo abre com o cursor **dentro** do campo de nome (está assim na
-        # tela do dono). Se a leitura não deu o campo, o teclado ainda dá: é o
-        # último degrau antes de desistir, e só acontece com a janela na frente.
+        print("     nome: a leitura não trouxe nenhuma caixa de texto no painel.")
         if _digitar_na_janela(janela, nome):
             preenchidos["nome"] = nome
+            nome_conferido = _nome_aparece(montada, nome)
             print(f"     nome: digitado pelo teclado (“{nome}”).")
         else:
-            print("     nome: não consegui digitar — o campo não está em foco.")
+            print("     nome: o teclado não estava na janela — não digitei às cegas.")
 
     janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
 
@@ -971,6 +1095,21 @@ def _preencher_dialogo(
     )
     if limite:
         preenchidos["limite"] = limite
+
+    # 4. a prova final é o botão “Create”: apagado = falta campo. Se o nome foi
+    #    escrito sem confirmação (o campo não publica valor), ele é o suspeito
+    #    número um — e reescrever do zero é barato.
+    if "nome" in preenchidos and not nome_conferido:
+        try:
+            janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        except PassoError:
+            return montada, preenchidos
+        botao = _botao_de_criar(montada)
+        if botao is not None and not botao.get("acionavel"):
+            print("     o botão “Create” continua apagado — reescrevo o nome do zero.")
+            if _digitar_substituindo(janela, nome):
+                print(f"     nome: reescrito (“{nome}”), apagando o que estivesse no campo.")
+                janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
     return montada, preenchidos
 
 
@@ -1079,14 +1218,29 @@ def _criar_e_copiar(
         janela, montada, nome, mouse=mouse, primeiro_mouse=primeiro_mouse
     )
     antes = _nomes(montada)
-    faltando = [campo for campo in ("expiração", "limite") if campo not in preenchidos]
+    # O nome entra na conta: sem ele o “Create” também fica apagado, e a
+    # mensagem tem de dizer **qual** campo faltou.
+    faltando = [campo for campo in ("nome", "expiração", "limite") if campo not in preenchidos]
     if "expiração" in faltando:
         print("     AVISO: sem a expiração o botão Create costuma ficar apagado.")
         print("     Se a chave não nascer, escolha a expiração você mesmo e rode `--pegar`.")
 
     # 3. o botão do diálogo (“Create”, curto) — e a conferência de que fechou
     try:
-        janela, criar, montada = _esperar_elemento(janela, chave_web.PADROES_CONFIRMAR, segundos=8)
+        janela, criar, montada = _esperar_botao_criar(janela, segundos=8)
+        if not criar.get("acionavel"):
+            # Botão apagado = os três campos não estão preenchidos. Clicar nele
+            # não gera erro e não cria nada; o script já fez isso duas vezes e
+            # o dono ficou olhando uma tela parada. Aqui ele para e diz o que
+            # falta, em vez de esperar o milagre.
+            print("  3. o botão “Create” está APAGADO — clicar nele não criaria nada.")
+            if faltando:
+                print(f"     campos que eu não consegui preencher: {', '.join(faltando)}.")
+            else:
+                print("     os três campos parecem preenchidos; o site pode exigir algo a mais.")
+            _gravar_relatorio(janela, extra=["o botão Create estava desativado (desativado=True na leitura)"])
+            print("     Complete no navegador e rode `--pegar`; não precisa refazer o resto.")
+            return None
         print(f"  3. clicando em “{criar.get('nome')}” para criar…")
         print(f"     {_descrever_clique(_clicar(janela, criar, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
         time.sleep(2.0)
