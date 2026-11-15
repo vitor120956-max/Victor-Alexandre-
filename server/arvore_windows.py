@@ -1647,7 +1647,7 @@ def _digitar_em(
     if mouse and caixa:
         # Último degrau, e o único que usa o mouse: clicar no campo medido e
         # então usar o teclado. Só quando pedido com `--mouse`.
-        clique = clicar_fisico(caixa)
+        clique = clicar_fisico(caixa, handle=int(handle))
         if clique.get("executou") and _teclado_esta_na_janela(handle):
             from server import mesa
 
@@ -1675,6 +1675,7 @@ def executar_ref(
     caixa: list[int] | None = None,
     acrescentar: bool = False,
     mouse: bool = False,
+    primeiro_mouse: bool = False,
 ) -> dict[str, Any]:
     """Executa `clicar` ou `digitar` num elemento, pelo caminho da leitura.
 
@@ -1688,8 +1689,47 @@ def executar_ref(
     if not janela_muda(handle):
         return {"executou": False, "como": "nenhum", "motivo": "a janela não está mais aberta."}
 
+    def _pelo_mouse(motivo_do_degrau: str) -> dict[str, Any] | None:
+        """Degrau de baixo: clicar na caixa medida, sem passar pela árvore.
+
+        Devolve `None` quando o mouse não foi autorizado — aí quem chama segue
+        com a resposta de sempre (e o motivo dela, que é o que o dono lê).
+        """
+        if not (mouse and caixa):
+            return None
+        clique = clicar_fisico(caixa, handle=int(handle))
+        if not clique.get("executou"):
+            return {"executou": False, "como": "nenhum", "motivo": str(clique.get("motivo") or "")}
+        if pedido == "digitar":
+            from server import mesa
+
+            if not _teclado_esta_na_janela(int(handle)):
+                return {"executou": False, "como": "nenhum", "motivo": "o clique saiu, mas o teclado não veio para a janela."}
+            mesa.digitar(texto)
+            return {
+                "executou": True,
+                "como": "clique físico no campo + teclado",
+                "caracteres": len(texto),
+                "cursor_voltou": clique.get("cursor_voltou", False),
+                "motivo_do_degrau": motivo_do_degrau,
+            }
+        return {**clique, "elemento": "", "motivo_do_degrau": motivo_do_degrau}
+
+    if primeiro_mouse and mouse and caixa:
+        # Pedido explícito (`--mouse`): a árvore às vezes anuncia uma ação que
+        # não faz nada. Quem pediu o clique de verdade quer o clique de verdade.
+        feito_pelo_mouse = _pelo_mouse("pedido explícito: --mouse")
+        if feito_pelo_mouse is not None and feito_pelo_mouse.get("executou"):
+            return feito_pelo_mouse
+
     ponteiro = _abrir(int(handle))
     if not ponteiro:
+        # Sem MSAA não há `accDoDefaultAction` — mas a caixa medida veio da
+        # UIA, e um clique é um clique. Antes da 0.91.10 isto era um beco sem
+        # saída; agora, com `mouse` autorizado, o degrau de baixo existe.
+        feito_pelo_mouse = _pelo_mouse("a janela não publica MSAA")
+        if feito_pelo_mouse is not None:
+            return feito_pelo_mouse
         return {
             "executou": False,
             "como": "nenhum",
@@ -1699,6 +1739,9 @@ def executar_ref(
         alvo, filho = _navegar(ponteiro, [int(item) for item in caminho])
     except Exception as exc:  # noqa: BLE001
         _liberar(ponteiro)
+        feito_pelo_mouse = _pelo_mouse(f"caminho não achado ({exc})")
+        if feito_pelo_mouse is not None:
+            return feito_pelo_mouse
         return {"executou": False, "como": "nenhum", "motivo": f"não achei o elemento: {exc}"}
 
     try:
@@ -1722,7 +1765,7 @@ def executar_ref(
                 "elemento": nome,
             }
         if mouse and caixa:
-            clique = clicar_fisico(caixa)
+            clique = clicar_fisico(caixa, handle=int(handle))
             if clique.get("executou"):
                 return {**clique, "elemento": nome}
             return {"executou": False, "como": "nenhum", "motivo": str(clique.get("motivo") or "")}
@@ -1778,13 +1821,32 @@ def trazer_para_frente(handle: int) -> bool:
         return False
 
 
-def clicar_fisico(caixa: list[int]) -> dict[str, Any]:
-    """Clica no centro da caixa medida do elemento.
+def clicar_fisico(
+    caixa: list[int],
+    *,
+    handle: int | None = None,
+    voltar: bool = True,
+) -> dict[str, Any]:
+    """Clica no centro da caixa medida do elemento — mouse de verdade.
 
-    Este é o degrau que o usuário perguntou: mouse de verdade. Só entra quando
-    pedido (`--mouse`), porque mover o ponteiro mexe na máquina de quem está
-    usando, e porque a tela dele dá toque fantasma. Mas quando o elemento não
-    aceita ação nem foco, é o único caminho que existe.
+    Este é o degrau que o usuário perguntou (“por que não clica no botão com o
+    mouse?”), e ele resolve dois casos que a ação de acessibilidade não resolve:
+
+    1. o botão **está** na árvore, com posição medida, mas não declara ação
+       padrão nem aceita foco — programas modernos publicam o rótulo e escondem
+       o resto;
+    2. a leitura veio pela **UIAutomation**, e a janela não publica MSAA — aí
+       `accDoDefaultAction` não tem nem ponteiro para chamar.
+
+    Três travas antes de tocar no ponteiro:
+
+    - a janela tem de estar **na frente** (clique cego acerta o que estiver por
+      cima, e por cima pode estar qualquer coisa do dono);
+    - o ponto tem de cair **dentro do retângulo da janela**;
+    - se o dono mexer o mouse no meio do caminho, `mesa.mover` para sozinho.
+
+    E uma cortesia: `voltar=True` devolve o cursor para onde ele estava. Clicar
+    num botão não é sequestrar o mouse de quem está trabalhando.
     """
     from server import mesa
 
@@ -1792,11 +1854,51 @@ def clicar_fisico(caixa: list[int]) -> dict[str, Any]:
         return {"executou": False, "como": "nenhum", "motivo": "o elemento não tem posição medida."}
     x = int(caixa[0]) + int(caixa[2]) // 2
     y = int(caixa[1]) + int(caixa[3]) // 2
+
+    if handle:
+        if not trazer_para_frente(int(handle)):
+            return {
+                "executou": False,
+                "como": "nenhum",
+                "motivo": "não consegui trazer a janela para a frente; clique físico acertaria outra janela.",
+            }
+        time.sleep(0.25)  # o Chrome pinta depois do SetForegroundWindow
+        if not arvore.dentro_da_janela(_caixa(int(handle)), x, y):
+            return {
+                "executou": False,
+                "como": "nenhum",
+                "motivo": (
+                    f"o centro do botão ({x},{y}) ficou fora da janela — a página pode ter "
+                    "rolado depois da leitura. Rode de novo que eu releio a posição."
+                ),
+            }
+
     try:
         feito = mesa.clicar(x, y)
     except Exception as exc:  # noqa: BLE001
         return {"executou": False, "como": "nenhum", "motivo": f"o clique físico falhou: {exc}"}
-    return {"executou": True, "como": f"clique físico em {x},{y}", "clique": feito}
+    if feito.get("clicou") is False:
+        return {
+            "executou": False,
+            "como": "nenhum",
+            "motivo": str(feito.get("motivo") or "o clique não saiu (o dono mexeu o mouse)."),
+        }
+
+    voltou = False
+    origem = feito.get("veio_de")
+    if voltar and origem:
+        time.sleep(0.15)  # o clique termina antes de o cursor sair de cima
+        try:
+            mesa.mover(int(origem[0]), int(origem[1]), failsafe=False)
+            voltou = True
+        except Exception:  # noqa: BLE001 - devolver o cursor é cortesia, não requisito
+            voltou = False
+    return {
+        "executou": True,
+        "como": f"clique físico em {x},{y}",
+        "clique": feito,
+        "cursor_voltou": voltou,
+    }
 
 
 def restaurar(handle: int) -> bool:

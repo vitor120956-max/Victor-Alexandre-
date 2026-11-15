@@ -194,3 +194,18 @@ def test_focar_recusa_janela_que_nao_existe() -> None:
     with pytest.raises(mesa.MesaError) as erro:
         mesa.focar("excel", backend=BackendFalso())
     assert "Nenhuma janela" in str(erro.value)
+
+
+def test_clicar_com_coordenada_lembra_de_onde_o_cursor_veio() -> None:
+    """Quem clica num botão medido devolve o cursor — e para isso precisa saber
+    de onde ele veio. A 0.91.10 acrescentou `veio_de` justamente para isso."""
+    backend = BackendFalso(1920, 1080, (10, 20))
+    resultado = mesa.clicar(800, 400, backend=backend)
+    assert resultado["veio_de"] == [10, 20]
+    assert resultado["em"] == [800, 400]
+
+
+def test_clicar_sem_coordenada_nao_inventa_origem() -> None:
+    backend = BackendFalso()
+    resultado = mesa.clicar(backend=backend)
+    assert resultado["veio_de"] is None

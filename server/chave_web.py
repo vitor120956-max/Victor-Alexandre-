@@ -1,4 +1,4 @@
-"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.9).
+"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.10).
 
 Por que a lógica mora aqui e não no script: achar o botão numa árvore de
 acessibilidade é regra, e regra se testa sem Chrome, sem Windows e sem tela. O
@@ -30,6 +30,12 @@ from typing import Any
 # Nomes de botão/link que interessam, em ordem de preferência. Acentos e
 # maiúsculas não importam (a comparação normaliza).
 PADROES_CRIAR = ("create key", "criar chave", "new key", "nova chave", "add key", "adicionar chave")
+# O botão que **fecha** o diálogo de criação costuma ser só “Create”/“Criar”
+# — mais curto que o “Create Key” da página. A 0.91.10 só conhecia o rótulo
+# longo e travou no passo 3 com o diálogo aberto na frente: o dublê do teste
+# mostrou isso antes do dono. “Created/at” não é botão, mas entra na conta; por
+# isso o nome mais curto vem primeiro.
+PADROES_CONFIRMAR = ("create", "criar", "confirmar", "confirm", "save", "salvar")
 PADROES_COPIAR = ("copy", "copiar")
 PADROES_NOME = ("key name", "nome da chave", "name", "nome")
 
@@ -85,6 +91,23 @@ def e_pagina_de_chaves(arvore_montada: dict[str, Any]) -> bool:
     return any(marca in texto for marca in MARCAS_DA_PAGINA)
 
 
+def caixa_de(no: dict[str, Any] | None) -> list[int] | None:
+    """A posição medida de um nó — é o que permite clicar com o mouse.
+
+    Sem posição não existe clique físico: a leitura diz o nome, mas não onde o
+    botão está na tela. Por isso o diagnóstico separa “achei” de “achei e sei
+    onde fica”.
+    """
+    if not isinstance(no, dict):
+        return None
+    caixa = no.get("caixa")
+    if isinstance(caixa, (list, tuple)) and len(caixa) == 4:
+        valores = [int(valor) for valor in caixa]
+        if valores[2] > 0 and valores[3] > 0:
+            return valores
+    return None
+
+
 def diagnostico(arvore_montada: dict[str, Any]) -> dict[str, Any]:
     """O que existe na página agora — sem clique nenhum.
 
@@ -100,6 +123,11 @@ def diagnostico(arvore_montada: dict[str, Any]) -> dict[str, Any]:
     def resumo(lista: list[dict[str, Any]], limite: int = 3) -> list[str]:
         return [str(no.get("nome") or "")[:60] for no in lista[:limite]]
 
+    posicoes = {
+        "criar": caixa_de(criar[0]) if criar else None,
+        "copiar": caixa_de(copiar[0]) if copiar else None,
+        "nome": caixa_de(nome[0]) if nome else None,
+    }
     return {
         "pagina_de_chaves": e_pagina_de_chaves(arvore_montada),
         "elementos_com_nome": total,
@@ -108,6 +136,8 @@ def diagnostico(arvore_montada: dict[str, Any]) -> dict[str, Any]:
         "nome": resumo(nome),
         "pode_criar": bool(criar),
         "pode_copiar": bool(copiar),
+        "posicoes": posicoes,
+        "pode_clicar_com_mouse": bool(posicoes["criar"] or posicoes["copiar"]),
         "fonte": str(arvore_montada.get("fonte") or ""),
         "alvo": str(arvore_montada.get("alvo") or ""),
     }
@@ -127,10 +157,16 @@ def texto_do_diagnostico(dados: dict[str, Any]) -> str:
     linhas.append(f"  elementos com nome: {dados['elementos_com_nome']}")
     for rotulo, chave in (("botão de criar", "criar"), ("botão de copiar", "copiar"), ("campo de nome", "nome")):
         achados = dados[chave]
-        if achados:
-            linhas.append(f"  {rotulo}: SIM — " + " | ".join(f"“{nome}”" for nome in achados))
-        else:
+        if not achados:
             linhas.append(f"  {rotulo}: não encontrado")
+            continue
+        caixa = (dados.get("posicoes") or {}).get(chave)
+        onde = (
+            f"  (em {caixa[0]},{caixa[1]} — o mouse acerta)"
+            if caixa
+            else "  (sem posição medida: só a ação do elemento)"
+        )
+        linhas.append(f"  {rotulo}: SIM — " + " | ".join(f"“{nome}”" for nome in achados) + onde)
     if dados["pode_criar"]:
         linhas.append("")
         linhas.append("  Dá para tentar: `--criar --autorizar` (cria uma chave NOVA na sua conta).")

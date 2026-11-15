@@ -86,22 +86,51 @@ def _ler_janela(alvo: str):
     return janela, montada
 
 
-def _clicar(janela: dict, no: dict, acao: str = "clicar", texto: str = "") -> dict:
-    """Clica num nó **da leitura que o encontrou** (ref antigo não serve)."""
+def _clicar(
+    janela: dict,
+    no: dict,
+    acao: str = "clicar",
+    texto: str = "",
+    *,
+    mouse: bool = False,
+    primeiro_mouse: bool = False,
+) -> dict:
+    """Clica num nó **da leitura que o encontrou** (ref antigo não serve).
+
+    Antes da 0.91.10 o resultado era descartado: se o clique não saía, o script
+    seguia para o passo seguinte e culpava o passo errado. Agora quem não
+    executou vira `PassoError` com o motivo que o Windows deu.
+    """
     from server import arvore_windows
 
+    nome = str(no.get("nome") or "")[:60]
     try:
-        return arvore_windows.executar_ref(
+        feito = arvore_windows.executar_ref(
             int(janela["handle"]),
             no["caminho"],
             acao,
             texto,
             no.get("caixa"),
+            mouse=mouse,
+            primeiro_mouse=primeiro_mouse,
         )
     except Exception as exc:  # noqa: BLE001 - COM de terceiros
         raise PassoError(
-            f"não consegui clicar em “{no.get('nome')}” ({type(exc).__name__})."
+            f"não consegui clicar em “{nome}” ({type(exc).__name__})."
         ) from exc
+    if not feito.get("executou"):
+        motivo = str(feito.get("motivo") or "o Windows não disse o motivo.")
+        raise PassoError(f"“{nome}” não aceitou o clique: {motivo}")
+    return feito
+
+
+def _descrever_clique(feito: dict) -> str:
+    """Como o clique saiu — com o mouse ou pela ação do elemento."""
+    como = str(feito.get("como") or "")
+    if como.startswith("clique físico"):
+        voltou = " o cursor voltou para onde estava." if feito.get("cursor_voltou") else ""
+        return f"{como}.{voltou}"
+    return como or "feito"
 
 
 def _esperar_elemento(alvo: str, padroes: tuple[str, ...], segundos: float = 12.0):
@@ -130,6 +159,10 @@ def passo_ver(args) -> int:
     dados = chave_web.diagnostico(montada)
     print(chave_web.texto_do_diagnostico(dados))
     print()
+    if dados["pode_clicar_com_mouse"]:
+        print("  Dá para clicar com o mouse: SIM — há botão com posição medida na tela.")
+    elif dados["pode_criar"] or dados["pode_copiar"]:
+        print("  Dá para clicar com o mouse: não — achei o botão, mas sem posição na tela.")
     print("  Nada foi clicado: isto é só leitura.")
     return 0
 
@@ -141,6 +174,7 @@ def passo_pegar(args) -> int:
         limpo, chave = modulo.chave_da_area_de_transferencia()
     except RuntimeError as exc:
         print(f"  NÃO DEU: {exc}")
+        print("  Copie a chave no site (botão COPIAR) e rode `--pegar` de novo.")
         return 1
     print(modulo.descrever_area(limpo, chave))
     return _gravar(modulo, chave)
@@ -172,26 +206,44 @@ def passo_criar(args) -> int:
 
     modulo = _modulo_do_configurador()
     nome = args.nome or chave_web.nome_sugerido()
+    mouse = not args.sem_mouse
+    if args.mouse and args.sem_mouse:
+        print("  Escolha um: --mouse ou --sem-mouse (os dois juntos não dizem nada).")
+        return 2
+
+    if mouse:
+        print("  Vou clicar com o mouse nos botões medidos; o cursor volta para onde estava.")
+        if not dados["pode_clicar_com_mouse"]:
+            print("  (sem posição medida na leitura, o clique será pela ação do elemento.)")
+    else:
+        print("  --sem-mouse: só a ação do elemento, o ponteiro não se mexe.")
+    print()
 
     # 1. clicar em "Create Key"
-    print(f"  1. clicando em “{dados['criar'][0]}”…")
-    _clicar(janela, chave_web.procurar(montada, chave_web.PADROES_CRIAR)[0])
+    botao = chave_web.procurar(montada, chave_web.PADROES_CRIAR)[0]
+    print(f"  1. clicando em “{botao.get('nome')}”…")
+    try:
+        print(f"     {_descrever_clique(_clicar(janela, botao, mouse=mouse, primeiro_mouse=args.mouse))}")
+    except PassoError as exc:
+        print(f"  1. NÃO DEI: {exc}")
+        print("  Se a chave não abriu o diálogo, faça no navegador e rode `--pegar`.")
+        return 1
     time.sleep(1.5)
 
     # 2. dar um nome (se aparecer um campo)
     try:
         janela, campo, _ = _esperar_elemento(args.alvo, chave_web.PADROES_NOME, segundos=8)
         print(f"  2. escrevendo o nome “{nome}” em “{campo.get('nome')}”…")
-        _clicar(janela, campo, "digitar", nome)
+        print(f"     {_descrever_clique(_clicar(janela, campo, 'digitar', nome, mouse=mouse, primeiro_mouse=args.mouse))}")
         time.sleep(0.8)
     except PassoError:
         print("  2. não apareceu campo de nome — seguindo (alguns fluxos não pedem).")
 
     # 3. confirmar a criação (o botão de criar, de novo, agora no diálogo)
     try:
-        janela, criar, montada = _esperar_elemento(args.alvo, chave_web.PADROES_CRIAR, segundos=8)
+        janela, criar, montada = _esperar_elemento(args.alvo, chave_web.PADROES_CONFIRMAR, segundos=8)
         print(f"  3. clicando em “{criar.get('nome')}” para criar…")
-        _clicar(janela, criar)
+        print(f"     {_descrever_clique(_clicar(janela, criar, mouse=mouse, primeiro_mouse=args.mouse))}")
         time.sleep(2.0)
     except PassoError as exc:
         print(f"  3. NÃO DEI: {exc}")
@@ -202,8 +254,8 @@ def passo_criar(args) -> int:
     try:
         janela, copiar, _ = _esperar_elemento(args.alvo, chave_web.PADROES_COPIAR, segundos=10)
         print(f"  4. clicando em “{copiar.get('nome')}” para copiar a chave…")
-        _clicar(janela, copiar)
-        time.sleep(0.8)
+        print(f"     {_descrever_clique(_clicar(janela, copiar, mouse=mouse, primeiro_mouse=args.mouse))}")
+        time.sleep(1.2)  # o Windows leva um instante para pôr o texto na área
     except PassoError as exc:
         print(f"  4. NÃO DEI: {exc}")
         print("  Se a chave está na tela, clique em Copiar você mesmo e rode `--pegar`.")
@@ -241,6 +293,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--criar", action="store_true", help="Tenta criar uma chave nova clicando na página.")
     parser.add_argument("--autorizar", action="store_true", help="Sem isto, --criar só mostra o que faria.")
     parser.add_argument("--nome", default="", help="Nome da chave criada (padrão: jarvis-AAAA-MM-DD).")
+    parser.add_argument(
+        "--sem-mouse",
+        action="store_true",
+        help="Não usa o mouse: só a ação do elemento. O padrão do --criar é poder clicar.",
+    )
+    parser.add_argument(
+        "--mouse",
+        action="store_true",
+        help="(já é o padrão no --criar) Autoriza o clique físico nos botões medidos.",
+    )
     parser.add_argument("--alvo", default="chrome", help="Pedaço do título da janela (padrão: chrome).")
     args = parser.parse_args(argv)
 

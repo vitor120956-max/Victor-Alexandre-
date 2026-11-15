@@ -299,6 +299,9 @@ def clicar(
             return {**movido, "acao": "clicar", "clicou": False}
     antes = backend.posicao()
     backend.clicar(botao, int(vezes))
+    # `veio_de` é onde o cursor estava antes de a gente mexer nele. Quem clica
+    # num botão medido usa isso para **devolver o cursor** ao dono depois —
+    # clicar não é sequestrar o mouse.
     return {
         "acao": "clicar",
         "clicou": True,
@@ -306,6 +309,7 @@ def clicar(
         "vezes": int(vezes),
         "em": list(antes),
         "movido": movido is not None,
+        "veio_de": list(movido["de"]) if movido and movido.get("de") else None,
     }
 
 

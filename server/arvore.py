@@ -977,6 +977,24 @@ def desenhar(no: dict[str, Any] | None, profundidade: int = 0, linhas: list[str]
 
 ACAO_DE_TEXTO = {"escrever", "digitar"}
 
+
+def dentro_da_janela(janela: list[int] | tuple[int, ...] | None, x: int, y: int) -> bool:
+    """O ponto está dentro do retângulo da janela? (`x, y, largura, altura`)
+
+    Existe por causa do clique físico: antes de mover o mouse para o centro de
+    um botão medido, é preciso saber que o ponto cai **dentro da janela do
+    navegador**. Se a conta apontar para fora — janela movida, tela girada,
+    medição de outra hora —, o clique acertaria o que estivesse ali, e o que
+    está ali pode ser qualquer coisa do dono. Fora da janela, não se clica.
+    """
+    if not janela or len(janela) != 4:
+        return False
+    esquerda, topo, largura, altura = (int(valor) for valor in janela)
+    if largura <= 0 or altura <= 0:
+        return False
+    return esquerda <= int(x) < esquerda + largura and topo <= int(y) < topo + altura
+
+
 # Moldura de janela: existe em qualquer programa, tem posição e ação, e não é
 # trabalhar no programa — é fechar, minimizar ou rolar. Os 26 “acionáveis” do
 # Bloco de Notas eram todos disto, e a prontidão dizia que dava para agir.

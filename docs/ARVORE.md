@@ -174,6 +174,31 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.10 — o mouse no botão (medido antes de clicar, e com freio)
+
+A pergunta do dono — “por que não clica no botão de copiar com o mouse?” — tinha
+resposta técnica: até a 0.91.9 o executor só sabia pedir a **ação padrão do
+elemento**. Quando a página não declara essa ação, ou quando a leitura veio da
+UIAutomation (e a janela não publica MSAA), não havia o que fazer.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| `arvore.dentro_da_janela` | o ponto do clique tem de cair dentro do retângulo da janela — conta pura, testada |
+| `arvore_windows.clicar_fisico` | traz a janela para a frente, confere a posição, clica e **devolve o cursor** ao dono |
+| `executar_ref(..., mouse=True)` | o clique por coordenada é o último degrau; sem `mouse`, continua só a árvore |
+| `chave_web.PADROES_CONFIRMAR` | o botão do diálogo é “Create”, não “Create Key” |
+| `chave_web.diagnostico` | diz se o botão tem **posição medida** (“o mouse acerta”) ou só nome |
+
+O `--criar --autorizar` usa o mouse por padrão (foi o pedido); `--sem-mouse`
+volta ao comportamento antigo. O `--ver` nunca clica.
+
+Também consertou um erro silencioso: o retorno do clique era descartado, e um
+passo que falhava fazia o script culpar o seguinte. Agora o primeiro que não dá
+para ali, com o motivo do Windows.
+
+
 ### 0.91.9 — a chave pelo navegador (medir antes de clicar)
 
 Pedido do dono: entrar no site, gerar a chave e salvar sozinho. Duas coisas

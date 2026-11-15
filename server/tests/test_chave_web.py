@@ -88,3 +88,61 @@ def test_arvore_aninhada_fundo_e_percorrida():
         ]},
     }
     assert chave_web.diagnostico(arvore)["pode_criar"] is True
+
+
+# ------------------------------------------------------------------ o mouse
+
+def test_posicao_medida_permite_clicar_com_o_mouse():
+    """“Copy” com caixa na tela é clicável pelo mouse; sem caixa, não."""
+    pagina = _pagina("Create Key")
+    pagina["arvore"]["filhos"].append(_no("Copy", caixa=[812, 400, 70, 28]))
+    dados = chave_web.diagnostico(pagina)
+    assert dados["pode_clicar_com_mouse"] is True
+    assert dados["posicoes"]["copiar"] == [812, 400, 70, 28]
+    assert "o mouse acerta" in chave_web.texto_do_diagnostico(dados)
+
+
+def test_sem_posicao_o_diagnostico_nao_promete_mouse():
+    dados = chave_web.diagnostico(_pagina("Create Key", "Copy"))
+    assert dados["pode_clicar_com_mouse"] is False
+    assert dados["posicoes"]["copiar"] is None
+    assert "sem posição medida" in chave_web.texto_do_diagnostico(dados)
+
+
+def test_caixa_zerada_nao_vale_como_posicao():
+    assert chave_web.caixa_de({"caixa": [0, 0, 0, 0]}) is None
+    assert chave_web.caixa_de({"caixa": [1, 2]}) is None
+    assert chave_web.caixa_de(None) is None
+    assert chave_web.caixa_de({"caixa": [10, 20, 30, 40]}) == [10, 20, 30, 40]
+
+
+def _script():
+    import importlib.util
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location("chave_no_navegador_teste", raiz / "chave-no-navegador.py")
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def test_a_mensagem_do_clique_diz_que_o_cursor_voltou():
+    texto = _script()._descrever_clique({"como": "clique físico em 812,414", "cursor_voltou": True})
+    assert "cursor voltou" in texto
+
+
+def test_sem_mouse_a_mensagem_e_a_acao_do_elemento():
+    texto = _script()._descrever_clique({"como": "ação padrão do elemento"})
+    assert texto == "ação padrão do elemento"
+
+
+def test_o_botao_que_fecha_o_dialogo_e_so_create():
+    """O diálogo do OpenRouter pede “Create”, não “Create Key”.
+
+    A 0.91.9 só conhecia o rótulo longo: com o diálogo aberto, o passo 3
+    procurava “create key”, não achava e dizia que a página tinha mudado.
+    """
+    dados = chave_web.diagnostico(_pagina("Key name", "Create"))
+    assert chave_web.procurar(_pagina("Key name", "Create"), chave_web.PADROES_CONFIRMAR)[0]["nome"] == "Create"
+    assert dados["pode_criar"] is False, "o rótulo curto não é o da página, é o do diálogo"

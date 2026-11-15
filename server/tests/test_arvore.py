@@ -1461,19 +1461,24 @@ def test_a_sonda_tem_o_comando_de_agir():
     assert "como_autorizar" in texto or "--executar" in texto
 
 
-def test_o_executor_nao_move_o_mouse():
+def test_o_executor_nao_move_o_mouse_por_conta_propria():
     """Você não tem mouse USB e a tela dá toque fantasma.
 
-    A ação tem de vir do elemento (ação padrão / foco), nunca de coordenada.
-    Se um dia alguém puser um clique por posição aqui, este teste avisa.
+    A ação continua vindo do elemento (ação padrão / foco) **por padrão**. Na
+    0.91.10 o dono pediu o clique de verdade no botão de copiar, então o
+    caminho por coordenada passou a existir — mas atrás de `mouse`, que nasce
+    `False` aqui. Este teste guarda as duas metades: o padrão é a árvore, e o
+    clique físico só acontece quando alguém autorizou.
     """
     fonte = (Path("server") / "arvore_windows.py").read_text(encoding="utf-8")
     inicio = fonte.index("def executar_ref(")
-    trecho = fonte[inicio : inicio + 3000]
+    trecho = fonte[inicio : fonte.index("def clicar_fisico(")]
     assert "ACC_DO_DEFAULT_ACTION" in trecho
     assert "_focar(" in trecho
     assert "mesa.clicar(" not in trecho
     assert "mesa.mover(" not in trecho
+    assert "mouse: bool = False" in trecho, "o clique físico não pode nascer ligado"
+    assert "if not (mouse and caixa):" in trecho, "o clique por coordenada tem de passar pela autorização"
 
 
 # ---------------------------------------------------------------------------
@@ -1690,3 +1695,26 @@ def test_o_nome_da_janela_nao_sai_duplicado():
     assert plano["processo"] == "notepad.exe"
     assert not plano["janela"].startswith("notepad.exe")
     assert plano["janela"] == "Sem título - Bloco de notas"
+
+
+# -------------------------------------------------------- onde o mouse acerta
+#
+# O clique físico move o cursor para o centro de um botão medido. Estas três
+# conferências são a trava que impede o clique de cair fora da janela do
+# navegador — e acertar o que estiver atrás dela.
+
+def test_ponto_dentro_da_janela_vale() -> None:
+    assert arvore.dentro_da_janela([100, 50, 1200, 800], 700, 400)
+
+
+def test_ponto_fora_da_janela_ou_na_borda_de_baixo_nao_vale() -> None:
+    janela = [100, 50, 1200, 800]
+    assert not arvore.dentro_da_janela(janela, 99, 400)      # à esquerda
+    assert not arvore.dentro_da_janela(janela, 700, 850)     # abaixo do fim
+    assert not arvore.dentro_da_janela(janela, 1300, 400)    # à direita
+
+
+def test_sem_janela_medida_nao_ha_clique() -> None:
+    assert not arvore.dentro_da_janela(None, 10, 10)
+    assert not arvore.dentro_da_janela([], 10, 10)
+    assert not arvore.dentro_da_janela([0, 0, 0, 500], 10, 10)
