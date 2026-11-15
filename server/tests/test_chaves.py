@@ -510,3 +510,69 @@ def test_mascara_da_chave_aq_nao_mostra_o_miolo(env: Path):
     assert mascarada.startswith("AQ.")
     # A máscara mostra o começo e o fim e diz o tamanho: o miolo nunca sai.
     assert "yyyy" in mascarada and colada not in mascarada
+
+
+# ------------------------------------------- Ctrl+V virou lixo na chave (0.91.7)
+#
+# No PC do dono a chave gravada era `\x16abc\x16`. `\x16` é o Ctrl+V: no
+# console do Windows 10 antigo ele não cola, escreve o caractere. O provedor
+# respondia HTTP 400 e a investigação ia para o modelo — lugar errado.
+
+
+def test_caractere_de_controle_sai_da_chave_lida():
+    from server.chaves import separar_chaves
+
+    assert separar_chaves("\x16abc\x16") == ["abc"]
+    assert separar_chaves("gsk_" + "a" * 40 + "\x16") == ["gsk_" + "a" * 40]
+
+
+def test_chave_com_cara_de_chave_nao_gera_suspeita():
+    from server.chaves import suspeitas
+
+    assert suspeitas(["sk-or-v1-" + "a" * 40]) == []
+
+
+def test_chave_sem_formato_vira_aviso_com_o_que_fazer():
+    from server.chaves import suspeitas
+
+    avisos = suspeitas(["abc"], bruto="\x16abc\x16")
+    assert len(avisos) == 1
+    assert "caractere de controle" in avisos[0]
+    assert "Ctrl+V" in avisos[0]
+    assert "3 caractere(s)" in avisos[0]
+
+
+def test_estado_do_env_com_lixo_avisa(tmp_path, monkeypatch):
+    from server import chaves
+
+    arquivo = tmp_path / ".env"
+    arquivo.write_bytes(
+        b"JARVIS_AI_API_KEY=\x16abc\x16\n"
+        b"JARVIS_AI_BASE_URL=https://openrouter.ai/api/v1\n"
+        b"JARVIS_AI_MODEL=deepseek/deepseek-chat-v3-0324:free\n"
+    )
+    monkeypatch.setattr(chaves, "ENV_CAMINHO", arquivo)
+    estado = chaves.estado()
+    assert estado["quantidade"] == 1
+    assert estado["suspeitas"], "chave com lixo precisa aparecer na tela"
+    assert "Ctrl+V" in estado["suspeitas"][0]
+    # O valor devolvido já vem limpo: a chave certa no arquivo volta a funcionar.
+    assert chaves.separar_chaves(chaves.ler_valor("JARVIS_AI_API_KEY")) == ["abc"]
+
+
+def test_env_limpo_nao_ganha_aviso(tmp_path, monkeypatch):
+    from server import chaves
+
+    arquivo = tmp_path / ".env"
+    arquivo.write_bytes(b"JARVIS_AI_API_KEY=sk-or-v1-" + b"a" * 40 + b"\n")
+    monkeypatch.setattr(chaves, "ENV_CAMINHO", arquivo)
+    assert chaves.estado()["suspeitas"] == []
+
+
+def test_a_limpeza_nao_junta_linhas():
+    """Tirar `\\n` colaria duas chaves de linhas diferentes — e a extração pegaria a mais."""
+    from server.chaves import chaves_do_texto, sem_controle
+
+    amostra = "api grok 1 gsk_" + "A" * 40 + "\napi groq 2 gsk_" + "B" * 40
+    assert sem_controle(amostra).count("\n") == 1
+    assert chaves_do_texto(amostra) == ["gsk_" + "A" * 40, "gsk_" + "B" * 40]

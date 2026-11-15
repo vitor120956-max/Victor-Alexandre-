@@ -140,6 +140,27 @@ chave de outro — `llama-3.3-70b-versatile` (Groq) × `meta-llama/llama-3.3-70b
 (OpenRouter). A chave está boa; o nome é que não existe ali.
 
 
+### 0.91.7 — a chave com Ctrl+V dentro
+
+O `conferir-ia.py` respondeu antes de qualquer chamada de rede:
+`chaves: 1 configurada(s) ['\x16…\x16']` — 4 caracteres, dois deles `\x16`.
+
+`\x16` é o código de controle do **Ctrl+V**. No console do Windows 10
+(10.0.14393) o Ctrl+V **não cola**: escreve o caractere. A chave foi gravada
+com lixo nas pontas, o provedor respondeu 400, e a investigação ia para o
+modelo — lugar errado.
+
+- `sem_controle()` em `server/ai.py`, `server/chaves.py` e `configurar-chave.py`:
+  caracteres de controle saem na leitura (preservando `\t\n\r` — tirar a
+  quebra de linha cola linhas e a extração pega chave a mais).
+- `chaves.suspeitas()`: diz, em português, que a chave não tem cara de chave e
+  que o Ctrl+V foi o culpado; `estado()` devolve a lista.
+- `conferir-ia.py` para **antes** da rede quando há suspeita.
+- `configurar-chave.py` limpa ao digitar e avisa quando removeu algo.
+
+Colar no console antigo: **botão direito do mouse**, não Ctrl+V.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

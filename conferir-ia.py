@@ -70,6 +70,22 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  arquivo:   {estado.get('arquivo')}")
     print()
 
+    # A chave inválida vem ANTES de qualquer chamada de rede: perguntar ao
+    # provedor com uma chave que não é chave devolve 400 ou 401, e as duas
+    # mandam a pessoa investigar o lugar errado.
+    problemas = list(estado.get("suspeitas") or [])
+    if problemas:
+        for aviso in problemas:
+            print(f"  ATENÇÃO: {aviso}")
+        print()
+        print("  Isso é a causa, e não é o modelo: a chave gravada não é uma chave.")
+        print("  Para gravar de novo:")
+        print("    .venv\\Scripts\\python configurar-chave.py")
+        print("  No console do Windows 10, cole com o BOTÃO DIREITO do mouse —")
+        print("  Ctrl+V aqui não cola, ele escreve um caractere invisível na chave.")
+        print("  Se preferir a tela do JARVIS: Configurações → Chaves de IA → colar → salvar.")
+        return 1
+
     if not base or not modelo:
         print("  Não há IA configurada. Abra a tela do JARVIS → Configurações → Modelos de IA,")
         print("  ou rode: .venv\\Scripts\\python configurar-chave.py")

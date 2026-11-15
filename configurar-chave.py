@@ -164,6 +164,19 @@ _PADROES_CHAVE = (
 )
 
 
+def sem_controle(texto: str) -> str:
+    """Fora os caracteres de controle (0x00–0x1F e 0x7F).
+
+    0.91.7 — no PC do dono a chave gravada era `\x16abc\x16`. O `\x16` é o
+    **Ctrl+V**: no console do Windows 10 antigo ele não cola, escreve esse
+    caractere. Se a pessoa digitar assim de novo, o lixo sai aqui antes de ir
+    para o `.env`.
+    """
+    # `\t`, `\n` e `\r` ficam: é neles que as chaves estão separadas. Tirar a
+    # quebra de linha colaria duas linhas e a extração pegaria chave a mais.
+    return "".join(c for c in (texto or "") if c in "\t\n\r" or (c >= " " and c != "\x7f"))
+
+
 def chaves_do_texto(texto: str) -> list[str]:
     """Acha chaves dentro de um arquivo de anotações — sem repetir.
 
@@ -174,7 +187,7 @@ def chaves_do_texto(texto: str) -> list[str]:
     """
     achadas: list[str] = []
     for padrao in _PADROES_CHAVE:
-        for achado in re.findall(padrao, texto or ""):
+        for achado in re.findall(padrao, sem_controle(texto)):
             if achado not in achadas:
                 achadas.append(achado)
     return achadas
@@ -448,7 +461,11 @@ def principal(argv: list[str] | None = None) -> int:
     if chave is None and not local:
         if interativo():
             try:
-                chave = getpass.getpass("Chave(s), uma ou separadas por vírgula (não aparece ao digitar): ").strip()
+                digitada = getpass.getpass("Chave(s), uma ou separadas por vírgula (não aparece ao digitar): ")
+                chave = sem_controle(digitada).strip()
+                if chave != digitada.strip():
+                    print("\nHavia caractere invisível na colagem (Ctrl+V no console antigo). Removi.")
+                    print("Se a chave continuar inválida, cole de novo com o botão direito do mouse.")
             except (EOFError, KeyboardInterrupt):
                 chave = ""
         else:

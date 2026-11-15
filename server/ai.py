@@ -107,12 +107,25 @@ def separar_chaves(bruto: str) -> list[str]:
     """
     vistas: set[str] = set()
     saida: list[str] = []
-    for parte in re.split(r"[,;|\s]+", (bruto or "").strip()):
+    for parte in re.split(r"[,;|\s]+", _sem_controle(bruto).strip()):
         parte = parte.strip()
         if parte and parte not in vistas:
             vistas.add(parte)
             saida.append(parte)
     return saida
+
+
+def _sem_controle(texto: str) -> str:
+    """Fora os caracteres de controle (0x00–0x1F e 0x7F).
+
+    0.91.7 — medido no PC do dono: a chave guardada era `\x16abc\x16`. O `\x16`
+    é o **Ctrl+V**: no console do Windows 10 antigo o Ctrl+V não cola, escreve
+    esse caractere. A chave ia para o provedor com lixo nas pontas e voltava
+    HTTP 400 — que parece problema de modelo e não é.
+    """
+    # `\t`, `\n` e `\r` ficam: é neles que as chaves estão separadas. Tirar a
+    # quebra de linha colaria duas linhas e a extração pegaria chave a mais.
+    return "".join(c for c in (texto or "") if c in "\t\n\r" or (c >= " " and c != "\x7f"))
 
 
 def e_local(url: str) -> bool:

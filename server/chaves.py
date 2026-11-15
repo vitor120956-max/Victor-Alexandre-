@@ -85,12 +85,50 @@ def separar_chaves(bruto: str) -> list[str]:
     """Separa o campo `JARVIS_AI_API_KEY` (vírgula, `;`, `|`, espaço ou linha)."""
     vistas: set[str] = set()
     saida: list[str] = []
-    for parte in re.split(r"[,;|\s]+", (bruto or "").strip()):
+    for parte in re.split(r"[,;|\s]+", sem_controle(bruto).strip()):
         parte = parte.strip()
         if parte and parte not in vistas:
             vistas.add(parte)
             saida.append(parte)
     return saida
+
+
+def sem_controle(texto: str) -> str:
+    """Fora os caracteres de controle (0x00–0x1F e 0x7F).
+
+    0.91.7 — no PC do dono a chave gravada era `\x16abc\x16`: o `\x16` é o
+    **Ctrl+V**, que no console do Windows 10 antigo não cola — escreve o
+    caractere. Limpar na leitura faz o JARVIS voltar a funcionar com uma chave
+    que já está certa no arquivo, e não custa nada quando não há lixo.
+    """
+    # `\t`, `\n` e `\r` ficam: é neles que as chaves estão separadas. Tirar a
+    # quebra de linha colaria duas linhas e a extração pegaria chave a mais.
+    return "".join(c for c in (texto or "") if c in "\t\n\r" or (c >= " " and c != "\x7f"))
+
+
+def parece_chave(chave: str) -> bool:
+    """A string tem cara de chave de algum provedor conhecido?"""
+    return any(re.fullmatch(padrao, chave or "") for padrao in PADROES_CHAVE)
+
+
+def suspeitas(chaves: list[str], bruto: str = "") -> list[str]:
+    """Frases prontas sobre chaves que não parecem chave — para a tela dizer o quê."""
+    avisos: list[str] = []
+    tinha_controle = any(ord(c) < 32 or ord(c) == 127 for c in (bruto or ""))
+    for indice, chave in enumerate(chaves, start=1):
+        if parece_chave(chave):
+            continue
+        motivo = (
+            "tinha caractere de controle (é o Ctrl+V: no console do Windows 10 antigo ele não cola, escreve um símbolo)"
+            if tinha_controle
+            else "não bate com nenhum formato conhecido"
+        )
+        avisos.append(
+            f"a chave {indice} {motivo} e tem {len(chave)} caractere(s). "
+            "Ela não é uma chave válida: cole de novo no cartão Chaves de IA "
+            "(lá o Ctrl+V funciona) ou rode `configurar-chave.py` e use o botão direito do mouse para colar."
+        )
+    return avisos
 
 
 def chaves_do_texto(texto: str) -> list[str]:
@@ -204,6 +242,7 @@ def estado() -> dict[str, Any]:
     dono = provedores.por_base(base)
     return {
         "quantidade": len(chaves),
+        "suspeitas": suspeitas(chaves, ler_valor("JARVIS_AI_API_KEY", texto)),
         "mascaradas": [mascarar(chave) for chave in chaves],
         "provedor": ler_valor("JARVIS_AI_PROVIDER", texto),
         "provedor_id": dono["id"] if dono else "",
