@@ -576,3 +576,32 @@ def test_a_parada_diz_o_que_fazer(registry):
     assert "Cole o traceback" in dica
     assert dica in resultado["resumo"]
     assert "O que fazer: " + dica in maestro.texto_da_execucao(resultado)
+
+
+def test_o_terminal_mostra_o_dossie_inteiro(registry):
+    """0.91.5 — o dossiê saía cortado em 160 caracteres, e ele é o produto."""
+    plano = _plano("conserta o erro do meu programa", registry)
+    dossie = "# Dossiê de conserto\n" + ("linha do dossiê\n" * 40) + "FIM DO DOSSIE"
+
+    async def falso(skill, campos, dry):
+        if skill == "conserto.diagnosticar":
+            return {"lido": True, "fonte": "colado"}
+        if skill == "conserto.dossie":
+            return {"lido": True, "texto": dossie}
+        return {"lido": True, "proposto": False, "motivo": "sem chave"}
+
+    resultado = asyncio.run(maestro.executar(plano, registry=registry, autorizar=True, executador=falso))
+
+    resumido = maestro.texto_da_execucao(resultado)
+    assert "FIM DO DOSSIE" not in resumido, "no chat o texto continua resumido"
+
+    completo = maestro.texto_da_execucao(resultado, completo=True)
+    assert "FIM DO DOSSIE" in completo
+    assert "--- conserto.dossie (documento completo) ---" in completo
+    assert "linha do dossiê" in completo
+
+
+def test_so_o_passo_que_declara_mostra_o_documento(registry):
+    plano = _plano("conserta o erro do meu programa", registry)
+    assert plano["passos"][1]["mostrar_texto"] is True
+    assert plano["passos"][0]["mostrar_texto"] is False

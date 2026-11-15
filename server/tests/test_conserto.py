@@ -325,3 +325,37 @@ def test_o_app_registra_a_falha_interna_no_diario_e_nao_vaza_detalhe(tmp_path, m
     assert ultimo["tipo"] == "KeyError"
     assert ultimo["skill"] == "teste.quebra"
     assert "campo_secreto_do_usuario" in ultimo["rastro"]
+
+
+def test_a_falha_do_provedor_mostra_a_causa_e_nao_so_o_nome():
+    """0.91.5 — medido no PC: a resposta era só “AIUnavailable”.
+
+    `AIUnavailable` carrega a frase que diz o que fazer e existe justamente
+    para poder ser mostrada sem segredo. Jogar fora o `str()` deixava o dono
+    sem saber se era chave, cota ou rede.
+    """
+    from server.ai import AIUnavailable
+
+    class ProvedorQueRecusa:
+        configured = True
+
+        async def generate(self, pedido):  # noqa: ARG002
+            raise AIUnavailable("as 2 chaves estão no limite agora (HTTP 429).")
+
+    achado = conserto.propor(erro=RASTRO_KEYERROR, provedor=ProvedorQueRecusa())
+    assert achado["proposto"] is False
+    assert "HTTP 429" in achado["motivo"]
+    assert "no limite" in achado["motivo"]
+    assert achado["motivo"] != "O provedor não respondeu: AIUnavailable."
+
+
+def test_falha_do_provedor_sem_mensagem_ainda_diz_o_tipo():
+    class ProvedorMudo:
+        configured = True
+
+        async def generate(self, pedido):  # noqa: ARG002
+            raise RuntimeError()
+
+    achado = conserto.propor(erro=RASTRO_KEYERROR, provedor=ProvedorMudo())
+    assert "RuntimeError" in achado["motivo"]
+    assert "sem detalhe" in achado["motivo"]

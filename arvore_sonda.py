@@ -125,9 +125,9 @@ def _orquestrar(args: argparse.Namespace) -> int:
 
     resultado = asyncio.run(maestro.executar(plano, registry=registro, autorizar=True))
     if args.json:
-        print(json.dumps({**resultado, "texto": maestro.texto_da_execucao(resultado)}, ensure_ascii=False, indent=2, default=str))
+        print(json.dumps({**resultado, "texto": maestro.texto_da_execucao(resultado, completo=True)}, ensure_ascii=False, indent=2, default=str))
     else:
-        print(maestro.texto_da_execucao(resultado))
+        print(maestro.texto_da_execucao(resultado, completo=True))
         if resultado.get("parou_em"):
             print(f"  parou no passo {resultado['parou_em']} de {len(plano['passos'])}.")
     return 0 if resultado.get("ok") else 1

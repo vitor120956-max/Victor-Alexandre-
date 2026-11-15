@@ -106,6 +106,20 @@ em qualquer posição — num traceback, a exceção é a última coisa escrita.
 testes fixam: linha única acha e classifica, várias linhas continua igual.
 
 
+### 0.91.5 — o dossiê inteiro e a falha da IA com causa
+
+Duas coisas que só aparecem quando a máquina funciona: na primeira execução em
+que o diagnóstico **achou** o erro (`IndexError`, `server/app.py` linha 318), o
+dossiê saiu cortado em 160 caracteres e a falha do passo 3 saiu como
+`AIUnavailable` — o nome da exceção, não a explicação.
+
+- `Passo.mostrar_texto`: o terminal imprime o documento inteiro entre
+  marcadores; a API continua resumida. Só o passo que produz documento abre.
+- `conserto.propor` passou a usar o `str()` do erro: `AIUnavailable` existe para
+  poder ser mostrada sem segredo, e diz se a chave foi recusada, se está no
+  limite ou se é rede.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

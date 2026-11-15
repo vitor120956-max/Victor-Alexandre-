@@ -62,6 +62,10 @@ class Passo:
     # O que dizer à pessoa quando **este** passo barra a fila. Declarado junto
     # do passo porque só ele sabe qual é a saída.
     dica: str = ""
+    # Se o passo produz um documento (dossiê, relatório), o terminal mostra o
+    # texto inteiro. Cortar em 160 caracteres o produto do passo é entregar
+    # nada com aparência de entrega.
+    mostrar_texto: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,6 +163,7 @@ PROCEDIMENTOS: tuple[Procedimento, ...] = (
                 campos={"erro": "$erro"},
                 porque="juntar o que é preciso para corrigir de primeira",
                 exigir="lido",
+                mostrar_texto=True,
             ),
             Passo(
                 skill="conserto.propor",
@@ -391,6 +396,7 @@ def planejar(pedido: str, *, registry: Any, procedimento: Procedimento | None = 
                 "efeito": _efeito(registry, passo.skill),
                 "exigir": passo.exigir,
                 "dica": passo.dica,
+                "mostrar_texto": passo.mostrar_texto,
                 "obrigatorios": obrigatorios,
                 "faltando": sorted(set(faltando)),
                 "vem_do_passo": vindos,
@@ -628,7 +634,15 @@ async def executar(
                 f"a skill rodou mas não concluiu ({exigir}=false): {motivo_da_skill}",
             )
         saidas.append(normalizada)
-        feitos.append({"n": passo["n"], "skill": passo["skill"], "campos": campos, "saida": saidas[-1]})
+        feitos.append(
+            {
+                "n": passo["n"],
+                "skill": passo["skill"],
+                "campos": campos,
+                "saida": saidas[-1],
+                "mostrar_texto": bool(passo.get("mostrar_texto")),
+            }
+        )
 
     return {
         "ok": True,
@@ -764,19 +778,31 @@ def texto_do_plano(plano: dict[str, Any]) -> str:
     return "\n".join(linhas)
 
 
-def texto_da_execucao(resultado: dict[str, Any]) -> str:
+def texto_da_execucao(resultado: dict[str, Any], *, completo: bool = False) -> str:
     """O que rodou, **o que voltou** e — se parou — onde parou.
 
     Antes de 0.91.2 isto dizia só “feito”. Um passo que devolveu `lido: false`
     aparecia igualzinho a um que leu de verdade, e a pessoa não tinha como
     saber que o resultado estava vazio sem abrir o JSON.
+
+    `completo=True` (o terminal usa assim) imprime inteiro o texto dos passos
+    que declaram `mostrar_texto` — o dossiê é o produto do passo 2, e cortá-lo
+    em 160 caracteres entrega nada com aparência de entrega.
     """
     linhas: list[str] = []
     for passo in resultado["passos"]:
         linhas.append(f"{passo['n']}. {passo['skill']} — feito")
-        voltou = _linha_da_saida(passo.get("saida") or {})
+        saida = passo.get("saida") or {}
+        voltou = _linha_da_saida(saida)
         if voltou:
             linhas.append(f"   voltou: {voltou}")
+        documento = str(saida.get("texto") or "")
+        if completo and passo.get("mostrar_texto") and documento.strip():
+            linhas.append("")
+            linhas.append(f"   --- {passo['skill']} (documento completo) ---")
+            linhas.extend(f"   {linha}" for linha in documento.splitlines())
+            linhas.append(f"   --- fim de {passo['skill']} ---")
+            linhas.append("")
     if resultado.get("parou_em"):
         alvo = resultado["passo_que_parou"]
         linhas.append(f"Parei no passo {alvo['n']} ({alvo['skill']}): {resultado['motivo']}")

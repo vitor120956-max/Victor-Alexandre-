@@ -507,7 +507,18 @@ def propor(
     try:
         resposta = asyncio.run(provedor.generate(pedido))
     except Exception as exc:  # rede, cota, chave inválida
-        return {"lido": True, "proposto": False, "motivo": f"O provedor não respondeu: {type(exc).__name__}."}
+        # 0.91.5 — medido no PC: a resposta era só “AIUnavailable”, o nome da
+        # exceção. `AIUnavailable` já carrega a frase que diz o que fazer
+        # (“a chave foi recusada…”, “as chaves estão no limite…”, “não foi
+        # possível conectar…”), e o `str()` dela é seguro por contrato — a
+        # classe existe justamente para poder ser mostrada sem segredo.
+        detalhe = str(exc).strip()
+        motivo = (
+            f"O provedor não respondeu ({type(exc).__name__}): {detalhe}"
+            if detalhe
+            else f"O provedor não respondeu ({type(exc).__name__}), sem detalhe."
+        )
+        return {"lido": True, "proposto": False, "motivo": motivo}
 
     if "SEM PATCH" in resposta.upper():
         motivo = resposta.replace("SEM PATCH", "").strip(" —:-") or "o modelo disse que não é erro de código."
