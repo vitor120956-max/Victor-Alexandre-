@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+from datetime import datetime
 import sys
 import time
 from pathlib import Path
@@ -117,20 +118,62 @@ def _ler_janela(alvo: str, profundidade: int = 8, limite: int = 1500):
     return janela, montada
 
 
+# Abaixo disto a leitura não chegou na página: veio a **moldura** do Chrome
+# (“Chrome Legacy Window”, o título da aba, botões da barra). Medido na tela do
+# dono: com o painel aberto, a leitura automática escolheu a moldura e trouxe
+# 3 nomes — e o script disse que o diálogo não estava lá.
+LEITURA_POBRE = 8
+
+
+def _nomes(montada: dict) -> int:
+    """Quantos elementos com nome a leitura trouxe — o tamanho da “cara” da página."""
+    from server import chave_web
+
+    return len(chave_web.elementos(montada))
+
+
+def _ler_pela_fonte(handle: int, profundidade: int, limite: int, fonte: str = "auto") -> dict:
+    """Uma leitura, por uma fonte escolhida. `auto` deixa o Windows decidir."""
+    from server import arvore, arvore_windows
+
+    if fonte == "auto":
+        bruto = arvore_windows.ler_janela(handle, profundidade, limite)
+    else:
+        bruto = arvore_windows.ler_janela(handle, profundidade, limite, fonte=fonte)
+    return arvore.montar(bruto, profundidade, limite, com_caminho=True)
+
+
 def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
     """Relê **esta** janela (pelo handle), não “a janela do chrome”.
 
-    Por que importa: a cada passo o código escolhia de novo a janela pelo nome.
-    Com duas janelas do Chrome abertas — a sua e a do site —, um passo podia
-    ler (e clicar) na errada. O handle é a identidade; o nome é palpite.
+    Duas coisas que esta função garante, e cada uma custou uma execução no PC
+    do dono:
+
+    1. **o handle é a identidade.** A cada passo o código escolhia de novo a
+       janela pelo nome; com duas janelas do Chrome abertas — a sua e a do
+       site —, um passo podia ler (e clicar) na errada;
+    2. **leitura pobre é lida de novo, pelas duas fontes.** O Chrome moderno
+       publica a página pela UIAutomation; a MSAA devolve só a moldura. Se a
+       escolha automática cair na moldura (3 nomes), a página some da leitura —
+       e o script conclui “não apareceu”. Aqui, quando isso acontece, as fontes
+       são medidas na mão e fica a que mostrou a página.
     """
-    from server import arvore, arvore_windows
+    from server import arvore_windows
 
     handle = int(janela.get("handle") or 0)
     if not handle or not arvore_windows.janela_muda(handle):
         raise PassoError("a janela do navegador foi fechada no meio do caminho.")
-    bruto = arvore_windows.ler_janela(handle, profundidade, limite)
-    return janela, arvore.montar(bruto, profundidade, limite, com_caminho=True)
+    montada = _ler_pela_fonte(handle, profundidade, limite, "auto")
+    if _nomes(montada) >= LEITURA_POBRE:
+        return janela, montada
+    for fonte in ("uia", "msaa"):
+        try:
+            tentativa = _ler_pela_fonte(handle, profundidade, limite, fonte)
+        except Exception:  # noqa: BLE001 - COM de terceiros: uma fonte pode cair
+            continue
+        if _nomes(tentativa) > _nomes(montada):
+            montada = tentativa
+    return janela, montada
 
 
 def _clicar(
@@ -554,36 +597,99 @@ def _levar_ate_as_chaves(args, conta: str | None = None, segundos: float | None 
     )
 
 
-def _esperar_dialogo(args, janela: dict, segundos: float = 12.0):
-    """Espera o diálogo “Create API key” aparecer, lendo fundo.
+def _esperar_dialogo(args, janela: dict, segundos: float = 35.0):
+    """Espera o painel “Create API key” aparecer, com paciência e sem palpite.
 
-    Duas coisas que a 0.91.15 não fazia e custaram uma execução no PC do dono:
+    O que mudou depois do PC do dono (0.91.17): ele desistia em 12 segundos e,
+    pior, desistia **por causa de uma leitura ruim** — uma passada em que o
+    Chrome devolveu só a moldura. Duas correções:
 
-    1. **lê fundo** (14 níveis): o painel mora no fim do documento e a leitura
-       rasa não o via — o diálogo estava na tela e o script dizia que não;
-    2. **olha as outras janelas do navegador**: se o clique caiu numa janela
-       diferente da que foi lida, o painel está lá, não aqui.
+    1. **35 segundos**, com aviso de progresso: carregar a página, ou o painel
+       abrir, pode levar mais do que os 12 de antes — e esperar calado parece
+       travamento;
+    2. **leitura pobre não é resposta.** Cada tentativa relê pela fonte que
+       mostra a página (ver `_reler`); só quando o painel não aparece em
+       leitura boa é que ele conclui que não abriu.
+
+    As outras janelas do navegador são conferidas a cada três tentativas — o
+    clique pode abrir o painel na janela vizinha.
     """
     from server import chave_web
 
-    fim = time.time() + segundos
+    inicio = time.time()
+    fim = inicio + segundos
+    print(f"     esperando o painel abrir (até {int(segundos)}s; a página pode estar carregando)…")
     ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
+    tentativa = 0
     while True:
-        try:
-            _janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
-            ultima = (janela, montada)
-            if chave_web.e_dialogo_de_criacao(montada):
-                return ultima
-        except PassoError:
-            pass
-        for outra, montada_outra in _ler_janelas(args.alvo, profundidade=PROFUNDA, limite=TETO_FUNDO):
-            if int(outra.get("handle") or 0) == int(janela.get("handle") or 0):
-                continue
-            if chave_web.e_dialogo_de_criacao(montada_outra):
-                return outra, montada_outra
+        if chave_web.e_dialogo_de_criacao(ultima[1]):
+            return ultima
         if time.time() >= fim:
-            raise PassoError(_diagnostico_da_leitura(ultima[1]))
-        time.sleep(0.7)
+            break
+        tentativa += 1
+        if tentativa % 3 == 0:
+            for outra, montada_outra in _ler_janelas(
+                args.alvo, profundidade=PROFUNDA, limite=TETO_FUNDO
+            ):
+                if int(outra.get("handle") or 0) == int(janela.get("handle") or 0):
+                    continue
+                if chave_web.e_dialogo_de_criacao(montada_outra):
+                    return outra, montada_outra
+        ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
+        if tentativa % 4 == 0:
+            print(
+                f"     ainda procurando… ({int(time.time() - inicio)}s) — "
+                f"a leitura trouxe {_nomes(ultima[1])} elementos."
+            )
+        time.sleep(1.0)
+    relatorio = _gravar_relatorio(janela)
+    raise PassoError(_diagnostico_da_leitura(ultima[1]) + relatorio["recado"])
+
+
+def _gravar_relatorio(janela: dict) -> dict:
+    """Grava, na pasta do JARVIS, o que cada fonte de leitura mostrou.
+
+    Por que um arquivo: quando a leitura falha, a tela mostra só o veredito. O
+    relatório guarda as três leituras — quantos elementos cada uma trouxe, o
+    aviso delas e os primeiros nomes — que é o que permite descobrir a causa
+    sem adivinhar.
+    """
+    from server import chave_web
+
+    linhas = [
+        "JARVIS — por que a leitura não achou o painel “Create API key”",
+        f"quando: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+        f"janela: {str(janela.get('titulo') or '')!r} (handle {janela.get('handle')})",
+        "",
+    ]
+    handle = int(janela.get("handle") or 0)
+    for fonte in ("auto", "uia", "msaa"):
+        try:
+            montada = _ler_pela_fonte(handle, PROFUNDA, TETO_FUNDO, fonte)
+        except Exception as exc:  # noqa: BLE001 - é diagnóstico, não pode derrubar
+            linhas.append(f"{fonte:4}: erro {type(exc).__name__}: {exc}")
+            linhas.append("")
+            continue
+        nos = chave_web.elementos(montada)
+        linhas.append(
+            f"{fonte:4}: {len(nos)} elemento(s) com nome, {montada.get('total')} nó(s), "
+            f"fonte relatada {montada.get('fonte')!r}"
+        )
+        for chave in ("aviso", "nota", "de_filha", "dica"):
+            valor = str(montada.get(chave) or "").strip()
+            if valor:
+                linhas.append(f"      {chave}: {valor}")
+        if nos:
+            linhas.append(
+                "      primeiros: " + ", ".join(str(n.get("nome") or "")[:40] for n in nos[:40])
+            )
+        linhas.append("")
+    caminho = Path(__file__).resolve().parent / "chave-leitura.txt"
+    try:
+        caminho.write_text("\n".join(linhas), encoding="utf-8")
+    except OSError:
+        return {"arquivo": "", "recado": ""}
+    return {"arquivo": str(caminho), "recado": f" Detalhes em {caminho.name}."}
 
 
 def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
@@ -598,11 +704,51 @@ def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
     nomes = [str(no.get("nome") or "")[:28] for no in chave_web.elementos(montada)[:quantos]]
     total = len(chave_web.elementos(montada))
     aviso = str(montada.get("aviso") or "").strip()
-    texto = f"o diálogo não apareceu na leitura ({total} elementos com nome"
+    texto = (
+        f"o painel não apareceu na leitura ({total} elementos com nome, "
+        f"fonte {montada.get('fonte') or '?'}, {montada.get('total')} nós"
+    )
     texto += f"; os primeiros: {', '.join(nomes)})." if nomes else ")."
+    if total < LEITURA_POBRE:
+        texto += (
+            " A leitura veio pobre — isso é a moldura do Chrome, não a página: "
+            "pode ser a página ainda carregando ou o painel ainda abrindo."
+        )
     if aviso:
         texto += f" Aviso da leitura: {aviso}"
     return texto
+
+
+def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 18.0):
+    """Espera a página parar de mudar antes de clicar em “New key”.
+
+    Medido no PC do dono (0.91.17): a página abriu ainda carregando, o clique
+    caiu num botão que a página trocou em seguida, e o painel nunca abriu —
+    “ele tentou antes de a página ficar pronta”, nas palavras do dono.
+
+    O sinal de “pronta” aqui é simples e não depende de palpite: o botão de
+    criar está na leitura **e** duas leituras seguidas trazem praticamente os
+    mesmos elementos. Não é garantia de fim de carregamento; é o suficiente
+    para não clicar num botão que vai sumir.
+    """
+    from server import chave_web
+
+    fim = time.time() + segundos
+    anterior = -1
+    avisou = False
+    while True:
+        agora = _nomes(montada)
+        tem_botao = bool(chave_web.procurar(montada, chave_web.PADROES_CRIAR))
+        if tem_botao and agora >= LEITURA_POBRE and abs(agora - anterior) <= 2:
+            return janela, montada
+        if time.time() >= fim:
+            return janela, montada  # segue com o que há: quem clica diz o que deu
+        if not avisou:
+            print("     a página ainda está carregando — espero ela parar antes de clicar.")
+            avisou = True
+        anterior = agora
+        time.sleep(1.0)
+        janela, montada = _reler(janela, 8, 1500)
 
 
 def _abrir_lista(
@@ -767,36 +913,67 @@ def _criar_e_copiar(
 
     nome = args.nome or chave_web.nome_sugerido()
 
-    # 1. Create Key
-    achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR)
-    if not achados:
-        print("  1. NÃO DEI: o botão de criar não está na árvore desta janela.")
-        return None
-    botao = achados[0]
-    print(f"  1. clicando em “{botao.get('nome')}”…")
-    try:
-        print(f"     {_descrever_clique(_clicar(janela, botao, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
-    except PassoError as exc:
-        print(f"  1. NÃO DEI: {exc}")
-        return None
-    time.sleep(1.5)
+    # 0. a página pronta — a 0.91.16 clicou num botão que a página ainda ia
+    #    trocar, e o painel nunca abriu. Clicar cedo demais é o mesmo que não
+    #    clicar: o efeito se perde quando a página termina de montar.
+    janela, montada = _esperar_pagina_pronta(args, janela, montada)
 
-    # 2. o diálogo inteiro: nome, expiração e limite de crédito.
-    #    Medido na tela do dono: sem a expiração (que tem asterisco) o botão
-    #    “Create” fica desabilitado, e clicar nele não cria nada.
-    try:
-        janela, montada = _esperar_dialogo(args, janela, segundos=12)
-    except PassoError as exc:
+    # 1. Create Key — e, se o painel não abrir numa página **legível**, mais uma
+    #    tentativa. O PC do dono mostrou os dois lados disso:
+    #      print 1 — página legível (43 elementos), painel ausente: o clique se
+    #                perdeu porque a página ainda montava. Repetir é seguro;
+    #      print 2 — painel aberto, leitura com 3 nomes: aqui NÃO se repete,
+    #                porque não se sabe o que está na tela (poderia abrir um
+    #                segundo painel em cima do primeiro).
+    falha = None
+    for tentativa in (1, 2):
+        achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR)
+        if not achados:
+            print("  1. NÃO DEI: o botão de criar não está na árvore desta janela.")
+            return None
+        botao = achados[0]
+        print(f"  1. clicando em “{botao.get('nome')}”…")
+        try:
+            print(f"     {_descrever_clique(_clicar(janela, botao, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
+        except PassoError as exc:
+            print(f"  1. NÃO DEI: {exc}")
+            return None
+        time.sleep(1.5)
+
+        # 2. o diálogo inteiro: nome, expiração e limite de crédito.
+        #    Medido na tela do dono: sem a expiração (que tem asterisco) o botão
+        #    “Create” fica desabilitado, e clicar nele não cria nada.
+        try:
+            janela, montada = _esperar_dialogo(args, janela)
+            break
+        except PassoError as exc:
+            falha = exc
+            try:
+                janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+            except PassoError:
+                montada = None
+            legivel = montada is not None and _nomes(montada) >= LEITURA_POBRE
+            if tentativa == 2 or not legivel:
+                break
+            if chave_web.e_dialogo_de_criacao(montada):
+                break
+            print("     o painel não abriu, e a página está legível — clico em “New key” mais uma vez.")
+            time.sleep(1.0)
+    else:  # pragma: no cover - o `for` sempre sai por `break`
+        return None
+    if falha is not None and not chave_web.e_dialogo_de_criacao(montada or {}):
         # Sem o diálogo não há o que preencher: seguir daqui faria o passo 3
         # achar o botão “New key” da página e clicar nele outra vez, e o
         # relatório diria “criei” sem ter criado nada.
-        print(f"  2. NÃO DEI: {exc}")
-        print("     O diálogo não abriu. Clique em New key e rode de novo; nada foi criado.")
+        print(f"  2. NÃO DEI: {falha}")
+        print("     Nada foi criado. Se o painel está ABERTO na sua tela, ele ficou ilegível")
+        print("     para o JARVIS agora: feche com Esc, deixe a página terminar e rode de novo.")
         return None
     print("  2. preenchendo o diálogo:")
     montada, preenchidos = _preencher_dialogo(
         janela, montada, nome, mouse=mouse, primeiro_mouse=primeiro_mouse
     )
+    antes = _nomes(montada)
     faltando = [campo for campo in ("expiração", "limite") if campo not in preenchidos]
     if "expiração" in faltando:
         print("     AVISO: sem a expiração o botão Create costuma ficar apagado.")
@@ -819,6 +996,13 @@ def _criar_e_copiar(
     try:
         _janela, depois = _reler(janela, PROFUNDA, TETO_FUNDO)
     except PassoError:
+        depois = None
+    # Leitura que despencou não prova nada sobre o painel: se antes vinham 43
+    # elementos e agora vêm 3, o que falhou foi a leitura — não o clique. Nesse
+    # caso não se conclui nem “criou” nem “não criou”: segue para a cópia, e a
+    # cópia é quem diz a verdade (chave na área = criou).
+    if depois is not None and _nomes(depois) < LEITURA_POBRE and _nomes(depois) * 2 < antes:
+        print("  3. a leitura despencou agora; não dá para conferir pelo painel — vou pela cópia.")
         depois = None
     if depois and chave_web.e_dialogo_de_criacao(depois):
         print("  3. o diálogo CONTINUA aberto — a chave não foi criada.")

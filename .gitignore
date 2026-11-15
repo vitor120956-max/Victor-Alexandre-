@@ -31,3 +31,6 @@ google_drive/
 
 # Relatório do diagnostico.py (dado da máquina, não do projeto).
 relatorio-lentidao.txt
+
+# relatório de leitura que o chave-no-navegador.py grava quando falha
+chave-leitura.txt

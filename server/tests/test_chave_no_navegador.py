@@ -23,6 +23,8 @@ from typing import Any
 
 import pytest
 
+from server import chave_web
+
 RAIZ = Path(__file__).resolve().parents[2]
 
 
@@ -78,6 +80,18 @@ class WindowsFalso:
 
     def janela_muda(self, _handle) -> bool:
         return True
+
+    def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+        """O bruto, como o Windows devolve — quem monta é `arvore.montar`."""
+        return {
+            "janela": {"handle": handle, "titulo": "API Keys | OpenRouter", "processo": "chrome"},
+            "raiz": {
+                "nome": "API Keys",
+                "papel": 1,
+                "filhos": [{"nome": "Create Key", "papel": 43, "caixa": [812, 200, 90, 28]}],
+            },
+            "fonte": "uia",
+        }
 
     def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
         self.chamadas.append(
@@ -224,8 +238,14 @@ class Mundo:
     def janela_muda(self, _handle) -> bool:
         return True
 
-    def ler_janela(self, _handle, _profundidade=8, _limite=1500):
-        return self.montar()
+    def ler_janela(self, _handle, _profundidade=8, _limite=1500, fonte="auto"):
+        self.fontes = getattr(self, "fontes", []) + [fonte]
+        montada = self.montar()
+        return {
+            "janela": {"handle": 4242, "titulo": montada.get("alvo") or "OpenRouter", "processo": "chrome"},
+            "raiz": montada.get("arvore"),
+            "fonte": "uia",
+        }
 
     def trazer_para_frente(self, _handle) -> bool:
         return True
@@ -538,32 +558,56 @@ class ConfiguradorAuto(ConfiguradorFalso):
 
 
 def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
+    """O `--auto` com um site de mentira que **muda quando é clicado**.
+
+    Modelar o site (e não a leitura) é o que deixa o dublê honesto: a página
+    das chaves mostra “New key”; o clique troca a tela pelo painel; o clique em
+    “Create” troca pela página já criada. É assim que o Chrome do dono se
+    comporta — e é o que permite testar a espera da página e a do painel.
+    """
     script = _script()
-    fila = list(paginas)
-    estado = {"i": 0}
+    pagina = {"i": 0}
 
-    def ler(_alvo):
-        indice = min(estado["i"], len(fila) - 1)
-        estado["i"] += 1
-        return JANELA, fila[indice]
+    def atual() -> dict[str, Any]:
+        return paginas[min(pagina["i"], len(paginas) - 1)]
 
-    monkeypatch.setattr(script, "_ler_janela", ler)
+    def bruto(handle: int) -> dict[str, Any]:
+        tela = atual()
+        return {
+            "janela": {"handle": handle, "titulo": str(tela.get("alvo") or "API Keys"), "processo": "chrome"},
+            "raiz": tela.get("arvore"),
+            "fonte": "uia",
+        }
 
-    # `_reler` é o “olhar de novo a mesma janela”: no dublê, o diálogo (a
-    # segunda página da fila) fica na tela até o Create ser clicado — as listas
-    # de expiração/limite não abrem aqui, e é o `_ler_janela` do passo 3 que
-    # avança para a página seguinte, já criada.
-    def reler(janela, _p=8, _l=1500):
-        return janela, fila[min(1, len(fila) - 1)]
+    modulo = windows or WindowsFalso()
+    modulo.ler_janela = lambda handle, _p=8, _l=1500, fonte="auto": bruto(handle)
+    clique = modulo.executar_ref
 
-    monkeypatch.setattr(script, "_reler", reler)
+    def nome_do_botao(caixa_alvo) -> str:
+        """Que botão tem esta caixa na tela de agora (para saber se ela muda)."""
+        pilha = [atual().get("arvore")]
+        while pilha:
+            no = pilha.pop()
+            if not isinstance(no, dict):
+                continue
+            if list(no.get("caixa") or []) == list(caixa_alvo or []):
+                return str(no.get("nome") or "")
+            pilha.extend(no.get("filhos") or [])
+        return ""
 
-    def esperar_pagina(_args, conta="", segundos=0):
-        # A página já está aberta no dublê; os passos seguintes releem por
-        # `_ler_janela`, que continua andando pela mesma fila.
-        return JANELA, fila[0]
+    def executar(handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+        resultado = clique(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+        # Só os botões trocam a tela: digitar no nome não é navegação.
+        nome = nome_do_botao(caixa)
+        if any(marca in nome.lower() for marca in ("create", "new key")):
+            pagina["i"] += 1
+        return resultado
 
-    monkeypatch.setattr(script, "_levar_ate_as_chaves", esperar_pagina)
+    modulo.executar_ref = executar
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", modulo)
+
+    monkeypatch.setattr(script, "_ler_janela", lambda _alvo, **_k: (JANELA, atual()))
+    monkeypatch.setattr(script, "_levar_ate_as_chaves", lambda _args, conta="", segundos=0: (JANELA, paginas[0]))
     monkeypatch.setattr(script, "_texto_da_area", lambda: area["texto"])
     relogio = itertools.count()
     monkeypatch.setattr(
@@ -571,7 +615,6 @@ def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
     )
     config = config or ConfiguradorAuto()
     monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
-    monkeypatch.setitem(sys.modules, "server.arvore_windows", windows or WindowsFalso())
     base = _args(provedor="", espera_pagina=5, espera_colar=5)
     for chave, valor in extra.items():
         setattr(base, chave, valor)
@@ -590,25 +633,7 @@ def test_auto_abre_cria_copia_e_grava_a_chave_nova(monkeypatch, capsys):
         _no("Create", [700, 640, 80, 28]),
     )
     paginas = [_pagina(_no("Create Key", [812, 200, 90, 28])), dialogo, PAGINA_COM_COPIA]
-    windows = WindowsFalso()
-    script, config, args = _auto(monkeypatch, paginas, area, windows=windows)
-
-    # O diálogo só some quando o “Create” é clicado — é assim no site, e é o
-    # que a conferência do passo 3 lê para saber que a chave nasceu.
-    aberto = {"sim": True}
-    clique_de_verdade = windows.executar_ref
-
-    def executar_ref(handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
-        if list(caixa or []) == [700, 640, 80, 28]:
-            aberto["sim"] = False
-        return clique_de_verdade(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
-
-    monkeypatch.setattr(windows, "executar_ref", executar_ref)
-    monkeypatch.setattr(
-        script,
-        "_reler",
-        lambda janela, _p=8, _l=1500: (janela, dialogo if aberto["sim"] else PAGINA_COM_COPIA),
-    )
+    script, config, args = _auto(monkeypatch, paginas, area)
     # a página, depois de criar, tem a chave escrita nela: Ctrl+A/Ctrl+C copia isso
     monkeypatch.setattr(
         script,
@@ -651,11 +676,13 @@ def test_auto_sem_autorizar_nao_abre_nem_cria(monkeypatch, capsys):
     assert "--autorizar" in capsys.readouterr().out
 
 
-def test_auto_usa_o_site_do_provedor_pedido(monkeypatch):
+def test_auto_usa_o_site_do_provedor_pedido(monkeypatch, tmp_path):
     """O pedido foi “os sites onde estão as chaves” — não é só o OpenRouter."""
     area = {"texto": ""}
     paginas = [_pagina(_no("Create Key"))]
     script, config, args = _auto(monkeypatch, paginas, area, provedor="groq")
+    # a página do dublê não tem painel; a falha grava o relatório na pasta do script
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
     monkeypatch.setattr(script, "_esperar_chave", lambda _m, _a, segundos=0: (CHAVE_NOVA, CHAVE_NOVA))
 
     assert script.passo_auto(args) == 0
@@ -940,7 +967,7 @@ def test_sem_never_escolhe_o_maior_prazo(monkeypatch):
     assert mundo.expira == "90 days"
 
 
-def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys):
+def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys, tmp_path):
     class NuncaAbre(Mundo):
         def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
             if list(caixa or []) == CAIXA_NEW_KEY:
@@ -950,11 +977,16 @@ def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys):
 
     mundo = NuncaAbre()
     script, config = _com_mundo(monkeypatch, mundo)
+    # a falha grava o relatório na pasta do script: aqui vai para a temporária,
+    # para a suíte não deixar arquivo no repositório
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
 
     assert script.passo_criar(_args()) == 1
     assert mundo.cliques == [CAIXA_NEW_KEY], "um clique só: não insiste no New key"
     assert config.gravadas == []
-    assert "O diálogo não abriu" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "Nada foi criado" in saida
+    assert "rode de novo" in saida
 
 
 # ---------------------------------------------------------------------------
@@ -1078,3 +1110,216 @@ def test_a_falta_do_dialogo_diz_quantos_elementos_a_leitura_viu():
 
     assert "2 elementos" in texto or "elementos com nome" in texto
     assert "Create Key" in texto, "dizer o que a leitura viu é o que torna o erro investigável"
+
+
+# ---------------------------------------------------------------------------
+# 0.91.17 — “acho que a página demorou e ele tentou antes de aparecer”
+#
+# Dois sintomas nas telas do dono:
+#   print 1: a página ainda carregava e o clique caiu num botão que ia sumir;
+#   print 2: o painel estava aberto e a leitura trouxe 3 nomes (a moldura).
+
+def _moldura() -> dict[str, Any]:
+    """O que o Chrome publica quando a leitura não chega na página."""
+    return _pagina(
+        _no("Chrome Legacy Window"),
+        _no("Keys | Settings | OpenRouter"),
+        _no("Notifications"),
+    )
+
+
+def _pagina_rica() -> dict[str, Any]:
+    return _pagina(
+        _no("API Keys"),
+        _no("Create Key"),
+        _no("Search"),
+        _no("Keys"),
+        _no("Settings"),
+        _no("jarvis"),
+        _no("Hermes"),
+        _no("meugerador"),
+        _no("Docs"),
+    )
+
+
+class MolduraOuPagina:
+    """A escolha automática cai na moldura; a UIA mostra a página. É o print 2."""
+
+    def __init__(self, moldura: dict, pagina: dict) -> None:
+        self.moldura, self.pagina = moldura, pagina
+        self.pedidas: list[str] = []
+
+    def _janela(self, handle: int) -> dict[str, Any]:
+        return {"handle": handle, "titulo": "Keys | Settings | OpenRouter", "processo": "chrome"}
+
+    def janela_muda(self, _handle) -> bool:
+        return True
+
+    def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+        self.pedidas.append(fonte)
+        tela = self.pagina if fonte == "uia" else self.moldura
+        return {"janela": self._janela(int(handle)), "raiz": tela["arvore"], "fonte": fonte}
+
+
+def test_leitura_pobre_e_repetida_pela_uia_e_acha_a_pagina(monkeypatch):
+    """O print 2: 3 nomes não são “a página não tem o painel” — é leitura ruim."""
+    script = _script()
+    falso = MolduraOuPagina(_moldura(), _pagina_rica())
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+
+    _janela, montada = script._reler(JANELA, script.PROFUNDA, script.TETO_FUNDO)
+
+    assert script._nomes(montada) >= 8, "com a moldura sozinha o script conclui errado"
+    assert "uia" in falso.pedidas, "leitura pobre tem de ser repetida pela UIAutomation"
+
+
+def test_esperar_dialogo_nao_desiste_por_causa_de_uma_leitura_pobre(monkeypatch, capsys):
+    """Duas leituras ruins seguidas não são resposta: o painel aparece depois."""
+    script = _script()
+    dialogo = _pagina(
+        _no("Create API key"), _no("Key name", papel=42), _no("Select expiration"), _no("Create")
+    )
+    fila = [_moldura(), _moldura(), dialogo]
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0]))
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 0.5, sleep=lambda _s: None)
+    )
+
+    _janela, montada = script._esperar_dialogo(_args(), JANELA)
+
+    assert any(no.get("nome") == "Create" for no in chave_web.elementos(montada))
+    assert "esperando o painel abrir" in capsys.readouterr().out
+
+
+def test_a_falta_do_painel_diz_que_a_leitura_veio_pobre():
+    """“não apareceu” sozinho não distingue página sem painel de leitura ruim."""
+    script = _script()
+
+    texto = script._diagnostico_da_leitura(_moldura())
+
+    assert "elementos com nome" in texto
+    assert "fonte" in texto, "dizer de qual fonte veio é o que permite investigar"
+    assert "veio pobre" in texto
+
+
+def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
+    """Falhou? Fica um arquivo na pasta com o que cada fonte mostrou."""
+    script = _script()
+    falso = MolduraOuPagina(_moldura(), _pagina_rica())
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    resultado = script._gravar_relatorio(JANELA)
+
+    arquivo = tmp_path / "chave-leitura.txt"
+    assert resultado["arquivo"] and arquivo.exists()
+    texto = arquivo.read_text(encoding="utf-8")
+    for fonte in ("auto", "uia", "msaa"):
+        assert fonte in texto
+    assert "primeiros:" in texto
+
+
+def test_espera_a_pagina_parar_de_carregar_antes_de_clicar(monkeypatch, capsys):
+    """O print 1: clicar enquanto a página monta é o mesmo que não clicar."""
+    script = _script()
+    vazia = _pagina(_no("Nova guia"))
+    fila = [vazia, _pagina_rica(), _pagina_rica()]
+    monkeypatch.setattr(
+        script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
+    )
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    _janela, montada = script._esperar_pagina_pronta(_args(), JANELA, vazia)
+
+    assert chave_web.procurar(montada, chave_web.PADROES_CRIAR), "só clica com o botão na tela"
+    assert "carregando" in capsys.readouterr().out
+
+
+def test_leitura_que_despenca_depois_do_create_nao_vira_veredito(monkeypatch, capsys):
+    """43 nomes → 3 nomes: quem falhou foi a leitura, não o clique.
+
+    Sem esta regra, o script diria “o painel continua aberto, não criou” com a
+    chave criada na conta — e não tentaria copiar.
+    """
+    class Despenca(Mundo):
+        def __init__(self) -> None:
+            super().__init__()
+            self.despencou = False
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            resultado = super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+            if list(caixa or []) == CAIXA_CREATE:
+                self.despencou = True
+            return resultado
+
+        def montar(self):
+            if not self.despencou:
+                arvore = super().montar()
+                if self.tela == "dialogo":
+                    arvore["arvore"]["filhos"] += [
+                        self._no(f"chave {indice}", [100, 900 + indice, 40, 20])
+                        for indice in range(10)
+                    ]
+                return arvore
+            moldura = _moldura()
+            moldura["alvo"] = "Keys | Settings | OpenRouter"
+            return moldura
+
+    mundo = Despenca()
+    script, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script, "_copiar_pela_pagina", lambda _janela: True)
+
+    codigo = script.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert codigo == 0
+    assert "despencou" in saida
+    assert "CONTINUA aberto" not in saida, "leitura ruim não é prova de que o painel ficou aberto"
+    assert config.gravadas == [config.chave]
+
+
+def test_se_o_painel_nao_abrir_numa_pagina_legivel_ele_tenta_uma_vez_mais(monkeypatch, capsys, tmp_path):
+    """O print 1: a página já estava legível (43 elementos) e o painel não veio.
+
+    Com prova de que o painel **não** está aberto, repetir o clique é seguro —
+    e foi o que faltou: ele desistiu na primeira tentativa e mandou o dono
+    clicar à mão.
+    """
+    class Engasga(Mundo):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cliques_new_key = 0
+
+        def montar(self):
+            arvore = super().montar()
+            if self.tela == "chaves":
+                arvore["arvore"]["filhos"] += [
+                    self._no(f"chave {indice}", [100, 500 + indice, 40, 20]) for indice in range(8)
+                ]
+            return arvore
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            if list(caixa or []) == CAIXA_NEW_KEY:
+                self.cliques_new_key += 1
+                if self.cliques_new_key == 1:  # o primeiro clique se perde
+                    self.cliques.append(list(caixa))
+                    return {"executou": True, "como": "clique físico", "cursor_voltou": True}
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = Engasga()
+    script, config = _com_mundo(monkeypatch, mundo)
+    # a primeira tentativa falha de propósito e grava o relatório: vai para a
+    # pasta temporária, não para o repositório
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    codigo = script.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert codigo == 0
+    assert mundo.cliques_new_key == 2, "uma nova tentativa, não dez"
+    assert "mais uma vez" in saida
+    assert config.gravadas == [config.chave]

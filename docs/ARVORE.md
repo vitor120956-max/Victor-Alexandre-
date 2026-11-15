@@ -174,6 +174,43 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.17 — a página ainda carregava, e a leitura às vezes volta só a moldura
+
+Duas telas, dois defeitos diferentes — e a leitura era a mesma nos dois:
+
+| tela | o que a leitura trouxe | o que aconteceu |
+|---|---|---|
+| print 1 | 43 elementos, a página inteira | o clique em “New key” caiu enquanto a página ainda montava; o painel não abriu |
+| print 2 | **3 elementos**: “Chrome Legacy Window”, o título da aba, “Notifications” | o painel estava aberto na tela e o script disse que não |
+
+O segundo é o mais instrutivo: **3 nomes é a moldura do Chrome, não a página.**
+O Chrome moderno publica o conteúdo pela UIAutomation; a MSAA devolve só a
+casca da janela. Quando a escolha automática de fonte caía nessa casca, a
+página inteira sumia da leitura — e o script concluía “o painel não apareceu”
+com toda a confiança do mundo.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| `LEITURA_POBRE = 8` | abaixo de 8 nomes a leitura não chegou na página |
+| `_reler` | leitura pobre é repetida pedindo `uia` e `msaa` na mão; fica a que mostrou mais |
+| `_esperar_dialogo` | 35 s (eram 12), com aviso de progresso a cada tentativa |
+| `_esperar_pagina_pronta` | antes de clicar: o botão existe **e** duas leituras seguidas trazem os mesmos elementos |
+| segunda tentativa | se a página está legível e o painel **não** está, repete o clique uma vez |
+| `_gravar_relatorio` | ao falhar, grava `chave-leitura.txt` com as três leituras |
+| conferência do passo 3 | leitura que despenca (43 → 3) não vira veredito: quem decide é a cópia |
+
+Três decisões que valem registro:
+
+- **repetir o clique só com prova.** A segunda tentativa exige leitura boa (≥ 8
+  nomes) e ausência do painel. Com leitura pobre não se sabe o que está na
+  tela — repetir poderia abrir um segundo painel em cima do primeiro;
+- **espera com aviso.** Trinta e cinco segundos calados parecem travamento (o
+  dono chegou a interromper com Ctrl+C: o `KeyboardInterrupt` aparece no print);
+- **cansar é diferente de falhar.** O relatório em arquivo existe porque a tela
+  mostra só o veredito; o arquivo mostra o que cada fonte leu.
+
 ### 0.91.16 — o diálogo estava na tela e a leitura não o via
 
 O dono rodou a 0.91.15 no PC e mandou o print: **Create API key aberto na
