@@ -1,6 +1,6 @@
 """Ler a área de transferência do Windows — sem dependência nova.
 
-Por que isto existe (0.91.17): duas versões seguidas foram perdidas em cima de
+Por que isto existe (0.91.18): duas versões seguidas foram perdidas em cima de
 **como a chave chega ao `.env`**, não de como ela é usada.
 
 - 0.91.7: a chave gravada era `\\x16abc\\x16` — o `\\x16` é o Ctrl+V, que no

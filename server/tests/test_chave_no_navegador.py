@@ -170,6 +170,7 @@ class Mundo:
         self.lista_aberta = ""
         self.criada = False
         self.cliques: list[list[int]] = []
+        self.pedidos: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------ leitura
     def _no(self, nome: str, caixa: list[int], papel: int = 43) -> dict[str, Any]:
@@ -208,6 +209,9 @@ class Mundo:
     def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
         caixa = list(caixa or [])
         self.cliques.append(caixa)
+        # Anota o pedido: a 0.91.18 é a versão em que o clique de verdade passou
+        # a ser o primeiro degrau, e isso tem de ser visível no teste.
+        self.pedidos.append({"mouse": mouse, "primeiro_mouse": primeiro_mouse, "caixa": caixa})
         nome = self._nome_da_caixa(caixa)
         if acao == "digitar":
             self.nome = texto
@@ -378,9 +382,11 @@ def test_sem_mouse_chega_ao_executor_como_pedido(monkeypatch):
     assert not any(mundo.mouses), "--sem-mouse não pode mover o ponteiro em nenhum passo"
 
 
-def test_clique_recusado_para_no_passo_e_diz_o_motivo(monkeypatch, capsys):
+def test_clique_recusado_para_no_passo_e_diz_o_motivo(monkeypatch, capsys, tmp_path):
     windows = WindowsFalso({"executou": False, "como": "nenhum", "motivo": "o botão não aceita clique."})
     script = _montar(monkeypatch, [PAGINA_INICIAL], windows, ConfiguradorFalso())
+    # a falha grava o relatório na pasta do script: aqui, na temporária
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
 
     codigo = script.passo_criar(_args())
     saida = capsys.readouterr().out
@@ -982,7 +988,10 @@ def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys, 
     monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
 
     assert script.passo_criar(_args()) == 1
-    assert mundo.cliques == [CAIXA_NEW_KEY], "um clique só: não insiste no New key"
+    # A escada da 0.91.18 tenta três degraus (mouse, mouse de novo, ação do
+    # elemento) — e para. O que não pode acontecer é seguir para o “Create” da
+    # página e dizer que criou.
+    assert mundo.cliques == [CAIXA_NEW_KEY] * 3
     assert config.gravadas == []
     saida = capsys.readouterr().out
     assert "Nada foi criado" in saida
@@ -1321,5 +1330,164 @@ def test_se_o_painel_nao_abrir_numa_pagina_legivel_ele_tenta_uma_vez_mais(monkey
 
     assert codigo == 0
     assert mundo.cliques_new_key == 2, "uma nova tentativa, não dez"
-    assert "mais uma vez" in saida
+    assert "segunda vez" in saida
     assert config.gravadas == [config.chave]
+
+
+# ---------------------------------------------------------------------------
+# 0.91.18 — o clique que abre o painel é o do mouse, não a “ação do elemento”
+#
+# Medido no PC do dono: `accDoDefaultAction` devolveu S_OK e o painel não abriu.
+# O `.bat` não passa `--mouse`, então o clique físico nunca era tentado.
+
+def test_o_clique_no_new_key_e_do_mouse_por_padrao(monkeypatch):
+    mundo = Mundo()
+    script, _config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args()) == 0
+
+    primeiro = mundo.pedidos[0]
+    assert primeiro["mouse"] is True
+    assert primeiro["primeiro_mouse"] is True, (
+        "a ação do elemento devolve sucesso sem fazer nada no Chrome; o clique de verdade vem antes"
+    )
+
+
+def test_sem_mouse_nenhum_pedido_de_clique_fisico(monkeypatch):
+    mundo = Mundo()
+    script, _config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args(sem_mouse=True)) == 0
+
+    assert mundo.pedidos, "alguma coisa foi clicada"
+    assert all(p["mouse"] is False and p["primeiro_mouse"] is False for p in mundo.pedidos)
+
+
+def test_se_o_primeiro_clique_nao_abrir_o_painel_ele_clica_de_novo(monkeypatch, capsys, tmp_path):
+    """O primeiro clique pode só ativar a janela — o segundo é o que aperta."""
+    class EngoleOImediato(Mundo):
+        def __init__(self) -> None:
+            super().__init__()
+            self.engoliu = False
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            if list(caixa or []) == CAIXA_NEW_KEY and not self.engoliu:
+                self.engoliu = True
+                self.cliques.append(list(caixa))
+                self.pedidos.append({"mouse": mouse, "primeiro_mouse": primeiro_mouse, "caixa": list(caixa)})
+                return {"executou": True, "como": "clique físico em 0,0", "cursor_voltou": True}
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = EngoleOImediato()
+    script, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert script.passo_criar(_args()) == 0
+    saida = capsys.readouterr().out
+
+    new_key = [p for p in mundo.pedidos if p["caixa"] == CAIXA_NEW_KEY]
+    assert len(new_key) == 2
+    assert all(p["primeiro_mouse"] for p in new_key), "as duas tentativas são de clique de verdade"
+    assert "segunda vez" in saida
+    assert config.gravadas == [config.chave]
+
+
+def test_a_janela_tem_de_estar_na_frente_antes_do_clique(monkeypatch, capsys):
+    class NuncaVemParaFrente(Mundo):
+        def executa_foco_falso(self):  # pragma: no cover - só documenta a ideia
+            return None
+
+    mundo = NuncaVemParaFrente()
+    script, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script, "_garantir_na_frente", lambda _janela, segundos=2.0: False)
+
+    # Mesmo sem conseguir trazer a janela, o clique é tentado — mas o dono é avisado.
+    assert script.passo_criar(_args()) == 0
+    assert "não consegui pôr a janela na frente" in capsys.readouterr().out
+
+
+def test_garantir_na_frente_confere_pelo_windows(monkeypatch):
+    script = _script()
+    foco = {"handle": 4242, "titulo": "API Keys | OpenRouter"}
+    falso = types.SimpleNamespace(
+        trazer_para_frente=lambda _h: True,
+        janela_em_foco=lambda: foco,
+    )
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+
+    assert script._garantir_na_frente({"handle": 4242}) is True
+
+    falso.janela_em_foco = lambda: {"handle": 9999}
+    monkeypatch.setattr(script, "time", types.SimpleNamespace(time=lambda: 0.0, sleep=lambda _s: None))
+    # com a janela sempre atrás, a confirmação falha — e isso não é exceção
+    assert script._garantir_na_frente({"handle": 4242}, segundos=0.0) is False
+
+
+def test_ctrl_c_nao_vira_traceback(monkeypatch, capsys):
+    """Ctrl+C é do dono: tem de sair com uma frase, não com 8 linhas de erro."""
+    script = _script()
+
+    def interrompido(_args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(script, "passo_auto", interrompido)
+    monkeypatch.setattr(script, "_configurar_ambiente", lambda: None)
+    monkeypatch.setattr(script.sys, "platform", "win32")
+
+    codigo = script.main(["--auto"])
+    saida = capsys.readouterr().out
+
+    assert codigo == 130
+    assert "Ctrl+C" in saida
+    assert "nada foi gravado" in saida.lower()
+
+
+def test_pegar_nao_anuncia_como_nova_a_chave_que_ja_estava(monkeypatch, capsys):
+    """No PC do dono, o `--pegar` salvou a chave VELHA e o `.bat` disse “pronto”.
+
+    Estava pronto mesmo — com a chave de antes. A frase tem de dizer isso.
+    """
+    script = _script()
+    gravadas: list[str] = []
+
+    class Modulo:
+        CHAVE = "JARVIS_AI_API_KEY"
+
+        def chave_da_area_de_transferencia(self):
+            return f" {CHAVE_VELHA}\n", CHAVE_VELHA
+
+        def descrever_area(self, _limpo, chave):
+            return f"  chave na área: {chave[:10]}…"
+
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: Modulo())
+    monkeypatch.setattr(script, "_chave_do_env", lambda _modulo: CHAVE_VELHA)
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    assert script.passo_pegar(_args()) == 0
+    saida = capsys.readouterr().out
+
+    assert gravadas == [], "não regrava o que já está igual"
+    assert "MESMA" in saida
+    assert "COPIAR" in saida
+
+
+def test_pegar_chave_nova_grava_como_sempre(monkeypatch, capsys):
+    script = _script()
+    gravadas: list[str] = []
+
+    class Modulo:
+        CHAVE = "JARVIS_AI_API_KEY"
+
+        def chave_da_area_de_transferencia(self):
+            return f" {CHAVE_NOVA}\n", CHAVE_NOVA
+
+        def descrever_area(self, _limpo, chave):
+            return f"  chave na área: {chave[:10]}…"
+
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: Modulo())
+    monkeypatch.setattr(script, "_chave_do_env", lambda _modulo: CHAVE_VELHA)
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    assert script.passo_pegar(_args()) == 0
+    assert gravadas == [CHAVE_NOVA]
+    assert "MESMA" not in capsys.readouterr().out

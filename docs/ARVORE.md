@@ -174,6 +174,47 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.18 — a ação do elemento devolve sucesso e não faz nada
+
+Depois da 0.91.17 a página passou a ser lida inteira — 43 elementos, o botão
+“New key” nela — e **o painel continuou não abrindo**. Duas esperas de 35 s
+depois de dois cliques que “deram certo”. O print mostrava a saída exata:
+
+    1. clicando em “New key”…
+       ação padrão do elemento
+
+`accDoDefaultAction` devolve `S_OK`. No Chrome, para este botão, ela não faz
+nada. O `executar_ref` tentava a ação **antes** do clique físico, e o clique
+físico só vinha primeiro com `--mouse` — que o `.bat` não passa. Ou seja: o
+`pegar-chave.bat` nunca clicava de verdade.
+
+E havia prova do contrário na própria história: na 0.91.15 o clique saiu como
+**“clique físico em 68,317”** e o painel abriu (o print do dono mostrava o
+painel na tela; quem falhou ali foi a leitura). Ação do elemento: nada. Clique
+de verdade: painel aberto.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| clique físico primeiro | `primeiro_mouse` passou a ser “o mouse está autorizado” (o padrão), não “o dono passou `--mouse`” |
+| `_garantir_na_frente` | traz a janela e **confirma** pelo `GetForegroundWindow` — `SetForegroundWindow` pode dizer ok sem trocar nada |
+| escada de 3 degraus | clique → clique de novo (o primeiro pode só ativar a janela) → ação do elemento |
+| esperas curtas | 12 s, 12 s, 10 s — em vez de 70 s parado depois de um clique que não fez nada |
+| relatório com os cliques | `chave-leitura.txt` passa a listar o que cada degrau fez |
+| Ctrl+C | sai com “Interrompido com Ctrl+C. Nada foi gravado.”, sem traceback |
+| `--pegar` honesto | chave igual à que já está no `.env` deixa de ser anunciada como nova |
+
+Duas decisões que valem registro:
+
+- **clique recusado para a escada.** Se o Windows *recusa* o clique (janela
+  coberta, ponto fora), repetir do mesmo jeito não muda a resposta: para ali e
+  diz o motivo — a regra da 0.91.10 continua;
+- **repetir só com leitura boa.** Um degrau novo só acontece se a página ainda
+  se parece com a que tinha o botão (mesma ordem de grandeza de elementos). Sem
+  isso, um segundo clique poderia abrir um painel em cima de outro.
+
+
 ### 0.91.17 — a página ainda carregava, e a leitura às vezes volta só a moldura
 
 Duas telas, dois defeitos diferentes — e a leitura era a mesma nos dois:

@@ -342,7 +342,28 @@ def passo_pegar(args) -> int:
         print("  Copie a chave no site (botão COPIAR) e rode `--pegar` de novo.")
         return 1
     print(modulo.descrever_area(limpo, chave))
+    atual = _chave_do_env(modulo)
+    if atual and atual == chave:
+        # Aconteceu no PC do dono: o `--auto` falhou, ele apertou Ctrl+C, disse
+        # “n” no aviso do .bat, o `--pegar` achou a chave **velha** na área de
+        # transferência e o .bat anunciou “a chave está no .env”. Estava — a
+        # velha. Aqui a frase passa a ser verdadeira.
+        print("  Essa chave é a MESMA que já estava no .env — nada mudou.")
+        print("  Se você acabou de criar uma, o COPIAR não chegou a copiá-la.")
+        print("  Clique em COPIAR no site e rode `--pegar` de novo.")
+        return 0
     return _gravar(modulo, chave)
+
+
+def _chave_do_env(modulo) -> str:
+    """A chave que está gravada hoje — para não anunciar como nova a que já era."""
+    try:
+        if not modulo.ENV.is_file():
+            return ""
+        texto = modulo.ler_texto(modulo.ENV)
+        return (modulo.ler_valor(texto, modulo.CHAVE) or "").strip()
+    except Exception:  # noqa: BLE001 - comparar é conveniência, não requisito
+        return ""
 
 
 def _avisar_jarvis_aberto() -> bool:
@@ -521,7 +542,12 @@ def _tentar_entrar(args, estados: list[tuple[dict, dict, dict]], tentativas: dic
             return True
         print(f"  escolha de conta: clicando em “{escolhida['nome']}”…")
         try:
-            _clicar(janela, escolhida["no"], mouse=not args.sem_mouse, primeiro_mouse=args.mouse)
+            _clicar(
+                janela,
+                escolhida["no"],
+                mouse=not args.sem_mouse,
+                primeiro_mouse=not args.sem_mouse,
+            )
         except PassoError as exc:
             print(f"    não deu: {exc}")
         tentativas["conta"] += 1
@@ -541,7 +567,12 @@ def _tentar_entrar(args, estados: list[tuple[dict, dict, dict]], tentativas: dic
             return True
         print("  tela de login: entrando pelo Google…")
         try:
-            _clicar(janela, botoes[0], mouse=not args.sem_mouse, primeiro_mouse=args.mouse)
+            _clicar(
+                janela,
+                botoes[0],
+                mouse=not args.sem_mouse,
+                primeiro_mouse=not args.sem_mouse,
+            )
         except PassoError as exc:
             print(f"    não deu: {exc}")
         tentativas["google"] += 1
@@ -597,7 +628,38 @@ def _levar_ate_as_chaves(args, conta: str | None = None, segundos: float | None 
     )
 
 
-def _esperar_dialogo(args, janela: dict, segundos: float = 35.0):
+def _garantir_na_frente(janela: dict, segundos: float = 2.0) -> bool:
+    """Põe a janela na frente e **confirma** que ela está — pelo Windows.
+
+    Por que confirmar: `SetForegroundWindow` pode voltar dizendo “ok” e o
+    Windows não trocar nada (ele recusa quando quem pede está em segundo
+    plano). Sem confirmar, o clique físico cairia numa janela coberta — e o
+    primeiro clique só serviria para ativar a janela, não para apertar o botão.
+    Era exatamente isso que fazia o “New key” não abrir o painel.
+    """
+    from server import arvore_windows
+
+    handle = int(janela.get("handle") or 0)
+    if not handle:
+        return False
+    fim = time.time() + segundos
+    while True:
+        try:
+            arvore_windows.trazer_para_frente(handle)
+        except Exception:  # noqa: BLE001 - COM de terceiros
+            return False
+        time.sleep(0.25)
+        try:
+            foco = arvore_windows.janela_em_foco() or {}
+        except Exception:  # noqa: BLE001 - sem como confirmar, não atrapalha
+            return True
+        if int(foco.get("handle") or 0) == handle:
+            return True
+        if time.time() >= fim:
+            return False
+
+
+def _esperar_dialogo(args, janela: dict, segundos: float = 35.0, avisar: bool = True):
     """Espera o painel “Create API key” aparecer, com paciência e sem palpite.
 
     O que mudou depois do PC do dono (0.91.17): ele desistia em 12 segundos e,
@@ -618,7 +680,8 @@ def _esperar_dialogo(args, janela: dict, segundos: float = 35.0):
 
     inicio = time.time()
     fim = inicio + segundos
-    print(f"     esperando o painel abrir (até {int(segundos)}s; a página pode estar carregando)…")
+    if avisar:
+        print(f"     esperando o painel abrir (até {int(segundos)}s; a página pode estar carregando)…")
     ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
     tentativa = 0
     while True:
@@ -646,7 +709,7 @@ def _esperar_dialogo(args, janela: dict, segundos: float = 35.0):
     raise PassoError(_diagnostico_da_leitura(ultima[1]) + relatorio["recado"])
 
 
-def _gravar_relatorio(janela: dict) -> dict:
+def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
     """Grava, na pasta do JARVIS, o que cada fonte de leitura mostrou.
 
     Por que um arquivo: quando a leitura falha, a tela mostra só o veredito. O
@@ -662,6 +725,12 @@ def _gravar_relatorio(janela: dict) -> dict:
         f"janela: {str(janela.get('titulo') or '')!r} (handle {janela.get('handle')})",
         "",
     ]
+    if extra:
+        # O que cada clique tentou fazer. Quando o painel não abre, a pergunta
+        # “o clique saiu?” se responde aqui, e não no chute.
+        linhas.append("tentativas de clique:")
+        linhas.extend(f"  {linha}" for linha in extra)
+        linhas.append("")
     handle = int(janela.get("handle") or 0)
     for fonte in ("auto", "uia", "msaa"):
         try:
@@ -918,56 +987,92 @@ def _criar_e_copiar(
     #    clicar: o efeito se perde quando a página termina de montar.
     janela, montada = _esperar_pagina_pronta(args, janela, montada)
 
-    # 1. Create Key — e, se o painel não abrir numa página **legível**, mais uma
-    #    tentativa. O PC do dono mostrou os dois lados disso:
-    #      print 1 — página legível (43 elementos), painel ausente: o clique se
-    #                perdeu porque a página ainda montava. Repetir é seguro;
-    #      print 2 — painel aberto, leitura com 3 nomes: aqui NÃO se repete,
-    #                porque não se sabe o que está na tela (poderia abrir um
-    #                segundo painel em cima do primeiro).
+    # 1. Create Key — com uma escada, porque no Chrome a “ação do elemento”
+    #    mente: `accDoDefaultAction` devolve sucesso e a página não faz nada.
+    #    Medido no PC do dono (0.91.17): duas esperas de 35 s depois de duas
+    #    “ações” que não abriram nada. O que abre o painel é o clique do mouse,
+    #    que só era tentado com `--mouse` — e o `.bat` não passa `--mouse`.
+    #
+    #    A ordem agora é: clique do mouse → clique do mouse outra vez (o
+    #    primeiro pode só ativar a janela) → ação do elemento. Cada degrau é
+    #    conferido: se o painel abriu, para ali.
+    plano = [
+        ("mouse", 12.0, "clique do mouse"),
+        ("mouse", 12.0, "clique do mouse, segunda vez"),
+        ("acao", 10.0, "ação do elemento"),
+    ]
+    if not mouse:
+        plano = [("acao", 20.0, "ação do elemento")]
     falha = None
-    for tentativa in (1, 2):
-        achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR)
+    cliques: list[str] = []
+    # Quantos nomes a página tinha ao achar o botão: é a régua para saber se uma
+    # leitura nova “despencou”. Não é um número absoluto — página pequena vale.
+    referencia = _nomes(montada)
+    for degrau, (estrategia, espera, rotulo) in enumerate(plano, start=1):
+        if degrau > 1:
+            try:
+                janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+            except PassoError:
+                montada = None
+            if montada is not None and chave_web.e_dialogo_de_criacao(montada):
+                break
+            if montada is None or not chave_web.procurar(montada, chave_web.PADROES_CRIAR):
+                break
+            if referencia and _nomes(montada) * 2 < referencia:
+                # Leitura que despencou: não se sabe o que há na tela, e repetir
+                # poderia abrir um painel em cima do outro.
+                print("     a leitura despencou — não repito o clique sem saber o que está na tela.")
+                break
+        achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR) if montada else []
         if not achados:
             print("  1. NÃO DEI: o botão de criar não está na árvore desta janela.")
             return None
         botao = achados[0]
-        print(f"  1. clicando em “{botao.get('nome')}”…")
+        if estrategia == "mouse" and not _garantir_na_frente(janela):
+            print("     não consegui pôr a janela na frente — o clique pode só ativá-la.")
+            cliques.append("janela não veio para a frente")
+        print(f"  1. clicando em “{botao.get('nome')}” ({rotulo})…")
         try:
-            print(f"     {_descrever_clique(_clicar(janela, botao, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
+            feito = _clicar(
+                janela,
+                botao,
+                mouse=mouse,
+                primeiro_mouse=(estrategia == "mouse"),
+            )
+            print(f"     {_descrever_clique(feito)}")
+            cliques.append(f"{rotulo}: {_descrever_clique(feito)}")
         except PassoError as exc:
+            # Clique **recusado** é outra coisa de clique que não abriu nada: o
+            # Windows disse não (janela coberta, ponto fora). Repetir do mesmo
+            # jeito não muda a resposta — para aqui e diz o motivo, como desde
+            # a 0.91.10.
             print(f"  1. NÃO DEI: {exc}")
+            cliques.append(f"{rotulo}: {exc}")
+            _gravar_relatorio(janela, extra=[f"clique {item}" for item in cliques])
             return None
-        time.sleep(1.5)
+        time.sleep(1.2)
 
         # 2. o diálogo inteiro: nome, expiração e limite de crédito.
         #    Medido na tela do dono: sem a expiração (que tem asterisco) o botão
         #    “Create” fica desabilitado, e clicar nele não cria nada.
         try:
-            janela, montada = _esperar_dialogo(args, janela)
+            janela, montada = _esperar_dialogo(args, janela, segundos=espera, avisar=(degrau == 1))
             break
         except PassoError as exc:
             falha = exc
-            try:
-                janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
-            except PassoError:
-                montada = None
-            legivel = montada is not None and _nomes(montada) >= LEITURA_POBRE
-            if tentativa == 2 or not legivel:
-                break
-            if chave_web.e_dialogo_de_criacao(montada):
-                break
-            print("     o painel não abriu, e a página está legível — clico em “New key” mais uma vez.")
-            time.sleep(1.0)
-    else:  # pragma: no cover - o `for` sempre sai por `break`
-        return None
-    if falha is not None and not chave_web.e_dialogo_de_criacao(montada or {}):
+            continue
+    if falha is not None and (montada is None or not chave_web.e_dialogo_de_criacao(montada)):
         # Sem o diálogo não há o que preencher: seguir daqui faria o passo 3
         # achar o botão “New key” da página e clicar nele outra vez, e o
         # relatório diria “criei” sem ter criado nada.
+        # O relatório é reescrito com a escada de cliques dentro (o recado do
+        # arquivo já vem na mensagem de `falha`).
+        _gravar_relatorio(janela, extra=[f"clique {item}" for item in cliques])
         print(f"  2. NÃO DEI: {falha}")
-        print("     Nada foi criado. Se o painel está ABERTO na sua tela, ele ficou ilegível")
-        print("     para o JARVIS agora: feche com Esc, deixe a página terminar e rode de novo.")
+        print("     Nada foi criado. O clique não abriu o painel — isso não é mais leitura:")
+        print("     a página foi lida inteira e o botão estava nela. Feche o que estiver na")
+        print("     frente do Chrome (eu coloco a janela na frente, mas o Windows recusa")
+        print("     enquanto outro programa tem o foco) e rode de novo.")
         return None
     print("  2. preenchendo o diálogo:")
     montada, preenchidos = _preencher_dialogo(
@@ -1076,7 +1181,7 @@ def passo_criar(args) -> int:
         montada,
         dados,
         mouse=mouse,
-        primeiro_mouse=args.mouse,
+        primeiro_mouse=mouse,
         anterior=_texto_da_area(),
     )
     if not chave:
@@ -1168,7 +1273,7 @@ def passo_auto(args) -> int:
                 montada,
                 dados,
                 mouse=mouse,
-                primeiro_mouse=args.mouse,
+                primeiro_mouse=mouse,
                 anterior=anterior,
             ) or ""
         else:
@@ -1262,6 +1367,11 @@ def main(argv: list[str] | None = None) -> int:
     except PassoError as exc:
         print(f"  NÃO DEU: {exc}")
         return 1
+    except KeyboardInterrupt:
+        # Ctrl+C é do dono, não é defeito. Sem isto, o Windows mostrava um
+        # traceback de 8 linhas e o `.bat` seguia como se tivesse dado certo.
+        print("\n  Interrompido com Ctrl+C. Nada foi gravado.")
+        return 130
 
 
 if __name__ == "__main__":
