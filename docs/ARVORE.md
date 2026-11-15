@@ -47,6 +47,16 @@ intenção é uma condição, e todas as condições precisam valer.
 - não segue depois de um erro;
 - não grava arquivo vazio quando a busca voltou sem nada.
 
+### 0.91.1 — a sonda passou a ler o `.env`
+
+Achado antes do primeiro teste no PC: o `arvore_sonda.py` roda solto no
+terminal e **não** carregava o `.env` — só o `server/app.py` carregava. Com
+`JARVIS_HOST_REDE=1` no arquivo, a fila parava no passo 1 dizendo "Rede
+desligada". Medido no sandbox: antes, mensagem de configuração; depois, falha de
+rede de verdade. O mesmo valia para `JARVIS_FILES_ROOT`, que decidiria em qual
+pasta o maestro grava.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

@@ -456,3 +456,30 @@ def test_a_sonda_recusa_objetivo_fora_do_catalogo(capsys):
     codigo = _sonda()._orquestrar(_args(orquestrar="faz um bolo de cenoura"))
     assert codigo == 1
     assert "não tenho procedimento" in capsys.readouterr().out
+
+
+def test_a_sonda_le_o_env_do_pc(tmp_path, monkeypatch):
+    """0.91.0 lia `JARVIS_HOST_REDE=1` no `.env` e continuava dizendo “Rede desligada”.
+
+    Só o `server/app.py` carregava o `.env`; o `arvore_sonda.py` roda solto no
+    terminal e não carregava. Medido no sandbox antes da correção.
+    """
+    monkeypatch.delenv("JARVIS_HOST_REDE", raising=False)
+    (tmp_path / ".env").write_text("JARVIS_HOST_REDE=1\n", encoding="utf-8")
+
+    assert _sonda()._configurar_ambiente(tmp_path) is True
+    import os
+
+    assert os.environ.get("JARVIS_HOST_REDE") == "1"
+    monkeypatch.delenv("JARVIS_HOST_REDE", raising=False)
+
+
+def test_o_env_do_pc_nao_sobrescreve_o_que_ja_estava_no_ambiente(tmp_path, monkeypatch):
+    """Quem exportou a variável no terminal continua mandando."""
+    monkeypatch.setenv("JARVIS_HOST_REDE", "1")
+    (tmp_path / ".env").write_text("JARVIS_HOST_REDE=0\n", encoding="utf-8")
+
+    _sonda()._configurar_ambiente(tmp_path)
+    import os
+
+    assert os.environ["JARVIS_HOST_REDE"] == "1"

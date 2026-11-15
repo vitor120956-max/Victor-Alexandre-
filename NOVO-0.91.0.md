@@ -1,4 +1,4 @@
-# JARVIS 0.91.0 — o maestro: um pedido, vários passos
+# JARVIS 0.91.1 — o maestro: um pedido, vários passos
 
 Até ontem, cada pedido valia por **uma** skill. "Pesquisa o clima e guarda num
 arquivo" tem duas coisas dentro, e a resposta honesta era: peça uma, depois a
@@ -141,4 +141,4 @@ maestro não rouba o que já funciona.
 - **325 skills** (322 + `maestro.catalogo`, `maestro.planejar`, `maestro.executar`)
 - **4 procedimentos** declarados
 - **47 testes** no `test_maestro.py`
-- Versão **0.91.0** em 17 arquivos, manifesto regerado
+- Versão **0.91.1** em 17 arquivos, manifesto regerado

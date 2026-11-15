@@ -48,16 +48,43 @@ import sys
 
 
 def _abrir_registro():
-    """O registro de skills, com a mesma pasta de arquivos da API."""
+    """O registro de skills, com **a mesma configuração da API**.
+
+    Faltava o `.env`. O `arvore_sonda.py` roda solto no terminal, e só o
+    `server/app.py` lia o `.env` — então `JARVIS_HOST_REDE=1` e um
+    `JARVIS_FILES_ROOT` trocado valiam na API e **não** valiam aqui. Medido em
+    0.91.0: com `JARVIS_HOST_REDE=1` no `.env`, a fila parava no passo 1 com
+    “Rede desligada”, e o usuário ia culpar a rede.
+
+    `load_dotenv` não sobrescreve o que já está no ambiente — quem exportou a
+    variável no terminal continua mandando.
+    """
     import os
     from pathlib import Path
 
+    raiz_projeto = Path(__file__).resolve().parent
+    _configurar_ambiente(raiz_projeto)
+
     from server.skill_registry import build_registry
 
-    raiz_projeto = Path(__file__).resolve().parent
     configurada = os.getenv("JARVIS_FILES_ROOT", "").strip()
     pasta = Path(configurada).expanduser() if configurada else raiz_projeto / "storage" / "user-files"
     return build_registry(pasta)
+
+
+def _configurar_ambiente(raiz_projeto) -> bool:
+    """Lê o `.env` da pasta do JARVIS, sem sobrescrever o ambiente.
+
+    Existe separado de `_abrir_registro` para poder ser testado com uma pasta
+    de mentira: `load_dotenv` num caminho qualquer, e a variável aparece.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(raiz_projeto / ".env")
+        return True
+    except Exception:  # noqa: BLE001 - sem python-dotenv, o ambiente ainda vale
+        return False
 
 
 def _orquestrar(args: argparse.Namespace) -> int:
