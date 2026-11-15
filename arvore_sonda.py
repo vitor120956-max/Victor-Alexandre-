@@ -17,7 +17,7 @@ Uso (Windows):
     py arvore_sonda.py --alvo notepad --escrever "oi, mundo" --executar   # escreve de verdade
     py arvore_sonda.py --programa "bloco de notas" --escrever "oi" --executar  # abre se preciso
     py arvore_sonda.py --orquestrar "pesquisa o clima e guarda em clima.txt"   # plano, nada roda
-    py arvore_sonda.py --orquestrar "..." --autorizar                          # roda e para no efeito
+    py arvore_sonda.py --orquestrar "..." --autorizar                          # roda (autoriza os efeitos)
     py arvore_sonda.py --catalogo                                              # o que sei encadear
 
 Só leitura: nada é clicado, digitado ou movido.
@@ -482,7 +482,10 @@ def principal(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--autorizar",
         action="store_true",
-        help="Com --orquestrar, roda os passos na ordem e para antes do primeiro que tem efeito colateral.",
+        help=(
+            "Com --orquestrar, roda os passos na ordem e AUTORIZA os que têm efeito (abrir, baixar, "
+            "gravar, digitar). Sem esta opção o plano é só plano: nada roda."
+        ),
     )
     parser.add_argument(
         "--catalogo",

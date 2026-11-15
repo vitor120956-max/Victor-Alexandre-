@@ -1,6 +1,6 @@
 {
  "versao": "0.91.0",
- "gerado": "2026-11-15T01:40:26+00:00",
+ "gerado": "2026-11-15T01:42:32+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -391,8 +391,8 @@
    "bytes": 3748
   },
   "arvore_sonda.py": {
-   "sha256": "488433b873eab6d3e9c654f4172b1baf3627c350a4023a531462df721f6ea4e2",
-   "bytes": 29505
+   "sha256": "dda4c3eb35334977cc957e8b7fbe6db5b3955751b548277861426b2e186cccc0",
+   "bytes": 29612
   },
   "atualizar-baixar.ps1": {
    "sha256": "bd36335c2b431dd760a50f24145b20b554ff0cf4869d9eb5fc3f1cc328886fd1",
@@ -859,8 +859,8 @@
    "bytes": 6930
   },
   "server/agente_local.py": {
-   "sha256": "ef97863941c0eb7c1b288d807723ae893d6a7542ef7e4cb5af4f09fa76266182",
-   "bytes": 195674
+   "sha256": "2b45438c3dba221c39159302030c5f3a07c976ca6c29c45ebd6ca84a8dfa51bb",
+   "bytes": 195438
   },
   "server/ai.py": {
    "sha256": "b268a7ceff4a882f97ce53dae4e35597b4826f65a6eab80e814e4dac78dc777e",

@@ -3952,16 +3952,11 @@ def _resposta_de_orquestracao(termo: str, registry: Any) -> dict[str, Any] | Non
     base["confianca"] = 1.0
     base["parametros"] = {"procedimento": plano["procedimento"], "passos": len(plano["passos"])}
     base["plano"] = plano
-    comandos = [
-        f"arvore_sonda.py --orquestrar \"{plano['pedido']}\"",
-        f"arvore_sonda.py --orquestrar \"{plano['pedido']}\" --autorizar",
-    ]
     base["resposta"] = (
         maestro.texto_do_plano(plano)
-        + "\n\nNada rodou: plano não é execução. Para rodar, use a skill `maestro.executar` "
-        "com `pedido` e `autorizar=true`, ou no PC:"
-        + "\n" + comandos[0] + "   (só mostra de novo; nada roda)"
-        + "\n" + comandos[1] + "   (roda os passos de leitura e para antes do primeiro efeito)"
+        + "\n\nNada rodou: plano não é execução. Para rodar de verdade, use a skill "
+        "`maestro.executar` com `pedido` e `autorizar=true`, ou no PC:"
+        + f"\narvore_sonda.py --orquestrar \"{plano['pedido']}\" --autorizar"
     )
     return base
 
