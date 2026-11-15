@@ -242,3 +242,42 @@ def test_texto_de_apoio_nao_ganha_do_botao():
         {"nome": "Create", "papel": 43, "acionavel": True},
     ]
     assert chave_web.procurar(pagina, chave_web.PADROES_CONFIRMAR)[0]["nome"] == "Create"
+
+
+# ------------------------------------------------- o diálogo “Create API key”
+#
+# A tela do dono tem três campos com asterisco: Name, Expiration e Credit
+# limit. Sem a expiração, o botão “Create” fica apagado.
+
+def test_reconhece_o_dialogo_de_criacao():
+    pagina = _pagina("Create API key", "Name", "Select expiration", "Create")
+    assert chave_web.e_dialogo_de_criacao(pagina) is True
+    assert chave_web.e_dialogo_de_criacao(_pagina("API keys", "New key")) is False
+
+
+def test_expiracao_escolhe_o_maior_prazo_e_prefere_never():
+    assert chave_web.melhor_expiracao(["30 days", "90 days", "1 year", "Never"]) == "Never"
+    assert chave_web.melhor_expiracao(["7 days", "30 days", "1 year"]) == "1 year"
+    assert chave_web.melhor_expiracao(["Nunca", "30 dias"]) == "Nunca"
+    assert chave_web.melhor_expiracao(["Selecione", "Escolha"]) is None
+
+
+def test_limite_prefere_o_que_nao_trava_a_chave():
+    assert chave_web.melhor_limite(["5", "10", "No limit"]) == "No limit"
+    assert chave_web.melhor_limite(["Sem limite", "5"]) == "Sem limite"
+    assert chave_web.melhor_limite(["5", "10"]) is None
+
+
+def test_nomes_novos_acha_as_opcoes_da_lista_aberta():
+    antes = _pagina("Create API key", "Select expiration", "Create")
+    depois = _pagina("Create API key", "Select expiration", "Create", "30 days", "Never")
+    novos = [no["nome"] for no in chave_web.nomes_novos(antes, depois)]
+    assert novos == ["30 days", "Never"]
+
+
+def test_nomes_novos_ignora_texto_longo_demais():
+    antes = _pagina("Create API key")
+    frase = "Uma frase enorme de ajuda que não é opção de nada e só explica o campo"
+    assert len(frase) > 60
+    depois = _pagina("Create API key", frase)
+    assert chave_web.nomes_novos(antes, depois) == []

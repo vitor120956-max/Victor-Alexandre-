@@ -1,4 +1,4 @@
-"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.14).
+"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.15).
 
 Por que a lógica mora aqui e não no script: achar o botão numa árvore de
 acessibilidade é regra, e regra se testa sem Chrome, sem Windows e sem tela. O
@@ -31,26 +31,118 @@ from typing import Any
 # maiúsculas não importam (a comparação normaliza).
 PADROES_CRIAR = ("create key", "criar chave", "new key", "nova chave", "add key", "adicionar chave")
 # O botão que **fecha** o diálogo de criação costuma ser só “Create”/“Criar”
-# — mais curto que o “Create Key” da página. A 0.91.14 só conhecia o rótulo
+# — mais curto que o “Create Key” da página. A 0.91.15 só conhecia o rótulo
 # longo e travou no passo 3 com o diálogo aberto na frente: o dublê do teste
 # mostrou isso antes do dono. “Created/at” não é botão, mas entra na conta; por
 # isso o nome mais curto vem primeiro.
 PADROES_CONFIRMAR = ("create", "criar", "confirmar", "confirm", "save", "salvar")
 PADROES_COPIAR = ("copy", "copiar")
+
+# ---------------------------------------------------------------------------
+# O diálogo “Create API key” (0.91.15) — medido na tela do dono
+#
+# Ele não é só nome e botão. Tem três campos com asterisco:
+#
+#     Name *        (caixa de texto)
+#     Expiration *  (“Select expiration” — lista suspensa)
+#     Credit limit * (“Choose a credit limit” — lista suspensa)
+#
+# Com só o nome preenchido, o botão “Create” fica desabilitado e o clique não
+# faz nada. Era esse o travamento: o JARVIS “clicava em Create” e a chave não
+# nascia, e o relatório dizia que tinha dado certo.
+# ---------------------------------------------------------------------------
+
+PADROES_DIALOGO = ("create api key", "criar chave de api", "create key", "nova chave de api")
+PADROES_EXPIRACAO = ("select expiration", "expiration", "expiração", "selecione a expiração")
+PADROES_LIMITE = ("choose a credit limit", "credit limit", "limite de crédito")
+
+# Valores que resolvem uma lista sem limite de tempo/valor, em inglês e português.
+SEM_LIMITE = ("never", "nunca", "no limit", "unlimited", "sem limite", "ilimitado", "no expiration")
+
+_UNIDADES = {
+    "day": 1, "dias": 1, "dia": 1, "days": 1,
+    "week": 7, "semana": 7, "semanas": 7, "weeks": 7,
+    "month": 30, "mês": 30, "mes": 30, "meses": 30, "months": 30,
+    "year": 365, "ano": 365, "anos": 365, "years": 365,
+}
+_NUMERO_E_UNIDADE = re.compile(r"(\d+)\s*([a-zçãéêíóôõ]+)")
+
+
+def _dias(texto: str) -> int | None:
+    """Quanto tempo um rótulo como “30 days” ou “1 year” dura, em dias."""
+    normalizado = normalizar(texto)
+    if any(marca in normalizado for marca in SEM_LIMITE):
+        return 10**6  # "nunca expira" ganha de qualquer prazo
+    achado = _NUMERO_E_UNIDADE.search(normalizado)
+    if not achado:
+        return None
+    unidade = achado.group(2)
+    return int(achado.group(1)) * _UNIDADES.get(unidade, 0) or None
+
+
+def melhor_expiracao(opcoes: list[str]) -> str | None:
+    """Qual prazo escolher na lista do diálogo — o **mais longo**.
+
+    Por que o mais longo e não o mais curto: a chave que expira em 90 dias
+    derruba o JARVIS três meses depois, sem ninguém ligar uma coisa à outra.
+    “Never”, quando existe, ganha de tudo.
+    """
+    validas = [(dia, opcao) for opcao in opcoes if (dia := _dias(opcao)) is not None]
+    if not validas:
+        return None
+    validas.sort(key=lambda par: (-par[0], len(par[1])))
+    return validas[0][1]
+
+
+def melhor_limite(opcoes: list[str]) -> str | None:
+    """A opção de crédito que não trava a chave — “No limit”/“Sem limite”.
+
+    Não escolher limite é o que evita a chave parar sozinha no meio do mês;
+    se a lista só tiver valores (5, 10, 20…), devolve `None` e o dono decide.
+    """
+    for opcao in opcoes:
+        normalizada = normalizar(opcao)
+        if any(marca in normalizada for marca in SEM_LIMITE):
+            return opcao
+    return None
+
+
+def e_dialogo_de_criacao(arvore_montada: dict[str, Any]) -> bool:
+    """A janela está com o diálogo “Create API key” aberto?"""
+    texto = texto_da_janela(arvore_montada)
+    return any(marca in texto for marca in PADROES_DIALOGO)
+
+
+def nomes_novos(antes: dict[str, Any], depois: dict[str, Any], limite: int = 60) -> list[dict[str, Any]]:
+    """Nós que apareceram entre duas leituras — as opções de uma lista aberta.
+
+    Abrir uma lista suspensa não muda o nome de nada: ela **acrescenta** nós.
+    Comparar as duas leituras pelo nome é o jeito de achar as opções sem saber
+    como o site as desenha.
+    """
+    vistos = {str(no.get("nome") or "").strip() for no in elementos(antes)}
+    novos = [
+        no
+        for no in elementos(depois)
+        if str(no.get("nome") or "").strip()
+        and str(no.get("nome") or "").strip() not in vistos
+        and len(str(no.get("nome") or "").strip()) <= limite
+    ]
+    return novos
 PADROES_NOME = ("key name", "nome da chave", "name", "nome")
 
 # O que a página de chaves tem escrito, independentemente do idioma.
 # Nada de `keys`/`chaves` sozinhos: qualquer página pode ter a palavra, e um
 # falso positivo aqui faria o script clicar na página errada.
 #
-# 0.91.14 — `openrouter` saiu daqui. A tela de **login** do OpenRouter tem
+# 0.91.15 — `openrouter` saiu daqui. A tela de **login** do OpenRouter tem
 # “OpenRouter” no título, e com essa marca o JARVIS achava que já estava na
 # página de chaves, parava e pedia um botão que não existia. Marcas agora são as
 # que só existem **depois** de entrar.
 MARCAS_DA_PAGINA = ("api keys", "chaves de api", "new key", "nova chave", "create key", "criar chave")
 
 # ---------------------------------------------------------------------------
-# Onde estou? (0.91.14)
+# Onde estou? (0.91.15)
 #
 # Medido nas telas do dono: abrir openrouter.ai/keys sem sessão cai em
 # “Sign In | OpenRouter”, com os botões GitHub / Google / Reddit; clicar no

@@ -120,12 +120,134 @@ def _args(**extra: Any):
     return base
 
 
+# Caixas fixas de cada controle do mundo falso — o clique é identificado por
+# elas, como no Windows de verdade (o `caminho` muda a cada leitura).
+CAIXA_NEW_KEY = [1400, 200, 100, 30]
+CAIXA_NOME = [400, 300, 320, 30]
+CAIXA_EXPIRACAO = [400, 380, 320, 30]
+CAIXA_LIMITE = [400, 460, 320, 30]
+CAIXA_CREATE = [700, 640, 80, 28]
+CAIXA_COPIAR = [980, 200, 60, 28]
+
+OPCOES_EXPIRACAO = ("30 days", "90 days", "1 year", "Never")
+OPCOES_LIMITE = ("5", "10", "No limit")
+
+
+class Mundo:
+    """O OpenRouter de mentira: o diálogo “Create API key”, com as três listas.
+
+    Ele responde a **cliques por caixa** e muda de estado — é o que permite
+    testar a sequência de verdade: New key → diálogo → nome → expiração →
+    limite → Create → chave na tela.
+    """
+
+    def __init__(self, *, expira: str = "", limite: str = "") -> None:
+        # As opções ficam na instância (e não no módulo) para cada teste poder
+        # montar o diálogo do jeito que quiser sem mexer no vizinho.
+        self.opcoes_expiracao = OPCOES_EXPIRACAO
+        self.opcoes_limite = OPCOES_LIMITE
+        self.tela = "chaves"
+        self.nome = ""
+        self.expira = expira
+        self.limite = limite
+        self.lista_aberta = ""
+        self.criada = False
+        self.cliques: list[list[int]] = []
+
+    # ------------------------------------------------------------ leitura
+    def _no(self, nome: str, caixa: list[int], papel: int = 43) -> dict[str, Any]:
+        return {"nome": nome, "papel": papel, "caixa": list(caixa), "acionavel": True, "caminho": [0, 1]}
+
+    def montar(self) -> dict[str, Any]:
+        if self.tela == "chaves":
+            filhos = [self._no("New key", CAIXA_NEW_KEY)]
+        else:
+            filhos = [
+                self._no("Create API key", [400, 180, 300, 30], papel=1),
+                self._no("Name", CAIXA_NOME, papel=42),
+                self._no(self.expira or "Select expiration", CAIXA_EXPIRACAO),
+                self._no(self.limite or "Choose a credit limit", CAIXA_LIMITE),
+                self._no("Create", CAIXA_CREATE),
+            ]
+            if self.lista_aberta == "expiracao":
+                filhos += [
+                    self._no(opcao, [500, 400 + indice * 30, 200, 30])
+                    for indice, opcao in enumerate(self.opcoes_expiracao)
+                ]
+            if self.lista_aberta == "limite":
+                filhos += [
+                    self._no(opcao, [500, 600 + indice * 30, 200, 30])
+                    for indice, opcao in enumerate(self.opcoes_limite)
+                ]
+        if self.criada:
+            filhos = [self._no("Copy", CAIXA_COPIAR), self._no("API keys", [100, 100, 120, 30], papel=1)]
+        return {
+            "alvo": "chrome — Keys | Settings | OpenRouter",
+            "fonte": "uia",
+            "arvore": {"nome": "OpenRouter", "filhos": filhos},
+        }
+
+    # ------------------------------------------------------------- clique
+    def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+        caixa = list(caixa or [])
+        self.cliques.append(caixa)
+        nome = self._nome_da_caixa(caixa)
+        if acao == "digitar":
+            self.nome = texto
+            return {"executou": True, "como": "clique físico no campo", "cursor_voltou": True}
+        if caixa == CAIXA_NEW_KEY:
+            self.tela = "dialogo"
+        elif caixa == CAIXA_EXPIRACAO:
+            self.lista_aberta = "" if self.lista_aberta == "expiracao" else "expiracao"
+        elif caixa == CAIXA_LIMITE:
+            self.lista_aberta = "" if self.lista_aberta == "limite" else "limite"
+        elif self.lista_aberta == "expiracao" and caixa and caixa[0] == 500 and 400 <= caixa[1] < 600:
+            self.expira = nome
+            self.lista_aberta = ""
+        elif self.lista_aberta == "limite" and caixa and caixa[0] == 500 and caixa[1] >= 600:
+            self.limite = nome
+            self.lista_aberta = ""
+        elif caixa == CAIXA_CREATE:
+            # Só cria com os três campos preenchidos — como no site de verdade.
+            if self.nome and self.expira and self.limite:
+                self.criada = True
+        return {
+            "executou": True,
+            "como": f"clique físico em {caixa[0]},{caixa[1]}" if caixa else "clique",
+            "cursor_voltou": True,
+        }
+
+    def _nome_da_caixa(self, caixa: list[int]) -> str:
+        mapa = {
+            tuple(CAIXA_NEW_KEY): "New key",
+            tuple(CAIXA_NOME): "Name",
+            tuple(CAIXA_EXPIRACAO): "Select expiration",
+            tuple(CAIXA_LIMITE): "Choose a credit limit",
+            tuple(CAIXA_CREATE): "Create",
+            tuple(CAIXA_COPIAR): "Copy",
+        }
+        if tuple(caixa) in mapa:
+            return mapa[tuple(caixa)]
+        if caixa and caixa[0] == 500:
+            indice = (caixa[1] - 400) // 30
+            if caixa[1] < 600 and 0 <= indice < len(self.opcoes_expiracao):
+                return self.opcoes_expiracao[indice]
+            indice = (caixa[1] - 600) // 30
+            if 0 <= indice < len(self.opcoes_limite):
+                return self.opcoes_limite[indice]
+        return "?"
+
+
 def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, config: ConfiguradorFalso):
     script = _script()
     fila = list(paginas)
 
+    # Cada tela da fila fica de pé por algumas leituras: o passo do diálogo
+    # relê a janela várias vezes (nome, expiração, limite) antes de clicar.
+    repetidas = [tela for tela in fila for _ in range(4)] or [PAGINA_COM_COPIA]
+
     def ler(_alvo):
-        return JANELA, fila.pop(0) if fila else PAGINA_COM_COPIA
+        return JANELA, repetidas.pop(0) if len(repetidas) > 1 else (repetidas[0] if repetidas else PAGINA_COM_COPIA)
 
     monkeypatch.setattr(script, "_ler_janela", ler)
     monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
@@ -147,25 +269,42 @@ def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, c
     return script
 
 
-def test_a_sequencia_inteira_cria_copia_e_grava(monkeypatch, capsys):
-    windows = WindowsFalso()
-    config = ConfiguradorFalso()
-    script = _montar(
-        monkeypatch,
-        [PAGINA_INICIAL, PAGINA_DO_NOME, PAGINA_CRIADA, PAGINA_COM_COPIA],
-        windows,
-        config,
+def _com_mundo(monkeypatch, mundo: Mundo, config: ConfiguradorFalso | None = None):
+    """Liga o script a um OpenRouter de mentira com estado (o diálogo de verdade)."""
+    script = _script()
+    monkeypatch.setattr(script, "_ler_janela", lambda _alvo: (JANELA, mundo.montar()))
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script,
+        "time",
+        types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None),
     )
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", mundo)
+    config = config or ConfiguradorFalso()
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: config.gravadas.append(chave) or 0)
+    monkeypatch.setattr(script, "_copiar_pela_pagina", lambda _janela: False)
+    monkeypatch.setattr(
+        script, "_esperar_chave", lambda _modulo, _antes, segundos=0: (config.chave, config.chave)
+    )
+    return script, config
+
+
+def test_a_sequencia_inteira_preenche_o_dialogo_cria_copia_e_grava(monkeypatch, capsys):
+    """O caminho completo, com o diálogo de três campos que o dono fotografou."""
+    mundo = Mundo()
+    script, config = _com_mundo(monkeypatch, mundo)
 
     codigo = script.passo_criar(_args())
     saida = capsys.readouterr().out
 
     assert codigo == 0
-    assert [c["acao"] for c in windows.chamadas] == ["clicar", "digitar", "clicar", "clicar"]
-    assert windows.chamadas[1]["texto"] == "jarvis-teste"
-    assert all(c["mouse"] is True for c in windows.chamadas), "com --autorizar o mouse é o padrão"
+    assert mundo.nome == "jarvis-teste"
+    assert mundo.expira == "Never", "prazo mais longo: chave que expira derruba o JARVIS depois"
+    assert mundo.limite == "No limit"
+    assert mundo.criada is True
     assert config.gravadas == [config.chave]
-    assert "1." in saida and "4." in saida and "5." not in saida
+    assert "expiração: escolhendo “Never”" in saida
     assert "cursor voltou" in saida
 
 
@@ -181,17 +320,22 @@ def test_sem_autorizar_nada_e_clicado(monkeypatch, capsys):
 
 
 def test_sem_mouse_chega_ao_executor_como_pedido(monkeypatch):
-    windows = WindowsFalso({"executou": True, "como": "ação padrão do elemento"})
+    class MundoSemMouse(Mundo):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mouses: list[bool] = []
+
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            self.mouses.append(bool(mouse))
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = MundoSemMouse()
     config = ConfiguradorFalso(chave="sk-or-v1-" + "cd" * 34)
-    script = _montar(
-        monkeypatch,
-        [PAGINA_INICIAL, PAGINA_DO_NOME, PAGINA_CRIADA, PAGINA_COM_COPIA],
-        windows,
-        config,
-    )
+    script, _config = _com_mundo(monkeypatch, mundo, config)
 
     assert script.passo_criar(_args(sem_mouse=True)) == 0
-    assert [c["mouse"] for c in windows.chamadas] == [False, False, False, False]
+    assert mundo.mouses, "houve cliques"
+    assert not any(mundo.mouses), "--sem-mouse não pode mover o ponteiro em nenhum passo"
 
 
 def test_clique_recusado_para_no_passo_e_diz_o_motivo(monkeypatch, capsys):
@@ -701,3 +845,61 @@ def test_a_conta_escolhida_fica_lembrada_no_env(monkeypatch, tmp_path):
 
     assert script._tentar_entrar(_args(), estados, {"google": 0, "conta": 0}) is True
     assert gravado["email"] == "vitor120956@gmail.com"
+
+
+# --------------------------------------- o diálogo de três campos (0.91.15)
+#
+# Medido na tela do dono: “Create API key” pede Name, Expiration e Credit
+# limit. Com a expiração vazia o botão “Create” fica apagado — o clique não
+# cria nada e não devolve erro. Era esse o travamento.
+
+def test_sem_expiracao_nao_finge_que_criou(monkeypatch, capsys):
+    class SemListas(Mundo):
+        """Um site em que as listas suspensas não abrem (ou não publicam opções)."""
+
+        def montar(self):
+            arvore = super().montar()
+            for filho in arvore["arvore"]["filhos"]:
+                filho.pop("caixa", None) if False else None
+            arvore["arvore"]["filhos"] = [
+                no for no in arvore["arvore"]["filhos"] if no["nome"] not in OPCOES_EXPIRACAO + OPCOES_LIMITE
+            ]
+            return arvore
+
+    mundo = SemListas()
+    script, config = _com_mundo(monkeypatch, mundo)
+
+    codigo = script.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert codigo == 1
+    assert mundo.criada is False
+    assert config.gravadas == [], "nada pode ser gravado sem chave"
+    assert "CONTINUA aberto" in saida
+    assert "expiração" in saida
+
+
+def test_sem_never_escolhe_o_maior_prazo(monkeypatch):
+    mundo = Mundo()
+    mundo.opcoes_expiracao = ("7 days", "30 days", "90 days")
+    script, _config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args()) == 0
+    assert mundo.expira == "90 days"
+
+
+def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys):
+    class NuncaAbre(Mundo):
+        def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+            if list(caixa or []) == CAIXA_NEW_KEY:
+                self.cliques.append(list(caixa))
+                return {"executou": True, "como": "clique físico", "cursor_voltou": True}
+            return super().executar_ref(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    mundo = NuncaAbre()
+    script, config = _com_mundo(monkeypatch, mundo)
+
+    assert script.passo_criar(_args()) == 1
+    assert mundo.cliques == [CAIXA_NEW_KEY], "um clique só: não insiste no New key"
+    assert config.gravadas == []
+    assert "O diálogo não abriu" in capsys.readouterr().out

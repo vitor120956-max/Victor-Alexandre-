@@ -174,6 +174,43 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.15 — o diálogo de criação tem três campos (e um botão apagado)
+
+Tela do dono, medida: **Create API key** pede
+
+    Name *          caixa de texto
+    Expiration *    “Select expiration” — lista
+    Credit limit *  “Choose a credit limit” — lista
+
+com o botão **Create** no rodapé. Preencher só o nome e clicar em Create não
+cria nada: o botão está apagado. No Windows isso não gera erro — o clique
+“acontece” e nada muda. Era esse o travamento, e o relatório dizia que tinha
+dado certo.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| `e_dialogo_de_criacao` | reconhece “Create API key” aberto |
+| `melhor_expiracao` | escolhe o **maior prazo**; “Never/Nunca” ganha de tudo |
+| `melhor_limite` | escolhe “No limit/Sem limite”; se só há números, não escolhe |
+| `nomes_novos` | as opções de uma lista são os nós **que apareceram** entre as duas leituras |
+| `_preencher_dialogo` | nome → expiração → limite, cada um dizendo o que escolheu |
+| conferência do diálogo | depois do Create, relê: se o diálogo continua aberto, **não criou** |
+
+Três decisões que valem registro:
+
+- **o maior prazo, não o mais curto.** A chave que expira em 90 dias derruba o
+  JARVIS três meses depois, e ninguém liga uma coisa à outra;
+- **“No limit”** para o crédito: escolher um teto faz a chave parar sozinha no
+  meio do mês;
+- **sem o diálogo, não segue.** Antes, se o diálogo não abria, o passo seguinte
+  achava o “New key” da página e clicava de novo — e o relatório dizia “criei”.
+
+Quando um campo não é preenchido, o script diz qual ficou faltando e manda
+completar no navegador e rodar `--pegar`; nada é gravado sem chave.
+
+
 ### 0.91.14 — “ele tem que saber a página e a parte em que ele tá”
 
 Medido nas telas do dono, e o defeito era grave: abrir `openrouter.ai/keys` sem

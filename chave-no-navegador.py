@@ -524,6 +524,149 @@ def _levar_ate_as_chaves(args, conta: str | None = None, segundos: float | None 
     )
 
 
+def _esperar_dialogo(args, segundos: float = 10.0):
+    """Espera o diálogo “Create API key” aparecer depois do clique em New key."""
+    from server import chave_web
+
+    fim = time.time() + segundos
+    ultima = None
+    while True:
+        janela, montada = _ler_janela(args.alvo)
+        ultima = (janela, montada)
+        if chave_web.e_dialogo_de_criacao(montada):
+            return ultima
+        if time.time() >= fim:
+            raise PassoError("o diálogo de criação não apareceu na leitura.")
+        time.sleep(0.7)
+
+
+def _abrir_lista(args, montada, campo, *, mouse: bool, primeiro_mouse: bool, segundos: float = 4.0):
+    """Clica num campo de lista e devolve as opções que apareceram.
+
+    Lista suspensa não muda nome de nada: ela **acrescenta** nós à janela. É
+    comparando a leitura de antes com a de depois que se acham as opções — sem
+    saber como o site as desenha.
+    """
+    from server import chave_web
+
+    try:
+        _clicar(_janela_atual(args), campo, mouse=mouse, primeiro_mouse=primeiro_mouse)
+    except PassoError as exc:
+        raise PassoError(f"não abri a lista “{campo.get('nome')}”: {exc}") from exc
+
+    fim = time.time() + segundos
+    while True:
+        janela, depois = _ler_janela(args.alvo)
+        opcoes = chave_web.nomes_novos(montada, depois)
+        if opcoes:
+            return janela, depois, opcoes
+        if time.time() >= fim:
+            return janela, depois, []
+        time.sleep(0.6)
+
+
+def _janela_atual(args) -> dict:
+    """A janela do navegador agora — os cliques precisam do handle dela."""
+    janela, _montada = _ler_janela(args.alvo)
+    return janela
+
+
+def _preencher_uma_lista(
+    args,
+    montada: dict,
+    padroes: tuple[str, ...],
+    regra,
+    rotulo: str,
+    *,
+    mouse: bool,
+    primeiro_mouse: bool,
+) -> tuple[dict, str]:
+    """Abre a lista do diálogo, escolhe pela regra e devolve (leitura nova, escolha).
+
+    Devolve `(montada, "")` quando não achou o campo ou não deu para escolher —
+    quem chama diz o que ficou faltando, em vez de fingir que preencheu.
+    """
+    from server import chave_web
+
+    campos = chave_web.procurar(montada, padroes)
+    if not campos:
+        print(f"     {rotulo}: não achei o campo nesta tela.")
+        return montada, ""
+    campo = campos[0]
+    print(f"     {rotulo}: abrindo “{str(campo.get('nome') or '')[:40]}”…")
+    try:
+        _janela, aberta, opcoes = _abrir_lista(
+            args, montada, campo, mouse=mouse, primeiro_mouse=primeiro_mouse
+        )
+    except PassoError as exc:
+        print(f"     {rotulo}: {exc}")
+        return montada, ""
+
+    nomes = [str(opcao.get("nome") or "") for opcao in opcoes]
+    escolha = regra(nomes)
+    if not escolha:
+        print(f"     {rotulo}: a lista abriu com {len(nomes)} opções e nenhuma serve — deixei como estava.")
+        return aberta, ""
+    alvo = next((opcao for opcao in opcoes if str(opcao.get("nome") or "") == escolha), None)
+    if alvo is None:
+        return aberta, ""
+    print(f"     {rotulo}: escolhendo “{escolha}”.")
+    try:
+        _clicar(_janela_atual(args), alvo, mouse=mouse, primeiro_mouse=primeiro_mouse)
+    except PassoError as exc:
+        print(f"     {rotulo}: não consegui clicar na opção ({exc}).")
+        return aberta, ""
+    time.sleep(0.5)
+    return _ler_janela(args.alvo)[1], escolha
+
+
+def _preencher_dialogo(
+    args, montada: dict, nome: str, *, mouse: bool, primeiro_mouse: bool
+) -> tuple[dict, dict[str, str]]:
+    """Preenche “Create API key” inteiro: nome, expiração e limite.
+
+    Medido na tela do dono: o botão “Create” fica desabilitado enquanto a
+    expiração (que tem asterisco) está vazia. Escrever só o nome e clicar em
+    Create não cria nada — e antes desta versão o script dizia que tinha dado
+    certo. Aqui cada campo devolve o que foi realmente escolhido.
+    """
+    from server import chave_web
+
+    preenchidos: dict[str, str] = {}
+
+    # 1. nome
+    campos = chave_web.procurar(montada, chave_web.PADROES_NOME)
+    if campos:
+        print(f"     nome: escrevendo “{nome}”…")
+        try:
+            _clicar(_janela_atual(args), campos[0], "digitar", nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
+            preenchidos["nome"] = nome
+            time.sleep(0.4)
+        except PassoError as exc:
+            print(f"     nome: não deu ({exc}).")
+    else:
+        print("     nome: não achei o campo — seguindo.")
+
+    montada = _ler_janela(args.alvo)[1]
+
+    # 2. expiração — o campo que deixava o Create apagado
+    montada, prazo = _preencher_uma_lista(
+        args, montada, chave_web.PADROES_EXPIRACAO, chave_web.melhor_expiracao, "expiração",
+        mouse=mouse, primeiro_mouse=primeiro_mouse,
+    )
+    if prazo:
+        preenchidos["expiração"] = prazo
+
+    # 3. limite de crédito — não é para caber mais, é para não travar sozinho
+    montada, limite = _preencher_uma_lista(
+        args, montada, chave_web.PADROES_LIMITE, chave_web.melhor_limite, "limite",
+        mouse=mouse, primeiro_mouse=primeiro_mouse,
+    )
+    if limite:
+        preenchidos["limite"] = limite
+    return montada, preenchidos
+
+
 def _criar_e_copiar(
     args, modulo, janela, montada, dados, *, mouse: bool, primeiro_mouse: bool, anterior: str
 ) -> str | None:
@@ -546,16 +689,26 @@ def _criar_e_copiar(
         return None
     time.sleep(1.5)
 
-    # 2. nome (quando o diálogo pede)
+    # 2. o diálogo inteiro: nome, expiração e limite de crédito.
+    #    Medido na tela do dono: sem a expiração (que tem asterisco) o botão
+    #    “Create” fica desabilitado, e clicar nele não cria nada.
     try:
-        janela, campo, _ = _esperar_elemento(args.alvo, chave_web.PADROES_NOME, segundos=8)
-        print(f"  2. escrevendo o nome “{nome}” em “{campo.get('nome')}”…")
-        print(f"     {_descrever_clique(_clicar(janela, campo, 'digitar', nome, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
-        time.sleep(0.8)
-    except PassoError:
-        print("  2. não apareceu campo de nome — seguindo (alguns fluxos não pedem).")
+        janela, montada = _esperar_dialogo(args, segundos=10)
+    except PassoError as exc:
+        # Sem o diálogo não há o que preencher: seguir daqui faria o passo 3
+        # achar o botão “New key” da página e clicar nele outra vez, e o
+        # relatório diria “criei” sem ter criado nada.
+        print(f"  2. NÃO DEI: {exc}")
+        print("     O diálogo não abriu. Clique em New key e rode de novo; nada foi criado.")
+        return None
+    print("  2. preenchendo o diálogo:")
+    montada, preenchidos = _preencher_dialogo(args, montada, nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
+    faltando = [campo for campo in ("expiração", "limite") if campo not in preenchidos]
+    if "expiração" in faltando:
+        print("     AVISO: sem a expiração o botão Create costuma ficar apagado.")
+        print("     Se a chave não nascer, escolha a expiração você mesmo e rode `--pegar`.")
 
-    # 3. o botão do diálogo (“Create”, curto)
+    # 3. o botão do diálogo (“Create”, curto) — e a conferência de que fechou
     try:
         janela, criar, montada = _esperar_elemento(args.alvo, chave_web.PADROES_CONFIRMAR, segundos=8)
         print(f"  3. clicando em “{criar.get('nome')}” para criar…")
@@ -564,6 +717,20 @@ def _criar_e_copiar(
     except PassoError as exc:
         print(f"  3. NÃO DEI: {exc}")
         print("  A chave pode ter ficado criada e não copiada. Veja no navegador.")
+        return None
+
+    # O clique pode ter caído num botão desabilitado: isso não gera erro, o
+    # diálogo simplesmente continua aberto. Conferir é o que separa “criei” de
+    # “achei que criei”.
+    try:
+        _janela, depois = _ler_janela(args.alvo)
+    except PassoError:
+        depois = None
+    if depois and chave_web.e_dialogo_de_criacao(depois):
+        print("  3. o diálogo CONTINUA aberto — a chave não foi criada.")
+        if faltando:
+            print(f"     campos que eu não consegui preencher: {', '.join(faltando)}.")
+        print("     Complete no navegador e rode `--pegar`; não precisa refazer nada.")
         return None
 
     # 4. copiar — primeiro o texto da página (não depende de botão nenhum),
