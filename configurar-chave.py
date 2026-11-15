@@ -288,16 +288,25 @@ def guia_do_provedor(provedor: str, base: str) -> dict[str, str]:
     return {"nome": provedor, "onde": "", "modelo": "", "nota": "", "gratis": ""}
 
 
-def mostrar_guia(guia: dict[str, str]) -> None:
-    """As três informações que faltavam no topo do script."""
+def mostrar_guia(guia: dict[str, str], *, colar: bool = False) -> None:
+    """As três informações que faltavam no topo do script.
+
+    `colar=True` muda o passo 3: com `--colar` a chave **não** é digitada nem
+    colada no console — ela fica na área de transferência e o JARVIS lê de lá.
+    Dizer "cole com o botão direito" nesse caminho seria ensinar o jeito antigo.
+    """
     if not guia.get("onde"):
         return
     print(f"  Provedor: {guia['nome']}")
     print(f"  Onde pegar a chave:  {guia['onde']}")
     print("  1. abra esse endereço no navegador e entre (no OpenRouter dá para entrar com o Google)")
-    print("  2. crie uma chave nova e COPIE pelo botão de copiar (não selecione o texto com o mouse)")
-    print("  3. volte para esta janela e cole com o BOTÃO DIREITO do mouse")
-    print("     (no console antigo do Windows o Ctrl+V não cola: ele escreve um símbolo)")
+    print("  2. crie uma chave nova e clique no botão COPIAR (não selecione o texto com o mouse)")
+    if colar:
+        print("  3. volte para esta janela e rode de novo: o JARVIS lê a chave copiada sozinho")
+        print("     (nada é digitado no console — é aí que as chaves se estragam)")
+    else:
+        print("  3. volte para esta janela e cole com o BOTÃO DIREITO do mouse")
+        print("     (no console antigo do Windows o Ctrl+V não cola: ele escreve um símbolo)")
     if guia.get("nota"):
         print(f"  Modelo grátis: {guia['nota']}")
     if guia.get("modelo"):
@@ -378,12 +387,85 @@ def _testar_uma(base: str, modelo: str, chave: str) -> bool:
     return False
 
 
+def abrir_no_navegador(endereco: str) -> bool:
+    """Abre a página do provedor no navegador padrão. Não retorna nada de segredo."""
+    if not endereco:
+        return False
+    url = endereco if endereco.startswith("http") else f"https://{endereco}"
+    try:
+        if sys.platform == "win32":
+            os.startfile(url)  # type: ignore[attr-defined]
+        else:
+            import webbrowser  # noqa: PLC0415 - só quem pede paga
+
+            webbrowser.open(url)
+        return True
+    except Exception:  # noqa: BLE001 - abrir navegador é conveniência, não requisito
+        return False
+
+
+def chave_da_area_de_transferencia() -> tuple[str, str]:
+    """Lê a área de transferência e devolve (texto_limpo, chave_achada).
+
+    A chave é procurada com os mesmos padrões do resto do programa: copiar a
+    linha toda do site, ou um JSON com a chave dentro, funciona igual. O que não
+    tem cara de chave é recusado — gravar lixo no `.env` foi o defeito da 0.91.7.
+    """
+    try:
+        from server import area_transferencia  # noqa: PLC0415 - import tardio: só no Windows
+    except Exception as exc:  # noqa: BLE001 - sem o pacote, a mensagem tem de ser clara
+        raise RuntimeError(
+            f"não consegui carregar o leitor da área de transferência ({type(exc).__name__}). "
+            "Rode este script da pasta do JARVIS, com o .venv."
+        ) from exc
+
+    try:
+        texto = area_transferencia.ler()
+    except area_transferencia.AreaTransferenciaError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    limpo = sem_controle(texto).strip()
+    if not limpo:
+        raise RuntimeError(
+            "a área de transferência está vazia. No site, clique no botão de COPIAR "
+            "(não selecione o texto com o mouse) e rode este comando de novo."
+        )
+    achadas = chaves_do_texto(limpo)
+    if not achadas:
+        raise RuntimeError(
+            "o que está copiado não tem cara de chave. O esperado começa com "
+            "sk-or-v1- (OpenRouter), gsk_ (Groq), sk- (OpenAI) ou AIza/AQ. (Google)."
+        )
+    return limpo, achadas[0]
+
+
+def descrever_area(limpo: str, chave: str) -> str:
+    """Uma linha do que foi encontrado — sem a chave inteira."""
+    return (
+        f"  Copiado: {len(limpo)} caractere(s); chave reconhecida {mascarar(chave)}"
+    )
+
+
 def principal(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Grava a chave de IA no .env sem abrir editor de texto."
     )
     parser.add_argument("--ver", action="store_true", help="Mostra a configuração atual (chave mascarada) e sai.")
     parser.add_argument("--limpar", action="store_true", help="Apaga só a chave, mantendo as outras variáveis.")
+    parser.add_argument(
+        "--colar",
+        action="store_true",
+        help=(
+            "Pega a chave da ÁREA DE TRANSFERÊNCIA (o que você copiou no site) em vez de "
+            "pedir para digitar. É o caminho recomendado: digitar 73 caracteres num console "
+            "antigo é onde as chaves se estragam."
+        ),
+    )
+    parser.add_argument(
+        "--abrir",
+        action="store_true",
+        help="Abre a página do provedor no navegador antes de colar (a chave é copiada lá).",
+    )
     parser.add_argument("--provedor", help="Nome exibido na interface. Ex.: OpenAI")
     parser.add_argument("--base", help="Base da API, sem /chat/completions. Ex.: https://api.openai.com/v1")
     parser.add_argument("--modelo", help="Nome exato do modelo na sua conta.")
@@ -494,13 +576,16 @@ def principal(argv: list[str] | None = None) -> int:
         args.base = args.base or args.local
 
     print("Configurar a IA externa do JARVIS")
-    print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")
+    if getattr(args, "colar", False):
+        print("A chave vem da ÁREA DE TRANSFERÊNCIA — você copia no site e nada é digitado aqui.")
+    else:
+        print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")
     print("Deixe em branco para manter o valor atual.\n")
 
     _atual_provedor = args.provedor or ler_valor(texto, "JARVIS_AI_PROVIDER") or CAMPOS["JARVIS_AI_PROVIDER"]
     _atual_base = args.base or ler_valor(texto, "JARVIS_AI_BASE_URL") or CAMPOS["JARVIS_AI_BASE_URL"]
     if not local:
-        mostrar_guia(guia_do_provedor(_atual_provedor, _atual_base))
+        mostrar_guia(guia_do_provedor(_atual_provedor, _atual_base), colar=bool(getattr(args, "colar", False)))
 
     provedor = args.provedor or perguntar("Provedor", ler_valor(texto, "JARVIS_AI_PROVIDER") or CAMPOS["JARVIS_AI_PROVIDER"])
     base = args.base or perguntar("Base da API", ler_valor(texto, "JARVIS_AI_BASE_URL") or CAMPOS["JARVIS_AI_BASE_URL"])
@@ -511,6 +596,36 @@ def principal(argv: list[str] | None = None) -> int:
         base = base.rstrip("/")[: -len("/chat/completions")]
     # O servidor monta f"{base}/chat/completions"; barra sobrando viraria "//".
     base = base.rstrip("/") or base
+
+    # ---- caminho novo: copiar no navegador e deixar o JARVIS ler ----
+    if args.colar:
+        guia = guia_do_provedor(_atual_provedor, _atual_base)
+        if args.abrir and guia.get("onde"):
+            if abrir_no_navegador(guia["onde"]):
+                print(f"  Abri {guia['onde']} no navegador.")
+                print("  Se você já está logado: Create Key → dê um nome → botão COPIAR.")
+                print("  Depois volte para esta janela.")
+                return 0
+            print(f"  Não consegui abrir o navegador. Abra na mão: {guia['onde']}")
+            return 1
+        print("  Lendo a área de transferência...")
+        try:
+            limpo, chave = chave_da_area_de_transferencia()
+        except RuntimeError as exc:
+            print(f"\n  NÃO DEU: {exc}")
+            if guia.get("onde"):
+                print(f"\n  A chave é criada em {guia['onde']}: Create Key → botão COPIAR.")
+            print("  Não digite a chave no console: copie no navegador e rode --colar de novo.")
+            return 1
+        print(descrever_area(limpo, chave))
+        args.chave = chave
+    elif args.abrir:
+        guia = guia_do_provedor(_atual_provedor, _atual_base)
+        if guia.get("onde") and abrir_no_navegador(guia["onde"]):
+            print(f"  Abri {guia['onde']} no navegador.")
+            return 0
+        print("  Não consegui abrir o navegador.")
+        return 1
 
     chave = args.chave
     if chave is None and not local:

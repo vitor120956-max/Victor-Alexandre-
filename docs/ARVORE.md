@@ -174,6 +174,33 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.9 — a chave pelo navegador (medir antes de clicar)
+
+Pedido do dono: entrar no site, gerar a chave e salvar sozinho. Duas coisas
+precisam ser ditas com clareza:
+
+1. **A chave existente não é legível.** O OpenRouter mostra o valor uma vez, na
+   criação, e depois só o prefixo mascarado. Não há o que coletar da página.
+2. **Criar uma nova é automatizável em princípio** — clicar, nomear, criar,
+   copiar, ler a área de transferência — mas depende de o Chrome publicar esses
+   botões na árvore de acessibilidade, e isso **não foi medido**.
+
+Por isso o script novo (`chave-no-navegador.py`) chega em três degraus:
+
+| comando | o que faz | risco |
+|---|---|---|
+| `--pegar` | lê a área de transferência e grava | nenhum — só lê o que você copiou |
+| `--ver` | lê a janela e diz quais botões existem | nenhum — não clica |
+| `--criar --autorizar` | clica e cria uma chave nova na conta | cria credencial de verdade |
+
+A regra de achar (normalizar, preferir nome curto, ignorar página errada) mora
+em `server/chave_web.py` e é testada sem Windows; o driver fica no script.
+
+O `--pegar` é a peça que resolve o problema real das últimas três versões: a
+chave **não passa pelo console**, então não há Ctrl+V para virar `\x16` nem
+seleção de mouse para cortar caractere.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:
