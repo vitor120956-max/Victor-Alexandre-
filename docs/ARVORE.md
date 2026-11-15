@@ -174,6 +174,28 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.11 — o duplo clique (nenhum comando para decorar)
+
+Resposta ao “não entendi, só atualizei”: o caminho existia, mas exigia lembrar
+um comando de duas linhas e uma opção. Agora é um arquivo na pasta:
+`pegar-chave.bat`.
+
+Ele faz, na ordem: abre `openrouter.ai/keys`; mostra no console os quatro
+cliques do site (Create Key → nome → Create → COPIAR); espera; lê a área de
+transferência; grava. Se a leitura falhar, oferece tentar de novo sem fechar a
+janela — o caso comum de copiar a chave depois de já ter apertado Enter.
+
+Duas correções que vieram junto:
+
+| antes | depois |
+|---|---|
+| gravar chamava o questionário inteiro (provedor, base, modelo) | com provedor já gravado, troca só a chave e diz o que manteve |
+| `--pegar` lendo área vazia só dizia “não deu” | diz para copiar no site e rodar de novo |
+
+O `.bat` é ASCII puro com CRLF, como os outros: o console antigo não desenha
+acento e o Bloco de Notas não entende LF.
+
+
 ### 0.91.10 — o mouse no botão (medido antes de clicar, e com freio)
 
 A pergunta do dono — “por que não clica no botão de copiar com o mouse?” — tinha

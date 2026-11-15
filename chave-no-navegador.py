@@ -181,6 +181,24 @@ def passo_pegar(args) -> int:
 
 
 def _gravar(modulo, chave: str) -> int:
+    """Grava a chave **sem perguntar nada** quando o provedor já está escolhido.
+
+    A 0.91.10 mandava tudo pelo `principal()`, que é o questionário da primeira
+    configuração: provedor, base, modelo. Com o `.env` já montado — o caso de
+    quem está só trocando a chave —, esse questionário fazia o duplo clique
+    parar esperando Enter em três perguntas que já tinham resposta. Aqui:
+    provedor já gravado → troca só a chave; primeira vez → aí sim pergunta.
+    """
+    texto = modulo.ler_texto(modulo.ENV) if modulo.ENV.is_file() else modulo.texto_base()
+    provedor = (modulo.ler_valor(texto, "JARVIS_AI_PROVIDER") or "").strip()
+    if provedor:
+        texto = modulo.definir(texto, modulo.CHAVE, chave)
+        destino = modulo.gravar(texto)
+        print(f"\n  Gravado em {destino}")
+        print(f"  provedor: {provedor}")
+        print(f"  chave:    {modulo.mascarar(chave)}")
+        print("\n  As outras linhas do .env ficaram como estavam.")
+        return 0
     codigo = modulo.principal(["--chave", chave])
     if codigo != 0:
         print("  A chave foi lida, mas não deu para gravar no .env — veja acima.")

@@ -89,7 +89,7 @@ class ConfiguradorFalso:
     def __init__(self, chave: str = "sk-or-v1-" + "ab" * 34, erro: bool = False) -> None:
         self.chave = chave
         self.erro = erro
-        self.gravadas: list[list[str]] = []
+        self.gravadas: list[str] = []
 
     def chave_da_area_de_transferencia(self):
         if self.erro:
@@ -98,10 +98,6 @@ class ConfiguradorFalso:
 
     def descrever_area(self, limpo: str, chave: str) -> str:
         return f"  Copiado: {len(limpo.strip())} caractere(s); chave reconhecida {chave[:5]}…{chave[-4:]}"
-
-    def principal(self, argv: list[str]) -> int:
-        self.gravadas.append(list(argv))
-        return 0
 
 
 def _args(**extra: Any):
@@ -122,6 +118,7 @@ def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, c
 
     monkeypatch.setattr(script, "_ler_janela", ler)
     monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: config.gravadas.append(chave) or 0)
     relogio = itertools.count()
     monkeypatch.setattr(
         script,
@@ -149,7 +146,7 @@ def test_a_sequencia_inteira_cria_copia_e_grava(monkeypatch, capsys):
     assert [c["acao"] for c in windows.chamadas] == ["clicar", "digitar", "clicar", "clicar"]
     assert windows.chamadas[1]["texto"] == "jarvis-teste"
     assert all(c["mouse"] is True for c in windows.chamadas), "com --autorizar o mouse é o padrão"
-    assert config.gravadas == [["--chave", config.chave]]
+    assert config.gravadas == [config.chave]
     assert "1." in saida and "5." in saida
     assert "cursor voltou" in saida
 
@@ -206,3 +203,83 @@ def test_area_de_transferencia_vazia_diz_o_que_fazer(monkeypatch, capsys):
 def test_o_script_tem_a_opcao_do_mouse_documentada(nome):
     texto = (RAIZ / "chave-no-navegador.py").read_text(encoding="utf-8")
     assert "--sem-mouse" in texto
+
+
+# ------------------------------------------------- gravar sem perguntar nada
+#
+# O duplo clique em `pegar-chave.bat` não pode parar em três perguntas que já
+# têm resposta no .env. Antes da 0.91.11, trocar a chave chamava o questionário
+# inteiro da primeira configuração.
+
+def test_com_provedor_ja_escolhido_grava_so_a_chave(tmp_path, monkeypatch):
+    import importlib.util as _imp
+
+    caminho_cc = RAIZ / "configurar-chave.py"
+    spec_cc = _imp.spec_from_file_location("config_para_teste", caminho_cc)
+    cc = _imp.module_from_spec(spec_cc)
+    spec_cc.loader.exec_module(cc)
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "JARVIS_AI_PROVIDER=openrouter\n"
+        "JARVIS_AI_BASE_URL=https://openrouter.ai/api/v1\n"
+        "JARVIS_AI_MODEL=deepseek/deepseek-chat-v3-0324:free\n"
+        "JARVIS_AI_API_KEY=sk-or-v1-velha\n"
+        "# comentario do dono\n"
+    )
+    monkeypatch.setattr(cc, "ENV", env)
+
+    def perguntou(*_a, **_k):
+        raise AssertionError("não podia perguntar nada: o provedor já estava gravado")
+
+    monkeypatch.setattr(cc, "perguntar", perguntou)
+
+    nova = "sk-or-v1-" + "9f" * 34
+    assert _script()._gravar(cc, nova) == 0
+
+    escrito = env.read_text()
+    assert f"JARVIS_AI_API_KEY={nova}" in escrito
+    assert "# comentario do dono" in escrito, "as outras linhas ficam como estavam"
+    assert "deepseek" in escrito
+    assert b"\r\n" in env.read_bytes(), ".env é CRLF"
+
+
+def test_sem_provedor_gravado_cai_no_questionario(tmp_path, monkeypatch):
+    import importlib.util as _imp
+
+    spec_cc = _imp.spec_from_file_location("config_para_teste2", RAIZ / "configurar-chave.py")
+    cc = _imp.module_from_spec(spec_cc)
+    spec_cc.loader.exec_module(cc)
+    env = tmp_path / ".env"
+    env.write_text("JARVIS_AI_PROVIDER=\n")
+    monkeypatch.setattr(cc, "ENV", env)
+    chamado: list[list[str]] = []
+    monkeypatch.setattr(cc, "principal", lambda argv: chamado.append(argv) or 0)
+
+    assert _script()._gravar(cc, "sk-or-v1-" + "aa" * 34) == 0
+    assert chamado == [["--chave", "sk-or-v1-" + "aa" * 34]]
+
+
+# ----------------------------------------------------------- o duplo clique
+
+def test_o_bat_existe_e_e_ascii_com_crlf():
+    bruto = (RAIZ / "pegar-chave.bat").read_bytes()
+    texto = bruto.decode("ascii")  # o console do 1607 não mostra acento
+    assert bruto.count(b"\r\n") == texto.count("\n") == texto.count("\r")
+
+
+def test_o_bat_abre_pega_e_ensina_onde_copiar():
+    texto = (RAIZ / "pegar-chave.bat").read_text(encoding="ascii")
+    assert "--abrir" in texto and "--pegar" in texto
+    assert "Create Key" in texto and "COPIAR" in texto
+    assert ".venv\\Scripts\\python.exe" in texto
+
+
+def test_o_bat_nao_tem_salto_para_rotulo_inexistente():
+    import re
+
+    texto = (RAIZ / "pegar-chave.bat").read_text(encoding="ascii")
+    rotulos = set(re.findall(r"^:(\w+)", texto, re.M))
+    saltos = set(re.findall(r"goto\s+(\w+)", texto))
+    assert saltos <= rotulos, f"salto sem rótulo: {saltos - rotulos}"
+    assert "tentar" in rotulos, "tem de dar para tentar de novo sem fechar a janela"
