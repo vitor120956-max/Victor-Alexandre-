@@ -174,6 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.12 — o JARVIS copia sozinho (e espera quando não consegue clicar)
+
+O dono corrigiu o desenho: “ele deve abrir os sites onde estão as chaves para
+ele poder copiar e colar na própria pasta”. Abrir e esperar o dono fazer o
+resto era meio caminho.
+
+Entrou o `--auto --autorizar`, que é o que o `pegar-chave.bat` chama:
+
+| passo | como |
+|---|---|
+| 1. abrir | `guia_do_provedor` → o site do provedor que está no `.env` (ou `--provedor`) |
+| 2. achar a janela certa | entre várias janelas do Chrome, a da página de chaves; a em foco primeiro |
+| 3. criar | Create Key → nome → Create, com o mouse nos botões medidos |
+| 4. copiar | Ctrl+A/Ctrl+C no texto da página (não depende de botão) e, se falhar, o botão “Copy” |
+| 5. gravar | só a chave, sem questionário (0.91.11) |
+
+Três decisões que sustentam o resto:
+
+- **a foto da área de transferência é tirada antes do primeiro clique.** Sem
+  isso, o texto que o próprio “Create” põe na área seria confundido com “o que
+  já estava lá” e a chave nova seria recusada por ser igual a si mesma — este
+  defeito existiu por uma hora e o dublê pegou;
+- **sem botão na árvore, o comando não morre**: ele explica os quatro cliques,
+  deixa a página aberta e espera a chave aparecer (90 a 120 segundos), depois
+  grava;
+- **`Ctrl+C` só é enviado se o teclado estiver na janela do navegador**
+  (`arvore_windows.teclado_na_janela`).
+
+
 ### 0.91.11 — o duplo clique (nenhum comando para decorar)
 
 Resposta ao “não entendi, só atualizei”: o caminho existia, mas exigia lembrar

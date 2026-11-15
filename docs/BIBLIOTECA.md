@@ -1,4 +1,4 @@
-# Biblioteca e armazenamento — 0.91.11
+# Biblioteca e armazenamento — 0.91.12
 
 Duas coisas que faltavam para o JARVIS deixar de depender só do que você digita
 na hora:
@@ -272,9 +272,9 @@ Limites, sem enfeite:
 | Testes da instância | **28** (`test_instancia.py`: os quatro estados da porta, comparação de versão exata, `netstat` sem confundir porta parecida e encerramento que recusa quem não é o JARVIS) |
 | Testes do mouse e do teclado | **19** (`test_mesa.py`, backend falso: nada toca o Windows de verdade) |
 | Testes da chave pelo navegador | **14** (`test_chave_web.py`: acha “Create Key” e “Copy”, casa português e inglês, nome curto ganha do longo, página sem botão aponta o caminho que funciona, janela sem árvore não inventa diagnóstico, árvore aninhada é percorrida, o nome da chave leva a data, a posição medida libera o mouse e a caixa zerada não vale) |
-| Testes do piloto do navegador | **13** (`test_chave_no_navegador.py`, com Windows e área de transferência falsos: a ordem dos cinco passos, o nome digitado, o mouse chegando em cada clique, `--sem-mouse` desligando o ponteiro, clique recusado parando no passo certo, área vazia ensinando o que fazer, `.bat` com ASCII/CRLF e rótulos, a gravação que não pergunta nada quando o provedor já está no `.env` e o questionário que continua na primeira vez) |
+| Testes do piloto do navegador | **22** (`test_chave_no_navegador.py`, com navegador, Windows, teclado e área de transferência falsos: os cinco passos, o mouse em cada clique, `--sem-mouse`, clique recusado parando no passo certo, o `--auto` abrindo o site do provedor do `.env`, a janela certa entre duas do Chrome, o plano B esperando a cópia do dono, a chave copiada antes sendo ignorada, o `Ctrl+C` recusado fora da janela e o `.bat` com `--auto`/`--pegar`) |
 | Testes do clique físico | **5** (3 em `test_arvore.py` para o ponto dentro da janela e 2 em `test_mesa.py` para o cursor voltar; a leitura não pode mover o mouse por conta própria) |
-| Suíte da API | **3.677** |
+| Suíte da API | **3.686** |
 | Skills no registro | **325** (5 em `estudo.*`; 8 em `maquina.*`: cinco só leem — processos, portatil, plano, debloat e limpar — e três executam com confirmação — `arrumar`, `desfazer` e `administrador`; 3 em `conserto.*`: diagnóstico e dossiê só leem, a proposta de patch exige confirmação; 3 em `maestro.*`: `maestro.catalogo` e `maestro.planejar` só leem, e `maestro.executar` roda a fila com autorização, parando no primeiro passo que falha ou que tem efeito sem permissão; 4 em `atualizacao.*`: estado e verificação só leem, preparar e aplicar pedem confirmação; 4 em `conectores.*`: estado, triagem da caixa por IMAP somente leitura, link do WhatsApp e leitura de conversa exportada, todos só leem; `mesa.*` ganhou 3: `mesa.arvore`, que lê a árvore de acessibilidade da janela numa sonda separada, sem clicar; `mesa.agir`, que clica ou digita por `ref` **relendo a janela antes** (ref de leitura antiga é recusado), ou sem `ref` acha o campo de escrita sozinho, e só age com `executar=true`, sem mover o mouse; e `mesa.ditar`, que abre o programa da lista fechada se ele não estiver aberto, espera a janela, escreve e confere a leitura de volta; 1 em `ia.*`: `ia.local`, que confere, baixa e aponta o `.env` para um modelo sem chave) |
 | Importação real | `mover-dados.py` copiou **150 arquivos / 2,1 MB** e a conferência deu `ok` nas seis áreas |
 

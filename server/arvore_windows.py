@@ -1503,6 +1503,16 @@ def _pertence(hwnd: int, ascendente: int) -> bool:
     return False
 
 
+def teclado_na_janela(handle: int) -> bool:
+    """O teclado está dentro desta janela? — versão pública, para quem vai teclar.
+
+    `Ctrl+C` enviado com o foco no lugar errado copia outra coisa (ou nada). A
+    conferência é a mesma que a digitação já usava; só deixou de ser privada
+    quando o `--auto` passou a copiar o texto da página pelas teclas.
+    """
+    return _teclado_esta_na_janela(int(handle))
+
+
 def _teclado_esta_na_janela(handle: int) -> bool:
     """Confirma que o teclado está dentro da janela alvo antes de digitar."""
     hwnd = foco_de_agora(handle)

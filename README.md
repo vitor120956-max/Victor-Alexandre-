@@ -179,7 +179,7 @@ A chave de IA entra por `py configurar-chave.py` (ou pelo duplo clique em `usar-
 
 A chave também pode **não ser digitada**: `py chave-no-navegador.py --abrir` abre a página do provedor, você cria a chave e clica em COPIAR; `py chave-no-navegador.py --pegar` lê a área de transferência e grava no `.env`. É o caminho que evita o console — no Windows antigo, colar com Ctrl+V escreve `\x16` e a chave chega quebrada. `py chave-no-navegador.py --ver` só lê a janela do navegador e informa se os botões de criar e copiar estão publicados na árvore de acessibilidade; ele não clica. Criar a chave pelo JARVIS (`--criar --autorizar`) depende dessa medição e nunca roda sem a palavra de autorização.
 
-Para não digitar comando nenhum, o duplo clique em `pegar-chave.bat` faz o caminho inteiro: abre a página de chaves, espera você criar e copiar, lê a área de transferência e grava no `.env`. Se o provedor já estiver escolhido no `.env`, ele troca só a chave e não pergunta mais nada; se for a primeira vez, aí sim pergunta provedor, base e modelo.
+Para não digitar comando nenhum, o duplo clique em `pegar-chave.bat` roda `chave-no-navegador.py --auto --autorizar`: ele abre a página de chaves **do provedor que está no `.env`** (OpenRouter, Groq, Google e os outros do catálogo), cria a chave, copia e grava no `.env`. Se o navegador não publicar os botões na árvore de acessibilidade, ele não termina em erro: deixa a página aberta, diz os quatro cliques e fica esperando a chave aparecer na área de transferência. Se o provedor já estiver escolhido no `.env`, ele troca só a chave e não pergunta mais nada; se for a primeira vez, aí sim pergunta provedor, base e modelo.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -756,7 +756,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.11", "skills": 325}`.
+`{"version": "0.91.12", "skills": 325}`.
 
 ## Verificações
 

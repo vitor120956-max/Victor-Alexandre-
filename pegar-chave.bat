@@ -1,61 +1,47 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title JARVIS - pegar a chave do navegador
+title JARVIS - pegar a chave no site
 echo.
-echo   JARVIS - pegar a chave do navegador
-echo   Versao: 0.91.11
+echo   JARVIS - pegar a chave no site, sozinho
+echo   Versao: 0.91.12
 echo   ----------------------------------------------------------------
-echo   Um duplo clique aqui e o JARVIS faz o resto.
-echo   Voce nao digita chave nenhuma: ela vem copiada do site.
+echo   Um duplo clique e o JARVIS abre a pagina das chaves,
+echo   cria a chave, copia e grava no .env dele.
 echo.
 if not exist ".venv\Scripts\python.exe" goto semvenv
 if not exist "chave-no-navegador.py" goto semscript
-echo   Abrindo a pagina de chaves no seu navegador...
-".venv\Scripts\python.exe" chave-no-navegador.py --abrir
-if errorlevel 1 goto semnavegador
+set "PYTHON=.venv\Scripts\python.exe"
+echo   Abrindo o site e tentando fazer tudo sozinho...
+echo   (se ele nao conseguir clicar, ele avisa e espera voce)
 echo.
-echo   No site, com a sua conta (voce ja esta logado):
-echo     1. clique em Create Key
-echo     2. de um nome para a chave (ou deixe o que ele sugere)
-echo     3. clique em Create
-echo     4. clique no botao COPIAR
-echo.
-echo   Nao selecione o texto com o mouse: copie pelo botao.
-echo.
-pause
-echo.
+"%PYTHON%" chave-no-navegador.py --auto --autorizar
+if errorlevel 1 goto tentar
+goto pronto
+
 :tentar
-echo   Lendo a area de transferencia...
 echo.
-".venv\Scripts\python.exe" chave-no-navegador.py --pegar
-if not errorlevel 1 goto pronto
-echo.
-set /p "de_novo=  Tentar de novo? Aperte Enter. Para sair, digite N e Enter: "
+echo   ----------------------------------------------------------------
+echo   Faltou a chave. Ela pode estar copiada agora.
+echo   Se voce copiou no site, aperte Enter que eu leio.
+echo   Para sair, digite N e Enter.
+set /p "de_novo=  Enter para tentar / N para sair: "
 if /i "%de_novo%"=="N" goto fim
 echo.
-goto tentar
+"%PYTHON%" chave-no-navegador.py --pegar
+if errorlevel 1 goto tentar
+goto pronto
 
 :pronto
 echo.
 echo   ----------------------------------------------------------------
 echo   Pronto. A chave esta no .env e o JARVIS ja usa ela.
 echo.
-echo   Se quiser conferir que ela responde de verdade:
+echo   Para conferir que ela responde de verdade:
 echo     .venv\Scripts\python conferir-ia.py
 echo.
 pause
 exit /b 0
-
-:semnavegador
-echo.
-echo   Nao consegui abrir o navegador sozinho.
-echo   Abra voce mesmo este endereco:
-echo     openrouter.ai/keys
-echo.
-echo   Depois de copiar a chave, rode este .bat de novo.
-pause
-exit /b 1
 
 :semvenv
 echo   Nao encontrei o .venv nesta pasta.

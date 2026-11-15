@@ -70,6 +70,12 @@ class WindowsFalso:
             "cursor_voltou": True,
         }
 
+    def trazer_para_frente(self, _handle) -> bool:
+        return True
+
+    def teclado_na_janela(self, _handle) -> bool:
+        return True
+
     def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
         self.chamadas.append(
             {
@@ -126,6 +132,13 @@ def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, c
         types.SimpleNamespace(time=lambda: next(relogio) * 10.0, sleep=lambda _s: None),
     )
     monkeypatch.setitem(sys.modules, "server.arvore_windows", windows)
+    # O passo 4 da 0.91.12 tenta o texto da página (mesa de verdade: no Linux
+    # não há teclado) e depois o botão “Copy”; aqui a área responde na hora,
+    # que é o que o dono veria no Windows.
+    monkeypatch.setattr(script, "_copiar_pela_pagina", lambda _janela: False)
+    monkeypatch.setattr(
+        script, "_esperar_chave", lambda _modulo, _antes, segundos=0: (config.chave, config.chave)
+    )
     return script
 
 
@@ -147,7 +160,7 @@ def test_a_sequencia_inteira_cria_copia_e_grava(monkeypatch, capsys):
     assert windows.chamadas[1]["texto"] == "jarvis-teste"
     assert all(c["mouse"] is True for c in windows.chamadas), "com --autorizar o mouse é o padrão"
     assert config.gravadas == [config.chave]
-    assert "1." in saida and "5." in saida
+    assert "1." in saida and "4." in saida and "5." not in saida
     assert "cursor voltou" in saida
 
 
@@ -268,11 +281,19 @@ def test_o_bat_existe_e_e_ascii_com_crlf():
     assert bruto.count(b"\r\n") == texto.count("\n") == texto.count("\r")
 
 
-def test_o_bat_abre_pega_e_ensina_onde_copiar():
+def test_o_bat_tenta_sozinho_e_tem_o_plano_b_ao_lado():
+    """0.91.12 — o duplo clique tenta fazer tudo; se não der, lê o que ele copiou.
+
+    `--abrir` saiu de cena: abrir sozinho era o problema que o dono apontou
+    (“ele deve abrir os sites [...] para ele poder copiar e colar”). O `--auto`
+    abre, cria, copia e grava; o `--pegar` fica como segunda chance, no mesmo
+    arquivo, sem precisar de outro comando.
+    """
     texto = (RAIZ / "pegar-chave.bat").read_text(encoding="ascii")
-    assert "--abrir" in texto and "--pegar" in texto
-    assert "Create Key" in texto and "COPIAR" in texto
+    assert "--auto --autorizar" in texto
+    assert "--pegar" in texto
     assert ".venv\\Scripts\\python.exe" in texto
+    assert 'set "PYTHON=' in texto, "o caminho do python tem de estar definido"
 
 
 def test_o_bat_nao_tem_salto_para_rotulo_inexistente():
@@ -283,3 +304,252 @@ def test_o_bat_nao_tem_salto_para_rotulo_inexistente():
     saltos = set(re.findall(r"goto\s+(\w+)", texto))
     assert saltos <= rotulos, f"salto sem rótulo: {saltos - rotulos}"
     assert "tentar" in rotulos, "tem de dar para tentar de novo sem fechar a janela"
+
+
+# ------------------------------------------------- o comando único (--auto)
+#
+# “Ele deve abrir os sites onde estão as chaves para ele poder copiar e colar
+# na própria pasta.” — o `--auto` é isto: abrir, criar, copiar e gravar, sem
+# pedir comando nenhum no meio. E, se não puder clicar, esperar a cópia do dono
+# em vez de terminar com erro.
+
+CHAVE_NOVA = "sk-or-v1-" + "7c" * 34
+CHAVE_VELHA = "sk-or-v1-antiga-copiada-ontem-0123456789abcdef"
+
+
+class ConfiguradorAuto(ConfiguradorFalso):
+    """Configurador com um `.env` em memória e um navegador que abre."""
+
+    CHAVE = "JARVIS_AI_API_KEY"
+
+    def __init__(self, provedor: str = "openrouter") -> None:
+        super().__init__(chave=CHAVE_NOVA)
+        self.ENV = Path("/nao/existe/.env")
+        self.texto = f"JARVIS_AI_PROVIDER={provedor}\nJARVIS_AI_BASE_URL=https://openrouter.ai/api/v1\n"
+        self.abertos: list[str] = []
+        self.gravada: str = ""
+
+    def texto_base(self) -> str:
+        return self.texto
+
+    def ler_valor(self, texto: str, nome: str):
+        for linha in texto.splitlines():
+            if linha.startswith(nome + "="):
+                return linha.split("=", 1)[1]
+        return None
+
+    def definir(self, texto: str, nome: str, valor: str) -> str:
+        return texto + f"{nome}={valor}\n"
+
+    def gravar(self, texto, _caminho=None):
+        self.gravada = texto
+        return ".env"
+
+    def mascarar(self, chave: str) -> str:
+        return f"{chave[:5]}…{chave[-4:]} ({len(chave)} caracteres)"
+
+    def guia_do_provedor(self, provedor: str, _base: str):
+        onde = {
+            "openrouter": "openrouter.ai/keys",
+            "groq": "console.groq.com/keys",
+        }.get(provedor.strip().lower(), "")
+        return {"nome": provedor, "onde": onde}
+
+    def abrir_no_navegador(self, endereco: str) -> bool:
+        self.abertos.append(endereco)
+        return True
+
+    def chaves_do_texto(self, texto: str) -> list[str]:
+        import re
+
+        return re.findall(r"sk-or-v1-[A-Za-z0-9]{20,}", texto)
+
+    def sem_controle(self, texto: str) -> str:
+        return texto
+
+
+def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
+    script = _script()
+    fila = list(paginas)
+    estado = {"i": 0}
+
+    def ler(_alvo):
+        indice = min(estado["i"], len(fila) - 1)
+        estado["i"] += 1
+        return JANELA, fila[indice]
+
+    monkeypatch.setattr(script, "_ler_janela", ler)
+
+    def esperar_pagina(_alvo, segundos=0):
+        # A página já está aberta no dublê; os passos seguintes releem por
+        # `_ler_janela`, que continua andando pela mesma fila.
+        assert segundos == 5
+        return JANELA, fila[0]
+
+    monkeypatch.setattr(script, "_esperar_pagina", esperar_pagina)
+    monkeypatch.setattr(script, "_texto_da_area", lambda: area["texto"])
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 0.5, sleep=lambda _s: None)
+    )
+    config = config or ConfiguradorAuto()
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", windows or WindowsFalso())
+    base = _args(provedor="", espera_pagina=5, espera_colar=5)
+    for chave, valor in extra.items():
+        setattr(base, chave, valor)
+    return script, config, base
+
+
+def test_auto_abre_cria_copia_e_grava_a_chave_nova(monkeypatch, capsys):
+    area = {"texto": CHAVE_VELHA}  # já havia uma chave copiada antes
+    paginas = [
+        _pagina(_no("Create Key", [812, 200, 90, 28])),
+        _pagina(_no("Key name", [400, 300, 320, 30], papel=42), _no("Create", [700, 380, 80, 28])),
+        _pagina(_no("Create", [700, 380, 80, 28])),
+    ]
+    script, config, args = _auto(monkeypatch, paginas, area)
+    # a página, depois de criar, tem a chave escrita nela: Ctrl+A/Ctrl+C copia isso
+    monkeypatch.setattr(
+        script,
+        "_copiar_pela_pagina",
+        lambda _janela: (area.__setitem__("texto", f"API Keys\n{CHAVE_NOVA}\nCopiar"), True)[1],
+    )
+
+    assert script.passo_auto(args) == 0
+
+    assert config.abertos == ["openrouter.ai/keys"]
+    assert CHAVE_NOVA in config.gravada
+    assert CHAVE_VELHA not in config.gravada, "a chave copiada antes não pode ser confundida"
+    assert "sk-or…7c7c" in capsys.readouterr().out
+
+
+def test_auto_sem_botao_na_arvore_espera_o_dono_copiar(monkeypatch, capsys):
+    """Página que não publica botão: o JARVIS não desiste, ele espera a cópia."""
+    area = {"texto": CHAVE_VELHA}
+    paginas = [_pagina(_no("Settings"), _no("Docs"))]
+    script, config, args = _auto(monkeypatch, paginas, area, espera_colar=4)
+
+    def copia_do_dono(_modulo, _antes, segundos=0):
+        assert segundos == 4
+        return (CHAVE_NOVA, CHAVE_NOVA)
+
+    monkeypatch.setattr(script, "_esperar_chave", copia_do_dono)
+
+    assert script.passo_auto(args) == 0
+    assert "botões não estão na árvore" in capsys.readouterr().out
+    assert CHAVE_NOVA in config.gravada
+
+
+def test_auto_sem_autorizar_nao_abre_nem_cria(monkeypatch, capsys):
+    area = {"texto": ""}
+    script, config, args = _auto(monkeypatch, [_pagina(_no("Create Key"))], area, autorizar=False)
+
+    assert script.passo_auto(args) == 0
+    assert config.abertos == []
+    assert config.gravada == ""
+    assert "--autorizar" in capsys.readouterr().out
+
+
+def test_auto_usa_o_site_do_provedor_pedido(monkeypatch):
+    """O pedido foi “os sites onde estão as chaves” — não é só o OpenRouter."""
+    area = {"texto": ""}
+    paginas = [_pagina(_no("Create Key"))]
+    script, config, args = _auto(monkeypatch, paginas, area, provedor="groq")
+    monkeypatch.setattr(script, "_esperar_chave", lambda _m, _a, segundos=0: (CHAVE_NOVA, CHAVE_NOVA))
+
+    assert script.passo_auto(args) == 0
+    assert config.abertos == ["console.groq.com/keys"]
+
+
+def test_auto_sem_saber_o_provedor_nao_inventa(monkeypatch, capsys):
+    area = {"texto": ""}
+    config = ConfiguradorAuto(provedor="")
+    script, _config, args = _auto(monkeypatch, [_pagina(_no("Create Key"))], area, config=config)
+
+    assert script.passo_auto(args) == 1
+    assert "Não sei qual provedor" in capsys.readouterr().out
+
+
+def test_esperar_chave_ignora_o_que_ja_estava_copiado(monkeypatch):
+    script = _script()
+    area = {"texto": CHAVE_VELHA}
+    monkeypatch.setattr(script, "_texto_da_area", lambda: area["texto"])
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    assert script._esperar_chave(ConfiguradorAuto(), CHAVE_VELHA, segundos=3) is None
+
+
+def test_copiar_pela_pagina_recusa_se_o_teclado_nao_esta_na_janela(monkeypatch):
+    script = _script()
+
+    class SemTeclado(WindowsFalso):
+        def trazer_para_frente(self, _h):
+            return True
+
+        def teclado_na_janela(self, _h):
+            return False
+
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", SemTeclado())
+    assert script._copiar_pela_pagina({"handle": 1}) is False
+
+
+# ------------------------------------------------- mais de uma janela aberta
+
+def test_escolhe_a_janela_que_e_a_pagina_de_chaves(monkeypatch):
+    """Chrome aberto com o e-mail e com as chaves: tem de ler a das chaves.
+
+    Quando o dono já está com o navegador aberto, o link cai numa aba da janela
+    em foco; escolher só por “chrome” empatava todas e podia ler a errada.
+    """
+    script = _script()
+    janelas = [
+        {"handle": 1, "titulo": "Caixa de entrada - Gmail", "processo": "chrome"},
+        {"handle": 2, "titulo": "API Keys | OpenRouter", "processo": "chrome"},
+    ]
+    arvores = {
+        1: {"janela": janelas[0], "fonte": "uia", "raiz": {"nome": "Caixa de entrada", "filhos": []}},
+        2: {"janela": janelas[1], "fonte": "uia", "raiz": {"nome": "API Keys", "filhos": [
+            {"nome": "Create Key", "papel": 43, "caixa": [10, 20, 80, 28], "filhos": []}]}},
+    }
+
+    class Windows(WindowsFalso):
+        def janelas(self):
+            return janelas
+
+        def janela_em_foco(self):
+            return janelas[0]
+
+        def ler_janela(self, handle, _p=8, _l=1500):
+            return arvores[int(handle)]
+
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", Windows())
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    janela, montada = script._esperar_pagina("chrome", segundos=3)
+    assert janela["handle"] == 2
+    assert montada["arvore"]["nome"] == "API Keys"
+
+
+def test_a_janela_em_foco_vem_primeiro(monkeypatch):
+    script = _script()
+    janelas = [
+        {"handle": 10, "titulo": "Google Chrome", "processo": "chrome"},
+        {"handle": 11, "titulo": "Outra janela do Chrome", "processo": "chrome"},
+    ]
+
+    class Windows(WindowsFalso):
+        def janelas(self):
+            return janelas
+
+        def janela_em_foco(self):
+            return janelas[1]
+
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", Windows())
+    assert [j["handle"] for j in script._janelas_do_alvo("chrome")] == [11, 10]
