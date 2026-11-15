@@ -576,3 +576,42 @@ def test_a_limpeza_nao_junta_linhas():
     amostra = "api grok 1 gsk_" + "A" * 40 + "\napi groq 2 gsk_" + "B" * 40
     assert sem_controle(amostra).count("\n") == 1
     assert chaves_do_texto(amostra) == ["gsk_" + "A" * 40, "gsk_" + "B" * 40]
+
+
+# ------------------------------------------- o script diz ONDE pegar a chave
+#
+# Medido no PC em 0.91.7: `configurar-chave.py` abria com `Provedor
+# [OpenRouter]:` e nada sobre onde criar a chave. Quem nunca fez isso fica
+# parado no prompt — e o dado já existia em `server/provedores.py`.
+
+
+def _script_de_configuracao():
+    import importlib.util
+    from pathlib import Path as _Path
+
+    caminho = _Path(__file__).resolve().parents[2] / "configurar-chave.py"
+    spec = importlib.util.spec_from_file_location("cc_guia", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def test_o_guia_do_openrouter_diz_onde_pegar():
+    guia = _script_de_configuracao().guia_do_provedor("OpenRouter", "https://openrouter.ai/api/v1")
+    assert guia["onde"] == "openrouter.ai/keys"
+    assert ":free" in guia["nota"]
+
+
+def test_o_guia_avisa_que_ctrl_v_nao_cola_no_console_antigo(capsys):
+    modulo = _script_de_configuracao()
+    modulo.mostrar_guia(modulo.guia_do_provedor("OpenRouter", "https://openrouter.ai/api/v1"))
+    saida = capsys.readouterr().out
+    assert "BOTÃO DIREITO" in saida
+    assert "Ctrl+V não cola" in saida
+
+
+def test_provedor_sem_catalogo_nao_quebra_o_guia():
+    guia = _script_de_configuracao().guia_do_provedor("ProvedorInventado", "https://exemplo.invalido/v1")
+    assert guia["nome"] == "ProvedorInventado"
+    assert guia["onde"] == ""

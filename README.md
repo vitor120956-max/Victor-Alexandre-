@@ -752,7 +752,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.7", "skills": 325}`.
+`{"version": "0.91.8", "skills": 325}`.
 
 ## Verificações
 

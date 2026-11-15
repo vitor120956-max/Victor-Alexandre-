@@ -161,6 +161,19 @@ modelo — lugar errado.
 Colar no console antigo: **botão direito do mouse**, não Ctrl+V.
 
 
+### 0.91.8 — o script passa a dizer onde pegar a chave
+
+Medido no PC: `configurar-chave.py` abria com `Provedor [OpenRouter]:` e nenhuma
+palavra sobre onde criar a chave. Quem nunca fez isso fica parado no prompt —
+foi exatamente a pergunta do dono. O endereço já estava no catálogo
+(`provedores.onde`), só não era impresso.
+
+- `guia_do_provedor()` + `mostrar_guia()`: endereço, passo a passo, aviso do
+  botão direito (Ctrl+V não cola no console antigo) e o modelo sugerido.
+- O endereço reaparece no prompt da chave, quando a tela já rolou.
+- Provedor fora do catálogo não quebra: só não mostra endereço.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

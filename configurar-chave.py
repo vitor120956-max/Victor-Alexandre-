@@ -255,6 +255,56 @@ def perguntar(rotulo: str, padrao: str) -> str:
     return resposta or padrao
 
 
+def guia_do_provedor(provedor: str, base: str) -> dict[str, str]:
+    """Onde pegar a chave e o que digitar — do mesmo catálogo que a tela usa.
+
+    0.91.8 — medido no PC do dono: o script abria com
+    `Provedor [OpenRouter]:` e nenhuma palavra sobre **onde** criar a chave.
+    Quem nunca fez isso fica parado no prompt. O dado já existia em
+    `server/provedores.py` (`onde`, `nota`, `modelo`); faltava mostrar.
+    """
+    try:
+        from server import provedores  # noqa: PLC0415 - só quem roda com o venv paga
+
+        achado = provedores.por_id(provedor.strip().lower()) or provedores.por_base(base)
+        if achado:
+            return {
+                "nome": str(achado.get("nome") or provedor),
+                "onde": str(achado.get("onde") or ""),
+                "modelo": str(achado.get("modelo") or ""),
+                "nota": str(achado.get("nota") or ""),
+                "gratis": str(achado.get("gratis") or ""),
+            }
+    except Exception:  # noqa: BLE001 - sem o pacote do servidor, o guia é opcional
+        pass
+    if "openrouter" in (provedor + base).lower():
+        return {
+            "nome": "OpenRouter",
+            "onde": "openrouter.ai/keys",
+            "modelo": "deepseek/deepseek-chat-v3-0324:free",
+            "nota": "os gratuitos terminam em :free; o catálogo muda toda semana",
+            "gratis": "sim, só o que termina em :free",
+        }
+    return {"nome": provedor, "onde": "", "modelo": "", "nota": "", "gratis": ""}
+
+
+def mostrar_guia(guia: dict[str, str]) -> None:
+    """As três informações que faltavam no topo do script."""
+    if not guia.get("onde"):
+        return
+    print(f"  Provedor: {guia['nome']}")
+    print(f"  Onde pegar a chave:  {guia['onde']}")
+    print("  1. abra esse endereço no navegador e entre (no OpenRouter dá para entrar com o Google)")
+    print("  2. crie uma chave nova e COPIE pelo botão de copiar (não selecione o texto com o mouse)")
+    print("  3. volte para esta janela e cole com o BOTÃO DIREITO do mouse")
+    print("     (no console antigo do Windows o Ctrl+V não cola: ele escreve um símbolo)")
+    if guia.get("nota"):
+        print(f"  Modelo grátis: {guia['nota']}")
+    if guia.get("modelo"):
+        print(f"  Sugestão de modelo: {guia['modelo']}")
+    print()
+
+
 def tester(base: str, modelo: str, chave: str) -> bool:
     """Testa a chave — ou cada uma delas, se houver várias.
 
@@ -447,6 +497,11 @@ def principal(argv: list[str] | None = None) -> int:
     print("A chave é digitada sem aparecer na tela e não é gravada em histórico.")
     print("Deixe em branco para manter o valor atual.\n")
 
+    _atual_provedor = args.provedor or ler_valor(texto, "JARVIS_AI_PROVIDER") or CAMPOS["JARVIS_AI_PROVIDER"]
+    _atual_base = args.base or ler_valor(texto, "JARVIS_AI_BASE_URL") or CAMPOS["JARVIS_AI_BASE_URL"]
+    if not local:
+        mostrar_guia(guia_do_provedor(_atual_provedor, _atual_base))
+
     provedor = args.provedor or perguntar("Provedor", ler_valor(texto, "JARVIS_AI_PROVIDER") or CAMPOS["JARVIS_AI_PROVIDER"])
     base = args.base or perguntar("Base da API", ler_valor(texto, "JARVIS_AI_BASE_URL") or CAMPOS["JARVIS_AI_BASE_URL"])
     modelo = args.modelo or perguntar("Modelo", ler_valor(texto, "JARVIS_AI_MODEL") or CAMPOS["JARVIS_AI_MODEL"])
@@ -460,6 +515,9 @@ def principal(argv: list[str] | None = None) -> int:
     chave = args.chave
     if chave is None and not local:
         if interativo():
+            _guia = guia_do_provedor(_atual_provedor, _atual_base)
+            if _guia.get("onde"):
+                print(f"\n  Chave de: {_guia['onde']}  —  cole com o botão direito do mouse.")
             try:
                 digitada = getpass.getpass("Chave(s), uma ou separadas por vírgula (não aparece ao digitar): ")
                 chave = sem_controle(digitada).strip()
