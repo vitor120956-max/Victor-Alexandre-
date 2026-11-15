@@ -1,6 +1,6 @@
 {
  "versao": "0.91.2",
- "gerado": "2026-11-15T02:55:39+00:00",
+ "gerado": "2026-11-15T02:56:40+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -371,11 +371,11 @@
    "bytes": 3448
   },
   "NOVO-0.91.0.md": {
-   "sha256": "8dc30cf311a8f3cc3870229c4ebeb3ff38244a26c02b36b7214a8d099c46d9e7",
+   "sha256": "45afa93c56208f1fa94f8b9d16a644de67238d2f6902f30c40b40a7fa928a761",
    "bytes": 5722
   },
   "NOVO-0.91.1.md": {
-   "sha256": "9bc757ffc7fbd070a84a2c03370a1c24a2da99b007a89a54ea7b8df64e454421",
+   "sha256": "3b161861265409d952e616c3e7513fe42450768667fb02c5664523a1e3e0ff27",
    "bytes": 1694
   },
   "NOVO-0.91.2.md": {
