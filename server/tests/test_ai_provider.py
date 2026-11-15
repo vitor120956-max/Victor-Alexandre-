@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -406,3 +407,154 @@ def test_o_diario_da_cota_nunca_mostra_a_chave(monkeypatch: pytest.MonkeyPatch):
     provedor._anotar_recusa(1, 401)
     texto = str(provedor.status())
     assert "gsk_segredo" not in texto
+
+
+# ------------------------------------------------- 400 sem corpo reconhecível
+#
+# 0.91.5, no PC do dono: o passo 3 parou com “o provedor de IA respondeu com
+# HTTP 400” — sem causa, sem o que fazer. O corpo que o provedor mandou não
+# casava com `error.message` e era descartado em silêncio.
+
+
+class CorpoCruResponse(FakeResponse):
+    def __init__(self, status: int, texto: str) -> None:
+        super().__init__(status=status)
+        self.text = texto
+
+    def json(self):  # type: ignore[override]
+        raise ValueError("não é JSON")
+
+
+class CorpoDictResponse(FakeResponse):
+    def __init__(self, status: int, corpo: dict[str, Any]) -> None:
+        super().__init__(status=status)
+        self._corpo = corpo
+        self.text = str(corpo)
+
+    def json(self):  # type: ignore[override]
+        return self._corpo
+
+
+class ClienteQueResponde:
+    def __init__(self, resposta) -> None:  # type: ignore[no-untyped-def]
+        self.resposta = resposta
+        self.chamadas = 0
+
+    def __call__(self, **_kwargs: Any) -> "ClienteQueResponde":
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args: Any) -> None:
+        return None
+
+    async def post(self, _url: str, **_kwargs: Any):
+        self.chamadas += 1
+        return self.resposta
+
+
+def _provedor_com_corpo(monkeypatch: pytest.MonkeyPatch, resposta) -> OpenAICompatibleProvider:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("JARVIS_AI_API_KEY", "test-key-not-a-real-secret")
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://provider.example/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-teste")
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", ClienteQueResponde(resposta))
+    return OpenAICompatibleProvider()
+
+
+def test_corpo_que_nao_e_json_aparece_na_mensagem(monkeypatch: pytest.MonkeyPatch):
+    """Antes devolvia string vazia e a resposta ficava sem causa nenhuma."""
+    provedor = _provedor_com_corpo(monkeypatch, CorpoCruResponse(400, "<html>Bad Request: modelo invalido</html>"))
+
+    with pytest.raises(AIUnavailable) as erro:
+        asyncio.run(provedor.generate(AIRequest(message="oi")))
+
+    texto = str(erro.value)
+    assert "HTTP 400" in texto
+    assert "modelo invalido" in texto
+    assert "conferir-ia.py" in texto
+
+
+def test_corpo_com_detail_em_vez_de_error_message(monkeypatch: pytest.MonkeyPatch):
+    """Servidor no estilo FastAPI (modelo local) usa `detail`, não `error.message`."""
+    provedor = _provedor_com_corpo(monkeypatch, CorpoDictResponse(400, {"detail": "context length exceeded: 9000 > 8192"}))
+
+    with pytest.raises(AIUnavailable) as erro:
+        asyncio.run(provedor.generate(AIRequest(message="oi")))
+
+    texto = str(erro.value)
+    assert "context length exceeded" in texto
+
+
+def test_o_400_diz_o_que_fazer_e_nao_culpa_a_chave(monkeypatch: pytest.MonkeyPatch):
+    provedor = _provedor_com_corpo(monkeypatch, CorpoDictResponse(400, {"error": {"message": "model_not_found"}}))
+
+    with pytest.raises(AIUnavailable) as erro:
+        asyncio.run(provedor.generate(AIRequest(message="oi")))
+
+    texto = str(erro.value)
+    assert "não é a chave nem a cota" in texto
+    assert "model_not_found" in texto
+
+
+def test_a_mensagem_do_provedor_nunca_mostra_a_chave(monkeypatch: pytest.MonkeyPatch):
+    provedor = _provedor_com_corpo(
+        monkeypatch,
+        CorpoCruResponse(400, "chave invalida: gsk_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 pedido ruim"),
+    )
+
+    with pytest.raises(AIUnavailable) as erro:
+        asyncio.run(provedor.generate(AIRequest(message="oi")))
+
+    assert "gsk_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456" not in str(erro.value)
+
+
+def test_conferir_ia_lista_o_modelo_e_aponta_o_errado(monkeypatch, tmp_path, capsys):
+    """`conferir-ia.py` é o comando que transforma “HTTP 400” numa causa.
+
+    O script é pequeno de propósito: ele não deve ter lógica que já não exista
+    no `server/`. Aqui só se prova que ele compara o nome do `.env` com a lista
+    real da conta e diz qual é o problema.
+    """
+    import importlib.util
+
+    from server import chaves, provedores
+
+    monkeypatch.setattr(
+        chaves,
+        "estado",
+        lambda: {
+            "quantidade": 1,
+            "mascaradas": ["gsk_…abc"],
+            "provedor": "groq",
+            "provedor_id": "groq",
+            "base": "https://api.groq.com/openai/v1",
+            "modelo": "llama-3.3-70b-versatile-antigo",
+            "arquivo": "/tmp/.env",
+        },
+    )
+    monkeypatch.setattr(
+        provedores,
+        "listar_modelos",
+        lambda **_kwargs: {
+            "modelos": [
+                {"id": "llama-3.3-70b-versatile", "gratis": True},
+                {"id": "llama-3.1-8b-instant", "gratis": True},
+            ],
+            "total": 2,
+        },
+    )
+
+    caminho = Path(__file__).resolve().parents[2] / "conferir-ia.py"
+    spec = importlib.util.spec_from_file_location("conferir_ia", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(modulo)
+
+    codigo = modulo.main([])
+    saida = capsys.readouterr().out
+
+    assert codigo == 1, "modelo fora da lista precisa sair com erro"
+    assert "NÃO está na lista" in saida
+    assert "llama-3.3-70b-versatile" in saida
+    assert "gsk_ABCDEF" not in saida, "a chave nunca aparece inteira"

@@ -120,6 +120,26 @@ dossiê saiu cortado em 160 caracteres e a falha do passo 3 saiu como
   limite ou se é rede.
 
 
+### 0.91.6 — o 400 do provedor
+
+No PC: o dossiê saiu inteiro (missão cumprida) e o passo 3 parou com
+`O provedor não respondeu (AIUnavailable): o provedor de IA respondeu com HTTP 400.`
+
+400 não é chave (401) nem cota (429): é pedido recusado. E o motivo que o
+provedor mandou estava sendo **descartado** — só dois formatos de corpo eram
+lidos (`error.message` e `message`). Formato desconhecido virava mensagem vazia.
+
+- `detalhe_do_corpo` passou a aceitar `detail` e `error` como texto, e a mostrar
+  o corpo cru (limpo, cortado) quando nada casa.
+- A frase do 400 diz o que fazer e aponta `conferir-ia.py`.
+- `conferir-ia.py`: script novo que lista os modelos que **a chave vê**
+  (`GET /models`, sem gastar geração) e diz se o nome configurado está lá.
+
+Causa mais provável, e é de graça confirmar: nome de modelo de um provedor com
+chave de outro — `llama-3.3-70b-versatile` (Groq) × `meta-llama/llama-3.3-70b-instruct`
+(OpenRouter). A chave está boa; o nome é que não existe ali.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

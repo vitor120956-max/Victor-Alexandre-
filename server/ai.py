@@ -146,16 +146,46 @@ def detalhe_do_corpo(resposta: Any) -> str:
     try:
         corpo = resposta.json()
     except Exception:  # noqa: BLE001 - corpo não-JSON é o caso comum no 502
-        return ""
+        return _corpo_cru(resposta)
     if not isinstance(corpo, dict):
-        return ""
+        return _corpo_cru(resposta)
     erro = corpo.get("error") if isinstance(corpo.get("error"), dict) else {}
-    mensagem = str(erro.get("message") or corpo.get("message") or erro.get("status") or "")
+    mensagem = str(
+        erro.get("message")
+        or corpo.get("message")
+        or erro.get("status")
+        # Formas que já apareceram em provedores diferentes e eram jogadas
+        # fora: `{"detail": ...}` (servidor no estilo FastAPI, inclusive de
+        # modelo local) e `{"error": "..."}` com o erro como texto.
+        or corpo.get("detail")
+        or (corpo.get("error") if isinstance(corpo.get("error"), str) else "")
+        or ""
+    )
     if not mensagem:
-        return ""
+        return _corpo_cru(resposta)
     from . import chaves as chaves_mod  # noqa: PLC0415 (evita ciclo na importação)
 
     return chaves_mod._limpar_mensagem(mensagem)[:300]  # noqa: SLF001 - mesma limpeza da tela
+
+
+def _corpo_cru(resposta: Any, limite: int = 300) -> str:
+    """O corpo como texto quando não é JSON conhecido — limpo e cortado.
+
+    Antes, um corpo que não casasse com `error.message` virava string vazia, e
+    a pessoa lia só “HTTP 400”. Aconteceu no PC do dono em 0.91.5: o provedor
+    mandou alguma coisa, o JARVIS jogou fora e a resposta ficou sem causa.
+    Mostrar o texto cru (sem chave, sem endereço) é melhor que não mostrar nada.
+    """
+    texto = getattr(resposta, "text", "")
+    if not isinstance(texto, str) or not texto.strip():
+        return ""
+    try:
+        from . import chaves as chaves_mod  # noqa: PLC0415 (evita ciclo na importação)
+
+        limpo = chaves_mod._limpar_mensagem(texto)  # noqa: SLF001 - mesma limpeza da tela
+    except Exception:  # noqa: BLE001 - diário da tela não pode derrubar o erro
+        limpo = " ".join(texto.split())[:limite]
+    return limpo[:limite]
 
 
 def categoria_do_erro(status: int, detalhe: str) -> str:
@@ -202,6 +232,17 @@ def frase_do_erro(status: int, detalhe: str, categoria: str, modelo: str = "", o
         return (
             f"a cota acabou agora (HTTP {status}). Espere o tempo que o provedor mandou, "
             "troque de modelo (cada modelo tem cota própria) ou acrescente outra chave." + cauda
+        )
+    if status == 400:
+        # 400 é pedido recusado: chave é 401, cota é 429. Medido no PC em
+        # 0.91.5, essa frase saía sozinha e não dizia o que fazer. As duas
+        # causas mais comuns têm conferência própria, e ela é de graça.
+        return (
+            "o provedor recusou o pedido (HTTP 400) — não é a chave nem a cota. "
+            "Quase sempre é o nome do modelo, que muda sem aviso nos planos grátis. "
+            "Rode `.venv\\Scripts\\python conferir-ia.py` na pasta do JARVIS: ele lista "
+            "os modelos que a sua chave vê e diz se o nome atual está entre eles."
+            + cauda
         )
     return f"o provedor de IA respondeu com HTTP {status}.{cauda}"
 
