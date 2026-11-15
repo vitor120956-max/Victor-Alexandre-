@@ -1,4 +1,4 @@
-# JARVIS 0.91.2 — o `.env` também vale para a sonda
+# JARVIS 0.91.1 — o `.env` também vale para a sonda
 
 Uma correção pequena, achada antes de você tropeçar nela.
 

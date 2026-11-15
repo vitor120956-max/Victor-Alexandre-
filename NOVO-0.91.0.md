@@ -1,4 +1,4 @@
-# JARVIS 0.91.1 — o maestro: um pedido, vários passos
+# JARVIS 0.91.0 — o maestro: um pedido, vários passos
 
 Até ontem, cada pedido valia por **uma** skill. "Pesquisa o clima e guarda num
 arquivo" tem duas coisas dentro, e a resposta honesta era: peça uma, depois a
