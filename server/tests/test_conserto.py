@@ -180,6 +180,30 @@ def test_o_dossie_diz_a_versao_do_jarvis_e_nao_a_em_que_o_modulo_nasceu():
     assert "0.75.0" not in achado["texto"]
 
 
+def test_traceback_numa_linha_so_ainda_tem_tipo_e_causa():
+    """0.91.4: colado numa linha só, o dossiê saía com `exceção: :`.
+
+    Acontece de verdade: terminal estreito, chat, ou o próprio maestro
+    montando o texto. O `KeyError: ...` não fica no começo de linha.
+    """
+    uma_linha = (
+        "Traceback (most recent call last): File \"server/app.py\", line 417, "
+        "in execute_skill KeyError: 'pedido'"
+    )
+    achado = conserto.diagnosticar(erro=uma_linha)
+    assert achado["lido"] is True
+    assert achado["excecao"]["tipo"] == "KeyError"
+    assert "pedido" in achado["excecao"]["mensagem"]
+    assert achado["onde"]["arquivo"] == "server/app.py"
+    assert achado["causa"]["codigo"] != "desconhecida"
+
+
+def test_traceback_com_varias_linhas_continua_igual():
+    achado = conserto.diagnosticar(erro=RASTRO_KEYERROR)
+    assert achado["excecao"]["tipo"] == "KeyError"
+    assert achado["causa"]["codigo"] == "chave_ausente"
+
+
 def test_o_dossie_sem_erro_nao_inventa_texto(tmp_path):
     achado = conserto.dossie(raiz=tmp_path)
     assert achado["lido"] is False

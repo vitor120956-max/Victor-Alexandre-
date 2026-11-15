@@ -93,6 +93,19 @@ O que fazer: o diário de erros não tinha nada e o pedido não trouxe erro. Col
 ```
 
 
+### 0.91.4 — traceback numa linha só
+
+Achado ao preparar o comando de teste para o PC, antes de mandar. O
+`diagnosticar` procurava o tipo da exceção com `^...$` em modo multilinha, então
+um traceback colapsado numa linha (terminal estreito, chat, ou o maestro
+montando o texto) não tinha `KeyError` no começo de linha: o dossiê saía com
+`exceção: :` e causa `desconhecida`.
+
+Agora, se o começo de linha não achar, a busca fica com a **última** ocorrência
+em qualquer posição — num traceback, a exceção é a última coisa escrita. Dois
+testes fixam: linha única acha e classifica, várias linhas continua igual.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

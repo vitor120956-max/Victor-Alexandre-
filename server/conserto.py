@@ -323,11 +323,17 @@ def diagnosticar(
         dados["rastro"] = erro.strip()[-MAX_ERRO:]
         # `json.decoder.JSONDecodeError: ...` também é exceção — o nome pode vir
         # qualificado, e o `\w+` antigo parava no primeiro ponto.
-        achado = re.search(
-            r"^((?:\w+\.)*[A-Za-z_]*(?:Error|Exception|Interrupt|Exit))\s*:\s*(.*)$",
-            dados["rastro"],
-            re.M,
-        )
+        padrao = r"((?:\w+\.)*[A-Za-z_]*(?:Error|Exception|Interrupt|Exit))\s*:\s*(.*)"
+        achado = re.search("^" + padrao + "$", dados["rastro"], re.M)
+        if achado is None:
+            # 0.91.4 — medido no PC: um traceback colado numa linha só (que é
+            # como ele sai de um terminal estreito ou de um chat) não tem o
+            # `KeyError: ...` no começo de linha. O dossiê saía com
+            # `exceção: :` e a causa ficava "desconhecida". Vale a **última**
+            # ocorrência: num traceback, a exceção é a última linha.
+            achado = None
+            for achado in re.finditer(padrao, dados["rastro"]):
+                pass
         if achado:
             dados["tipo"] = achado.group(1)
             dados["mensagem"] = achado.group(2).strip()[:1_000]
