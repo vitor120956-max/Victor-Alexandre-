@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Literal
 
 from . import biblioteca
+from . import maestro
 from .pesquisa import responder as pesquisa_responder
 from .sistema import SistemaError
 
@@ -3925,6 +3926,46 @@ def _resultado_base(pedido: str) -> dict[str, Any]:
     }
 
 
+
+def _resposta_de_orquestracao(termo: str, registry: Any) -> dict[str, Any] | None:
+    """Objetivo de **mais de um passo**: mostra o plano e não executa nada.
+
+    Um pedido de um passo só continua indo para o ranking normal — o maestro
+    não rouba “escreve oi no bloco de notas” do `mesa.ditar`, que já funciona
+    e já foi provado no PC. Aqui só entra o que o catálogo encadeia de fato.
+    """
+    procedimento = maestro.escolher_procedimento(termo)
+    if procedimento is None or len(procedimento.passos) < 2:
+        return None
+
+    base = _resultado_base(termo)
+    try:
+        plano = maestro.planejar(termo, registry=registry, procedimento=procedimento)
+    except maestro.MaestroError as exc:
+        base["acao"] = "faltando"
+        base["via"] = "maestro"
+        base["resposta"] = str(exc)
+        return base
+
+    base["acao"] = "plano"
+    base["via"] = "maestro"
+    base["confianca"] = 1.0
+    base["parametros"] = {"procedimento": plano["procedimento"], "passos": len(plano["passos"])}
+    base["plano"] = plano
+    comandos = [
+        f"arvore_sonda.py --orquestrar \"{plano['pedido']}\"",
+        f"arvore_sonda.py --orquestrar \"{plano['pedido']}\" --autorizar",
+    ]
+    base["resposta"] = (
+        maestro.texto_do_plano(plano)
+        + "\n\nNada rodou: plano não é execução. Para rodar, use a skill `maestro.executar` "
+        "com `pedido` e `autorizar=true`, ou no PC:"
+        + "\n" + comandos[0] + "   (só mostra de novo; nada roda)"
+        + "\n" + comandos[1] + "   (roda os passos de leitura e para antes do primeiro efeito)"
+    )
+    return base
+
+
 async def _executar_skill(
     entrada: Entrada,
     consulta: str,
@@ -4100,6 +4141,13 @@ async def _resolver(
                     " e ".join(_pedido_do_campo(campo, escolhida, "veja o formulário da skill") for campo in tentativa["faltando"]),
                 )
                 return base
+
+    # 0b0b. Objetivo com vários passos: o maestro monta a fila e não executa
+    # nada. Vem depois do apelido de propósito — o que você ensinou manda mais
+    # que o catálogo.
+    orquestrado = _resposta_de_orquestracao(termo, registry)
+    if orquestrado is not None:
+        return orquestrado
 
     # 0b1. "pesquisa no youtube sobre X": a fonte está dita, não há o que adivinhar.
     pesquisa = _pedido_direto_de_pesquisa(termo)

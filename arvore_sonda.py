@@ -16,6 +16,9 @@ Uso (Windows):
     py arvore_sonda.py --alvo notepad --escrever "oi, mundo"              # acha o campo e mostra o plano
     py arvore_sonda.py --alvo notepad --escrever "oi, mundo" --executar   # escreve de verdade
     py arvore_sonda.py --programa "bloco de notas" --escrever "oi" --executar  # abre se preciso
+    py arvore_sonda.py --orquestrar "pesquisa o clima e guarda em clima.txt"   # plano, nada roda
+    py arvore_sonda.py --orquestrar "..." --autorizar                          # roda e para no efeito
+    py arvore_sonda.py --catalogo                                              # o que sei encadear
 
 Só leitura: nada é clicado, digitado ou movido.
 
@@ -42,6 +45,65 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+
+
+def _abrir_registro():
+    """O registro de skills, com a mesma pasta de arquivos da API."""
+    import os
+    from pathlib import Path
+
+    from server.skill_registry import build_registry
+
+    raiz_projeto = Path(__file__).resolve().parent
+    configurada = os.getenv("JARVIS_FILES_ROOT", "").strip()
+    pasta = Path(configurada).expanduser() if configurada else raiz_projeto / "storage" / "user-files"
+    return build_registry(pasta)
+
+
+def _orquestrar(args: argparse.Namespace) -> int:
+    """`--catalogo` e `--orquestrar`: o maestro, aqui fora da API.
+
+    Fica antes da checagem de Windows de propósito: planejar não toca em tela
+    nem em janela. Se um passo precisar de Windows, quem recusa é o passo — e o
+    maestro diz em qual parou.
+    """
+    import asyncio
+
+    from server import maestro
+
+    try:
+        registro = _abrir_registro()
+    except Exception as exc:  # noqa: BLE001 - registro quebrado não é plano
+        return _falhar(f"não consegui carregar as skills ({type(exc).__name__}: {exc}).", json_sim=args.json)
+
+    if args.catalogo:
+        dados = maestro.catalogo()
+        if args.json:
+            print(json.dumps(dados, ensure_ascii=False, indent=2))
+        else:
+            print(dados["texto"])
+        return 0
+
+    try:
+        plano = maestro.pedido(args.orquestrar, registry=registro, procedimento=args.procedimento)
+    except maestro.MaestroError as exc:
+        return _falhar(str(exc), json_sim=args.json)
+
+    if not args.autorizar:
+        if args.json:
+            print(json.dumps({**plano, "texto": maestro.texto_do_plano(plano)}, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(maestro.texto_do_plano(plano))
+        return 0
+
+    resultado = asyncio.run(maestro.executar(plano, registry=registro, autorizar=True))
+    if args.json:
+        print(json.dumps({**resultado, "texto": maestro.texto_da_execucao(resultado)}, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(maestro.texto_da_execucao(resultado))
+        if resultado.get("parou_em"):
+            print(f"  parou no passo {resultado['parou_em']} de {len(plano['passos'])}.")
+    return 0 if resultado.get("ok") else 1
 
 
 def _falhar(mensagem: str, codigo: int = 1, *, json_sim: bool = False) -> int:
@@ -361,6 +423,11 @@ def principal(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Mede todas as janelas abertas e diz em quais o JARVIS consegue trabalhar.",
     )
+    parser.add_argument(
+        "--procedimento",
+        default="",
+        help="Com --orquestrar, força um procedimento pelo id (veja --catalogo).",
+    )
     parser.add_argument("--ref", default="", help="Ref do elemento (ex.: @4ab283d9:e11), vindo da leitura.")
     parser.add_argument(
         "--acao",
@@ -403,7 +470,29 @@ def principal(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Se o campo já tiver texto, escreve no fim dele em vez de recusar.",
     )
+    parser.add_argument(
+        "--orquestrar",
+        default="",
+        metavar="OBJETIVO",
+        help=(
+            "Objetivo em português. Mostra o plano (skill de cada passo) e **não executa nada**. "
+            "Serve em qualquer sistema: planejar não abre nem grava."
+        ),
+    )
+    parser.add_argument(
+        "--autorizar",
+        action="store_true",
+        help="Com --orquestrar, roda os passos na ordem e para antes do primeiro que tem efeito colateral.",
+    )
+    parser.add_argument(
+        "--catalogo",
+        action="store_true",
+        help="Lista os procedimentos que o maestro sabe encadear.",
+    )
     args = parser.parse_args(argv)
+
+    if args.catalogo or args.orquestrar:
+        return _orquestrar(args)
 
     if sys.platform != "win32":
         return _falhar("a leitura da árvore só existe no Windows hoje.", json_sim=args.json)

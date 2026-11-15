@@ -27,6 +27,7 @@ from .agency import (
     verify_watchdog,
 )
 from . import agenda as agenda_local
+from . import maestro
 from . import estudo as estudo_local
 from . import portatil as portatil_local
 from . import atualizacao as atualizacao_local
@@ -2140,6 +2141,43 @@ class MesaDitarInput(BaseModel):
     )
 
 
+class MaestroPlanejarInput(BaseModel):
+    """Monta o plano de um objetivo — sem executar nada."""
+
+    model_config = ConfigDict(extra="forbid")
+    pedido: str = Field(
+        min_length=6,
+        max_length=400,
+        title="Objetivo",
+        json_schema_extra={"description": "O que você quer, em português: “pesquisa X e guarda em y.txt”."},
+    )
+    procedimento: str = Field(
+        default="",
+        title="Procedimento",
+        max_length=40,
+        json_schema_extra={"description": "Vazio escolhe pelo pedido. Use um da lista de `maestro.catalogo`."},
+    )
+
+
+class MaestroExecutarInput(BaseModel):
+    """Roda o plano na ordem, parando no primeiro passo que não pode seguir."""
+
+    model_config = ConfigDict(extra="forbid")
+    pedido: str = Field(min_length=6, max_length=400, title="Objetivo")
+    autorizar: bool = Field(
+        default=False,
+        title="Autorizar efeitos",
+        json_schema_extra={
+            "description": "Sem isto, só os passos de leitura rodam: o maestro para no primeiro que abre, baixa, grava ou digita."
+        },
+    )
+    procedimento: str = Field(default="", title="Procedimento", max_length=40)
+
+
+class MaestroCatalogoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class MesaMoverInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     x: int = Field(ge=0, le=100_000, title="X")
@@ -3950,6 +3988,30 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             return baixar_sistema(url=data.url, modo=data.modo, autorizacao=data.autorizacao)
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
+
+    def maestro_catalogo_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return maestro.catalogo()
+
+    def maestro_planejar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MaestroPlanejarInput)
+        try:
+            plano = maestro.pedido(data.pedido, registry=registry, procedimento=data.procedimento)
+        except maestro.MaestroError as exc:
+            raise SkillError(str(exc)) from exc
+        return {**plano, "texto": maestro.texto_do_plano(plano)}
+
+    def maestro_executar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MaestroExecutarInput)
+        try:
+            plano = maestro.pedido(data.pedido, registry=registry, procedimento=data.procedimento)
+        except maestro.MaestroError as exc:
+            raise SkillError(str(exc)) from exc
+        if dry_run:
+            return {**plano, "texto": maestro.texto_do_plano(plano), "executado": False}
+        resultado = asyncio.run(
+            maestro.executar(plano, registry=registry, autorizar=data.autorizar)
+        )
+        return {**resultado, "texto": maestro.texto_da_execucao(resultado), "executado": True}
 
     def _slug_do_repo(bruto: str) -> str:
         texto = (bruto or "").strip()
@@ -5817,8 +5879,12 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("git.diff", "Diferenças do Git", "Mostra o resumo por arquivo e o patch do que mudou (`diff` ou `--staged`), cortado num teto de texto. Só leitura, sem `--ext-diff` e sem paginador.", "Git", GitDiffInput, git_diff_handler, timeout_seconds=30),
         SkillDefinition("git.remoto", "Remoto do Git", "Diz de onde o repositório veio e qual é o upstream, sem fazer `fetch` e sem pedir senha (`GIT_TERMINAL_PROMPT=0`).", "Git", GitRemotoInput, git_remoto_handler, timeout_seconds=20),
         SkillDefinition("navegador.regras", "Catálogo do navegador assistido", "Mostra papéis, formatos de alvo, ações, estados, padrões proibidos, regras de limite, campos do recibo e orçamento usados pelas skills.", "Navegador", EmptyInput, navegador_library_handler, timeout_seconds=5),
+        SkillDefinition("maestro.catalogo", "Que objetivos eu sei encadear", "Lista os procedimentos declarados: objetivo, passos na ordem e o limite de cada um. **Nada de modelo**: pedido igual dá plano igual. Se o objetivo não estiver aqui, o JARVIS diz que não sabe em vez de improvisar.", "Maestro", MaestroCatalogoInput, maestro_catalogo_handler, timeout_seconds=5, keywords=("que objetivos", "procedimentos do maestro", "o que voce sabe encadear", "orquestracao")),
+        SkillDefinition("maestro.planejar", "Planejar um objetivo", "Transforma um objetivo em português numa **fila ordenada de skills do catálogo**, cada passo com os campos preenchidos e a razão de estar ali. **Não executa nada** — nem leitura de rede. Diz também o que falta no pedido e onde um passo depende do outro.", "Maestro", MaestroPlanejarInput, maestro_planejar_handler, timeout_seconds=10, keywords=("planejar", "plano de passos", "monte o plano", "quais passos")),
+        SkillDefinition("maestro.executar", "Executar um plano", "Roda o plano **na ordem** e para no primeiro passo que falha ou que precisa de autorização, dizendo onde parou e o que já tinha dado certo. Passo com efeito (abrir, baixar, gravar, digitar) só roda com `autorizar=true`; sem isso, os passos de leitura rodam e a fila para antes do efeito.", "Maestro", MaestroExecutarInput, maestro_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180, keywords=("executar o plano", "faz tudo", "roda os passos", "orquestrar")),
     ]
-    return SkillRegistry(definitions, files_root)
+    registry = SkillRegistry(definitions, files_root)
+    return registry
 
 
 class SkillRegistry:

@@ -5,6 +5,48 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## O maestro: juntar os degraus num objetivo (0.91.0)
+
+As etapas anteriores deram **olhos** (ler a árvore) e **mãos** (abrir, escrever,
+conferir). Faltava a cabeça que decide a ordem — e ela chegou com uma escolha
+deliberada: **não usar modelo**.
+
+O motivo é o mesmo desta semana inteira. Um passo errado com confiança custa
+mais que um passo a menos. Então o plano não é gerado, é **declarado**:
+
+```python
+Procedimento(
+    id="consertar-erro",
+    precisa=("erro",),
+    grupos=(("conserta", "arruma", "diagnostic", "corrig"),),
+    passos=(
+        Passo(skill="conserto.diagnosticar", campos={"erro": "$erro"}),
+        Passo(skill="conserto.dossie",       campos={"erro": "$erro"}),
+        Passo(skill="conserto.propor",       campos={"erro": "$erro"}),
+    ),
+)
+```
+
+`precisa` são substrings que precisam aparecer todas; `grupos` são grupos em que
+**pelo menos uma** de cada grupo precisa aparecer. É assim que "salva" e
+"guarda" viram a mesma intenção sem uma lista de sinônimos solta: o
+procedimento exige *um* verbo de pesquisa **e** *um* de gravação.
+
+### Por que grupo, e não uma lista só
+
+"procura passagens e salva no arquivo" só casaria com `("guard",)` se eu
+tivesse escrito "salva" dentro da lista — e amanhã "anota" quebraria de novo. O
+primeiro teste que escrevi falhou exatamente aqui. Grupo é a forma certa: cada
+intenção é uma condição, e todas as condições precisam valer.
+
+### O que o maestro **não** faz, e é de propósito
+
+- não abre shell nem interpreta expressão livre (`$1.__class__` devolve vazio —
+  e há teste para isso);
+- não escolhe skill por modelo;
+- não segue depois de um erro;
+- não grava arquivo vazio quando a busca voltou sem nada.
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:
