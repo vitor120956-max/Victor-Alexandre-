@@ -55,6 +55,10 @@ class Passo:
     skill: str
     campos: dict[str, Any] = field(default_factory=dict)
     porque: str = ""
+    # Campo da saída que precisa vir verdadeiro para o passo valer. Um passo
+    # que "rodou" e devolveu `lido: false` não leu nada — seguir para o
+    # seguinte é construir em cima de vazio. Fica declarado, não adivinhado.
+    exigir: str = ""
 
 
 @dataclass(frozen=True)
@@ -141,11 +145,13 @@ PROCEDIMENTOS: tuple[Procedimento, ...] = (
                 skill="conserto.diagnosticar",
                 campos={"erro": "$erro"},
                 porque="dizer onde quebrou e por quê, antes de propor conserto",
+                exigir="lido",
             ),
             Passo(
                 skill="conserto.dossie",
                 campos={"erro": "$erro"},
                 porque="juntar o que é preciso para corrigir de primeira",
+                exigir="lido",
             ),
             Passo(
                 skill="conserto.propor",
@@ -224,6 +230,22 @@ def _texto_do_pedido(pedido: str) -> str:
     return resto.strip(" .,")
 
 
+_RE_TRACEBACK = re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE)
+
+
+def erro_do_pedido(pedido: str) -> str:
+    """O erro em si, sem a frase do pedido em volta.
+
+    “conserta esse erro: <traceback>” mandava a frase inteira para o
+    diagnóstico. Se há traceback, ele começa ali — o resto antes é conversa.
+    Sem traceback, o texto vai como veio: um erro de uma linha só é legítimo.
+    """
+    achado = _RE_TRACEBACK.search(pedido or "")
+    if achado:
+        return (pedido or "")[achado.start():].strip()
+    return (pedido or "").strip()
+
+
 def slots_do_pedido(pedido: str) -> dict[str, str]:
     """O que dá para tirar do texto sem inventar: url, arquivo, programa, texto."""
     texto = pedido or ""
@@ -235,7 +257,7 @@ def slots_do_pedido(pedido: str) -> dict[str, str]:
         "arquivo": arquivo,
         "programa": _programa_do_pedido(texto),
         "texto": _texto_do_pedido(texto),
-        "erro": texto.strip(),
+        "erro": erro_do_pedido(texto),
     }
     return slots
 
@@ -337,6 +359,7 @@ def planejar(pedido: str, *, registry: Any, procedimento: Procedimento | None = 
                 "porque": passo.porque,
                 "campos": campos,
                 "efeito": _efeito(registry, passo.skill),
+                "exigir": passo.exigir,
                 "obrigatorios": obrigatorios,
                 "faltando": sorted(set(faltando)),
                 "vem_do_passo": vindos,
@@ -563,7 +586,17 @@ async def executar(
                 plano, feitos, saidas, passo, "erro",
                 f"{type(exc).__name__}: {exc}",
             )
-        saidas.append(saida if isinstance(saida, dict) else {"resultado": saida})
+        normalizada = saida if isinstance(saida, dict) else {"resultado": saida}
+        exigir = passo.get("exigir") or ""
+        if exigir and not normalizada.get(exigir):
+            # Rodou, mas não leu/fez o que o próximo passo precisa. Tratar
+            # isto como sucesso é o que produz dossiê de erro que não existe.
+            motivo_da_skill = _linha_da_saida(normalizada) or "sem detalhe na saída"
+            return _parada(
+                plano, feitos, saidas, passo, "nao_confirmado",
+                f"a skill rodou mas devolveu {exigir}={normalizada.get(exigir)!r}: {motivo_da_skill}",
+            )
+        saidas.append(normalizada)
         feitos.append({"n": passo["n"], "skill": passo["skill"], "campos": campos, "saida": saidas[-1]})
 
     return {
@@ -576,6 +609,27 @@ async def executar(
         "resumo": f"{len(feitos)} passo(s) concluído(s): {plano['resumo']}",
         "ultimo": saidas[-1] if saidas else {},
     }
+
+
+def _linha_da_saida(saida: dict[str, Any], limite: int = 160) -> str:
+    """Uma linha do que a skill devolveu — para a pessoa ver, sem despejar JSON."""
+    for chave in ("resumo", "summary", "motivo", "resposta", "feito", "mensagem", "texto", "aviso"):
+        valor = saida.get(chave)
+        if not valor:
+            continue
+        if isinstance(valor, list):
+            valor = " ".join(str(item) for item in valor)
+        linha = " ".join(str(valor).split())
+        if linha:
+            return linha if len(linha) <= limite else linha[: limite - 1] + "…"
+    # Sem campo conhecido: mostra os escalares, que é o que dá para afirmar.
+    pedacos = [
+        f"{chave}={valor}"
+        for chave, valor in saida.items()
+        if isinstance(valor, (str, int, float, bool)) and str(valor).strip()
+    ]
+    linha = ", ".join(pedacos)
+    return linha if len(linha) <= limite else linha[: limite - 1] + "…"
 
 
 def _parada(
@@ -655,6 +709,8 @@ def texto_do_plano(plano: dict[str, Any]) -> str:
         linhas.append(f"   por quê: {passo['porque']}")
         if passo["vem_do_passo"]:
             linhas.append("   recebe do passo anterior: " + ", ".join(passo["vem_do_passo"]))
+        if passo.get("exigir"):
+            linhas.append(f"   só vale se voltar {passo['exigir']}=true")
         if passo["faltando"]:
             linhas.append("   FALTA no pedido: " + ", ".join(passo["faltando"]))
     linhas.append("")
@@ -668,13 +724,18 @@ def texto_do_plano(plano: dict[str, Any]) -> str:
 
 
 def texto_da_execucao(resultado: dict[str, Any]) -> str:
-    """O que rodou, o que conferiu e — se parou — onde parou."""
+    """O que rodou, **o que voltou** e — se parou — onde parou.
+
+    Antes de 0.91.2 isto dizia só “feito”. Um passo que devolveu `lido: false`
+    aparecia igualzinho a um que leu de verdade, e a pessoa não tinha como
+    saber que o resultado estava vazio sem abrir o JSON.
+    """
     linhas: list[str] = []
     for passo in resultado["passos"]:
         linhas.append(f"{passo['n']}. {passo['skill']} — feito")
-        campos = ", ".join(f"{k}={v}" for k, v in passo["campos"].items() if not isinstance(v, str) or len(str(v)) <= 60)
-        if campos:
-            linhas.append(f"   com: {campos}")
+        voltou = _linha_da_saida(passo.get("saida") or {})
+        if voltou:
+            linhas.append(f"   voltou: {voltou}")
     if resultado.get("parou_em"):
         alvo = resultado["passo_que_parou"]
         linhas.append(f"Parei no passo {alvo['n']} ({alvo['skill']}): {resultado['motivo']}")

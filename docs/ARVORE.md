@@ -57,6 +57,23 @@ rede de verdade. O mesmo valia para `JARVIS_FILES_ROOT`, que decidiria em qual
 pasta o maestro grava.
 
 
+### 0.91.2 — passo que não leu nada não conta como feito
+
+Olhando a execução de verdade (e não só o plano): `conserto.diagnosticar`
+devolvia `{"lido": false, "motivo": "Não há erro no diário…"}` e o maestro
+seguia para o dossiê e para a proposta, terminando com "todos os 3 passos
+rodaram". Dossiê de erro que ninguém leu.
+
+Agora o passo declara `exigir="lido"`, e o maestro confere **antes** de aceitar
+o passo: se voltar falso, a fila para com `nao_confirmado` e a saída da skill no
+motivo. Declarado, não adivinhado — skill sem campo de confirmação não tem
+`exigir` e nada muda.
+
+Junto: cada passo passou a mostrar `voltou: …` (antes só dizia "feito"), o plano
+avisa `só vale se voltar lido=true`, e o `$erro` do conserto corta no
+`Traceback` quando você cola o erro junto com a frase.
+
+
 ## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
 
 Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:

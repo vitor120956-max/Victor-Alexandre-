@@ -235,6 +235,8 @@ def _executador_falso(chamadas, *, falha_em=None):
             raise RuntimeError("quebrou de propósito")
         if skill == "sistema.rede":
             return {"summary": ["1 resultado."], "rows": [{"titulo": "Clima", "url": "https://exemplo/clima"}]}
+        if skill.startswith("conserto."):
+            return {"lido": True, "fonte": "texto colado", "resumo": f"{skill}: achado o ponto"}
         return {"slug": "dono__repo", "ok": True}
 
     return falso
@@ -285,6 +287,46 @@ def test_erro_num_passo_para_a_fila_e_diz_onde_parou(registry):
     assert "quebrou de propósito" in resultado["motivo"]
     assert [c[0] for c in chamadas] == ["conserto.diagnosticar", "conserto.dossie"]
     assert len(resultado["passos"]) == 1, "o passo que falhou não conta como concluído"
+
+
+def test_passo_que_roda_e_nao_le_nada_para_a_fila(registry):
+    """0.91.1: `conserto.diagnosticar` devolvia `lido: false` e a fila seguia.
+
+    Dossiê de erro que não existe é pior que dossiê nenhum. O passo declara
+    `exigir="lido"`, e o maestro confere isso antes de aceitar o passo.
+    """
+    plano = _plano("conserta o erro do meu programa", registry)
+
+    async def sem_erro(skill, campos, dry):
+        if skill == "conserto.diagnosticar":
+            return {"lido": False, "motivo": "Não há erro no diário e você não colou nenhum."}
+        raise AssertionError(f"não devia rodar {skill}")
+
+    resultado = asyncio.run(maestro.executar(plano, registry=registry, autorizar=True, executador=sem_erro))
+
+    assert resultado["ok"] is False
+    assert resultado["parou_em"] == 1
+    assert resultado["parou_motivo"] == "nao_confirmado"
+    assert "Não há erro no diário" in resultado["motivo"]
+    assert resultado["passos"] == []
+
+
+def test_o_plano_avisa_o_que_cada_passo_precisa_confirmar(registry):
+    plano = _plano("conserta o erro do meu programa", registry)
+    assert plano["passos"][0]["exigir"] == "lido"
+    texto = maestro.texto_do_plano(plano)
+    assert "só vale se voltar lido=true" in texto
+
+
+def test_a_execucao_mostra_o_que_cada_passo_trouxe(registry):
+    plano = _plano("conserta o erro do meu programa", registry)
+    chamadas: list[tuple[str, dict[str, Any]]] = []
+    resultado = asyncio.run(
+        maestro.executar(plano, registry=registry, autorizar=True, executador=_executador_falso(chamadas))
+    )
+    texto = maestro.texto_da_execucao(resultado)
+    assert "1. conserto.diagnosticar — feito" in texto
+    assert "voltou: conserto.diagnosticar: achado o ponto" in texto
 
 
 def test_passo_sem_dado_para_antes_de_rodar(registry):
@@ -483,3 +525,15 @@ def test_o_env_do_pc_nao_sobrescreve_o_que_ja_estava_no_ambiente(tmp_path, monke
     import os
 
     assert os.environ["JARVIS_HOST_REDE"] == "1"
+
+
+def test_o_erro_do_pedido_comeca_no_traceback():
+    """A frase do pedido não pode virar “o erro” que vai para o diagnóstico."""
+    pedido = "conserta esse erro: Traceback (most recent call last):\n  File \"x.py\", line 1\nKeyError: 'a'"
+    erro = maestro.slots_do_pedido(pedido)["erro"]
+    assert erro.startswith("Traceback")
+    assert "conserta esse erro" not in erro
+
+
+def test_erro_de_uma_linha_vai_inteiro():
+    assert maestro.slots_do_pedido("conserta o erro KeyError: 'a'")["erro"] == "conserta o erro KeyError: 'a'"
