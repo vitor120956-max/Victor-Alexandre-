@@ -108,7 +108,12 @@ class ConfiguradorFalso:
 
 def _args(**extra: Any):
     base = types.SimpleNamespace(
-        alvo="chrome", nome="jarvis-teste", autorizar=True, mouse=False, sem_mouse=False
+        alvo="chrome",
+        nome="jarvis-teste",
+        autorizar=True,
+        mouse=False,
+        sem_mouse=False,
+        conta="",
     )
     for chave, valor in extra.items():
         setattr(base, chave, valor)
@@ -380,13 +385,12 @@ def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
 
     monkeypatch.setattr(script, "_ler_janela", ler)
 
-    def esperar_pagina(_alvo, segundos=0):
+    def esperar_pagina(_args, conta="", segundos=0):
         # A página já está aberta no dublê; os passos seguintes releem por
         # `_ler_janela`, que continua andando pela mesma fila.
-        assert segundos == 5
         return JANELA, fila[0]
 
-    monkeypatch.setattr(script, "_esperar_pagina", esperar_pagina)
+    monkeypatch.setattr(script, "_levar_ate_as_chaves", esperar_pagina)
     monkeypatch.setattr(script, "_texto_da_area", lambda: area["texto"])
     relogio = itertools.count()
     monkeypatch.setattr(
@@ -527,12 +531,9 @@ def test_escolhe_a_janela_que_e_a_pagina_de_chaves(monkeypatch):
             return arvores[int(handle)]
 
     monkeypatch.setitem(sys.modules, "server.arvore_windows", Windows())
-    relogio = itertools.count()
-    monkeypatch.setattr(
-        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
-    )
+    monkeypatch.setattr(script, "time", types.SimpleNamespace(time=lambda: 0.0, sleep=lambda _s: None))
 
-    janela, montada = script._esperar_pagina("chrome", segundos=3)
+    janela, montada = script._levar_ate_as_chaves(_args(), segundos=3)
     assert janela["handle"] == 2
     assert montada["arvore"]["nome"] == "API Keys"
 
@@ -587,3 +588,116 @@ def test_api_desligada_nao_e_erro(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", sem_api)
     assert script._avisar_jarvis_aberto() is False
+
+
+# ------------------------------------------ atravessar o login (0.91.14)
+#
+# As três telas do dono, como ele as fotografou: Sign In do OpenRouter, a
+# escolha de conta do Google (com duas contas) e, só então, API keys.
+
+LOGIN = {
+    "alvo": "chrome — Sign In | OpenRouter",
+    "fonte": "uia",
+    "arvore": {"nome": "Sign In", "filhos": [
+        _no("GitHub"), _no("Google"), _no("Reddit"), _no("Email address"), _no("Continue")
+    ]},
+}
+GOOGLE = {
+    "alvo": "chrome — Fazer login nas Contas do Google",
+    "fonte": "uia",
+    "arvore": {"nome": "Escolha uma conta", "filhos": [
+        _no("Victor vitor120956@gmail.com"),
+        _no("Los PRO losproeduevi@gmail.com"),
+        _no("Usar outra conta"),
+    ]},
+}
+CHAVES = {
+    "alvo": "chrome — Keys | Settings | OpenRouter",
+    "fonte": "uia",
+    "arvore": {"nome": "OpenRouter", "filhos": [
+        _no("Keys"), _no("API keys"), _no("New key", [1400, 200, 100, 30])
+    ]},
+}
+
+
+def _navegador_com_fila(monkeypatch, script, telas):
+    """Um Chrome que mostra uma tela diferente a cada leitura."""
+    fila = list(telas)
+
+    def leitura(_alvo, maximo=3):
+        tela = fila.pop(0) if len(fila) > 1 else fila[0]
+        return [(JANELA, tela)]
+
+    monkeypatch.setattr(script, "_ler_janelas", leitura)
+
+
+def test_atravessa_login_google_conta_ate_as_chaves(monkeypatch, capsys):
+    script = _script()
+    windows = WindowsFalso()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", windows)
+    _navegador_com_fila(monkeypatch, script, [LOGIN, LOGIN, GOOGLE, GOOGLE, CHAVES])
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+    monkeypatch.setattr(script, "_perguntar_conta", lambda _contas: None)
+
+    janela, montada = script._levar_ate_as_chaves(_args(conta="vitor120956"), segundos=30)
+
+    assert montada is CHAVES
+    clicados = [c for c in windows.chamadas if c["acao"] == "clicar"]
+    assert len(clicados) == 2, "um clique no Google, um na conta — e nada mais"
+    saida = capsys.readouterr().out
+    assert "entrando pelo Google" in saida
+    assert "vitor120956@gmail.com" in saida
+
+
+def test_sem_saber_a_conta_ele_nao_chuta(monkeypatch, capsys):
+    script = _script()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", WindowsFalso())
+    _navegador_com_fila(monkeypatch, script, [GOOGLE])
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 2.0, sleep=lambda _s: None)
+    )
+    monkeypatch.setattr(script, "_perguntar_conta", lambda _contas: None)
+
+    with pytest.raises(script.PassoError) as erro:
+        script._levar_ate_as_chaves(_args(conta=""), segundos=6)
+
+    assert "--conta" in str(erro.value)
+    assert "escolha de conta" in capsys.readouterr().out
+
+
+def test_login_que_nao_passa_diz_para_entrar_uma_vez(monkeypatch):
+    script = _script()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", WindowsFalso())
+    _navegador_com_fila(monkeypatch, script, [LOGIN])
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 2.0, sleep=lambda _s: None)
+    )
+
+    with pytest.raises(script.PassoError) as erro:
+        script._levar_ate_as_chaves(_args(), segundos=6)
+
+    assert "tela de login" in str(erro.value)
+
+
+def test_a_conta_escolhida_fica_lembrada_no_env(monkeypatch, tmp_path):
+    script = _script()
+    config = ConfiguradorAuto()
+    gravado = {}
+    monkeypatch.setattr(
+        script, "_guardar_conta", lambda _mod, email: gravado.setdefault("email", email) or True
+    )
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: config)
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", WindowsFalso())
+
+    estados = [(JANELA, GOOGLE, {"estado": "escolha de conta do Google", "conta_escolhida": None,
+                                 "contas": [{"nome": "Victor vitor120956@gmail.com",
+                                             "email": "vitor120956@gmail.com", "no": _no("Victor")}]})]
+    monkeypatch.setattr(script, "_perguntar_conta", lambda contas: contas[0])
+
+    assert script._tentar_entrar(_args(), estados, {"google": 0, "conta": 0}) is True
+    assert gravado["email"] == "vitor120956@gmail.com"

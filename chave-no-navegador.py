@@ -9,7 +9,7 @@ chave que já existe — por isso este script não promete isso.
 
 O que ele faz é o caminho de **criar uma nova**, em passos medidos:
 
-    --auto --autorizar      abre o site, cria, copia e grava — o comando único
+    --auto --autorizar      abre o site, entra se preciso, cria, copia e grava
     --abrir                 abre a página de chaves no seu navegador
     --ver                   LÊ a página e diz quais botões existem (não clica)
     --pegar                 lê a área de transferência e grava no .env
@@ -17,9 +17,22 @@ O que ele faz é o caminho de **criar uma nova**, em passos medidos:
 
 O `--auto` pega o provedor do `.env` (ou de `--provedor`) e abre **o site dele**:
 openrouter.ai/keys, console.groq.com/keys, aistudio.google.com/apikey e assim
-por diante. Se os botões não estiverem na árvore de acessibilidade, ele não
-termina em erro: deixa a página aberta, diz o que falta clicar e fica esperando
-a chave aparecer na área de transferência.
+por diante.
+
+## As três páginas (medido nas telas do dono, 0.91.14)
+
+Abrir `openrouter.ai/keys` sem sessão **não** cai na página de chaves: cai em
+“Sign In | OpenRouter”. Clicar no Google abre a escolha de conta; só depois da
+conta é que aparece “API keys” com o botão “New key”. São três páginas na mesma
+janela, e o JARVIS tem de saber em qual está antes de clicar em qualquer coisa:
+
+    página de login  → clica no Google
+    escolha de conta → clica na conta do dono (`--conta` ou `JARVIS_CONTA_GOOGLE`)
+    página de chaves → clica em “New key”, nomeia, cria, copia
+
+Se os botões não estiverem na árvore de acessibilidade, ele não termina em erro:
+deixa a página aberta, diz o que falta clicar e fica esperando a chave aparecer
+na área de transferência.
 
 O `--ver` existe porque a promessa tem de ser medida antes de ser feita: se o
 Chrome não publicar o botão na árvore de acessibilidade, o `--criar` não tem
@@ -48,6 +61,11 @@ import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent
+
+# Onde fica lembrado o e-mail da conta do Google usada para entrar no site.
+# Sem isso, a tela de escolha de conta (que lista mais de uma) faria o JARVIS
+# perguntar em toda execução — ou pior, chutar.
+CONTA_GOOGLE = "JARVIS_CONTA_GOOGLE"
 
 
 class PassoError(RuntimeError):
@@ -163,6 +181,8 @@ def passo_ver(args) -> int:
     from server import chave_web
 
     janela, montada = _ler_janela(args.alvo)
+    estado = chave_web.onde_estou(montada, conta=args.conta)
+    print(chave_web.texto_do_estado(estado))
     dados = chave_web.diagnostico(montada)
     print(chave_web.texto_do_diagnostico(dados))
     print()
@@ -344,38 +364,163 @@ def _janelas_do_alvo(alvo: str) -> list[dict]:
     return [item for _peso, _foco, item in pontuadas]
 
 
-def _esperar_pagina(alvo: str, segundos: float = 25.0):
-    """Espera a janela do navegador aparecer **e** ser a página de chaves.
+def _ler_janelas(alvo: str, maximo: int = 3) -> list[tuple[dict, dict]]:
+    """Lê as janelas do navegador (até `maximo`), a que está em foco primeiro."""
+    from server import arvore, arvore_windows
 
-    Abrir o navegador não é instantâneo, e a primeira leitura de uma janela
-    recém-aberta costuma vir pobre (o Chrome liga a árvore quando percebe um
-    programa de acessibilidade olhando). Ler uma vez e desistir seria medir o
-    navegador no meio do espirro.
+    leituras: list[tuple[dict, dict]] = []
+    for janela in _janelas_do_alvo(alvo)[:maximo]:
+        try:
+            bruto = arvore_windows.ler_janela(int(janela["handle"]), 8, 1500)
+        except Exception:  # noqa: BLE001 - janela que fechou no meio
+            continue
+        leituras.append((janela, arvore.montar(bruto, 8, 1500, com_caminho=True)))
+    return leituras
 
-    Se nenhuma janela for a página de chaves, devolve a última leitura — quem
-    chamou mostra o diagnóstico dela em vez de inventar que a página não abriu.
+
+def _conta_do_env(modulo) -> str:
+    texto = modulo.ler_texto(modulo.ENV) if modulo.ENV.is_file() else modulo.texto_base()
+    return (modulo.ler_valor(texto, CONTA_GOOGLE) or "").strip()
+
+
+def _guardar_conta(modulo, email: str) -> bool:
+    """Lembra a conta escolhida no `.env` — perguntar uma vez é útil, duas é chatice."""
+    if not email:
+        return False
+    try:
+        texto = modulo.ler_texto(modulo.ENV) if modulo.ENV.is_file() else modulo.texto_base()
+        modulo.gravar(modulo.definir(texto, CONTA_GOOGLE, email))
+        return True
+    except Exception:  # noqa: BLE001 - lembrar é conveniência, não requisito
+        return False
+
+
+def _perguntar_conta(contas: list[dict]) -> dict | None:
+    """Pergunta qual conta, quando a tela mostra mais de uma e ninguém disse qual.
+
+    Escolher no chute a conta errada é pior do que perguntar: entrar na conta de
+    outra pessoa da casa criaria uma chave na conta errada.
     """
-    from server import arvore, arvore_windows, chave_web
+    if len(contas) == 1:
+        return contas[0]
+    if not contas or not sys.stdin or not sys.stdin.isatty():
+        return None
+    print("  Achei mais de uma conta do Google. Qual é a sua?")
+    for numero, conta in enumerate(contas[:6], start=1):
+        print(f"    {numero}. {conta['nome']}")
+    try:
+        escolha = input("  Número (Enter para eu não escolher): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if not escolha.isdigit():
+        return None
+    indice = int(escolha) - 1
+    return contas[indice] if 0 <= indice < len(contas) else None
 
-    fim = time.time() + segundos
-    ultima = None
+
+# Depois de clicar, a página leva alguns segundos para trocar. Sem esta pausa o
+# JARVIS clicaria no mesmo botão duas vezes — e no Google isso abre duas janelas
+# de login, que é pior do que esperar.
+ESPERA_DEPOIS_DO_CLIQUE = 3.0
+
+
+def _tentar_entrar(args, estados: list[tuple[dict, dict, dict]], tentativas: dict) -> bool:
+    """Um passo do login: clicar em “Google” ou na conta. Devolve se agiu."""
+    from server import chave_web
+
+    ultimo_em = tentativas.setdefault("ultimo_em", {})
+    agora = time.time()
+
+    # 1. escolha de conta do Google
+    for janela, montada, estado in estados:
+        if estado["estado"] != chave_web.ESTADO_GOOGLE or tentativas["conta"] >= 3:
+            continue
+        if agora - ultimo_em.get(chave_web.ESTADO_GOOGLE, -1e9) < ESPERA_DEPOIS_DO_CLIQUE:
+            return True
+        escolhida = estado.get("conta_escolhida")
+        if escolhida is None:
+            escolhida = _perguntar_conta(estado.get("contas") or [])
+            if escolhida:
+                _guardar_conta(_modulo_do_configurador(), escolhida["email"])
+        if not escolhida:
+            tentativas["conta"] += 1
+            print("  escolha de conta: não sei qual é a sua — clique nela que eu sigo.")
+            return True
+        print(f"  escolha de conta: clicando em “{escolhida['nome']}”…")
+        try:
+            _clicar(janela, escolhida["no"], mouse=not args.sem_mouse, primeiro_mouse=args.mouse)
+        except PassoError as exc:
+            print(f"    não deu: {exc}")
+        tentativas["conta"] += 1
+        ultimo_em[chave_web.ESTADO_GOOGLE] = agora
+        return True
+
+    # 2. tela de login do provedor → botão do Google
+    for janela, montada, estado in estados:
+        if estado["estado"] != chave_web.ESTADO_LOGIN or tentativas["google"] >= 3:
+            continue
+        if agora - ultimo_em.get(chave_web.ESTADO_LOGIN, -1e9) < ESPERA_DEPOIS_DO_CLIQUE:
+            return True
+        botoes = chave_web.procurar(montada, chave_web.PADROES_GOOGLE)
+        if not botoes:
+            tentativas["google"] += 1
+            print("  tela de login: não achei o botão do Google — clique nele que eu sigo.")
+            return True
+        print("  tela de login: entrando pelo Google…")
+        try:
+            _clicar(janela, botoes[0], mouse=not args.sem_mouse, primeiro_mouse=args.mouse)
+        except PassoError as exc:
+            print(f"    não deu: {exc}")
+        tentativas["google"] += 1
+        ultimo_em[chave_web.ESTADO_LOGIN] = agora
+        return True
+    return False
+
+
+def _levar_ate_as_chaves(args, conta: str | None = None, segundos: float | None = None) -> tuple[dict, dict]:
+    """Leva a janela do navegador até a página de chaves, atravessando o login.
+
+    Medido nas telas do dono (0.91.14): abrir `openrouter.ai/keys` sem sessão cai
+    em **Sign In**; o Google abre a **escolha de conta**; só depois aparece
+    **API keys**. Três páginas na mesma janela — e o JARVIS tem de saber em qual
+    está antes de clicar em qualquer coisa.
+    """
+    from server import chave_web
+
+    # Sem conta dita aqui, vale a que veio na linha de comando (`--conta`).
+    if conta is None:
+        conta = str(getattr(args, "conta", "") or "")
+    limite = time.time() + (args.espera_pagina if segundos is None else segundos)
+    tentativas = {"google": 0, "conta": 0, "ultimo_em": {}}
+    ultimo: dict | None = None
     while True:
-        for janela in _janelas_do_alvo(alvo)[:3]:
-            try:
-                bruto = arvore_windows.ler_janela(int(janela["handle"]), 8, 1500)
-            except Exception:  # noqa: BLE001 - janela que fechou no meio
-                continue
-            montada = arvore.montar(bruto, 8, 1500, com_caminho=True)
-            ultima = (janela, montada)
-            if chave_web.e_pagina_de_chaves(montada):
+        leituras = _ler_janelas(args.alvo)
+        estados = [(janela, montada, chave_web.onde_estou(montada, conta=conta)) for janela, montada in leituras]
+        for janela, montada, estado in estados:
+            ultimo = estado
+            if estado["estado"] == chave_web.ESTADO_CHAVES:
                 return janela, montada
-        if time.time() >= fim:
+        if estados:
+            _tentar_entrar(args, estados, tentativas)
+        if time.time() >= limite:
             break
         time.sleep(1.0)
-    if ultima:
-        return ultima
+
+    if ultimo is None:
+        raise PassoError("o navegador não abriu nenhuma janela a tempo. A página abriu em outro lugar?")
+    if ultimo["estado"] == chave_web.ESTADO_LOGIN:
+        raise PassoError(
+            "a página abriu na tela de login e eu não consegui entrar. "
+            "Entre você pelo Google (uma vez só) e rode de novo."
+        )
+    if ultimo["estado"] == chave_web.ESTADO_GOOGLE:
+        raise PassoError(
+            "estou parado na escolha de conta do Google. Diga qual é a sua com "
+            "`--conta seuemail@gmail.com` que eu lembro para as próximas vezes."
+        )
     raise PassoError(
-        "o navegador não abriu nenhuma janela a tempo. A página abriu em outro lugar?"
+        "não cheguei na página de chaves. O que a janela mostrou: "
+        + chave_web.texto_do_estado(ultimo)
     )
 
 
@@ -453,9 +598,15 @@ def passo_criar(args) -> int:
     from server import chave_web
 
     janela, montada = _ler_janela(args.alvo)
+    estado = chave_web.onde_estou(montada, conta=getattr(args, "conta", ""))
+    print(chave_web.texto_do_estado(estado))
     dados = chave_web.diagnostico(montada)
     print(chave_web.texto_do_diagnostico(dados))
     print()
+    if estado["estado"] in (chave_web.ESTADO_LOGIN, chave_web.ESTADO_GOOGLE):
+        print("  Estou numa página de login, não na das chaves — `--criar` não entra sozinho.")
+        print("  Use `--auto --autorizar`, que atravessa o login e só então cria.")
+        return 1
     if not dados["pode_criar"]:
         print("  Parei aqui: sem o botão de criar na árvore, não há o que clicar.")
         print("  Caminho que funciona sempre: crie no navegador e rode `--pegar`.")
@@ -540,9 +691,19 @@ def passo_auto(args) -> int:
         print(f"  NÃO DEI: não consegui abrir o navegador. Abra na mão: {guia['onde']}")
         return 1
 
+    conta = (args.conta or _conta_do_env(modulo)).strip()
+    if conta:
+        print(f"  Conta do Google: {conta}")
+    print()
+
     chave = ""
     try:
-        janela, montada = _esperar_pagina(args.alvo, segundos=args.espera_pagina)
+        janela, montada = _levar_ate_as_chaves(args, conta=conta)
+        if args.conta:
+            for item in chave_web.contas_visiveis(montada):
+                if chave_web.casar_conta([item], args.conta):
+                    _guardar_conta(modulo, item["email"])
+                    break
         dados = chave_web.diagnostico(montada)
         if dados["pode_criar"]:
             # A janela é trazida para a frente antes de qualquer clique: o
@@ -566,7 +727,7 @@ def passo_auto(args) -> int:
                 anterior=anterior,
             ) or ""
         else:
-            print("  2. a página abriu, mas os botões não estão na árvore de acessibilidade.")
+            print("  2. cheguei na página, mas os botões não estão na árvore de acessibilidade.")
             print("     Então eu não clico: eu espero você clicar.")
     except PassoError as exc:
         print(f"  2. NÃO DEI: {exc}")
@@ -614,6 +775,11 @@ def main(argv: list[str] | None = None) -> int:
         help="O caminho inteiro: abre a página, cria, copia e grava. Exige --autorizar.",
     )
     parser.add_argument("--provedor", default="", help="Provedor cujo site abrir (padrão: o do .env).")
+    parser.add_argument(
+        "--conta",
+        default="",
+        help="Pedaco do e-mail do Google usado para entrar (fica lembrado no .env).",
+    )
     parser.add_argument("--espera-pagina", type=float, default=25.0, help="Segundos esperando a página abrir.")
     parser.add_argument("--espera-colar", type=float, default=120.0, help="Segundos esperando você copiar no site.")
     parser.add_argument("--autorizar", action="store_true", help="Sem isto, --criar só mostra o que faria.")

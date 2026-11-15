@@ -4,10 +4,11 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.91.13
+echo   Versao: 0.91.14
 echo   ----------------------------------------------------------------
-echo   Um duplo clique e o JARVIS abre a pagina das chaves,
+echo   Um duplo clique e o JARVIS abre a pagina, entra se preciso,
 echo   cria a chave, copia e grava no .env dele.
+echo   Na primeira vez ele pergunta qual conta do Google e lembra.
 echo.
 if not exist ".venv\Scripts\python.exe" goto semvenv
 if not exist "chave-no-navegador.py" goto semscript

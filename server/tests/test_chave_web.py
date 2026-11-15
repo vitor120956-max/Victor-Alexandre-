@@ -146,3 +146,99 @@ def test_o_botao_que_fecha_o_dialogo_e_so_create():
     dados = chave_web.diagnostico(_pagina("Key name", "Create"))
     assert chave_web.procurar(_pagina("Key name", "Create"), chave_web.PADROES_CONFIRMAR)[0]["nome"] == "Create"
     assert dados["pode_criar"] is False, "o rótulo curto não é o da página, é o do diálogo"
+
+
+# ------------------------------------------------- em qual das três páginas
+#
+# Telas medidas no PC do dono (0.91.14): abrir openrouter.ai/keys sem sessão
+# cai em “Sign In | OpenRouter”; o Google abre a escolha de conta; só depois
+# aparece “API keys” com o botão “New key”.
+
+def _login_openrouter() -> dict[str, Any]:
+    return {
+        "alvo": "chrome — Sign In | OpenRouter",
+        "fonte": "uia",
+        "arvore": {"nome": "Sign In", "filhos": [
+            _no("GitHub"), _no("Google"), _no("Reddit"),
+            _no("Email address"), _no("Continue"), _no("Use passkey instead"),
+        ]},
+    }
+
+
+def _escolha_de_conta() -> dict[str, Any]:
+    return {
+        "alvo": "chrome — Fazer login nas Contas do Google",
+        "fonte": "uia",
+        "arvore": {"nome": "Escolha uma conta", "filhos": [
+            _no("Victor vitor120956@gmail.com"),
+            _no("Los PRO losproeduevi@gmail.com"),
+            _no("Usar outra conta"),
+        ]},
+    }
+
+
+def _pagina_de_chaves_do_openrouter() -> dict[str, Any]:
+    return {
+        "alvo": "chrome — Keys | Settings | OpenRouter",
+        "fonte": "uia",
+        "arvore": {"nome": "OpenRouter", "filhos": [
+            _no("Keys"), _no("API keys"), _no("Create and manage your API keys."),
+            _no("New key"), _no("Search by name or paste a key..."),
+        ]},
+    }
+
+
+def test_reconhece_a_tela_de_login():
+    dados = chave_web.onde_estou(_login_openrouter())
+    assert dados["estado"] == chave_web.ESTADO_LOGIN
+    assert "login" in chave_web.texto_do_estado(dados)
+
+
+def test_reconhece_a_escolha_de_conta_do_google():
+    dados = chave_web.onde_estou(_escolha_de_conta())
+    assert dados["estado"] == chave_web.ESTADO_GOOGLE
+    assert [c["email"] for c in dados["contas"]] == [
+        "vitor120956@gmail.com",
+        "losproeduevi@gmail.com",
+    ]
+
+
+def test_reconhece_a_pagina_de_chaves_com_botao_new_key():
+    dados = chave_web.onde_estou(_pagina_de_chaves_do_openrouter())
+    assert dados["estado"] == chave_web.ESTADO_CHAVES
+    assert chave_web.diagnostico(_pagina_de_chaves_do_openrouter())["criar"] == ["New key"]
+
+
+def test_login_nao_e_confundido_com_a_pagina_de_chaves():
+    """O defeito da 0.91.12: “OpenRouter” no título fazia a tela de login passar
+    por página de chaves, e o JARVIS parava pedindo um botão que não existia."""
+    assert chave_web.e_pagina_de_chaves(_login_openrouter()) is False
+
+
+def test_casa_a_conta_pedida_por_pedaco_do_email():
+    contas = chave_web.contas_visiveis(_escolha_de_conta())
+    assert chave_web.casar_conta(contas, "vitor120956")["email"] == "vitor120956@gmail.com"
+    assert chave_web.casar_conta(contas, "VITOR")["email"] == "vitor120956@gmail.com"
+    assert chave_web.casar_conta(contas, "lospro")["email"] == "losproeduevi@gmail.com"
+
+
+def test_conta_ambigua_nao_e_escolhida_no_chute():
+    contas = chave_web.contas_visiveis(_escolha_de_conta())
+    assert chave_web.casar_conta(contas, "@gmail.com") is None
+    assert chave_web.casar_conta(contas, "") is None
+    assert chave_web.casar_conta(contas, "ninguem") is None
+
+
+def test_texto_de_apoio_nao_ganha_do_botao():
+    """“Create and manage your API keys.” é parágrafo; “Create” é botão.
+
+    Os dois casam com `PADROES_CONFIRMAR`. Sem a ordem por acionável, o passo
+    que confirma a criação podia “clicar” no parágrafo e dizer que deu certo —
+    um clique que não acontece e um relatório que mente.
+    """
+    pagina = _pagina()
+    pagina["arvore"]["filhos"] = [
+        {"nome": "Create and manage your API keys.", "papel": 41, "acionavel": False},
+        {"nome": "Create", "papel": 43, "acionavel": True},
+    ]
+    assert chave_web.procurar(pagina, chave_web.PADROES_CONFIRMAR)[0]["nome"] == "Create"

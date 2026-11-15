@@ -174,6 +174,37 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.14 — “ele tem que saber a página e a parte em que ele tá”
+
+Medido nas telas do dono, e o defeito era grave: abrir `openrouter.ai/keys` sem
+sessão cai em **“Sign In | OpenRouter”**. Como a marca de “página de chaves”
+incluía a palavra `openrouter`, o JARVIS achou que já estava no lugar certo,
+parou e pediu um botão “Create Key” que não existia naquela tela.
+
+Três páginas, na mesma janela, na ordem em que aparecem:
+
+| onde estou | como se reconhece | o que fazer |
+|---|---|---|
+| login | “Sign In”, “log in”, “entrar” no título/texto | clicar no botão **Google** |
+| escolha de conta | `accounts.google.com`, “escolha uma conta”, “prosseguir para” | clicar na conta do dono |
+| página de chaves | “API keys”, “New key”, “Create key” | criar, copiar, gravar |
+
+Regras novas em `chave_web`: `onde_estou`, `contas_visiveis`, `casar_conta`,
+`texto_do_estado`. `MARCAS_DA_PAGINA` perdeu `openrouter` — a palavra que
+causou o falso positivo — e ganhou `new key`, que é o botão de verdade.
+
+Detalhes que evitam estrago:
+
+- **conta ambígua não é escolhida no chute**: duas contas e nenhuma dita →
+  pergunta (no console) ou para e pede `--conta`. Entrar na conta de outra
+  pessoa criaria a chave no lugar errado;
+- a conta escolhida fica no `.env` como `JARVIS_CONTA_GOOGLE`;
+- depois de clicar, três segundos de pausa antes de clicar de novo — no Google,
+  dois cliques no mesmo botão abrem duas janelas de login;
+- “o que dá para apertar” vem antes de “o que só está escrito”: o parágrafo
+  “Create and manage your API keys.” não pode ganhar do botão “Create”.
+
+
 ### 0.91.13 — a chave nova vale na hora (sem fechar o JARVIS)
 
 O servidor lê o `.env` **uma vez**, no start. Toda chave gravada por fora da
