@@ -892,3 +892,51 @@ def test_lista_de_janelas_e_relembrada_depois_de_abrir():
     inicio = fonte.index("abriu = True")
     trecho = fonte[inicio : inicio + 900]
     assert "candidatas = janelas_do_programa(leitor.janelas()" in trecho
+
+
+# ---------------------------------------------------------------------------
+# 0.90.0 — o agente tem de escolher mesa.ditar quando o pedido é esse
+# ---------------------------------------------------------------------------
+
+def _ranking(frase: str) -> list[tuple[str, float]]:
+    from server import agente_local, skill_registry
+
+    registro = skill_registry.build_registry(RAIZ / "storage" / "user-files")
+    entradas = agente_local.indexar(registro.list())
+    pontos = sorted(
+        ((agente_local.pontuar(frase, entrada), entrada) for entrada in entradas),
+        key=lambda par: par[0][0],
+        reverse=True,
+    )
+    return [(entrada.skill_id, par[0]) for par, entrada in pontos[:2]]
+
+
+def test_escrever_no_bloco_de_notas_escolhe_mesa_ditar():
+    """Empate em 0,56 é sorteio — e o sorteio ia para uma skill de memória."""
+    topo = _ranking("escreve oi no bloco de notas")
+    assert topo[0][0] == "mesa.ditar", topo
+    assert topo[0][1] >= 0.9, "tem de ganhar com folga, não por desempate"
+
+
+def test_abrir_o_paint_e_escrever_escolhe_mesa_ditar():
+    topo = _ranking("abre o paint e escreve oi")
+    assert topo[0][0] == "mesa.ditar", topo
+
+
+def test_ler_a_janela_escolhe_mesa_arvore():
+    topo = _ranking("leia a janela do notepad")
+    assert topo[0][0] == "mesa.arvore", topo
+
+
+def test_listar_janelas_escolhe_mesa_status():
+    topo = _ranking("quais janelas estao abertas")
+    assert topo[0][0] == "mesa.status", topo
+
+
+def test_as_palavras_chave_saem_no_catalogo():
+    from server import skill_registry
+
+    registro = skill_registry.build_registry(RAIZ / "storage" / "user-files")
+    itens = {item["id"]: item for item in registro.list()}
+    assert "bloco de notas" in itens["mesa.ditar"]["keywords"]
+    assert itens["mesa.ditar"]["keywords"], "sem palavras-chave, volta o empate"

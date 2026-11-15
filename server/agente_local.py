@@ -157,6 +157,11 @@ def entrada_de_skill(skill: dict[str, Any]) -> Entrada:
     fortes = set(palavras(str(skill.get("id") or "").replace(".", " ")))
     fortes.update(palavras(str(skill.get("name") or "")))
     fortes.update(palavras(str(skill.get("category") or "")))
+    # Palavras que a própria skill declara como assunto dela. Sem isto,
+    # “escreve oi no bloco de notas” empatava com uma skill de memória — e
+    # empate é sorteio de qual das duas roda.
+    for keyword in skill.get("keywords") or []:
+        fortes.update(palavras(str(keyword)))
     fracos = set(palavras(str(skill.get("description") or "")))
     fracos |= _campos_do_schema(schema)
     return Entrada(

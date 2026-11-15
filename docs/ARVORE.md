@@ -5,6 +5,67 @@ O `mesa.py` antigo só via **títulos** de janela e clicava por coordenada que v
 ditava — sem saber se acertou. Aqui o JARVIS passa a **ler** o que a janela
 publica sobre si mesma.
 
+## Etapa 3 fechada — do zero ao texto conferido (0.90.0)
+
+Na máquina do usuário, com o Bloco de Notas **fechado**, um comando:
+
+```
+.venv\Scripts\python arvore_sonda.py --programa "bloco de notas" --escrever "oi, mundo" --executar
+```
+
+```
+Abri o Bloco de notas. Feito: digitar 'oi, mundo' em texto em 22,465 (970x69) (conferi: o texto está no campo)
+
+janela:  notepad.exe — Sem título - Bloco de notas
+alvo:    @95bc8c3d:e11  texto “”
+onde:    22,465 (970x69)
+fonte:   msaa   leitura: 95bc8c3d
+como:    valor do campo (put_accValue, sem teclado)
+abri:    C:\Windows\system32\notepad.exe
+conferi: o texto está no campo.
+```
+
+A cadeia inteira, medida: **achar o executável → abrir → achar a janela nova →
+esperar o campo → escrever → ler de volta e conferir.**
+
+### O que ficou provado, e por qual caminho
+
+| passo | como | confere? |
+|---|---|---|
+| achar o programa | PATH → System32 → App Paths | caminho impresso |
+| abrir | `Popen(caminho)`; sem caminho, ShellExecute | janela do `pid` novo |
+| escolher a janela | processo vence título; minimizada por último | sim |
+| escrever | `put_accValue` (o 4º degrau) | texto de volta |
+| chegar antes | `SetForegroundWindow` | sem mouse |
+
+O caminho vencedor foi o **quarto degrau** — `put_accValue`. Neste Bloco de
+Notas o foco não vem (nem no elemento, nem no campo inteiro), então o teclado
+nunca seria usado. Foi bom ter os quatro: quem dependesse só de teclado estaria
+parado até hoje.
+
+### O que ainda não está provado
+
+- **programas que não publicam o valor do campo.** Se um programa não expõe
+  `accValue`, o quarto degrau não existe. Aí resta o `--mouse` (5º degrau) ou
+  nada. Cada programa é uma medição, não uma suposição.
+- **teclado de verdade.** Neste PC ele nunca chegou a rodar, porque o foco não
+  vem. Em outro programa pode ser o caminho natural.
+- **escrever no meio de um texto existente.** Ou é acrescentar no fim
+  (`--acrescentar`), ou recusa. Editar o meio é outra etapa.
+
+### E o agente escolhe essa skill sozinho
+
+“escreve oi no bloco de notas” empatava em 0,56 com uma skill de memória —
+empate é sorteio. As skills passaram a declarar **palavras-chave** (campo
+`keywords`), que contam como termo forte na busca do agente local:
+
+| frase | skill escolhida | nota |
+|---|---|---|
+| escreve oi no bloco de notas | `mesa.ditar` | 1.00 |
+| abre o paint e escreve oi | `mesa.ditar` | 0.78 |
+| leia a janela do notepad | `mesa.arvore` | 0.67 |
+| quais janelas estao abertas | `mesa.status` | 0.75 |
+
 ## Depois de abrir, reler — e não trocar a janela nova pela velha (0.89.6)
 
 Com o caminho do executável certo (0.89.5), faltavam dois furos que só
