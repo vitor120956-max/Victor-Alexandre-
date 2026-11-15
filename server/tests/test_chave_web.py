@@ -281,3 +281,47 @@ def test_nomes_novos_ignora_texto_longo_demais():
     assert len(frase) > 60
     depois = _pagina("Create API key", frase)
     assert chave_web.nomes_novos(antes, depois) == []
+
+
+def test_o_botao_create_key_da_pagina_nao_e_o_dialogo_aberto():
+    """Regressão da 0.91.16: “Create Key” é o **botão** e existe o tempo todo.
+
+    Com ele na lista de títulos, a página das chaves passava por “diálogo
+    aberto”: a espera terminava na hora e o script ia preencher uma caixa que
+    ainda não estava na tela.
+    """
+    pagina = _pagina("Create Key", "Copy")
+    assert chave_web.e_dialogo_de_criacao(pagina) is False
+
+
+def test_o_dialogo_e_reconhecido_pelos_campos_quando_o_titulo_nao_vem():
+    """No PC do dono o painel estava na tela e o título não veio na leitura.
+
+    Os campos, porém, vieram: “Expiration” e “Credit limit” só existem ali.
+    """
+    sem_titulo = {"alvo": "chrome — API Keys", "fonte": "uia", "arvore": {
+        "nome": "página", "papel": 1, "filhos": [
+            _no("Name", papel=42),
+            _no("Select expiration"),
+            _no("Choose a credit limit"),
+        ]
+    }}
+    assert chave_web.e_dialogo_de_criacao(sem_titulo) is True
+
+
+def test_so_a_marca_de_campo_sem_nome_precisa_do_create():
+    """Marca de campo sozinha não basta: a página também fala de limite.
+
+    O que fecha a prova é a marca **e** (o campo de nome **ou** a palavra
+    criar) — é o que separa o painel aberto de um texto de ajuda qualquer.
+    """
+    so_marca = {"alvo": "chrome — API Keys", "fonte": "uia", "arvore": {
+        "nome": "página", "papel": 1, "filhos": [_no("Key limit: 1000 credits")],
+    }}
+    assert chave_web.e_dialogo_de_criacao(so_marca) is False
+
+    com_create = {"alvo": "chrome — API Keys", "fonte": "uia", "arvore": {
+        "nome": "página", "papel": 1,
+        "filhos": [_no("Key limit: 1000 credits"), _no("Create")],
+    }}
+    assert chave_web.e_dialogo_de_criacao(com_create) is True

@@ -29,7 +29,7 @@ Fala '  A pergunta nao e "como zerar" nem "como tirar foto". E esta: por onde'
 Fala '  se entra? Sem entrada nao se troca sistema operacional, nao se instala'
 Fala '  ROM e nao se liga a depuracao.'
 Fala ''
-Fala '  Versao: 0.91.15'
+Fala '  Versao: 0.91.16'
 Fala ''
 Regua
 Fala ''

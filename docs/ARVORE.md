@@ -174,6 +174,37 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.16 — o diálogo estava na tela e a leitura não o via
+
+O dono rodou a 0.91.15 no PC e mandou o print: **Create API key aberto na
+tela**, e a saída dizendo
+
+    NÃO DEI: o diálogo de criação não apareceu na leitura.
+
+O script estava certo sobre o que queria; errado sobre o que lê. Quatro
+defeitos, todos medidos nesse mesmo print:
+
+| defeito | o que acontecia | correção |
+|---|---|---|
+| leitura rasa | `ler_janela(handle, 8, 1500)` — o painel mora no fim do documento, depois do nível 8 | a espera e o preenchimento releem fundo (`PROFUNDA = 14`, `TETO_FUNDO = 3000`) |
+| reler pelo **nome** | cada passo escolhia “a janela do chrome”; com duas abertas, podia ler a errada | `_reler(janela)` relê **pelo handle** — o nome é palpite, o handle é identidade |
+| uma janela só | se o clique caía na janela A e o painel abria na B, ninguém olhava a B | `_esperar_dialogo` confere as até 3 janelas do navegador |
+| falso positivo | “Create Key” estava na lista de títulos do diálogo — e é o **botão**, que existe o tempo todo | título agora é só “Create API key”; o botão ficou de fora |
+
+E duas coisas a mais, porque a mensagem de erro era o problema:
+
+- **o diagnóstico diz o que a leitura viu** — quantos elementos com nome e os
+  primeiros nomes, em vez de “não apareceu”. Com o diálogo na tela, a frase
+  passa a ser investigável em vez de misteriosa;
+- **o teclado é o último degrau do nome**: o diálogo nasce com o cursor dentro
+  do “Name”. Se a leitura não der o campo, digitar só acontece com a janela na
+  frente e o teclado nela — nunca às cegas.
+
+O que **não** mudou: as escolhas continuam “Never” (ou o maior prazo) e “No
+limit”; sem diálogo o passo para; sem chave nada é gravado; o cursor volta
+para onde estava.
+
+
 ### 0.91.15 — o diálogo de criação tem três campos (e um botão apagado)
 
 Tela do dono, medida: **Create API key** pede

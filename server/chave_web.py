@@ -1,4 +1,4 @@
-"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.15).
+"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.16).
 
 Por que a lógica mora aqui e não no script: achar o botão numa árvore de
 acessibilidade é regra, e regra se testa sem Chrome, sem Windows e sem tela. O
@@ -39,7 +39,7 @@ PADROES_CONFIRMAR = ("create", "criar", "confirmar", "confirm", "save", "salvar"
 PADROES_COPIAR = ("copy", "copiar")
 
 # ---------------------------------------------------------------------------
-# O diálogo “Create API key” (0.91.15) — medido na tela do dono
+# O diálogo “Create API key” (0.91.16) — medido na tela do dono
 #
 # Ele não é só nome e botão. Tem três campos com asterisco:
 #
@@ -52,7 +52,10 @@ PADROES_COPIAR = ("copy", "copiar")
 # nascia, e o relatório dizia que tinha dado certo.
 # ---------------------------------------------------------------------------
 
-PADROES_DIALOGO = ("create api key", "criar chave de api", "create key", "nova chave de api")
+# O título do painel. **Não** entra aqui o rótulo “Create Key”: é o botão da
+# página, e ele existe o tempo todo — com ele na lista, a página das chaves
+# passava por diálogo aberto e o script ia preencher uma caixa que não estava lá.
+PADROES_DIALOGO = ("create api key", "criar chave de api", "nova chave de api", "chave de api nova")
 PADROES_EXPIRACAO = ("select expiration", "expiration", "expiração", "selecione a expiração")
 PADROES_LIMITE = ("choose a credit limit", "credit limit", "limite de crédito")
 
@@ -107,10 +110,34 @@ def melhor_limite(opcoes: list[str]) -> str | None:
     return None
 
 
+# Marcas que **só** existem no diálogo de criação — valem mais que o título.
+# Medido no PC do dono (0.91.16): o painel abriu, o clique em “New key” acertou,
+# e a leitura não trouxe o texto “Create API key” — trouxe os campos. Procurar
+# o título sozinho dizia “o diálogo não apareceu” com o diálogo na tela.
+MARCAS_DO_DIALOGO = (
+    "select expiration",
+    "choose a credit limit",
+    "credit limit",
+    "key limit",
+    "reset limit",
+    "expiração",
+    "limite de crédito",
+)
+
+
 def e_dialogo_de_criacao(arvore_montada: dict[str, Any]) -> bool:
-    """A janela está com o diálogo “Create API key” aberto?"""
-    texto = texto_da_janela(arvore_montada)
-    return any(marca in texto for marca in PADROES_DIALOGO)
+    """A janela está com o diálogo “Create API key” aberto?
+
+    Duas provas, e qualquer uma serve: o título (“Create API key”) **ou** os
+    campos que só existem ali (expiração/limite). A segunda é a que funciona
+    quando a leitura não alcança o título — que foi o que aconteceu de verdade.
+    """
+    texto = texto_da_janela(arvore_montada, limite=200)
+    if any(marca in texto for marca in PADROES_DIALOGO):
+        return True
+    achou_marca = any(marca in texto for marca in MARCAS_DO_DIALOGO)
+    tem_nome = bool(procurar(arvore_montada, PADROES_NOME))
+    return achou_marca and (tem_nome or "create" in texto or "criar" in texto)
 
 
 def nomes_novos(antes: dict[str, Any], depois: dict[str, Any], limite: int = 60) -> list[dict[str, Any]]:
@@ -142,7 +169,7 @@ PADROES_NOME = ("key name", "nome da chave", "name", "nome")
 MARCAS_DA_PAGINA = ("api keys", "chaves de api", "new key", "nova chave", "create key", "criar chave")
 
 # ---------------------------------------------------------------------------
-# Onde estou? (0.91.15)
+# Onde estou? (0.91.16)
 #
 # Medido nas telas do dono: abrir openrouter.ai/keys sem sessão cai em
 # “Sign In | OpenRouter”, com os botões GitHub / Google / Reddit; clicar no

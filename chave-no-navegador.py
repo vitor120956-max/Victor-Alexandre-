@@ -90,7 +90,13 @@ def _modulo_do_configurador():
     return modulo
 
 
-def _ler_janela(alvo: str):
+# A leitura de estreia é rasa de propósito (rápida, 8 níveis). O diálogo de
+# criação, porém, é um painel no fim do documento: no PC do dono ele abriu e a
+# leitura rasa não o viu. Para achar o painel, a leitura vai fundo.
+PROFUNDA, TETO_FUNDO = 14, 3000
+
+
+def _ler_janela(alvo: str, profundidade: int = 8, limite: int = 1500):
     """A janela do navegador e a árvore montada — com o erro já em português."""
     from server import arvore, arvore_windows
 
@@ -106,9 +112,25 @@ def _ler_janela(alvo: str):
             f"não achei a janela do navegador ({type(exc).__name__}). "
             "Abra openrouter.ai/keys no Chrome e rode de novo."
         ) from exc
-    bruto = arvore_windows.ler_janela(int(janela["handle"]), 8, 1500)
-    montada = arvore.montar(bruto, 8, 1500, com_caminho=True)
+    bruto = arvore_windows.ler_janela(int(janela["handle"]), profundidade, limite)
+    montada = arvore.montar(bruto, profundidade, limite, com_caminho=True)
     return janela, montada
+
+
+def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
+    """Relê **esta** janela (pelo handle), não “a janela do chrome”.
+
+    Por que importa: a cada passo o código escolhia de novo a janela pelo nome.
+    Com duas janelas do Chrome abertas — a sua e a do site —, um passo podia
+    ler (e clicar) na errada. O handle é a identidade; o nome é palpite.
+    """
+    from server import arvore, arvore_windows
+
+    handle = int(janela.get("handle") or 0)
+    if not handle or not arvore_windows.janela_muda(handle):
+        raise PassoError("a janela do navegador foi fechada no meio do caminho.")
+    bruto = arvore_windows.ler_janela(handle, profundidade, limite)
+    return janela, arvore.montar(bruto, profundidade, limite, com_caminho=True)
 
 
 def _clicar(
@@ -158,22 +180,28 @@ def _descrever_clique(feito: dict) -> str:
     return como or "feito"
 
 
-def _esperar_elemento(alvo: str, padroes: tuple[str, ...], segundos: float = 12.0):
-    """Relê a janela até o elemento aparecer. Devolve (janela, nó, árvore)."""
+def _esperar_elemento(janela: dict, padroes: tuple[str, ...], segundos: float = 12.0):
+    """Relê **esta** janela até o elemento aparecer. Devolve (janela, nó, árvore).
+
+    Recebe a janela (handle) e não o nome: com duas janelas do Chrome abertas,
+    procurar pelo nome podia ler a errada — e o botão que está numa não existe
+    na outra.
+    """
     from server import chave_web
 
     fim = time.time() + segundos
     ultima = ""
     while True:
-        janela, montada = _ler_janela(alvo)
+        try:
+            janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        except PassoError:
+            raise
         achados = chave_web.procurar(montada, padroes)
         if achados:
             return janela, achados[0], montada
-        ultima = chave_web.texto_do_diagnostico(chave_web.diagnostico(montada))
+        ultima = _diagnostico_da_leitura(montada)
         if time.time() >= fim:
-            raise PassoError(
-                f"não apareceu “{padroes[0]}” em {int(segundos)}s nestaleitura.\n{ultima}"
-            )
+            raise PassoError(f"não apareceu “{padroes[0]}” em {int(segundos)}s nesta leitura. {ultima}")
         time.sleep(0.8)
 
 
@@ -364,17 +392,19 @@ def _janelas_do_alvo(alvo: str) -> list[dict]:
     return [item for _peso, _foco, item in pontuadas]
 
 
-def _ler_janelas(alvo: str, maximo: int = 3) -> list[tuple[dict, dict]]:
+def _ler_janelas(
+    alvo: str, maximo: int = 3, profundidade: int = 8, limite: int = 1500
+) -> list[tuple[dict, dict]]:
     """Lê as janelas do navegador (até `maximo`), a que está em foco primeiro."""
     from server import arvore, arvore_windows
 
     leituras: list[tuple[dict, dict]] = []
     for janela in _janelas_do_alvo(alvo)[:maximo]:
         try:
-            bruto = arvore_windows.ler_janela(int(janela["handle"]), 8, 1500)
+            bruto = arvore_windows.ler_janela(int(janela["handle"]), profundidade, limite)
         except Exception:  # noqa: BLE001 - janela que fechou no meio
             continue
-        leituras.append((janela, arvore.montar(bruto, 8, 1500, com_caminho=True)))
+        leituras.append((janela, arvore.montar(bruto, profundidade, limite, com_caminho=True)))
     return leituras
 
 
@@ -524,39 +554,77 @@ def _levar_ate_as_chaves(args, conta: str | None = None, segundos: float | None 
     )
 
 
-def _esperar_dialogo(args, segundos: float = 10.0):
-    """Espera o diálogo “Create API key” aparecer depois do clique em New key."""
+def _esperar_dialogo(args, janela: dict, segundos: float = 12.0):
+    """Espera o diálogo “Create API key” aparecer, lendo fundo.
+
+    Duas coisas que a 0.91.15 não fazia e custaram uma execução no PC do dono:
+
+    1. **lê fundo** (14 níveis): o painel mora no fim do documento e a leitura
+       rasa não o via — o diálogo estava na tela e o script dizia que não;
+    2. **olha as outras janelas do navegador**: se o clique caiu numa janela
+       diferente da que foi lida, o painel está lá, não aqui.
+    """
     from server import chave_web
 
     fim = time.time() + segundos
-    ultima = None
+    ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
     while True:
-        janela, montada = _ler_janela(args.alvo)
-        ultima = (janela, montada)
-        if chave_web.e_dialogo_de_criacao(montada):
-            return ultima
+        try:
+            _janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+            ultima = (janela, montada)
+            if chave_web.e_dialogo_de_criacao(montada):
+                return ultima
+        except PassoError:
+            pass
+        for outra, montada_outra in _ler_janelas(args.alvo, profundidade=PROFUNDA, limite=TETO_FUNDO):
+            if int(outra.get("handle") or 0) == int(janela.get("handle") or 0):
+                continue
+            if chave_web.e_dialogo_de_criacao(montada_outra):
+                return outra, montada_outra
         if time.time() >= fim:
-            raise PassoError("o diálogo de criação não apareceu na leitura.")
+            raise PassoError(_diagnostico_da_leitura(ultima[1]))
         time.sleep(0.7)
 
 
-def _abrir_lista(args, montada, campo, *, mouse: bool, primeiro_mouse: bool, segundos: float = 4.0):
+def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
+    """O que a leitura viu, em uma frase — para o dono poder mandar de volta.
+
+    “o diálogo não apareceu” não diz nada a quem está olhando a tela com o
+    diálogo aberto. Dizer quantos elementos vieram e quais os primeiros nomes
+    transforma o mistério em uma linha copiável.
+    """
+    from server import chave_web
+
+    nomes = [str(no.get("nome") or "")[:28] for no in chave_web.elementos(montada)[:quantos]]
+    total = len(chave_web.elementos(montada))
+    aviso = str(montada.get("aviso") or "").strip()
+    texto = f"o diálogo não apareceu na leitura ({total} elementos com nome"
+    texto += f"; os primeiros: {', '.join(nomes)})." if nomes else ")."
+    if aviso:
+        texto += f" Aviso da leitura: {aviso}"
+    return texto
+
+
+def _abrir_lista(
+    janela: dict, montada, campo, *, mouse: bool, primeiro_mouse: bool, segundos: float = 5.0
+):
     """Clica num campo de lista e devolve as opções que apareceram.
 
     Lista suspensa não muda nome de nada: ela **acrescenta** nós à janela. É
     comparando a leitura de antes com a de depois que se acham as opções — sem
-    saber como o site as desenha.
+    saber como o site as desenha. A leitura vai fundo: as opções moram no fim
+    do documento, como o próprio diálogo.
     """
     from server import chave_web
 
     try:
-        _clicar(_janela_atual(args), campo, mouse=mouse, primeiro_mouse=primeiro_mouse)
+        _clicar(janela, campo, mouse=mouse, primeiro_mouse=primeiro_mouse)
     except PassoError as exc:
         raise PassoError(f"não abri a lista “{campo.get('nome')}”: {exc}") from exc
 
     fim = time.time() + segundos
     while True:
-        janela, depois = _ler_janela(args.alvo)
+        janela, depois = _reler(janela, PROFUNDA, TETO_FUNDO)
         opcoes = chave_web.nomes_novos(montada, depois)
         if opcoes:
             return janela, depois, opcoes
@@ -565,14 +633,8 @@ def _abrir_lista(args, montada, campo, *, mouse: bool, primeiro_mouse: bool, seg
         time.sleep(0.6)
 
 
-def _janela_atual(args) -> dict:
-    """A janela do navegador agora — os cliques precisam do handle dela."""
-    janela, _montada = _ler_janela(args.alvo)
-    return janela
-
-
 def _preencher_uma_lista(
-    args,
+    janela: dict,
     montada: dict,
     padroes: tuple[str, ...],
     regra,
@@ -595,8 +657,8 @@ def _preencher_uma_lista(
     campo = campos[0]
     print(f"     {rotulo}: abrindo “{str(campo.get('nome') or '')[:40]}”…")
     try:
-        _janela, aberta, opcoes = _abrir_lista(
-            args, montada, campo, mouse=mouse, primeiro_mouse=primeiro_mouse
+        janela, aberta, opcoes = _abrir_lista(
+            janela, montada, campo, mouse=mouse, primeiro_mouse=primeiro_mouse
         )
     except PassoError as exc:
         print(f"     {rotulo}: {exc}")
@@ -612,22 +674,43 @@ def _preencher_uma_lista(
         return aberta, ""
     print(f"     {rotulo}: escolhendo “{escolha}”.")
     try:
-        _clicar(_janela_atual(args), alvo, mouse=mouse, primeiro_mouse=primeiro_mouse)
+        _clicar(janela, alvo, mouse=mouse, primeiro_mouse=primeiro_mouse)
     except PassoError as exc:
         print(f"     {rotulo}: não consegui clicar na opção ({exc}).")
         return aberta, ""
     time.sleep(0.5)
-    return _ler_janela(args.alvo)[1], escolha
+    return _reler(janela, PROFUNDA, TETO_FUNDO)[1], escolha
+
+
+def _digitar_na_janela(janela: dict, texto: str) -> bool:
+    """Digita com o teclado na janela **depois de conferir que ela está na frente**.
+
+    Só serve quando o foco já está no campo certo — que é o caso do diálogo de
+    criação, onde o cursor nasce dentro do “Name”. Se o teclado não estiver na
+    janela do navegador, não digita às cegas: devolve `False`.
+    """
+    from server import arvore_windows, mesa
+
+    try:
+        handle = int(janela.get("handle") or 0)
+        if not arvore_windows.trazer_para_frente(handle):
+            return False
+        if not arvore_windows.teclado_na_janela(handle):
+            return False
+        mesa.digitar(texto)
+        return True
+    except Exception:  # noqa: BLE001 - digitar é o último degrau, não requisito
+        return False
 
 
 def _preencher_dialogo(
-    args, montada: dict, nome: str, *, mouse: bool, primeiro_mouse: bool
+    janela: dict, montada: dict, nome: str, *, mouse: bool, primeiro_mouse: bool
 ) -> tuple[dict, dict[str, str]]:
     """Preenche “Create API key” inteiro: nome, expiração e limite.
 
     Medido na tela do dono: o botão “Create” fica desabilitado enquanto a
     expiração (que tem asterisco) está vazia. Escrever só o nome e clicar em
-    Create não cria nada — e antes desta versão o script dizia que tinha dado
+    Create não cria nada — e antes da 0.91.15 o script dizia que tinha dado
     certo. Aqui cada campo devolve o que foi realmente escolhido.
     """
     from server import chave_web
@@ -639,19 +722,28 @@ def _preencher_dialogo(
     if campos:
         print(f"     nome: escrevendo “{nome}”…")
         try:
-            _clicar(_janela_atual(args), campos[0], "digitar", nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
+            _clicar(janela, campos[0], "digitar", nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
             preenchidos["nome"] = nome
             time.sleep(0.4)
         except PassoError as exc:
-            print(f"     nome: não deu ({exc}).")
+            print(f"     nome: não deu pelo campo ({exc}) — tentando pelo teclado.")
     else:
-        print("     nome: não achei o campo — seguindo.")
+        print("     nome: o campo não apareceu na leitura — tentando pelo teclado.")
+    if "nome" not in preenchidos:
+        # O diálogo abre com o cursor **dentro** do campo de nome (está assim na
+        # tela do dono). Se a leitura não deu o campo, o teclado ainda dá: é o
+        # último degrau antes de desistir, e só acontece com a janela na frente.
+        if _digitar_na_janela(janela, nome):
+            preenchidos["nome"] = nome
+            print(f"     nome: digitado pelo teclado (“{nome}”).")
+        else:
+            print("     nome: não consegui digitar — o campo não está em foco.")
 
-    montada = _ler_janela(args.alvo)[1]
+    janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
 
     # 2. expiração — o campo que deixava o Create apagado
     montada, prazo = _preencher_uma_lista(
-        args, montada, chave_web.PADROES_EXPIRACAO, chave_web.melhor_expiracao, "expiração",
+        janela, montada, chave_web.PADROES_EXPIRACAO, chave_web.melhor_expiracao, "expiração",
         mouse=mouse, primeiro_mouse=primeiro_mouse,
     )
     if prazo:
@@ -659,7 +751,7 @@ def _preencher_dialogo(
 
     # 3. limite de crédito — não é para caber mais, é para não travar sozinho
     montada, limite = _preencher_uma_lista(
-        args, montada, chave_web.PADROES_LIMITE, chave_web.melhor_limite, "limite",
+        janela, montada, chave_web.PADROES_LIMITE, chave_web.melhor_limite, "limite",
         mouse=mouse, primeiro_mouse=primeiro_mouse,
     )
     if limite:
@@ -693,7 +785,7 @@ def _criar_e_copiar(
     #    Medido na tela do dono: sem a expiração (que tem asterisco) o botão
     #    “Create” fica desabilitado, e clicar nele não cria nada.
     try:
-        janela, montada = _esperar_dialogo(args, segundos=10)
+        janela, montada = _esperar_dialogo(args, janela, segundos=12)
     except PassoError as exc:
         # Sem o diálogo não há o que preencher: seguir daqui faria o passo 3
         # achar o botão “New key” da página e clicar nele outra vez, e o
@@ -702,7 +794,9 @@ def _criar_e_copiar(
         print("     O diálogo não abriu. Clique em New key e rode de novo; nada foi criado.")
         return None
     print("  2. preenchendo o diálogo:")
-    montada, preenchidos = _preencher_dialogo(args, montada, nome, mouse=mouse, primeiro_mouse=primeiro_mouse)
+    montada, preenchidos = _preencher_dialogo(
+        janela, montada, nome, mouse=mouse, primeiro_mouse=primeiro_mouse
+    )
     faltando = [campo for campo in ("expiração", "limite") if campo not in preenchidos]
     if "expiração" in faltando:
         print("     AVISO: sem a expiração o botão Create costuma ficar apagado.")
@@ -710,7 +804,7 @@ def _criar_e_copiar(
 
     # 3. o botão do diálogo (“Create”, curto) — e a conferência de que fechou
     try:
-        janela, criar, montada = _esperar_elemento(args.alvo, chave_web.PADROES_CONFIRMAR, segundos=8)
+        janela, criar, montada = _esperar_elemento(janela, chave_web.PADROES_CONFIRMAR, segundos=8)
         print(f"  3. clicando em “{criar.get('nome')}” para criar…")
         print(f"     {_descrever_clique(_clicar(janela, criar, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
         time.sleep(2.0)
@@ -723,7 +817,7 @@ def _criar_e_copiar(
     # diálogo simplesmente continua aberto. Conferir é o que separa “criei” de
     # “achei que criei”.
     try:
-        _janela, depois = _ler_janela(args.alvo)
+        _janela, depois = _reler(janela, PROFUNDA, TETO_FUNDO)
     except PassoError:
         depois = None
     if depois and chave_web.e_dialogo_de_criacao(depois):
@@ -750,7 +844,7 @@ def _criar_e_copiar(
         if achado:
             return achado[1]
     try:
-        janela, copiar, _ = _esperar_elemento(args.alvo, chave_web.PADROES_COPIAR, segundos=6)
+        janela, copiar, _ = _esperar_elemento(janela, chave_web.PADROES_COPIAR, segundos=6)
         print(f"     clicando em “{copiar.get('nome')}”…")
         print(f"     {_descrever_clique(_clicar(janela, copiar, mouse=mouse, primeiro_mouse=primeiro_mouse))}")
     except PassoError as exc:

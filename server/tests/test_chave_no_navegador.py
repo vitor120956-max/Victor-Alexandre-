@@ -76,6 +76,9 @@ class WindowsFalso:
     def teclado_na_janela(self, _handle) -> bool:
         return True
 
+    def janela_muda(self, _handle) -> bool:
+        return True
+
     def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
         self.chamadas.append(
             {
@@ -217,6 +220,22 @@ class Mundo:
             "cursor_voltou": True,
         }
 
+    # o driver relê pelo handle: aqui a janela nunca “fecha”
+    def janela_muda(self, _handle) -> bool:
+        return True
+
+    def ler_janela(self, _handle, _profundidade=8, _limite=1500):
+        return self.montar()
+
+    def trazer_para_frente(self, _handle) -> bool:
+        return True
+
+    def teclado_na_janela(self, _handle) -> bool:
+        return True
+
+    def digitar(self, texto: str) -> None:
+        self.digitado = texto
+
     def _nome_da_caixa(self, caixa: list[int]) -> str:
         mapa = {
             tuple(CAIXA_NEW_KEY): "New key",
@@ -272,7 +291,8 @@ def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, c
 def _com_mundo(monkeypatch, mundo: Mundo, config: ConfiguradorFalso | None = None):
     """Liga o script a um OpenRouter de mentira com estado (o diálogo de verdade)."""
     script = _script()
-    monkeypatch.setattr(script, "_ler_janela", lambda _alvo: (JANELA, mundo.montar()))
+    monkeypatch.setattr(script, "_ler_janela", lambda _alvo, **_k: (JANELA, mundo.montar()))
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, mundo.montar()))
     relogio = itertools.count()
     monkeypatch.setattr(
         script,
@@ -529,6 +549,15 @@ def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
 
     monkeypatch.setattr(script, "_ler_janela", ler)
 
+    # `_reler` é o “olhar de novo a mesma janela”: no dublê, o diálogo (a
+    # segunda página da fila) fica na tela até o Create ser clicado — as listas
+    # de expiração/limite não abrem aqui, e é o `_ler_janela` do passo 3 que
+    # avança para a página seguinte, já criada.
+    def reler(janela, _p=8, _l=1500):
+        return janela, fila[min(1, len(fila) - 1)]
+
+    monkeypatch.setattr(script, "_reler", reler)
+
     def esperar_pagina(_args, conta="", segundos=0):
         # A página já está aberta no dublê; os passos seguintes releem por
         # `_ler_janela`, que continua andando pela mesma fila.
@@ -551,12 +580,35 @@ def _auto(monkeypatch, paginas, area, windows=None, config=None, **extra):
 
 def test_auto_abre_cria_copia_e_grava_a_chave_nova(monkeypatch, capsys):
     area = {"texto": CHAVE_VELHA}  # já havia uma chave copiada antes
-    paginas = [
-        _pagina(_no("Create Key", [812, 200, 90, 28])),
-        _pagina(_no("Key name", [400, 300, 320, 30], papel=42), _no("Create", [700, 380, 80, 28])),
-        _pagina(_no("Create", [700, 380, 80, 28])),
-    ]
-    script, config, args = _auto(monkeypatch, paginas, area)
+    # O diálogo de verdade: nome, expiração e limite (as listas não abrem no
+    # dublê, e o script segue avisando — o que importa aqui é o caminho inteiro).
+    dialogo = _pagina(
+        _no("Create API key"),
+        _no("Key name", [400, 300, 320, 30], papel=42),
+        _no("Select expiration", [400, 380, 320, 30]),
+        _no("Choose a credit limit", [400, 460, 320, 30]),
+        _no("Create", [700, 640, 80, 28]),
+    )
+    paginas = [_pagina(_no("Create Key", [812, 200, 90, 28])), dialogo, PAGINA_COM_COPIA]
+    windows = WindowsFalso()
+    script, config, args = _auto(monkeypatch, paginas, area, windows=windows)
+
+    # O diálogo só some quando o “Create” é clicado — é assim no site, e é o
+    # que a conferência do passo 3 lê para saber que a chave nasceu.
+    aberto = {"sim": True}
+    clique_de_verdade = windows.executar_ref
+
+    def executar_ref(handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
+        if list(caixa or []) == [700, 640, 80, 28]:
+            aberto["sim"] = False
+        return clique_de_verdade(handle, caminho, acao, texto, caixa, mouse, primeiro_mouse)
+
+    monkeypatch.setattr(windows, "executar_ref", executar_ref)
+    monkeypatch.setattr(
+        script,
+        "_reler",
+        lambda janela, _p=8, _l=1500: (janela, dialogo if aberto["sim"] else PAGINA_COM_COPIA),
+    )
     # a página, depois de criar, tem a chave escrita nela: Ctrl+A/Ctrl+C copia isso
     monkeypatch.setattr(
         script,
@@ -768,7 +820,7 @@ def _navegador_com_fila(monkeypatch, script, telas):
     """Um Chrome que mostra uma tela diferente a cada leitura."""
     fila = list(telas)
 
-    def leitura(_alvo, maximo=3):
+    def leitura(_alvo, maximo=3, **_k):
         tela = fila.pop(0) if len(fila) > 1 else fila[0]
         return [(JANELA, tela)]
 
@@ -903,3 +955,126 @@ def test_o_dialogo_que_nao_abre_nao_vira_clique_no_new_key(monkeypatch, capsys):
     assert mundo.cliques == [CAIXA_NEW_KEY], "um clique só: não insiste no New key"
     assert config.gravadas == []
     assert "O diálogo não abriu" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# 0.91.16 — o diálogo estava na tela e a leitura não o via
+#
+# Medido no PC do dono: print com “Create API key” aberto, e a saída dizendo
+# “o diálogo de criação não apareceu na leitura”. O painel mora no fim de um
+# documento grande; a leitura de 8 níveis parava antes.
+
+def _fundo_do_documento() -> dict[str, Any]:
+    """O diálogo de verdade — “Create API key” com os três campos."""
+    return {
+        "nome": "Create API key",
+        "papel": 1,
+        "filhos": [
+            {"nome": "Name", "papel": 42, "caixa": [400, 300, 320, 30]},
+            {"nome": "Select expiration", "papel": 43, "caixa": [400, 380, 320, 30]},
+            {"nome": "Choose a credit limit", "papel": 43, "caixa": [400, 460, 320, 30]},
+        ],
+    }
+
+
+def _enterrado(niveis: int) -> dict[str, Any]:
+    """O diálogo dentro de `niveis` grupos — como no documento do Chrome."""
+    raiz = _fundo_do_documento()
+    for nivel in range(niveis):
+        raiz = {"nome": f"grupo {nivel}", "papel": 1, "filhos": [raiz]}
+    return raiz
+
+
+class DuasJanelas:
+    """Duas janelas do Chrome: a página numa, o painel na outra.
+
+    É o caso que a escolha por nome não distingue: as duas são “chrome”.
+    """
+
+    def __init__(self, raiz_por_handle: dict[int, dict[str, Any]]) -> None:
+        self.raizes = raiz_por_handle
+        self.leituras: list[tuple[int, int]] = []
+
+    def _janela(self, handle: int) -> dict[str, Any]:
+        return {"handle": handle, "titulo": "API Keys | OpenRouter", "processo": "chrome"}
+
+    def janelas(self):
+        return [self._janela(handle) for handle in self.raizes]
+
+    def janela_em_foco(self):
+        return self._janela(next(iter(self.raizes)))
+
+    def escolher_janela(self, _alvo, janelas=None, foco=None):
+        return (janelas or self.janelas())[0]
+
+    def janela_muda(self, _handle) -> bool:
+        return True
+
+    def ler_janela(self, handle, profundidade=8, limite=1500):
+        self.leituras.append((int(handle), int(profundidade)))
+        return {
+            "janela": self._janela(int(handle)),
+            "raiz": self.raizes[int(handle)],
+            "fonte": "uia",
+        }
+
+
+def _relogio(monkeypatch, script) -> None:
+    """Relógio que **anda**: fixo já pendurou a suíte uma vez (300 s)."""
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script,
+        "time",
+        types.SimpleNamespace(time=lambda: next(relogio) * 0.5, sleep=lambda _s: None),
+    )
+
+
+def test_a_leitura_rasa_nao_ve_o_painel_e_a_funda_ve(monkeypatch):
+    """A prova do erro: com 8 níveis, nada; com a leitura funda, o diálogo."""
+    from server import arvore, chave_web
+
+    bruto = {"janela": {"handle": 4242}, "raiz": _enterrado(12), "fonte": "uia"}
+    assert chave_web.e_dialogo_de_criacao(arvore.montar(bruto, 8, 1500)) is False
+    assert chave_web.e_dialogo_de_criacao(arvore.montar(bruto, 14, 3000)) is True
+
+
+def test_esperar_dialogo_le_fundo_e_acha_o_painel_enterrado(monkeypatch):
+    from server import chave_web
+
+    script = _script()
+    janelas = DuasJanelas({4242: _enterrado(12)})
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", janelas)
+    _relogio(monkeypatch, script)
+
+    janela = {"handle": 4242, "titulo": "API Keys | OpenRouter", "processo": "chrome"}
+    achada, montada = script._esperar_dialogo(_args(), janela)
+
+    assert int(achada["handle"]) == 4242
+    assert chave_web.e_dialogo_de_criacao(montada)
+    assert any(profundidade >= 12 for _handle, profundidade in janelas.leituras), (
+        "a espera tem de reler fundo — foi a leitura rasa que disse “não apareceu”"
+    )
+
+
+def test_esperar_dialogo_olha_as_outras_janelas_do_navegador(monkeypatch):
+    """O clique pode cair na janela A e o painel abrir na janela B."""
+    script = _script()
+    pagina = {"nome": "API Keys", "papel": 1, "filhos": [{"nome": "New key", "papel": 43}]}
+    janelas = DuasJanelas({4242: pagina, 5151: _fundo_do_documento()})
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", janelas)
+    _relogio(monkeypatch, script)
+
+    janela = {"handle": 4242, "titulo": "API Keys | OpenRouter", "processo": "chrome"}
+    achada, _montada = script._esperar_dialogo(_args(), janela)
+
+    assert int(achada["handle"]) == 5151, "o painel estava na outra janela"
+
+
+def test_a_falta_do_dialogo_diz_quantos_elementos_a_leitura_viu():
+    """"não apareceu" sem números não ajuda quem está vendo o diálogo na tela."""
+    script = _script()
+
+    texto = script._diagnostico_da_leitura(PAGINA_INICIAL)
+
+    assert "2 elementos" in texto or "elementos com nome" in texto
+    assert "Create Key" in texto, "dizer o que a leitura viu é o que torna o erro investigável"
