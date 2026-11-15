@@ -615,3 +615,30 @@ def test_provedor_sem_catalogo_nao_quebra_o_guia():
     guia = _script_de_configuracao().guia_do_provedor("ProvedorInventado", "https://exemplo.invalido/v1")
     assert guia["nome"] == "ProvedorInventado"
     assert guia["onde"] == ""
+
+
+def test_api_recarrega_o_env_gravado_por_fora(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, env: Path):
+    """A chave gravada por fora da tela (o `chave-no-navegador.py`) tem de valer
+    na hora. O servidor lê o `.env` uma vez, no start: sem esta rota, a tela
+    continuaria mostrando a chave antiga até fechar e abrir."""
+    chaves.salvar("gsk_" + "a" * 40)  # a que estava antes
+    cliente = _cliente(tmp_path, monkeypatch, env)
+    with cliente:
+        antes = cliente.get("/api/ai/status").json()
+        # alguém grava o arquivo por fora do processo, como o script faz —
+        # trocando até de provedor, para a diferença ser visível no status
+        env.write_text(
+            "JARVIS_AI_PROVIDER=OpenAI\n"
+            "JARVIS_AI_BASE_URL=https://api.openai.com/v1\n"
+            "JARVIS_AI_MODEL=gpt-4o-mini\n"
+            "JARVIS_AI_API_KEY=sk-" + "b" * 40 + "\n"
+        )
+        durante = cliente.get("/api/ai/status").json()
+        resposta = cliente.post("/api/ai/recarregar")
+        depois = cliente.get("/api/ai/status").json()
+    assert antes["provider"] == "Groq"
+    assert durante["provider"] == "Groq", "o processo ainda não sabe da troca até alguém mandar reler"
+    assert resposta.status_code == 200
+    assert resposta.json()["ok"] is True
+    assert depois["provider"] == "OpenAI"
+    assert depois["configured"] is True and depois["keys"] == 1

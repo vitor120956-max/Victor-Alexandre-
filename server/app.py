@@ -730,6 +730,22 @@ def create_app(
             provider.anotar_teste(resultado.get("resultados") or [])  # type: ignore[attr-defined]
         return {"ok": True, "result": resultado, "status": provider.status()}
 
+    @application.post("/api/ai/recarregar")
+    def ai_recarregar(request: Request) -> dict[str, Any]:
+        """Relê o `.env` **sem reiniciar** — para quem grava a chave por fora.
+
+        O servidor lê o `.env` uma vez, no start. Quem grava a chave pelo
+        `chave-no-navegador.py` (ou editando o arquivo) ficava com a tela
+        mostrando a chave antiga até fechar e abrir: o mesmo defeito de “tela
+        velha” que já custou versão. Aqui a rota recoloca o arquivo no ambiente
+        e manda o cérebro em memória reler — sem reiniciar processo nenhum.
+        """
+        _so_da_maquina(request)
+        chaves_mod.aplicar_no_ambiente()
+        if hasattr(provider, "recarregar"):
+            provider.recarregar()  # type: ignore[attr-defined]
+        return {"ok": True, "status": provider.status()}
+
     @application.get("/api/ai/status")
     def ai_status() -> dict[str, Any]:
         return {"ok": True, **provider.status()}

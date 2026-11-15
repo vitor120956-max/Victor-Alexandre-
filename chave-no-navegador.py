@@ -254,6 +254,31 @@ def passo_pegar(args) -> int:
     return _gravar(modulo, chave)
 
 
+def _avisar_jarvis_aberto() -> bool:
+    """Manda a API que já está rodando reler o `.env` — sem reiniciar.
+
+    O servidor lê o `.env` uma vez, no start. Gravar a chave por fora da tela
+    deixava a tela mostrando a chave antiga até fechar e abrir. Se a API não
+    estiver no ar, isso não é erro: o próximo start lê o arquivo novo.
+    """
+    import json
+    import urllib.request
+
+    for porta in (8000, 8001):
+        pedido = urllib.request.Request(
+            f"http://127.0.0.1:{porta}/api/ai/recarregar",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(pedido, timeout=1.5) as resposta:  # noqa: S310 - endereço fixo local
+                return bool(json.loads(resposta.read().decode("utf-8")).get("ok"))
+        except Exception:  # noqa: BLE001 - API desligada não é falha de gravar
+            continue
+    return False
+
+
 def _gravar(modulo, chave: str) -> int:
     """Grava a chave **sem perguntar nada** quando o provedor já está escolhido.
 
@@ -272,6 +297,10 @@ def _gravar(modulo, chave: str) -> int:
         print(f"  provedor: {provedor}")
         print(f"  chave:    {modulo.mascarar(chave)}")
         print("\n  As outras linhas do .env ficaram como estavam.")
+        if _avisar_jarvis_aberto():
+            print("  O JARVIS que já está aberto passou a usar esta chave agora.")
+        else:
+            print("  O JARVIS não está aberto: ele vai ler esta chave quando abrir.")
         return 0
     codigo = modulo.principal(["--chave", chave])
     if codigo != 0:

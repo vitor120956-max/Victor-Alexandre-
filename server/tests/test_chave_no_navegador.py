@@ -553,3 +553,37 @@ def test_a_janela_em_foco_vem_primeiro(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "server.arvore_windows", Windows())
     assert [j["handle"] for j in script._janelas_do_alvo("chrome")] == [11, 10]
+
+
+# --------------------------------------------- o JARVIS aberto fica sabendo
+
+def test_avisa_a_api_aberta_para_reler_o_env(monkeypatch):
+    import io
+
+    script = _script()
+    chamadas = []
+
+    class Resposta(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    def urlopen(pedido, timeout=0):
+        chamadas.append((pedido.full_url, timeout))
+        return Resposta(b'{"ok": true}')
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    assert script._avisar_jarvis_aberto() is True
+    assert chamadas[0][0].endswith("/api/ai/recarregar")
+
+
+def test_api_desligada_nao_e_erro(monkeypatch):
+    script = _script()
+
+    def sem_api(_pedido, timeout=0):
+        raise OSError("conexão recusada")
+
+    monkeypatch.setattr("urllib.request.urlopen", sem_api)
+    assert script._avisar_jarvis_aberto() is False

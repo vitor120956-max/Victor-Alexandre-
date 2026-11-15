@@ -174,6 +174,25 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.13 — a chave nova vale na hora (sem fechar o JARVIS)
+
+O servidor lê o `.env` **uma vez**, no start. Toda chave gravada por fora da
+tela — pelo `chave-no-navegador.py`, pelo `.bat`, editando o arquivo — ficava
+certa no arquivo e velha na memória: a tela continuava mostrando a anterior até
+alguém fechar e abrir. É o mesmo defeito de “tela velha” de versões atrás,
+aparecendo por outra porta.
+
+Duas peças:
+
+| peça | o que faz |
+|---|---|
+| `POST /api/ai/recarregar` | só da própria máquina: recoloca o `.env` no ambiente e manda o cérebro em memória reler. Não reinicia processo. |
+| `_avisar_jarvis_aberto()` no script | tenta essa rota após gravar (1,5 s, portas 8000/8001). API desligada não é erro. |
+
+O script passa a dizer qual dos dois casos aconteceu: “o JARVIS que já está
+aberto passou a usar esta chave agora” ou “ele vai ler esta chave quando abrir”.
+
+
 ### 0.91.12 — o JARVIS copia sozinho (e espera quando não consegue clicar)
 
 O dono corrigiu o desenho: “ele deve abrir os sites onde estão as chaves para

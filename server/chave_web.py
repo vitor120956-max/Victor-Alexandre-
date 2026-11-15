@@ -1,4 +1,4 @@
-"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.12).
+"""Achar, na página do provedor, o que cria e o que copia a chave (0.91.13).
 
 Por que a lógica mora aqui e não no script: achar o botão numa árvore de
 acessibilidade é regra, e regra se testa sem Chrome, sem Windows e sem tela. O
@@ -31,7 +31,7 @@ from typing import Any
 # maiúsculas não importam (a comparação normaliza).
 PADROES_CRIAR = ("create key", "criar chave", "new key", "nova chave", "add key", "adicionar chave")
 # O botão que **fecha** o diálogo de criação costuma ser só “Create”/“Criar”
-# — mais curto que o “Create Key” da página. A 0.91.12 só conhecia o rótulo
+# — mais curto que o “Create Key” da página. A 0.91.13 só conhecia o rótulo
 # longo e travou no passo 3 com o diálogo aberto na frente: o dublê do teste
 # mostrou isso antes do dono. “Created/at” não é botão, mas entra na conta; por
 # isso o nome mais curto vem primeiro.
