@@ -174,6 +174,40 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.24 — o manual da página, e um jeito de medir sem gastar chave
+
+Pedido do dono (16/11): *“eu vou ter que atualizar e testar de novo, você não
+consegue testar isso; leia o manual da página de como configurar, onde é o
+nome, onde deve clicar, passo a passo”*.
+
+Duas entregas, e a segunda vale mais que a primeira:
+
+| peça | o que é |
+|---|---|
+| `docs/CHAVE-OPENROUTER.md` | o manual da página, campo por campo, com o que o JARVIS faz em cada ponto |
+| `diagnostico-chave.bat` + `--diagnostico` | mede o que **cada leitura** enxerga e escreve o relatório — **sem criar chave e sem clicar em nada** |
+
+O manual foi escrito da documentação oficial (`Creating an API key`,
+`Authentication`) e dos prints: a ordem é **Name → Expiration → Credit limit →
+(Reset limit every) → Create**, as opções de expiração vão de `1 day` a
+`No expiration`, o `Reset limit every` fica em `N/A` com “No limit”, e a chave
+aparece **uma vez só**, com o botão `Copy`.
+
+O `--diagnostico` é a resposta ao “você não consegue testar”: ele imprime uma
+linha por leitura (`auto`, `uia`, `uia_raw`, `uia_content`, `msaa`) com quantos
+elementos cada uma trouxe e **quais campos do painel cada uma vê**, e grava
+tudo em `chave-leitura.txt`. Com o painel aberto na tela — que é a situação dos
+prints —, o arquivo responde a pergunta que sobrou: **qual vista enxerga o
+painel?**
+
+O `chave-leitura.txt` ganhou a linha `painel: SIM — nome, expiração, limite,
+criar` (ou `não — nenhum campo do painel nesta leitura`). É o que separa
+“a página não tem o painel” de “esta leitura não vê o painel”.
+
+O que **não** se sabe continua sendo o de sempre: se a vista crua resolve no
+Chrome do dono. Mas agora dá para descobrir isso sem criar chave nenhuma — um
+duplo clique e um arquivo.
+
 ### 0.91.23 — o problema não era a janela: era a vista
 
 Print de 16/11, 07:52. O painel **Create API key** aberto, e outra vez

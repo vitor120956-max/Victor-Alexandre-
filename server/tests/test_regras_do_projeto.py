@@ -89,6 +89,24 @@ def test_os_testes_citados_existem():
     assert not problemas, "\n".join(problemas)
 
 
+def test_o_manual_da_pagina_existe_e_esta_no_readme():
+    """O dono pediu o manual da página (“onde é o nome, onde clicar, passo a passo”).
+
+    Manual que ninguém acha não serve: ele fica no README, e o texto tem de
+    cobrir os campos que a página realmente mostra.
+    """
+    manual = RAIZ / "docs" / "CHAVE-OPENROUTER.md"
+    assert manual.is_file(), "o manual da página da chave tem de existir"
+
+    texto = manual.read_text(encoding="utf-8")
+    for campo in ("Name", "Expiration", "Credit limit", "Create", "Copy", "No expiration", "No limit"):
+        assert campo in texto, f"o manual não fala de “{campo}”"
+
+    readme = (RAIZ / "README.md").read_text(encoding="utf-8")
+    assert "docs/CHAVE-OPENROUTER.md" in readme, "o README aponta para o manual da página"
+    assert "diagnostico-chave.bat" in texto, "o manual ensina como pedir o diagnóstico"
+
+
 def test_a_regra_esta_no_readme():
     """Quem chega no projeto pelo README tem de encontrar a regra."""
     readme = (RAIZ / "README.md").read_text(encoding="utf-8")

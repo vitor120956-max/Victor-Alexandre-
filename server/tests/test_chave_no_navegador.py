@@ -1244,6 +1244,65 @@ def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
     assert "primeiros:" in texto
 
 
+def test_o_diagnostico_mede_as_vistas_e_nao_clica_em_nada(monkeypatch, tmp_path, capsys):
+    """Pedido do dono (16/11): ele não pode testar de graça, cada rodada custa uma chave.
+
+    “leia o manual da pagina … onde q deve clicar passo a passo” — o
+    `--diagnostico` é a versão que mede sem gastar: abre nenhuma chave, clica em
+    nada e escreve qual leitura enxerga o painel.
+    """
+    script = _script()
+    montadas = {"auto": _moldura(), "uia": _moldura(), "uia_raw": _pagina_rica()}
+
+    class SoNaCrua:
+        def __init__(self) -> None:
+            self.executou = 0
+            self.pedidas: list[str] = []
+
+        def janela_muda(self, _handle) -> bool:
+            return True
+
+        def janelas(self):
+            return [dict(JANELA)]
+
+        def janela_em_foco(self):
+            return dict(JANELA)
+
+        def escolher_janela(self, _alvo="", janelas=None, foco=None):
+            return dict((janelas or [JANELA])[0])
+
+        def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+            self.pedidas.append(fonte)
+            tela = montadas.get(fonte, _moldura())
+            return {"janela": dict(JANELA), "raiz": tela["arvore"], "fonte": fonte}
+
+        def executar_ref(self, *args, **kwargs):
+            self.executou += 1
+            return {"executou": True, "como": "nada"}
+
+        def trazer_para_frente(self, _handle) -> bool:
+            return True
+
+        def janela_em_foco_ou_nada(self):
+            return None
+
+    falso = SoNaCrua()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+    args = types.SimpleNamespace(alvo="chrome", conta="", provedor="")
+
+    assert script.passo_diagnostico(args) == 0
+
+    saida = capsys.readouterr().out
+    assert "uia_raw" in saida and "auto" in saida
+    assert "Nada foi clicado" in saida
+    assert falso.executou == 0, "diagnóstico não clica — nem para abrir o painel"
+    assert "uia_raw" in falso.pedidas
+
+    relatorio = (tmp_path / "chave-leitura.txt").read_text(encoding="utf-8")
+    assert "painel:" in relatorio, "o relatório diz quais campos cada leitura enxerga"
+
+
 def test_a_vista_crua_e_tentada_quando_a_de_controle_so_traz_moldura(monkeypatch):
     """Print de 16/11 07:52: painel aberto, 3 elementos, e a vista de controle é que falhava.
 

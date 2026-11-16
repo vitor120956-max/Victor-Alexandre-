@@ -687,6 +687,20 @@ def test_regressao_0_91_22_sem_conseguir_ler_a_pagina_a_mensagem_e_a_verdadeira(
     assert "clique uma vez no Chrome" in saida, "o dono tem de saber o que fazer"
 
 
+def test_regressao_0_91_24_o_diagnostico_nao_cria_chave_nem_toca_no_env(monkeypatch, tmp_path):
+    """A promessa do comando, cobrada: nada de chave nova, nada no `.env`."""
+    chrome = ChromeFalso()
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    antes = env.read_text(encoding="utf-8")
+    assert script.main(["--diagnostico"]) == 0
+
+    assert chrome.cliques == []
+    assert chrome.tela == "chaves"
+    assert env.read_text(encoding="utf-8") == antes
+
+
 def test_regressao_0_91_23_a_vista_crua_enxerga_o_painel_que_a_de_controle_nao_ve(
     monkeypatch, tmp_path, capsys
 ):

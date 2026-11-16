@@ -301,6 +301,30 @@ def _clicar(
     return feito
 
 
+# Os campos do painel “Create API key”, na ordem em que a página os mostra.
+# Medidos no PC do dono (print de 16/11) e confirmados na documentação:
+# Name → Expiration → Credit limit → (Reset limit every) → Create.
+CAMPOS_DO_PAINEL = ("nome", "expiração", "limite", "criar", "copiar")
+
+
+def _campos_do_painel(montada: dict) -> dict[str, bool]:
+    """Quais dos campos do painel esta leitura enxerga.
+
+    Serve para uma pergunta só, e é a pergunta que sobrou depois da 0.91.23:
+    **qual vista vê o painel?** Dizer “3 elementos” não responde; dizer “esta
+    vista vê o nome e a expiração, aquela não vê nada” responde.
+    """
+    from server import chave_web
+
+    return {
+        "nome": chave_web.campo_do_nome(montada) is not None,
+        "expiração": bool(chave_web.procurar(montada, chave_web.PADROES_EXPIRACAO)),
+        "limite": bool(chave_web.procurar(montada, chave_web.PADROES_LIMITE)),
+        "criar": _botao_de_criar(montada) is not None,
+        "copiar": bool(chave_web.procurar(montada, chave_web.PADROES_COPIAR)),
+    }
+
+
 def _descrever_clique(feito: dict) -> str:
     """Como o clique saiu — com o mouse ou pela ação do elemento."""
     como = str(feito.get("como") or "")
@@ -333,6 +357,69 @@ def _esperar_elemento(janela: dict, padroes: tuple[str, ...], segundos: float = 
         if time.time() >= fim:
             raise PassoError(f"não apareceu “{padroes[0]}” em {int(segundos)}s nesta leitura. {ultima}")
         time.sleep(0.8)
+
+
+def passo_diagnostico(args) -> int:
+    """Diz **qual leitura enxerga a página** — sem clicar em nada.
+
+    Por que existe: o dono não consegue testar de graça. Cada rodada custa
+    atualizar, abrir o site, criar (ou quase criar) uma chave e me mandar um
+    print. Este comando responde a pergunta que sobrou — *qual vista de
+    acessibilidade vê o painel?* — sem criar chave nenhuma e sem clicar em
+    nada, inclusive com o painel já aberto na tela dele.
+
+    O arquivo `chave-leitura.txt` sai com as cinco leituras (automática,
+    controle, crua, conteúdo e MSAA), a contagem de cada uma e quais campos do
+    painel cada uma enxerga.
+    """
+    from server import chave_web
+
+    janela, _montada = _ler_janela(args.alvo)
+    handle = int(janela.get("handle") or 0)
+    print(f"  Janela: {janela.get('titulo') or '?'}  (handle {handle})")
+    print("  Medindo o que cada leitura do Windows enxerga. Nada será clicado.")
+    print()
+
+    linhas: list[tuple[str, int, dict[str, bool], bool]] = []
+    for fonte in ("auto", "uia", "uia_raw", "uia_content", "msaa"):
+        try:
+            montada = _ler_pela_fonte(handle, PROFUNDA, TETO_FUNDO, fonte)
+        except Exception as exc:  # noqa: BLE001 - uma vista pode cair inteira
+            print(f"  {fonte:11} : não respondeu ({type(exc).__name__}).")
+            continue
+        campos = _campos_do_painel(montada)
+        painel = chave_web.e_dialogo_de_criacao(montada)
+        linhas.append((fonte, _nomes(montada), campos, painel))
+        vistos = [rotulo for rotulo in CAMPOS_DO_PAINEL if campos[rotulo]]
+        print(
+            f"  {fonte:11} : {_nomes(montada):3} elementos — "
+            f"painel: {'SIM' if painel else 'não'} — "
+            + (", ".join(vistos) if vistos else "nenhum campo do painel")
+        )
+
+    print()
+    if not linhas:
+        print("  Nenhuma leitura respondeu. O Chrome está aberto? A janela está minimizada?")
+        return 1
+    melhor = max(linhas, key=lambda item: (item[1], sum(item[2].values())))
+    print(f"  Quem mais viu: “{melhor[0]}” ({melhor[1]} elementos com nome).")
+    if any(item[3] for item in linhas):
+        print("  O painel “Create API key” está na tela — e alguma leitura o enxerga.")
+    elif _nomes_do_diagnostico(linhas):
+        print("  O painel não está aberto agora. Abra (New key) e rode de novo para eu medir com ele aberto.")
+
+    relatorio = _gravar_relatorio(janela)
+    print()
+    print("  Nada foi clicado e nada foi gravado no .env.")
+    if relatorio.get("arquivo"):
+        print(f"  Relatório: {relatorio['arquivo']}")
+        print("  Me mande esse arquivo: é ele que diz qual leitura vê o painel.")
+    return 0
+
+
+def _nomes_do_diagnostico(linhas: list[tuple[str, int, dict[str, bool], bool]]) -> bool:
+    """Alguma leitura chegou perto da página? Serve para o conselho certo."""
+    return any(total >= LEITURA_POBRE for _fonte, total, _campos, _painel in linhas)
 
 
 def passo_ver(args) -> int:
@@ -953,6 +1040,12 @@ def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
             valor = str(montada.get(chave) or "").strip()
             if valor:
                 linhas.append(f"      {chave}: {valor}")
+        campos = _campos_do_painel(montada)
+        vistos = [rotulo for rotulo in CAMPOS_DO_PAINEL if campos[rotulo]]
+        linhas.append(
+            "      painel: "
+            + ("SIM — " + ", ".join(vistos) if vistos else "não — nenhum campo do painel nesta leitura")
+        )
         if nos:
             linhas.append(
                 "      primeiros: " + ", ".join(str(n.get("nome") or "")[:40] for n in nos[:40])
@@ -1798,6 +1891,11 @@ def passo_abrir(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Criar/colher a chave de IA pelo navegador.")
     parser.add_argument("--abrir", action="store_true", help="Abre a página de chaves no navegador.")
+    parser.add_argument(
+        "--diagnostico",
+        action="store_true",
+        help="Mede o que cada leitura do Windows enxerga. Não clica e não cria nada.",
+    )
     parser.add_argument("--ver", action="store_true", help="Lê a página e diz o que existe. Não clica.")
     parser.add_argument("--pegar", action="store_true", help="Grava a chave que está na área de transferência.")
     parser.add_argument("--criar", action="store_true", help="Tenta criar uma chave nova clicando na página.")
@@ -1837,6 +1935,8 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(RAIZ))
 
     try:
+        if args.diagnostico:
+            return passo_diagnostico(args)
         if args.abrir:
             return passo_abrir(args)
         if args.auto:

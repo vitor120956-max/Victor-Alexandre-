@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.91.23
+echo   Versao: 0.91.24
 echo   ----------------------------------------------------------------
 echo   Um duplo clique e o JARVIS abre a pagina, entra se preciso,
 echo   cria a chave, copia e grava no .env dele.
@@ -26,6 +26,9 @@ echo   ----------------------------------------------------------------
 echo   Faltou a chave. Ela pode estar copiada agora.
 echo   Se voce copiou no site, aperte Enter que eu leio.
 echo   Para sair, digite N e Enter.
+echo.
+echo   Se ele nao conseguiu VER o painel (erro de leitura), rode antes
+echo   diagnostico-chave.bat: ele mede a pagina e nao cria nada.
 set /p "de_novo=  Enter para tentar / N para sair: "
 if /i "%de_novo%"=="N" goto fim
 echo.
