@@ -174,6 +174,36 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.21 — a regra dos testes, e um buraco que ela encontrou
+
+Pedido do dono: *“toda vez q corrigir um bug crie um teste de regressao”*.
+
+Antes de escrever a regra, veio a prova de que ela é necessária: o primeiro
+teste de ponta a ponta **reprovou o código da 0.91.20**. Com a página lenta, o
+`--auto` desistia da criação automática antes de esperar — o
+`_levar_ate_as_chaves` devolve a última leitura que fez, e ela podia ser de uma
+página em construção. O `_criar_e_copiar`, que espera e relê, era chamado só
+quando a página já parecia pronta.
+
+Duas coisas entraram:
+
+| peça | regra |
+|---|---|
+| espera antes de desistir | sem o botão na leitura, o `--auto` espera a página sossegar e relê fundo **antes** de cair no plano B |
+| `docs/TESTES.md` | a regra do projeto, com a tabela versão → teste |
+| `test_regras_do_projeto.py` | a regra cobrada por máquina: toda versão com `NOVO-*.md` (a partir da 0.91.13) tem teste listado, e todo teste citado existe |
+
+O teste de ponta a ponta (`test_chave_ponta_a_ponta.py`) roda o `main()` de
+verdade contra um Chrome de mentira que **muda de estado quando é clicado**. De
+mentira: janelas, árvore, clique, área de transferência, relógio. De verdade:
+`chave-no-navegador.py`, `chave_web.py`, `arvore.py` e a escrita do `.env`.
+São 19 cenários, um por print do dono — da página lenta ao botão apagado.
+
+Por que a regra precisa ser cobrada por máquina: entre a 0.91.17 e a 0.91.20 o
+**mesmo sintoma** (“não criou a chave”) voltou quatro vezes por causas
+diferentes. Cada correção desfez um pedaço da anterior sem que ninguém
+percebesse — porque o teste da anterior não existia.
+
 ### 0.91.20 — o botão estava na tela e a leitura não o trouxe
 
 Print do dono: a página inteira, “New key” visível no canto direito, e a saída

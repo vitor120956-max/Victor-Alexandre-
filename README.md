@@ -112,6 +112,12 @@ abra <http://127.0.0.1:8000>. Se ele apontar outra versão, **`parar-jarvis.bat`
 encerra só o processo que se identifica como JARVIS e libera a porta — a
 comparação de versão está em [`docs/PENDRIVE.md`](docs/PENDRIVE.md) §16.
 
+**Toda correção entra com um teste de regressão.** A regra está em
+[`docs/TESTES.md`](docs/TESTES.md): o teste reproduz o defeito (não a
+correção), tem nome que diz o que aconteceu e cita a tela ou a frase que o
+revelou. A suíte confere sozinha que toda versão entregue tem o seu teste
+listado — `server/tests/test_regras_do_projeto.py`.
+
 Se algum `.bat` parar de
 fazer qualquer coisa, rode **`consertar-arquivos.bat`**: copiar o `D:\JARVIS>` do
 prompt junto com o comando faz o `>` **zerar** o arquivo. Em
@@ -756,7 +762,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.20", "skills": 325}`.
+`{"version": "0.91.21", "skills": 325}`.
 
 ## Verificações
 

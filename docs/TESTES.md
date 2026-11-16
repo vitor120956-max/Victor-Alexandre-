@@ -1,0 +1,108 @@
+# Testes de regressão — a regra do projeto
+
+> **Toda vez que um defeito for corrigido, entra um teste que reproduz aquele
+> defeito.**
+
+Pedido do dono, 15/11/2026: *“toda vez q corrigir um bug crie um teste de
+regressao”*. Este arquivo é a regra, e o teste
+`server/tests/test_regras_do_projeto.py` confere que ela está sendo cumprida.
+
+---
+
+## 1. Por que
+
+As versões 0.91.15 a 0.91.20 consertaram, uma atrás da outra, defeitos que só
+apareceram no PC do dono — e três delas consertaram o **mesmo sintoma** (“não
+criou a chave”) por causas diferentes:
+
+| versão | o que estava errado | como se descobriu |
+|---|---|---|
+| 0.91.15 | o diálogo tem três campos e o Create fica apagado | print da tela |
+| 0.91.16 | a leitura não chegava no painel (8 níveis) | print com o painel aberto |
+| 0.91.17 | a leitura voltava só a moldura (3 nomes) | print com “3 elementos” |
+| 0.91.18 | a ação do elemento devolve sucesso e não faz nada | print com “ação padrão do elemento” |
+| 0.91.19 | o nome ia para o rótulo, não para a caixa | print do campo vazio |
+| 0.91.20 | o botão não vinha na primeira leitura e o script desistia | print com o botão na tela |
+
+Sem teste de regressão, cada correção nova podia desfazer a anterior — e foi o
+que quase aconteceu (a espera da página passou a usar leitura rasa na 0.91.17 e
+o botão “sumiu” na 0.91.20).
+
+## 2. Como o teste é feito
+
+Quatro regras, e nenhuma delas é sobre estilo:
+
+1. **o teste reproduz o defeito, não a correção.** Ele monta a situação que
+   quebrou (a página carregando, a leitura com 3 nomes, o rótulo ao lado da
+   caixa) e exige o resultado certo. Se o teste passar na versão anterior à
+   correção, ele não é de regressão — é decoração;
+2. **o nome diz o que aconteceu**, não o nome da função:
+   `test_o_botao_aparece_na_terceira_leitura`, não `test_achar_elemento_2`;
+3. **o comentário cita a tela ou a frase do dono.** Quem ler daqui a três meses
+   precisa entender por que aquele teste existe;
+4. **fica no arquivo do assunto.** Diálogo e reconhecimento em
+   `test_chave_web.py`; o driver em `test_chave_no_navegador.py`; o caminho
+   inteiro em `test_chave_ponta_a_ponta.py`.
+
+## 3. Onde está cada um
+
+| versão | teste(s) |
+|---|---|
+| 0.91.13 | `test_chave_no_navegador.py`: a API aberta é avisada para reler o `.env` (`POST /api/ai/recarregar`) |
+| 0.91.14 | `test_chave_no_navegador.py`: a travessia do login (Sign In → Google → conta) e a conta ambígua que não é escolhida no chute |
+| 0.91.15 | `test_chave_no_navegador.py`: diálogo preenchido, Create conferido, maior prazo, “No limit” |
+| 0.91.16 | `test_chave_no_navegador.py`: leitura funda acha o painel enterrado; painel na outra janela; diagnóstico com contagem |
+| 0.91.17 | `test_chave_no_navegador.py`: leitura pobre repetida pela UIA; duas leituras ruins não fazem desistir; página que carrega é esperada; relatório das três fontes; leitura que despenca não vira veredito |
+| 0.91.18 | `test_chave_no_navegador.py`: clique de mouse antes da ação; `--sem-mouse` sem clique físico; primeiro clique engolido → segundo; janela confirmada na frente; Ctrl+C sem traceback; `--pegar` não repete a chave |
+| 0.91.19 | `test_chave_web.py`: campo do nome é a caixa; busca da página descartada; caixa sem nome achada pela posição; rótulo não é campo. `test_chave_no_navegador.py`: nome vai para a caixa; sem caixa não finge; `conferido=False` tenta de novo; botão apagado para a criação; “Create” não é o título |
+| 0.91.20 | `test_chave_no_navegador.py`: insiste até o botão aparecer; desistir diz o que viu; espera da página usa leitura funda; página que não sossega avisa |
+| 0.91.21 | `test_chave_ponta_a_ponta.py`: **19 cenários de ponta a ponta** — um por print do dono (página lenta, moldura no meio, ação que mente, clique engolido, nome no rótulo, botão apagado, chave velha na área, `.env` preservado) — e a espera da página antes de desistir da criação no `--auto`. `test_regras_do_projeto.py`: a própria regra, cobrada por máquina |
+
+## 4. O teste de ponta a ponta
+
+`server/tests/test_chave_ponta_a_ponta.py` roda o `main()` de verdade contra um
+Chrome de mentira que **muda de estado quando é clicado**:
+
+- de mentira: as janelas, a árvore de acessibilidade, o clique, a área de
+  transferência e o relógio;
+- de verdade: `chave-no-navegador.py`, `server/chave_web.py`,
+  `server/arvore.py` (montagem da árvore) e `configurar-chave.py` (o `.env` é
+  escrito e lido de um arquivo).
+
+Ele é o mais perto do PC do dono que dá para chegar sem o PC do dono. Cobre
+página lenta, moldura no meio do caminho, ação do elemento que mente, primeiro
+clique engolido, nome no rótulo, botão apagado, chave velha na área e `.env`
+preservado.
+
+## 5. Como rodar
+
+```bat
+.venv\Scripts\python -m pytest -o addopts="" -q server\tests\test_chave_ponta_a_ponta.py
+```
+
+Só o que interessa da chave:
+
+```bat
+.venv\Scripts\python -m pytest -o addopts="" -q server\tests\test_chave_no_navegador.py server\tests\test_chave_web.py
+```
+
+Suíte inteira (uns 6 minutos):
+
+```bat
+.venv\Scripts\python -m pytest -o addopts="" -q
+```
+
+O `-o addopts=""` é necessário porque o `pytest.ini` do projeto traz opções que
+não existem fora do ambiente de desenvolvimento.
+
+## 6. O que o projeto confere sozinho
+
+`server/tests/test_regras_do_projeto.py` verifica, a cada execução da suíte:
+
+- existe uma linha para cada `NOVO-<versão>.md` a partir da 0.91.13 na tabela
+  da seção 3 deste arquivo;
+- cada linha cita um arquivo de teste que existe de verdade;
+- este arquivo continua existindo (a regra não pode ser apagada sem alguém
+  perceber).
+
+É de propósito que ele seja chato: a regra só vale se for cobrada por máquina.

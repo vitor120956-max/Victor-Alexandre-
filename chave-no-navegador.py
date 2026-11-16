@@ -1485,6 +1485,18 @@ def passo_auto(args) -> int:
                     _guardar_conta(modulo, item["email"])
                     break
         dados = chave_web.diagnostico(montada)
+        if not dados["pode_criar"]:
+            # A página pode ter sido lida ainda carregando: o `_levar_ate_as_chaves`
+            # devolve a última leitura que fez, e ela pode ser a de uma página em
+            # construção. Medido no PC do dono (0.91.20): o botão estava na tela e
+            # a leitura não o trouxe. Antes de desistir da criação automática,
+            # espera a página sossegar e lê de novo — fundo.
+            janela, montada = _esperar_pagina_pronta(args, janela, montada)
+            try:
+                janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+            except PassoError:
+                pass
+            dados = chave_web.diagnostico(montada)
         if dados["pode_criar"]:
             # A janela é trazida para a frente antes de qualquer clique: o
             # clique físico acerta o que está por cima, e por cima pode estar
