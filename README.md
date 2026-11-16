@@ -207,6 +207,19 @@ a configuração do Windows volta ao que era no fim. Se nem isso resolver,
 (espera o Chrome fechar de verdade antes — reabrir cedo faz o Windows entregar a
 chamada ao processo antigo e a opção é ignorada).
 
+**O caminho que não lê a tela (0.91.27).** Depois de medir, no PC do dono, que a
+mesma janela passa de 85 para 3 elementos em segundos, o JARVIS ganhou um
+caminho que não depende de acessibilidade: o **protocolo do próprio Chrome**
+(DevTools Protocol), o mesmo que o F12 usa. `chrome-cdp.bat` abre um Chrome
+**próprio** do JARVIS (perfil em `perfil-cdp`, sem fechar o seu), espera a porta
+9222 e chama `chave-no-navegador.py --cdp --autorizar`, que faz o serviço
+perguntando à página — “New key”, nome, “No expiration”, “No limit”, “Create” —
+e grava a chave no `.env`. Duas regras do Chrome valem aqui: a porta só abre num
+Chrome **iniciado** com `--remote-debugging-port`, e desde o Chrome 136 ela é
+**ignorada no perfil padrão** (proteção contra roubo de cookie). Por isso o
+perfil separado e o **único** login pedido, na primeira vez, dentro dessa
+janela. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.3.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -782,7 +795,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.26", "skills": 325}`.
+`{"version": "0.91.27", "skills": 325}`.
 
 ## Verificações
 

@@ -174,6 +174,57 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.27 — o fim da loteria: a página responde pelo protocolo do Chrome
+
+O log de 16/11 fechou a conta do caminho antigo. Duas medidas, na mesma tarde:
+
+- o diagnóstico da **0.91.26** ligou o sinal de leitor de tela **antes** da
+  primeira leitura, pediu a árvore (`WM_GETOBJECT`, OBJID −4) **três vezes** e
+  nas três rodadas “DEPOIS do pedido de árvore” leu **3/3/3/3/2**;
+- o `pegar-chave.bat` leu **quatro nomes** — “Keys | Settings | OpenRouter”
+  duas vezes e “Restaurar páginas?” duas vezes — e chamou isso de “a página foi
+  lida inteira”.
+
+Ou seja: doze versões tentando **ler a tela** de uma janela que o Chrome
+publica e despublica quando quer, e um balão do Chrome (“Restaurar páginas?”,
+que apareceu porque o `taskkill /F` mata o navegador sem ele salvar a sessão)
+entrando na leitura como se fosse o site.
+
+A 0.91.27 para de ler a tela. O Chrome tem uma porta de controle própria, a
+mesma que o F12 usa — o **DevTools Protocol**. Por ela, o programa não olha
+pixels nem árvore de acessibilidade: ele **pergunta à página** quais são os
+botões e recebe a resposta em texto. É determinístico: a mesma página, a mesma
+pergunta, a mesma resposta.
+
+| peça | o que faz |
+|---|---|
+| `server/chrome_cdp.py` | WebSocket mínimo (aperto de mão, quadros mascarados, ping/pong) e `Sessao.chamar/javascript`. Sem biblioteca externa: o JARVIS é instalado por zip, sem internet |
+| `chave-no-navegador.py --cdp` | o fluxo inteiro pela página: “New key” → nome → expiração → limite → “Create” → lê a chave → grava no `.env` |
+| `_CDP_AJUDA` | a única função injetada na página (`pronta`, `texto`, `clicar`, `select`, `opcoes`, `digitar`, `chave`). Ela não sabe de OpenRouter: recebe uma ordem e devolve o que a página respondeu |
+| `chrome-cdp.bat` | abre um Chrome **próprio** do JARVIS (perfil em `perfil-cdp`), com a porta 9222, e já chama o `--cdp`. O Chrome do dono não é fechado |
+| `_leitura_boa` | título repetido e o balão “Restaurar páginas?” passam a ser moldura: 4 títulos iguais não são a página |
+| `--pegar` | se a porta 9222 está aberta, vai por ela; se não, segue o caminho antigo |
+
+Duas verdades do Chrome que a 0.91.27 respeita:
+
+1. **A porta não abre no Chrome que já estava rodando.** É preciso iniciar o
+   Chrome com `--remote-debugging-port=9222`.
+2. **Desde o Chrome 136 a porta é ignorada no perfil padrão.** O Chrome passou
+   a exigir um `--user-data-dir` que não seja o de sempre — é proteção contra
+   roubo de cookie por porta de depuração. Por isso o `chrome-cdp.bat` usa a
+   pasta `perfil-cdp`, e por isso a **primeira** vez pede um login nessa janela:
+   ela é separada da do dia a dia, e fica guardada para as próximas.
+
+O que fica provado por teste, sem Chrome nenhum:
+
+- o transporte (aperto de mão, quadro mascarado, resposta casada por `id`,
+  erro do Chrome virando frase em português);
+- o JavaScript injetado, rodando no `node` sobre uma página falsa que tem o
+  OpenRouter **e** a moldura do print de 16/11. O clique em “New key” acha o
+  botão mesmo com os títulos repetidos na frente, o painel abre, o nome entra,
+  a lista de expiração oferece “No expiration”, e a chave só aparece depois do
+  “Create”.
+
 ### 0.91.26 — a página publicada e despublicada em segundos
 
 O log do dono (16/11) trouxe a prova que faltava, e ela é de duas metades:

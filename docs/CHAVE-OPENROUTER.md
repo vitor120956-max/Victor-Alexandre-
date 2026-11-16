@@ -191,6 +191,48 @@ a lista de processos) antes de abrir: reabrir cedo faz o Windows entregar a
 chamada ao processo antigo, e aí a opção é ignorada — foi por isso que, no log
 de 16/11, o Chrome voltou com 43 elementos uma vez e com 3 na seguinte.
 
+### 7.3 O caminho que não lê a tela (0.91.27)
+
+O log de 16/11 mostrou que o sinal de leitor de tela **não segura** a página
+por mais que alguns segundos, e que o balão “Restaurar páginas?” (o Chrome
+pergunta isso depois de ser morto com `taskkill /F`) entrava na leitura como se
+fosse o site. Doze versões gastas em cima da pergunta errada.
+
+O Chrome tem uma porta de controle própria — a mesma que o F12 usa, o
+**DevTools Protocol**. Por ela o programa não lê tela: ele pergunta à página
+quais são os botões e recebe a resposta em texto. A página pode despublicar a
+árvore de acessibilidade quando quiser; a porta continua lá.
+
+    chrome-cdp.bat        (um duplo clique)
+
+O que ele faz, na ordem:
+
+1. abre um Chrome **próprio do JARVIS**, com o perfil na pasta `perfil-cdp`
+   (o Chrome do dia a dia **não é fechado**; nada de `taskkill`);
+2. espera a porta 9222 responder (até 20 s);
+3. chama `chave-no-navegador.py --cdp --autorizar`, que faz o serviço inteiro
+   dentro da página: “New key” → nome → expiração “No expiration” → limite
+   “No limit” → “Create” → lê a chave → grava no `.env`.
+
+Duas condições do Chrome, e nenhuma é escolha nossa:
+
+- a porta **só abre** num Chrome iniciado com `--remote-debugging-port=9222`;
+- **desde o Chrome 136** essa opção é **ignorada no perfil padrão** (proteção
+  contra roubo de cookie por porta de depuração). Por isso o perfil separado.
+
+A consequência prática, e ela é uma vez só: na **primeira** execução, entre na
+sua conta do OpenRouter **na janela do JARVIS**. É uma janela separada da sua;
+o login fica guardado em `perfil-cdp`, e nas próximas vezes não é pedido de
+novo (o `perfil-cdp` também sobrevive a atualização do JARVIS — ele está na
+pasta do programa, não no zip).
+
+Se a janela abrir sem login, o programa diz exatamente isso e não clica em
+nada. Se a porta não abrir, o `chrome-cdp.bat` diz para rodar de novo (o Chrome
+às vezes leva mais que 20 s na primeira abertura de um perfil novo).
+
+O `pegar-chave.bat` continua existindo: se a porta 9222 estiver aberta, ele vai
+por ela; se não, faz o caminho antigo (ler a tela, esperar a cópia do dono).
+
 ## 8. De onde veio este manual
 
 - `openrouter.ai/docs` — *Creating an API key*: “dê um nome e, opcionalmente,

@@ -1431,6 +1431,51 @@ def test_pagina_pequena_nao_e_confundida_com_moldura(monkeypatch):
     assert not script._leitura_boa(_moldura()), "“Chrome Legacy Window” é a assinatura da moldura"
 
 
+def test_a_janela_recem_aberta_com_titulos_repetidos_nao_e_a_pagina():
+    """0.91.27 — o erro de 16/11, com a leitura que ele produziu.
+
+    O `taskkill /F` fez o Chrome reabrir perguntando “Restaurar páginas?”. A
+    leitura devolveu **4 nomes**, dois deles repetidos, e o `_leitura_boa` (≥3
+    nomes, sem as marcas antigas de moldura) aprovou. O script então concluiu
+    “o clique não abriu o painel — a página foi lida inteira e o botão estava
+    nela”, quando o que ele tinha lido era a moldura de uma janela sem página.
+
+    Título repetido é a assinatura disso: a página não se apresenta duas vezes
+    com o mesmo nome.
+    """
+    script = _script()
+
+    leitura_do_dia = _pagina(
+        _no("Keys | Settings | OpenRouter"),
+        _no("Keys | Settings | OpenRouter"),
+        _no("Restaurar páginas?"),
+        _no("Restaurar páginas?"),
+    )
+    assert not script._leitura_boa(leitura_do_dia), (
+        "quatro títulos de janela repetidos não são a página do OpenRouter"
+    )
+    assert script._parece_moldura(leitura_do_dia)
+
+
+def test_o_balao_de_restaurar_paginas_e_moldura_por_nome():
+    """O balão do Chrome (“Restaurar páginas?”) nunca é conteúdo da página."""
+    script = _script()
+
+    assert script._parece_moldura(_pagina(_no("Restaurar páginas?"), _no("Restaurar")))
+    assert not script._parece_moldura(
+        _pagina(_no("API keys"), _no("New key"), _no("Restaurar chave apagada"))
+    ), "“Restaurar chave” é texto do site, não o balão do Chrome"
+
+
+def test_a_pagina_pequena_de_quatro_nomes_distintos_continua_boa():
+    """A régua nova não pode reprovar a página legítima por ter poucos nomes."""
+    script = _script()
+
+    assert script._leitura_boa(
+        _pagina(_no("API keys"), _no("New key"), _no("Name"), _no("Create"))
+    )
+
+
 def test_o_relatorio_mede_todas_as_vistas(monkeypatch, tmp_path):
     """Quando o painel está na tela e a leitura não o traz, a pergunta é *qual vista* vê."""
     script = _script()
@@ -2097,3 +2142,193 @@ def test_sem_botao_o_passo_nao_segue_para_o_create(monkeypatch, capsys, tmp_path
     assert "não achei o botão" in saida
     assert "New key" in saida or "New key" in saida.replace("“", "").replace("”", "")
     assert config.gravadas == []
+
+
+# ---------------------------------------------------------------------------
+# O caminho pelo protocolo do Chrome (0.91.27)
+# ---------------------------------------------------------------------------
+# Nada de janela, nada de acessibilidade, nada de área de transferência: a
+# página responde pelas funções dela. Aqui a "página" é um dicionário e a
+# sessão é um dublê que devolve o que aquela página responderia.
+
+class PaginaFalsa:
+    """Uma página do OpenRouter que responde às ordens como o site de verdade."""
+
+    def __init__(self, *, logado: bool = True, abre_painel: bool = True, da_chave: bool = True) -> None:
+        self.logado = logado
+        self.abre_painel = abre_painel
+        self.da_chave = da_chave
+        self.painel = False
+        self.nome = ""
+        self.pedidos: list[tuple] = []
+        self.criada = False
+        self.lista: list[str] = []
+
+    # ---------------------------------------------------------- o que a página vê
+    def texto(self) -> str:
+        if not self.logado:
+            return "openrouter sign in log in"
+        corpo = "api keys new key name created last used"
+        if self.painel:
+            corpo += " create api key name " + self.nome
+        if self.criada:
+            corpo += " sk-or-v1-" + "b" * 64
+        return corpo
+
+    def responder(self, ordem: str, *argumentos):
+        self.pedidos.append((ordem, *argumentos))
+        if ordem == "pronta":
+            return {"url": "https://openrouter.ai/settings/keys", "texto": self.texto(), "tem_painel": self.painel}
+        if ordem == "texto":
+            return self.texto()
+        if ordem == "clicar":
+            alvo = str(argumentos[0]).lower()
+            if alvo in ("new key", "create key"):
+                self.painel = self.abre_painel
+                return True
+            if alvo == "create":
+                self.criada = True
+                return True
+            if alvo in ("select expiration", "expiration"):
+                self.lista = ["1 day", "30 days", "No expiration"]
+                return True
+            if alvo in ("credit limit", "choose a credit limit"):
+                self.lista = ["No limit", "5", "10"]
+                return True
+            if alvo in ("no expiration", "no limit"):
+                return True
+            return False
+        if ordem == "opcoes":
+            return self.lista
+        if ordem == "digitar":
+            self.nome = str(argumentos[1])
+            return True
+        if ordem == "select":
+            return False
+        if ordem == "chave":
+            return ("sk-or-v1-" + "b" * 64) if self.criada and self.da_chave else ""
+        raise AssertionError(f"ordem desconhecida: {ordem}")
+
+
+class SessaoFalsa:
+    def __init__(self, pagina: PaginaFalsa) -> None:
+        self.pagina = pagina
+        self.fechada = False
+
+    def javascript(self, expressao: str):
+        # O script manda `window.__JARVIS("op", ...)`; aqui basta ler a ordem.
+        import json as _json
+
+        assert expressao.startswith("window.__JARVIS("), expressao[:60]
+        dentro = expressao[len("window.__JARVIS(") : -1]
+        partes = _json.loads("[" + dentro + "]")
+        return self.pagina.responder(*partes)
+
+    def fechar(self) -> None:
+        self.fechada = True
+
+
+@pytest.fixture(autouse=False)
+def script_cdp(monkeypatch):
+    """O script com as esperas em zero — a página falsa responde na hora."""
+    script = _script()
+    monkeypatch.setattr(script, "ESPERA_PAGINA_CDP", 0.0)
+    monkeypatch.setattr(script, "ESPERA_PAINEL_CDP", 0.0)
+    monkeypatch.setattr(script, "ESPERA_CHAVE_CDP", 0.0)
+    return script
+
+
+def _args_cdp(**extra):
+    base = {"provedor": "openrouter", "nome": "jarvis-teste", "autorizar": True, "porta": 9222}
+    base.update(extra)
+    return types.SimpleNamespace(**base)
+
+
+def test_pelo_protocolo_a_chave_e_criada_preenchida_e_gravada(monkeypatch, script_cdp):
+    """O caminho inteiro: página lida pelo Chrome, painel preenchido, chave salva."""
+    script = script_cdp
+    pagina = PaginaFalsa()
+    sessao = SessaoFalsa(pagina)
+    gravadas: list[str] = []
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    codigo = script._cdp_fluxo(_args_cdp(), sessao)
+
+    assert codigo == 0
+    assert gravadas == ["sk-or-v1-" + "b" * 64]
+    assert pagina.nome == "jarvis-teste", "o nome tem de ser digitado no painel"
+    assert ("clicar", "No expiration") in pagina.pedidos, "a expiração escolhida é a que não expira"
+    assert ("clicar", "No limit") in pagina.pedidos, "o limite escolhido é o que não limita"
+    ordens = [pedido[0] for pedido in pagina.pedidos]
+    assert ordens.index("digitar") < ordens.index("chave"), "preenche antes de criar"
+    assert ("clicar", "New key") in pagina.pedidos
+
+
+def test_pelo_protocolo_sem_o_painel_o_passo_para_e_diz_por_que(monkeypatch, script_cdp):
+    """Clique sem painel: para no clique — não vai procurar a chave na página."""
+    script = script_cdp
+    pagina = PaginaFalsa(abre_painel=False)
+    gravadas: list[str] = []
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    codigo = script._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+
+    assert codigo == 1
+    assert not gravadas
+    assert ("clicar", "Create") not in pagina.pedidos
+
+
+def test_pelo_protocolo_a_janela_sem_conta_pede_para_entrar_uma_vez(monkeypatch, script_cdp):
+    """A janela do JARVIS é separada: sem login nela, o passo diz isso com todas as letras."""
+    script = script_cdp
+    pagina = PaginaFalsa(logado=False)
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: 1)
+
+    codigo = script._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+
+    assert codigo == 1
+    assert not pagina.painel
+    assert ("clicar", "New key") not in pagina.pedidos
+
+
+def test_pelo_protocolo_sem_autorizar_nada_e_clicado(monkeypatch, script_cdp):
+    """Sem `--autorizar`, o caminho novo só olha — como o antigo."""
+    script = script_cdp
+    pagina = PaginaFalsa()
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: 1)
+
+    codigo = script._cdp_fluxo(_args_cdp(autorizar=False), SessaoFalsa(pagina))
+
+    assert codigo == 1
+    assert [pedido for pedido in pagina.pedidos if pedido[0] == "clicar"] == []
+
+
+def test_pelo_protocolo_a_chave_que_nao_aparece_e_erro_e_nao_gravacao(monkeypatch, script_cdp):
+    """“Create” sem chave na tela não pode virar `.env` vazio."""
+    script = script_cdp
+    pagina = PaginaFalsa(da_chave=False)
+    gravadas: list[str] = []
+    monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    codigo = script._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+
+    assert codigo == 1
+    assert gravadas == []
+
+
+def test_o_pegar_escolhe_o_protocolo_quando_a_porta_esta_aberta(monkeypatch):
+    """`pegar-chave.bat` sozinho passa a usar a porta quando ela está de pé."""
+    script = _script()
+    from server import chrome_cdp
+
+    monkeypatch.setattr(chrome_cdp, "porta_aberta", lambda *_a, **_k: True)
+    chamado = {}
+    monkeypatch.setattr(script, "passo_cdp", lambda args: chamado.setdefault("cdp", args) and 0)
+    monkeypatch.setattr(script, "passo_pegar", lambda args: chamado.setdefault("pegar", args) and 0)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(script, "_configurar_ambiente", lambda: None)
+    monkeypatch.setattr(script, "_desligar_a_acessibilidade", lambda: None)
+
+    script.main(["--pegar", "--autorizar"])
+
+    assert "cdp" in chamado and "pegar" not in chamado

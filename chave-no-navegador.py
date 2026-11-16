@@ -145,12 +145,17 @@ def _nomes(montada: dict) -> int:
     return len(chave_web.elementos(montada))
 
 
-# Nomes que só existem na **moldura** do navegador, nunca na página.
+# Nomes que só existem na moldura do navegador, nunca na página.
 MARCAS_DE_MOLDURA = (
     "chrome legacy window",
     "chrome_renderwidgethosthwnd",
     "chrome_widgetwin",
     "mozilla windowclass",
+    # Print de 16/11 09:12, depois de reabrir o Chrome: 4 elementos, os títulos
+    # repetidos e o balão “Restaurar páginas?”. É a moldura de uma janela que
+    # acabou de nascer — e o script chamou isso de “a página foi lida inteira”.
+    "restaurar paginas",
+    "restore pages",
 )
 
 
@@ -158,10 +163,14 @@ def _parece_moldura(montada: dict) -> bool:
     """A leitura veio da moldura do navegador, e não da página?"""
     from server import chave_web
 
-    for no in chave_web.elementos(montada)[:12]:
-        nome = chave_web.normalizar(str(no.get("nome") or ""))
-        if any(marca in nome for marca in MARCAS_DE_MOLDURA):
-            return True
+    nomes = [chave_web.normalizar(str(no.get("nome") or "")) for no in chave_web.elementos(montada)[:12]]
+    if any(marca in nome for nome in nomes for marca in MARCAS_DE_MOLDURA):
+        return True
+    # Título repetido é sinal de moldura também: a página não se apresenta duas
+    # vezes com o mesmo nome. Foi o que apareceu com o Chrome recém-aberto.
+    com_nome = [nome for nome in nomes if nome]
+    if len(com_nome) >= 4 and len(set(com_nome)) <= len(com_nome) // 2:
+        return True
     return False
 
 
@@ -2117,6 +2126,323 @@ def passo_auto(args) -> int:
     return _gravar(modulo, chave)
 
 
+# ---------------------------------------------------------------------------
+# O caminho pelo protocolo do Chrome (0.91.27)
+# ---------------------------------------------------------------------------
+# Doze versões tentaram ler a página pela árvore de acessibilidade do Windows.
+# O diagnóstico de 16/11 mostrou a mesma janela passando de 85 elementos para 3
+# em segundos — e nem o sinal de leitor de tela segurou. Aqui não se lê tela:
+# pergunta-se à própria página quais são os elementos, pelo DevTools Protocol.
+#
+# Uma função só, injetada na página. Ela não sabe de OpenRouter: recebe uma
+# ordem e devolve o que a página respondeu.
+_CDP_AJUDA = r"""
+window.__JARVIS = function (op, a, b) {
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const visivel = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const estilo = getComputedStyle(el);
+    return estilo.visibility !== 'hidden' && estilo.display !== 'none';
+  };
+  const clicaveis = () => [...document.querySelectorAll(
+    'button, a, [role="button"], [role="option"], [role="menuitem"], [role="combobox"]'
+  )].filter(visivel);
+  const painel = () => document.querySelector('[role="dialog"], [role="alertdialog"]');
+
+  if (op === 'pronta') {
+    const texto = norm(document.body.innerText);
+    return { url: location.href, texto: texto.slice(0, 4000), tem_painel: !!painel() };
+  }
+  if (op === 'texto') {
+    const alvo = painel() || document.body;
+    return (alvo.innerText || '').slice(0, 6000);
+  }
+  if (op === 'clicar') {
+    const alvo = norm(a);
+    const lista = clicaveis();
+    const achado = lista.find((el) => norm(el.innerText) === alvo)
+      || lista.find((el) => norm(el.innerText).startsWith(alvo))
+      || lista.find((el) => norm(el.innerText).includes(alvo));
+    if (!achado) return false;
+    achado.scrollIntoView({ block: 'center' });
+    achado.click();
+    return true;
+  }
+  if (op === 'opcoes') {
+    return clicaveis()
+      .filter((el) => el.getAttribute('role') === 'option' || el.hasAttribute('data-radix-collection-item'))
+      .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+  }
+  if (op === 'select') {
+    const alvo = norm(a);
+    for (const sel of document.querySelectorAll('select')) {
+      if (!visivel(sel)) continue;
+      const opcao = [...sel.options].find((o) => norm(o.text) === alvo || norm(o.text).includes(alvo));
+      if (!opcao) continue;
+      sel.value = opcao.value;
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    return false;
+  }
+  if (op === 'digitar') {
+    const onde = painel() || document;
+    const campos = [...onde.querySelectorAll('input, textarea')].filter(visivel);
+    if (!campos.length) return false;
+    const campo = campos.find((el) => /name|nome/i.test(el.name || el.id || '')) || campos[0];
+    const prototipo = campo.tagName === 'TEXTAREA'
+      ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const definir = Object.getOwnPropertyDescriptor(prototipo, 'value').set;
+    campo.focus();
+    definir.call(campo, '');
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+    definir.call(campo, b);
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+    campo.dispatchEvent(new Event('change', { bubbles: true }));
+    return campo.value === b;
+  }
+  if (op === 'chave') {
+    // A chave pode estar no texto da página, num campo somente-leitura ou num
+    // atributo. O padrão exige os 64 hex: chave mascarada (“sk-or-v1-…abc”)
+    // não casa, e é bom que não case.
+    const padrao = /sk-or-v1-[0-9a-f]{64}/;
+    const noTexto = (document.body.innerText || '').match(padrao);
+    if (noTexto) return noTexto[0];
+    for (const el of document.querySelectorAll('input, textarea, code, span')) {
+      const valor = el.value || el.textContent || '';
+      const achado = String(valor).match(padrao);
+      if (achado) return achado[0];
+    }
+    const noHtml = (document.body.innerHTML || '').match(padrao);
+    return noHtml ? noHtml[0] : '';
+  }
+  return null;
+};
+true;
+"""
+
+
+# Quanto esperar, em segundos. Ficam aqui para o teste poder encurtar: com
+# espera cheia, a suíte passaria minutos parada esperando uma página que o
+# dublê já respondeu.
+ESPERA_PAGINA_CDP = 25.0
+ESPERA_PAINEL_CDP = 15.0
+ESPERA_CHAVE_CDP = 20.0
+
+
+def _cdp_chamar(sessao, op: str, *argumentos):
+    """Chama a função injetada com uma ordem e os argumentos em JSON."""
+    import json as _json
+
+    partes = [_json.dumps(op)] + [_json.dumps(item) for item in argumentos]
+    return sessao.javascript(f"window.__JARVIS({', '.join(partes)})")
+
+
+def _cdp_abrir_sessao(args, avisar=True):
+    """A sessão de controle com a página do provedor. `None` quando não há porta."""
+    from server import chrome_cdp
+
+    porta = int(getattr(args, "porta", 0) or chrome_cdp.PORTA_PADRAO)
+    if not chrome_cdp.porta_aberta(porta):
+        return None, ""
+    pagina = chrome_cdp.achar_alvo(porta, "openrouter", segundos=2.0) or chrome_cdp.achar_alvo(
+        porta, "", segundos=0.5
+    )
+    if pagina is None:
+        return None, ""
+    try:
+        sessao = chrome_cdp.Sessao(pagina)
+        sessao.javascript(_CDP_AJUDA)
+    except Exception as exc:  # noqa: BLE001 - CDP é de terceiros: nunca derrubar
+        if avisar:
+            print(f"  não consegui falar com o Chrome pelo protocolo ({exc}).")
+        return None, ""
+    return sessao, str(pagina.get("url") or "")
+
+
+def _cdp_esperar(sessao, condicao, segundos: float, passo: float = 0.5):
+    """Espera a página satisfazer `condicao(estado)`. Devolve o último estado."""
+    fim = time.time() + segundos
+    estado = {}
+    while True:
+        try:
+            estado = _cdp_chamar(sessao, "pronta") or {}
+        except Exception:  # noqa: BLE001 - a aba pode estar navegando
+            estado = {}
+        if condicao(estado):
+            return estado
+        if time.time() >= fim:
+            return estado
+        time.sleep(passo)
+
+
+def _cdp_preencher_painel(sessao, nome: str) -> list[str]:
+    """Os três campos do painel: nome, expiração e limite. Devolve o que ficou."""
+    feitos: list[str] = []
+
+    if _cdp_chamar(sessao, "digitar", "nome", nome):
+        feitos.append("nome")
+        print(f"     nome: {nome!r} digitado na caixa do painel.")
+    else:
+        print("     nome: não achei a caixa de texto do painel.")
+
+    # Expiração e limite: cada um tem um campo que abre uma lista.
+    for campo, rotulos, escolhida in (
+        (
+            "expiração",
+            ("Select expiration", "Expiration", "Select an expiration"),
+            "No expiration",
+        ),
+        (
+            "limite",
+            ("Choose a credit limit", "Credit limit", "Choose a limit"),
+            "No limit",
+        ),
+    ):
+        # Um <select> de verdade se resolve sem abrir nada.
+        if _cdp_chamar(sessao, "select", escolhida):
+            feitos.append(campo)
+            print(f"     {campo}: “{escolhida}” escolhido direto no campo.")
+            continue
+        aberto = False
+        for texto in rotulos:
+            if _cdp_chamar(sessao, "clicar", texto):
+                aberto = True
+                break
+        if not aberto:
+            print(f"     {campo}: não achei a lista na tela.")
+            continue
+        lista: list[str] = []
+        fim = time.time() + 5.0
+        while time.time() < fim:
+            lista = _cdp_chamar(sessao, "opcoes") or []
+            if lista:
+                break
+            time.sleep(0.3)
+        if not lista:
+            print(f"     {campo}: a lista abriu e não mostrou opção nenhuma.")
+            continue
+        escolha = _escolha_da_lista(campo, lista)
+        if not escolha:
+            print(f"     {campo}: nenhuma opção serve ({', '.join(lista[:6])}).")
+            continue
+        if _cdp_chamar(sessao, "clicar", escolha):
+            feitos.append(campo)
+            print(f"     {campo}: escolhendo “{escolha}”.")
+        else:
+            print(f"     {campo}: não consegui clicar em “{escolha}”.")
+    return feitos
+
+
+def _escolha_da_lista(campo: str, lista: list[str]) -> str | None:
+    """Qual opção escolher — a mesma regra do painel lido pela árvore."""
+    from server import chave_web
+
+    if campo == "expiração":
+        return chave_web.melhor_expiracao(lista)
+    # Uma lista de limite não tem opção de expiração — mas se a página devolver
+    # as duas coisas na mesma lista, escolher “No expiration” como limite
+    # deixaria o campo sem valor e o “Create” apagado.
+    so_limite = [opcao for opcao in lista if "expir" not in chave_web.normalizar(opcao)]
+    return chave_web.melhor_limite(so_limite, aceitar_maior=True)
+
+
+def passo_cdp(args) -> int:
+    """Cria a chave pelo protocolo do Chrome — sem ler a tela, sem adivinhar.
+
+    Exige o Chrome aberto pelo `chrome-cdp.bat` (porta de depuração ligada).
+    De verdade aqui: a página, pelos olhos dela mesma (`document`), e a escrita
+    do `.env`. Nada de árvore de acessibilidade, nada de área de transferência.
+    """
+    from server import chrome_cdp
+
+    porta = int(getattr(args, "porta", 0) or chrome_cdp.PORTA_PADRAO)
+    if not chrome_cdp.porta_aberta(porta):
+        print("  NÃO DEI: o Chrome não está com a porta de controle aberta.")
+        print("  Rode o `chrome-cdp.bat` — ele abre o Chrome já preparado e chama")
+        print(f"  este comando de novo. (porta {porta}, só no seu computador)")
+        return 1
+    sessao, endereco = _cdp_abrir_sessao(args)
+    if sessao is None:
+        print(f"  NÃO DEI: a porta {porta} está aberta, mas não achei uma aba para controlar.")
+        print("  Deixe a página do OpenRouter aberta na janela do JARVIS e rode de novo.")
+        return 1
+    print(f"  Página: {endereco}")
+    print("  Lendo pelo protocolo do Chrome (nada de tela, nada de mouse).")
+    try:
+        return _cdp_fluxo(args, sessao)
+    finally:
+        sessao.fechar()
+
+
+def _cdp_fluxo(args, sessao) -> int:
+    from server import chave_web
+
+    modulo = _modulo_do_configurador()
+    provedor, base = _provedor_do_env(modulo)
+    provedor = args.provedor or provedor
+    guia = modulo.guia_do_provedor(provedor or "openrouter", base)
+
+    def pronta(item):
+        texto = item.get("texto") or ""
+        return "api keys" in texto or "sign in" in texto or "log in" in texto
+
+    estado = _cdp_esperar(sessao, pronta, ESPERA_PAGINA_CDP)
+    texto = estado.get("texto") or ""
+    if "api keys" not in texto:
+        if "sign in" in texto or "log in" in texto:
+            print("  NÃO DEI: esta janela do Chrome não está com a sua conta aberta.")
+            print("  Ela é separada da que você usa todo dia (o Chrome não deixa")
+            print("  controlar a janela normal). Entre NESTA janela uma vez — ela")
+            print("  fica guardada no perfil do JARVIS — e rode de novo.")
+            return 1
+        print("  NÃO DEI: a página de chaves não carregou nesta aba.")
+        print(f"  Abra {guia.get('onde') or 'openrouter.ai/keys'} no Chrome e rode de novo.")
+        return 1
+    print("  1. página de chaves aberta.")
+    if not getattr(args, "autorizar", False):
+        print("\n  Sem --autorizar eu só olhei: nada foi clicado, nada foi criado.")
+        print("  O `chrome-cdp.bat` já chama este comando com a autorização.")
+        return 1
+
+    if not any(_cdp_chamar(sessao, "clicar", texto) for texto in ("New key", "Create key", "Create Key", "Create API key")):
+        print("  NÃO DEI: não achei o botão “New key” na página.")
+        return 1
+    print("  2. cliquei em “New key”.")
+
+    estado = _cdp_esperar(sessao, lambda item: bool(item.get("tem_painel")), ESPERA_PAINEL_CDP)
+    if not estado.get("tem_painel"):
+        print("  NÃO DEI: o painel “Create API key” não abriu depois do clique.")
+        return 1
+    print("  3. painel aberto:")
+    nome = (args.nome or "").strip() or chave_web.nome_sugerido()
+    _cdp_preencher_painel(sessao, nome)
+
+    if not _cdp_chamar(sessao, "clicar", "Create"):
+        print("  NÃO DEI: não achei o botão “Create” no painel.")
+        return 1
+    print("  4. cliquei em “Create”; esperando a chave aparecer na página…")
+    chave = ""
+    fim = time.time() + ESPERA_CHAVE_CDP
+    while True:
+        # Olha antes de esperar: com a página já respondida, esperar seria
+        # atraso puro — e com espera zero o laço `while time()<fim` nem rodava.
+        chave = str(_cdp_chamar(sessao, "chave") or "")
+        if chave or time.time() >= fim:
+            break
+        time.sleep(0.5)
+    if not chave:
+        print("  NÃO DEI: a chave não apareceu no texto da página.")
+        print("  Veja a aba do Chrome: se o botão “Create” estiver apagado, falta campo.")
+        return 1
+    print(f"  5. chave na mão: {modulo.mascarar(chave)}")
+    return _gravar(modulo, chave)
+
+
 def passo_abrir(args) -> int:
     modulo = _modulo_do_configurador()
     guia = modulo.guia_do_provedor("openrouter", "https://openrouter.ai/api/v1")
@@ -2166,6 +2492,12 @@ def main(argv: list[str] | None = None) -> int:
         help="(já é o padrão no --criar) Autoriza o clique físico nos botões medidos.",
     )
     parser.add_argument("--alvo", default="chrome", help="Pedaço do título da janela (padrão: chrome).")
+    parser.add_argument(
+        "--cdp",
+        action="store_true",
+        help="Cria a chave pelo protocolo do Chrome (exige o chrome-cdp.bat). Não lê a tela.",
+    )
+    parser.add_argument("--porta", type=int, default=9222, help="Porta de controle do Chrome (padrão: 9222).")
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -2176,6 +2508,8 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(RAIZ))
 
     try:
+        if args.cdp:
+            return passo_cdp(args)
         if args.diagnostico:
             return passo_diagnostico(args)
         if args.abrir:
@@ -2183,6 +2517,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.auto:
             return passo_auto(args)
         if args.pegar:
+            from server import chrome_cdp
+
+            # Porta aberta = o Chrome do `chrome-cdp.bat` está de pé. Aí não se
+            # lê tela: a página responde pelo protocolo dela (0.91.27).
+            if chrome_cdp.porta_aberta(int(args.porta)):
+                print("  O Chrome está com a porta de controle aberta: vou por ela,")
+                print("  sem ler a tela e sem área de transferência.")
+                return passo_cdp(args)
             return passo_pegar(args)
         if args.criar:
             return passo_criar(args)
