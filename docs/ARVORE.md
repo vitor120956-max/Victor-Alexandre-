@@ -174,7 +174,38 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
-### 0.91.24 — o manual da página, e um jeito de medir sem gastar chave
+### 0.91.25 — o Chrome não estava publicando a página
+
+O `diagnostico-chave.bat` da 0.91.25 respondeu a pergunta, e a resposta não era
+nenhuma das que eu vinha tentando:
+
+    auto        :   3 elementos — painel: não
+    uia         :   3 elementos — painel: não
+    uia_raw     :   3 elementos — painel: não
+    uia_content :   3 elementos — painel: não
+    msaa        :   2 elementos — painel: não
+
+Com o painel **aberto na tela**. Não era a janela atrás (0.91.22), nem a vista
+(0.91.23): o Chrome estava com a **acessibilidade desligada** e não publicava a
+página para ninguém.
+
+| peça | o que faz |
+|---|---|
+| `arvore_windows.ligar_leitor_de_tela` | liga `SPI_SETSCREENREADER` — o mesmo sinal que o NVDA dá ao abrir; é ele que faz o Chrome publicar a página |
+| `arvore_windows.acordar_acessibilidade` | o sinal + um `WM_GETOBJECT` na janela e nas filhas (o pedido formal de árvore) |
+| `arvore_windows.desligar_leitor_de_tela` | devolve a configuração como estava — o programa não toma o que não é dele |
+| `_acordar_a_acessibilidade` | chamado quando a leitura vem pobre; **uma vez por janela**, com aviso em português |
+| `--diagnostico` | mostra o estado do modo leitor de tela, mede **antes e depois** de ligar, e lista as **janelas filhas** do Chrome com a contagem de cada uma |
+| `chrome-acessibilidade.bat` | último recurso: fecha o Chrome e abre com `--force-renderer-accessibility` |
+
+O teste reproduz o print: um Chrome falso que devolve moldura em **todas** as
+fontes até receber o sinal — e o caminho inteiro termina com a chave no `.env`.
+
+O que continua não provado: se o sinal é suficiente no Chrome do dono. Se não
+for, o diagnóstico agora diz isso — e a diferença entre “o Chrome não publica
+nada” e “eu leio a janela errada” aparece nas linhas das filhas.
+
+### 0.91.25 — o manual da página, e um jeito de medir sem gastar chave
 
 Pedido do dono (16/11): *“eu vou ter que atualizar e testar de novo, você não
 consegue testar isso; leia o manual da página de como configurar, onde é o

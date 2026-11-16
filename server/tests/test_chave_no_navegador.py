@@ -1244,6 +1244,54 @@ def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
     assert "primeiros:" in texto
 
 
+def test_o_sinal_de_leitor_de_tela_e_pedido_uma_vez_por_janela(monkeypatch, capsys):
+    """Print de 16/11 08:35: 3 elementos em todas as leituras, com o painel na tela.
+
+    O sinal que faz o Chrome publicar a página é caro e mexe numa configuração
+    do Windows: uma vez por janela basta, e o dono tem de saber que ele foi
+    dado. Repetir a cada leitura seria mexer no sistema em laço.
+    """
+    script = _script()
+    script._ACESSIBILIDADE_PEDIDA.clear()
+
+    class SemPagina:
+        def __init__(self) -> None:
+            self.pedidos = 0
+
+        def janela_muda(self, _handle) -> bool:
+            return True
+
+        def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+            return {
+                "janela": {"handle": int(handle), "titulo": "Keys | Settings | OpenRouter"},
+                "raiz": _moldura()["arvore"],
+                "fonte": fonte,
+            }
+
+        def acordar_acessibilidade(self, _handle=0):
+            self.pedidos += 1
+            return {"antes": False, "ligado": True, "depois": True}
+
+        def trazer_para_frente(self, _handle) -> bool:
+            return True
+
+        def janela_em_foco(self):
+            return {"handle": 4242, "titulo": "Keys | Settings | OpenRouter"}
+
+    falso = SemPagina()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    script._acordar_leitura(JANELA, _moldura(), avisar=True)
+    script._acordar_leitura(JANELA, _moldura(), avisar=True)
+
+    assert falso.pedidos == 1, "o sinal é dado uma vez por janela, não a cada leitura"
+    assert "modo leitor de tela" in capsys.readouterr().out
+
+
 def test_o_diagnostico_mede_as_vistas_e_nao_clica_em_nada(monkeypatch, tmp_path, capsys):
     """Pedido do dono (16/11): ele não pode testar de graça, cada rodada custa uma chave.
 

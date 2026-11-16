@@ -91,6 +91,7 @@ class ChromeFalso:
         nome_digitado: bool = True,
         dorme_depois_do_clique: bool = False,
         so_na_leitura_crua: bool = False,
+        acessibilidade_desligada: bool = False,
     ) -> None:
         self.atraso = atraso
         # Print de 15/11 (0.91.21): o painel abriu, o dono foi olhar o console,
@@ -104,6 +105,12 @@ class ChromeFalso:
         # devolvia 3 elementos — a moldura. A vista **crua** da UIAutomation é
         # a que enxerga o modal. Aqui só ela mostra a página.
         self.so_na_leitura_crua = so_na_leitura_crua
+        # Print de 16/11 08:35 (0.91.24): com o painel aberto, TODAS as leituras
+        # devolveram 3 elementos. Não era a janela nem a vista: era o Chrome com
+        # a acessibilidade desligada, esperando o sinal de leitor de tela do
+        # Windows. Aqui ele dorme assim até alguém ligar o sinal.
+        self.acessibilidade_desligada = acessibilidade_desligada
+        self.sinal_de_leitor_pedido = 0
         self.fontes_pedidas: list[str] = []
         self.moldura_a_cada = moldura_a_cada
         self.acao_mente = acao_mente
@@ -225,8 +232,32 @@ class ChromeFalso:
     def teclado_na_janela(self, _handle) -> bool:
         return True
 
+    # ---------------------------------------- acessibilidade (0.91.25)
+    def leitor_de_tela(self):
+        return not self.acessibilidade_desligada
+
+    def acordar_acessibilidade(self, _handle=0):
+        """O sinal de leitor de tela: o Chrome passa a publicar a página."""
+        antes = not self.acessibilidade_desligada
+        self.sinal_de_leitor_pedido += 1
+        self.acessibilidade_desligada = False
+        return {"antes": antes, "ligado": True, "depois": True}
+
+    def desligar_leitor_de_tela(self):
+        return True
+
+    def janelas_filhas(self, _handle, _limite=24):
+        return [{"handle": 5150, "classe": "Chrome_RenderWidgetHostHWND", "titulo": "Chrome Legacy Window"}]
+
     def ler_janela(self, _handle, profundidade=8, limite=1500, fonte="auto"):
         self.fontes_pedidas.append(fonte)
+        if self.acessibilidade_desligada:
+            # Só a moldura, em qualquer fonte: é o retrato do print.
+            return {
+                "janela": dict(self.janela),
+                "raiz": {"nome": "API keys", "papel": 1, "filhos": self._moldura()},
+                "fonte": "uia" if fonte == "auto" else fonte,
+            }
         if self.so_na_leitura_crua and fonte != "uia_raw":
             # A vista de controle não vê o conteúdo: sobra a moldura.
             return {
@@ -685,6 +716,54 @@ def test_regressao_0_91_22_sem_conseguir_ler_a_pagina_a_mensagem_e_a_verdadeira(
     assert "NÃO consegui ver a" in saida
     assert "lida inteira" not in saida, "não pode afirmar uma leitura que não houve"
     assert "clique uma vez no Chrome" in saida, "o dono tem de saber o que fazer"
+
+
+def test_regressao_0_91_25_chrome_com_acessibilidade_desligada_e_acordado(monkeypatch, tmp_path, capsys):
+    """Print de 16/11 08:35: painel aberto, e as CINCO leituras com 3 elementos.
+
+    O diagnóstico da 0.91.24 provou que não era a janela nem a vista: auto, uia,
+    uia_raw, uia_content e msaa devolveram todos a moldura. O que faltava era o
+    sinal de **leitor de tela** do Windows, sem o qual o Chrome não publica a
+    página. Aqui o Chrome falso nasce assim e só acorda com o sinal.
+    """
+    chrome = ChromeFalso(acessibilidade_desligada=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert _rodar(script) == 0
+
+    assert chrome.sinal_de_leitor_pedido >= 1, "o sinal é o que faz o Chrome publicar"
+    assert chrome.tela == "criada"
+    assert _chave_gravada(env) == CHAVE_NOVA
+    assert "modo leitor de tela" in capsys.readouterr().out
+
+
+def test_regressao_0_91_25_o_sinal_de_leitor_de_tela_e_desfeito_no_fim(monkeypatch, tmp_path):
+    """O modo leitor de tela é emprestado: o programa devolve como estava."""
+    chrome = ChromeFalso(acessibilidade_desligada=True)
+    script, _config, _env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+
+    pedidos: list[str] = []
+    monkeypatch.setattr(chrome, "desligar_leitor_de_tela", lambda: pedidos.append("desfeito") or True)
+
+    assert _rodar(script) == 0
+    assert pedidos == ["desfeito"], "sem devolver, o Windows ficaria em modo leitor de tela"
+
+
+def test_regressao_0_91_25_o_diagnostico_mostra_o_sinal_e_as_janelas_filhas(monkeypatch, tmp_path, capsys):
+    """O relatório tem de responder *por que* 3 elementos — não só contar."""
+    chrome = ChromeFalso(acessibilidade_desligada=True)
+    script, _config, _env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert script.main(["--diagnostico"]) == 0
+
+    saida = capsys.readouterr().out
+    assert "Modo leitor de tela do Windows: desligado" in saida
+    assert "Janelas filhas do Chrome: 1" in saida
+    assert "Chrome_RenderWidgetHostHWND" in saida
+    assert "DEPOIS de ligar o modo leitor de tela" in saida
+    assert "Funcionou: a leitura" in saida
 
 
 def test_regressao_0_91_24_o_diagnostico_nao_cria_chave_nem_toca_no_env(monkeypatch, tmp_path):

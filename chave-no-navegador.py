@@ -363,16 +363,19 @@ def passo_diagnostico(args) -> int:
     """Diz **qual leitura enxerga a página** — sem clicar em nada.
 
     Por que existe: o dono não consegue testar de graça. Cada rodada custa
-    atualizar, abrir o site, criar (ou quase criar) uma chave e me mandar um
-    print. Este comando responde a pergunta que sobrou — *qual vista de
-    acessibilidade vê o painel?* — sem criar chave nenhuma e sem clicar em
-    nada, inclusive com o painel já aberto na tela dele.
+    atualizar, abrir o site, criar (ou quase criar) uma chave e mandar um print.
+    Este comando responde a pergunta que sobrou — *qual leitura de
+    acessibilidade vê o painel?* — sem criar chave e sem clicar em nada,
+    inclusive com o painel já aberto na tela dele.
 
-    O arquivo `chave-leitura.txt` sai com as cinco leituras (automática,
-    controle, crua, conteúdo e MSAA), a contagem de cada uma e quais campos do
-    painel cada uma enxerga.
+    Depois do print de 16/11 08:35 (3 elementos em **todas** as vistas), ele
+    passou a medir também duas coisas que ninguém estava olhando:
+
+    1. o **modo leitor de tela** do Windows — o Chrome só publica a página para
+       quem parece um leitor de tela;
+    2. as **janelas filhas** do Chrome — a página pode estar numa delas.
     """
-    from server import chave_web
+    from server import arvore_windows, chave_web
 
     janela, _montada = _ler_janela(args.alvo)
     handle = int(janela.get("handle") or 0)
@@ -380,32 +383,99 @@ def passo_diagnostico(args) -> int:
     print("  Medindo o que cada leitura do Windows enxerga. Nada será clicado.")
     print()
 
-    linhas: list[tuple[str, int, dict[str, bool], bool]] = []
-    for fonte in ("auto", "uia", "uia_raw", "uia_content", "msaa"):
-        try:
-            montada = _ler_pela_fonte(handle, PROFUNDA, TETO_FUNDO, fonte)
-        except Exception as exc:  # noqa: BLE001 - uma vista pode cair inteira
-            print(f"  {fonte:11} : não respondeu ({type(exc).__name__}).")
-            continue
-        campos = _campos_do_painel(montada)
-        painel = chave_web.e_dialogo_de_criacao(montada)
-        linhas.append((fonte, _nomes(montada), campos, painel))
-        vistos = [rotulo for rotulo in CAMPOS_DO_PAINEL if campos[rotulo]]
+    leitor = getattr(arvore_windows, "leitor_de_tela", None)
+    estado_leitor = leitor() if leitor else None
+    if estado_leitor is None:
+        print("  Modo leitor de tela do Windows: não deu para ler.")
+    else:
+        print(f"  Modo leitor de tela do Windows: {'LIGADO' if estado_leitor else 'desligado'}")
+        if not estado_leitor:
+            print("     O Chrome só publica a página para quem parece um leitor de tela.")
+    filhas = []
+    try:
+        filhas = arvore_windows.janelas_filhas(handle, 12)
+    except Exception:  # noqa: BLE001 - é diagnóstico, não pode derrubar
+        filhas = []
+    print(f"  Janelas filhas do Chrome: {len(filhas)}")
+    for filha in filhas[:8]:
+        # A página do navegador mora numa janela filha (`Chrome_RenderWidgetHostHWND`).
+        # Medir cada uma separa “a página não está em lugar nenhum” de “está
+        # nesta filha e eu estava lendo a janela de cima”.
+        contagens = []
+        for fonte in ("msaa", "uia_raw"):
+            try:
+                medida = _ler_pela_fonte(int(filha["handle"]), PROFUNDA, TETO_FUNDO, fonte)
+                contagens.append(f"{fonte}={_nomes(medida)}")
+            except Exception:  # noqa: BLE001 - uma filha pode nem aceitar leitura
+                contagens.append(f"{fonte}=erro")
         print(
-            f"  {fonte:11} : {_nomes(montada):3} elementos — "
-            f"painel: {'SIM' if painel else 'não'} — "
-            + (", ".join(vistos) if vistos else "nenhum campo do painel")
+            f"     {filha.get('classe') or '?'}  (handle {filha.get('handle')}) — "
+            + ", ".join(contagens)
         )
+    print()
+
+    def medir(titulo: str) -> list[tuple[str, int, dict[str, bool], bool]]:
+        print(titulo)
+        medidas: list[tuple[str, int, dict[str, bool], bool]] = []
+        for fonte in ("auto", "uia", "uia_raw", "uia_content", "msaa"):
+            try:
+                montada = _ler_pela_fonte(handle, PROFUNDA, TETO_FUNDO, fonte)
+            except Exception as exc:  # noqa: BLE001 - uma vista pode cair inteira
+                print(f"  {fonte:11} : não respondeu ({type(exc).__name__}).")
+                continue
+            campos = _campos_do_painel(montada)
+            painel = chave_web.e_dialogo_de_criacao(montada)
+            medidas.append((fonte, _nomes(montada), campos, painel))
+            vistos = [rotulo for rotulo in CAMPOS_DO_PAINEL if campos[rotulo]]
+            print(
+                f"  {fonte:11} : {_nomes(montada):4} elementos — "
+                f"diálogo: {'SIM' if painel else 'não'} — "
+                + ("campos: " + ", ".join(vistos) if vistos else "nenhum campo do painel")
+            )
+        print()
+        return medidas
+
+    medidas = medir("  ANTES de mexer em qualquer coisa:")
+    melhor = max(medidas, key=lambda item: (item[1], sum(item[2].values()))) if medidas else None
+
+    if melhor is not None and not _medida_boa(melhor):
+        # Nada mostrou a página: a causa mais provável — e a única que o dono
+        # ainda não tinha visto medida — é o Chrome com a acessibilidade
+        # desligada. Liga, pede de novo e mede outra vez.
+        print("  Nenhuma leitura viu a página. Ligando o modo leitor de tela e medindo de novo…")
+        print()
+        ligou = _acordar_a_acessibilidade(janela, avisar=False)
+        print(f"  Modo leitor de tela agora: {'LIGADO' if ligou else 'não consegui ligar'}")
+        print()
+        medidas = medir("  DEPOIS de ligar o modo leitor de tela:")
+        for medida in medidas:
+            if _medida_boa(medida):
+                print(f"  Funcionou: a leitura “{medida[0]}” viu {medida[1]} elementos.")
+                break
+        else:
+            print("  Continuou sem ver a página. O relatório abaixo tem o que cada leitura trouxe.")
 
     print()
-    if not linhas:
+    if not medidas:
         print("  Nenhuma leitura respondeu. O Chrome está aberto? A janela está minimizada?")
         return 1
-    melhor = max(linhas, key=lambda item: (item[1], sum(item[2].values())))
+    melhor = max(medidas, key=lambda item: (item[1], sum(item[2].values())))
     print(f"  Quem mais viu: “{melhor[0]}” ({melhor[1]} elementos com nome).")
-    if any(item[3] for item in linhas):
+    if any(item[3] for item in medidas):
         print("  O painel “Create API key” está na tela — e alguma leitura o enxerga.")
-    elif _nomes_do_diagnostico(linhas):
+    elif melhor[1] < LEITURA_POBRE:
+        print(
+            "  Nenhuma leitura viu a página. Se o painel está aberto na sua tela, mande o\n"
+            "  chave-leitura.txt: ele diz o que cada leitura trouxe, e é com isso que eu conserto.\n"
+            "\n"
+            "  O que ainda dá para tentar, do mais simples ao mais completo:\n"
+            "    1. rode de novo com o Chrome na frente e nada por cima dele;\n"
+            "    2. no Chrome, abra chrome://accessibility e ligue a acessibilidade\n"
+            "       (é uma página do próprio Chrome, com uma caixa de marcar no topo);\n"
+            "    3. feche o Chrome e abra de novo com o atalho que eu deixei:\n"
+            "       chrome-acessibilidade.bat"
+        )
+    else:
         print("  O painel não está aberto agora. Abra (New key) e rode de novo para eu medir com ele aberto.")
 
     relatorio = _gravar_relatorio(janela)
@@ -414,7 +484,14 @@ def passo_diagnostico(args) -> int:
     if relatorio.get("arquivo"):
         print(f"  Relatório: {relatorio['arquivo']}")
         print("  Me mande esse arquivo: é ele que diz qual leitura vê o painel.")
+    _desligar_a_acessibilidade()
     return 0
+
+
+def _medida_boa(medida: tuple[str, int, dict[str, bool], bool]) -> bool:
+    """A leitura dessa fonte mostrou a página ou o painel?"""
+    _fonte, total, _campos, painel = medida
+    return bool(painel) or total >= LEITURA_POBRE
 
 
 def _nomes_do_diagnostico(linhas: list[tuple[str, int, dict[str, bool], bool]]) -> bool:
@@ -846,6 +923,61 @@ def _garantir_na_frente(janela: dict, segundos: float = 2.0) -> bool:
             return False
 
 
+_ACESSIBILIDADE_PEDIDA: set[int] = set()
+
+
+def _acordar_a_acessibilidade(janela: dict, *, avisar: bool = False) -> bool:
+    """Liga o modo leitor de tela e pede a árvore — uma vez por janela.
+
+    Por que existe: no print de 16/11 08:35, com o painel aberto na tela,
+    **todas** as leituras (auto, uia, uia_raw, uia_content, msaa) devolveram 3
+    elementos. Não era a janela nem a vista: o Chrome estava com a
+    acessibilidade desligada. Ele liga quando o Windows diz que há um leitor de
+    tela — é a configuração `SPI_SETSCREENREADER`, a mesma que o NVDA usa.
+    Desfazemos no fim do programa.
+    """
+    try:
+        from server import arvore_windows
+    except Exception:  # noqa: BLE001 - fora do Windows (testes) não há o que acordar
+        return False
+
+    handle = int(janela.get("handle") or 0)
+    if not handle or handle in _ACESSIBILIDADE_PEDIDA:
+        return False
+    _ACESSIBILIDADE_PEDIDA.add(handle)
+    acordar = getattr(arvore_windows, "acordar_acessibilidade", None)
+    if acordar is None:  # dublê de teste sem a função
+        return False
+    try:
+        feito = acordar(handle)
+    except Exception:  # noqa: BLE001 - COM de terceiros: melhor esforço
+        return False
+    if avisar:
+        if feito.get("ligado"):
+            print(
+                "     o Chrome estava sem publicar a página — liguei o modo leitor de "
+                "tela do Windows (desligo no fim) e pedi a leitura de novo."
+            )
+        else:
+            print(
+                "     o Chrome não está publicando a página e eu não consegui ligar o "
+                "modo leitor de tela do Windows."
+            )
+    return bool(feito.get("ligado"))
+
+
+def _desligar_a_acessibilidade() -> None:
+    """Devolve a configuração do Windows como estava antes do programa."""
+    try:
+        from server import arvore_windows
+
+        desligar = getattr(arvore_windows, "desligar_leitor_de_tela", None)
+        if desligar is not None:
+            desligar()
+    except Exception:  # noqa: BLE001 - devolver é cortesia, não requisito
+        pass
+
+
 def _acordar_leitura(janela: dict, montada: dict, *, avisar: bool = False, segundos: float = 1.2):
     """Leitura pobre não é resposta: põe a janela na frente e lê de novo.
 
@@ -869,6 +1001,10 @@ def _acordar_leitura(janela: dict, montada: dict, *, avisar: bool = False, segun
         em_foco = _garantir_na_frente(janela, segundos=segundos)
     except Exception:  # noqa: BLE001 - COM de terceiros: não pode derrubar a espera
         em_foco = False
+    # O Chrome só publica a página para quem parece um leitor de tela. Se ele
+    # estiver desligado, nenhuma vista mostra nada — foi o print de 16/11 08:35,
+    # com 3 elementos em todas as leituras e o painel na tela.
+    _acordar_a_acessibilidade(janela, avisar=avisar)
     if avisar:
         if em_foco:
             print(
@@ -1020,6 +1156,19 @@ def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
         linhas.extend(f"  {linha}" for linha in extra)
         linhas.append("")
     handle = int(janela.get("handle") or 0)
+    try:
+        from server import arvore_windows
+
+        filhas = arvore_windows.janelas_filhas(handle, 12)
+    except Exception:  # noqa: BLE001 - diagnóstico não pode derrubar
+        filhas = []
+    if filhas:
+        linhas.append("janelas filhas do Chrome:")
+        for filha in filhas[:12]:
+            linhas.append(
+                f"  {filha.get('classe') or '?'}  (handle {filha.get('handle')})"
+            )
+        linhas.append("")
     # Todas as vistas são medidas e escritas: quando o painel está na tela e a
     # leitura não o traz, esta é a única pergunta que importa — **qual** vista
     # enxerga a página. (0.91.23: a de controle devolvia 3 elementos; a crua,
@@ -1616,6 +1765,7 @@ def _criar_e_copiar(
             print("     página do Chrome — a leitura trouxe só a moldura. Deixe a janela do")
             print("     Chrome na frente (não minimizada, nada por cima dela) e rode de novo;")
             print("     se o painel estiver aberto na sua tela, rode `--pegar`.")
+            print("     Se repetir, rode diagnostico-chave.bat e me mande o chave-leitura.txt:")
         else:
             print("     Nada foi criado. O clique não abriu o painel — isso não é mais leitura:")
             print("     a página foi lida inteira e o botão estava nela. Feche o que estiver na")
@@ -1954,6 +2104,9 @@ def main(argv: list[str] | None = None) -> int:
         # traceback de 8 linhas e o `.bat` seguia como se tivesse dado certo.
         print("\n  Interrompido com Ctrl+C. Nada foi gravado.")
         return 130
+    finally:
+        # O modo leitor de tela é emprestado, não tomado: sai como entrou.
+        _desligar_a_acessibilidade()
 
 
 if __name__ == "__main__":

@@ -283,6 +283,88 @@ def janela_em_foco() -> dict[str, Any] | None:
 # IAccessible
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# O "sinal de leitor de tela": o que faz o Chrome publicar a página (0.91.25)
+# ---------------------------------------------------------------------------
+# Medido no PC do dono (print de 16/11, 08:35): com o painel “Create API key”
+# aberto na tela, **todas** as leituras devolveram 3 elementos — “Chrome Legacy
+# Window”, o título da aba e “Notifications”. Não era a janela nem a vista: era
+# o Chrome com a acessibilidade **desligada**. Ele só publica a página para quem
+# parece um leitor de tela, e a marca de “existe um leitor de tela nesta
+# máquina” é uma configuração do Windows (`SPI_SETSCREENREADER`).
+#
+# É a mesma coisa que o NVDA faz ao abrir, e é reversível: guardamos o estado
+# anterior e devolvemos no fim.
+SPI_GETSCREENREADER = 0x0046
+SPI_SETSCREENREADER = 0x0047
+SPIF_SENDCHANGE = 0x02
+WM_GETOBJECT = 0x003D
+
+_LEITOR_ANTES: list[bool] = []
+
+
+def leitor_de_tela() -> bool | None:
+    """O Windows está com o modo leitor de tela ligado? `None` = não deu para ler."""
+    valor = wintypes.BOOL(False)
+    try:
+        ok = user32.SystemParametersInfoW(SPI_GETSCREENREADER, 0, ctypes.byref(valor), 0)
+    except Exception:  # noqa: BLE001 - COM/sistema de terceiros
+        return None
+    return bool(valor.value) if ok else None
+
+
+def ligar_leitor_de_tela() -> bool:
+    """Liga o modo leitor de tela — e lembra como estava, para desfazer depois.
+
+    Devolve `True` quando o Windows confirmou a mudança. Não mexe em nada se já
+    estava ligado.
+    """
+    antes = leitor_de_tela()
+    if antes is True:
+        return True
+    if not _LEITOR_ANTES:
+        _LEITOR_ANTES.append(bool(antes))
+    try:
+        # `None` no terceiro parâmetro: o Windows só aceita TRUE/FALSE aqui.
+        user32.SystemParametersInfoW(SPI_SETSCREENREADER, 1, None, SPIF_SENDCHANGE)
+    except Exception:  # noqa: BLE001
+        return False
+    time.sleep(0.2)
+    return leitor_de_tela() is True
+
+
+def desligar_leitor_de_tela() -> bool:
+    """Devolve a configuração como estava — o dono não pediu leitor de tela."""
+    if not _LEITOR_ANTES:
+        return True
+    antes = _LEITOR_ANTES.pop()
+    if antes:
+        return True
+    try:
+        user32.SystemParametersInfoW(SPI_SETSCREENREADER, 0, None, SPIF_SENDCHANGE)
+    except Exception:  # noqa: BLE001
+        return False
+    return leitor_de_tela() is False
+
+
+def acordar_acessibilidade(handle: int) -> dict[str, Any]:
+    """Pede ao programa que publique a página: sinal de leitor de tela + espiada.
+
+    A “espiada” é um `WM_GETOBJECT` na janela e nas filhas — é o pedido formal
+    de árvore de acessibilidade. Em navegador, esse pedido é o gatilho para ele
+    ligar a publicação da página.
+    """
+    antes = leitor_de_tela()
+    ligado = ligar_leitor_de_tela()
+    for hwnd in [int(handle)] + [int(filha["handle"]) for filha in janelas_filhas(int(handle), 8)]:
+        try:
+            user32.SendMessageW(wintypes.HWND(hwnd), WM_GETOBJECT, 0, ctypes.c_long(OBJID_CLIENT - (1 << 32)))
+        except Exception:  # noqa: BLE001 - melhor esforço
+            continue
+    time.sleep(0.4)
+    return {"antes": antes, "ligado": ligado, "depois": leitor_de_tela()}
+
+
 def _abrir(hwnd: int) -> int:
     """Ponteiro de IAccessible para a janela. 0 quando o programa não publica árvore."""
     ponteiro = ctypes.c_void_p(0)

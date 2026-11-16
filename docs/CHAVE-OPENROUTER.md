@@ -135,6 +135,38 @@ JARVIS, com:
 rode com ele aberto. Aí o relatório responde a pergunta que importa: *qual
 leitura vê o painel que está na minha frente?* — sem gastar uma chave.
 
+### 7.1 O modo leitor de tela — a peça que faltava (0.91.25)
+
+Medido no PC do dono em 16/11, 08:35: com o painel aberto na tela, **as cinco
+leituras** devolveram 3 elementos — “Chrome Legacy Window”, o título da aba e
+“Notifications”. Não era a janela atrás, nem a vista errada: era o **Chrome com
+a acessibilidade desligada**.
+
+O Chrome não publica a página para qualquer programa. Ele publica quando o
+Windows diz que existe um **leitor de tela** na máquina — a configuração
+`SPI_SETSCREENREADER`, a mesma que o NVDA liga ao abrir. Sem esse sinal, a
+janela responde só pela moldura, por todas as vistas.
+
+Então o JARVIS passou a:
+
+1. **dar o sinal** (ligar o modo leitor de tela) quando a leitura vem pobre, e
+   pedir a árvore de novo;
+2. **devolver a configuração como estava** no fim do programa — é emprestado,
+   não tomado;
+3. mostrar no diagnóstico se o modo estava ligado, e medir **antes e depois**.
+
+Se mesmo assim continuar em 3 elementos, o diagnóstico lista as **janelas
+filhas** do Chrome (a página mora numa filha, `Chrome_RenderWidgetHostHWND`) com
+a contagem de cada uma — e aí o problema não é leitura: é o Chrome não publicar
+nada, e o caminho é `chrome-acessibilidade.bat` (§7.2).
+
+### 7.2 `chrome-acessibilidade.bat`
+
+Fecha o Chrome e abre de novo com `--force-renderer-accessibility`. É a opção
+que o próprio Chrome oferece para publicar a árvore sempre, sem depender do
+sinal do Windows. **Fecha o Chrome** — as abas voltam, mas salve o que estiver
+escrevendo. Só é necessário se o §7.1 não resolver.
+
 ## 8. De onde veio este manual
 
 - `openrouter.ai/docs` — *Creating an API key*: “dê um nome e, opcionalmente,

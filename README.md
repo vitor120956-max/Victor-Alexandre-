@@ -195,7 +195,12 @@ os três campos, e a chave que aparece **uma única vez** com o botão **Copy**.
 Cada linha diz o que o JARVIS faz naquele ponto. Se a leitura falhar,
 `diagnostico-chave.bat` mede o que cada leitura do Windows enxerga — **sem criar
 chave e sem clicar em nada** — e grava `chave-leitura.txt` com a contagem de
-elementos e os campos que cada uma vê.
+elementos, os campos que cada uma vê e as janelas filhas do Chrome. Ele também
+mostra o **modo leitor de tela** do Windows: o Chrome só publica a página para
+quem parece um leitor de tela, e é esse sinal (`SPI_SETSCREENREADER`) que o
+JARVIS dá quando a leitura vem pobre — devolvendo a configuração como estava no
+fim. Se nem isso resolver, `chrome-acessibilidade.bat` reabre o Chrome com
+`--force-renderer-accessibility` (fecha o Chrome; as abas voltam).
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -772,7 +777,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.24", "skills": 325}`.
+`{"version": "0.91.25", "skills": 325}`.
 
 ## Verificações
 
