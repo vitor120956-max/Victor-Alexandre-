@@ -174,6 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.20 — o botão estava na tela e a leitura não o trouxe
+
+Print do dono: a página inteira, “New key” visível no canto direito, e a saída
+
+    1. NÃO DEI: o botão de criar não está na árvore desta janela.
+
+O script desistia na **primeira** tentativa, com a leitura que tinha em mãos —
+a mesma que acabara de dizer “a página ainda está carregando”. Ou seja: ele
+sabia que a leitura era de uma página em construção, e usou essa leitura como
+veredito.
+
+O que entrou:
+
+| peça | regra |
+|---|---|
+| `_achar_elemento` | procura **relendo** por 18 s, com leitura funda, antes de dizer que não existe |
+| outras janelas | a cada duas tentativas ele olha as outras janelas do navegador — a página pode ter aberto na vizinha |
+| `_esperar_pagina_pronta` | passou a reler **fundo** (era rasa) e, ao cansar, diz quantos elementos vieram |
+| desistir com prova | o erro diz quantos elementos a leitura trouxe e os primeiros nomes, e grava `chave-leitura.txt` |
+| diagnóstico neutro | “a leitura não trouxe o que eu procurava” — a frase serve para o botão e para o painel |
+
+Duas decisões que valem registro:
+
+- **a leitura que decide é a mesma que clica.** Ter uma leitura rasa para
+  decidir “pronto” e uma funda para clicar é o que produzia “o botão não
+  existe” com o botão na tela;
+- **“não achei” precisa de número.** Sem a contagem e os primeiros nomes, a
+  próxima execução falharia igual e ninguém saberia por quê.
+
 ### 0.91.19 — o clique acertou o botão, e o nome não foi digitado
 
 Depois da 0.91.18 o painel **abriu** (o clique de mouse resolveu). E o campo

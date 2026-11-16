@@ -1707,3 +1707,115 @@ def test_botao_de_criar_nao_e_o_titulo_do_painel():
     assert botao is not None
     assert botao["nome"] == "Create", "o título também contém “create” — e não é botão"
     assert chave_web.normalizar(botao["nome"]) in script.ROTULOS_DO_CRIAR
+
+
+# ---------------------------------------------------------------------------
+# 0.91.20 — “o botão não está na árvore” com o botão na tela
+#
+# O dono mandou o print: a página inteira, “New key” visível no canto, e o
+# script dizendo que o botão não estava na leitura. Ele desistia na **primeira**
+# tentativa, usando a leitura que tinha em mãos.
+
+def test_ele_insiste_ate_o_botao_aparecer_na_leitura(monkeypatch, capsys):
+    """Leitura pobre nas primeiras tentativas não é resposta: ele relê."""
+    script = _script()
+    fila = [
+        _moldura(),          # ainda carregando
+        _moldura(),          # ainda carregando
+        _pagina_rica(),      # a página, com “Create Key”
+    ]
+    monkeypatch.setattr(
+        script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
+    )
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    janela, botao, montada = script._achar_elemento(
+        JANELA, chave_web.PADROES_CRIAR, rotulo="o botão “New key”"
+    )
+
+    assert botao["nome"] == "Create Key"
+    assert script._nomes(montada) >= 8
+    assert "não veio na primeira leitura" in capsys.readouterr().out
+
+
+def test_se_o_botao_nunca_aparecer_ele_diz_o_que_viu(monkeypatch, capsys, tmp_path):
+    script = _script()
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, _moldura()))
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 10.0, sleep=lambda _s: None)
+    )
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    with pytest.raises(script.PassoError) as erro:
+        script._achar_elemento(JANELA, chave_web.PADROES_CRIAR, rotulo="o botão “New key”")
+
+    texto = str(erro.value)
+    assert "não achei o botão" in texto
+    assert "elementos com nome" in texto, "desistir exige dizer o que a leitura viu"
+    assert "Chrome Legacy Window" in texto
+    assert (tmp_path / "chave-leitura.txt").exists(), "a falha grava o relatório"
+
+
+def test_a_espera_da_pagina_usa_leitura_funda(monkeypatch, capsys):
+    """A leitura que decide “pronto” é a mesma que vai clicar: não pode ser rasa."""
+    script = _script()
+    pedidas: list[int] = []
+
+    def reler(janela, profundidade=8, _limite=1500):
+        pedidas.append(profundidade)
+        return janela, _pagina_rica()
+
+    monkeypatch.setattr(script, "_reler", reler)
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    script._esperar_pagina_pronta(_args(), JANELA, _moldura())
+
+    assert pedidas and all(profundidade >= script.PROFUNDA for profundidade in pedidas)
+
+
+def test_pagina_que_nao_sossega_diz_quantos_elementos_viu(monkeypatch, capsys):
+    script = _script()
+    # leituras sempre diferentes: a página nunca “para”
+    leituras = itertools.count(3)
+
+    def reler(janela, _p=8, _l=1500):
+        quantidade = next(leituras)
+        nomes = [_no(f"elemento {indice}", [100, 100 + indice * 10, 80, 20]) for indice in range(quantidade)]
+        return janela, _pagina(*nomes)
+
+    monkeypatch.setattr(script, "_reler", reler)
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 5.0, sleep=lambda _s: None)
+    )
+
+    script._esperar_pagina_pronta(_args(), JANELA, _moldura())
+
+    assert "não sossegou" in capsys.readouterr().out
+
+
+def test_sem_botao_o_passo_nao_segue_para_o_create(monkeypatch, capsys, tmp_path):
+    """Sem o botão de criar, nada é clicado e nada é gravado."""
+    mundo = Mundo()
+    script_, config = _com_mundo(monkeypatch, mundo)
+    monkeypatch.setattr(script_, "_reler", lambda janela, _p=8, _l=1500: (janela, _moldura()))
+    monkeypatch.setattr(script_, "__file__", str(tmp_path / "chave-no-navegador.py"))
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script_, "time", types.SimpleNamespace(time=lambda: next(relogio) * 10.0, sleep=lambda _s: None)
+    )
+
+    codigo = script_.passo_criar(_args())
+    saida = capsys.readouterr().out
+
+    assert codigo == 1
+    assert "não achei o botão" in saida
+    assert "New key" in saida or "New key" in saida.replace("“", "").replace("”", "")
+    assert config.gravadas == []

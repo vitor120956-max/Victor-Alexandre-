@@ -774,8 +774,8 @@ def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
     total = len(chave_web.elementos(montada))
     aviso = str(montada.get("aviso") or "").strip()
     texto = (
-        f"o painel não apareceu na leitura ({total} elementos com nome, "
-        f"fonte {montada.get('fonte') or '?'}, {montada.get('total')} nós"
+        f"a leitura não trouxe o que eu procurava ({total} elementos com nome, "
+        f"fonte {montada.get('fonte') or '?'}"
     )
     texto += f"; os primeiros: {', '.join(nomes)})." if nomes else ")."
     if total < LEITURA_POBRE:
@@ -821,17 +821,78 @@ def _esperar_botao_criar(janela: dict, segundos: float = 8.0):
         time.sleep(0.8)
 
 
-def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 18.0):
+def _achar_elemento(
+    janela: dict,
+    padroes: tuple[str, ...],
+    alvo: str = "",
+    segundos: float = 18.0,
+    rotulo: str = "o elemento",
+):
+    """Procura o elemento **relendo**, e só desiste depois de tentar de verdade.
+
+    Medido no PC do dono (0.91.19), com a página inteira na tela e o botão “New
+    key” nela:
+
+        1. NÃO DEI: o botão de criar não está na árvore desta janela.
+
+    A leitura daquele momento não trazia o botão (leitura pobre, moldura), e o
+    script parou na **primeira** tentativa, usando a última leitura que tinha em
+    mãos — sem reler fundo e sem dizer o que viu. Aqui:
+
+    - a leitura é **funda** (o painel e os botões moram no fim do documento);
+    - cada tentativa confere também **as outras janelas do navegador** (o clique
+      pode ter aberto a página na vizinha);
+    - desistir exige provas: o erro diz quantos elementos vieram e quais os
+      primeiros nomes, e o relatório é gravado.
+
+    Devolve `(janela, nó, árvore)` — com a janela certa, que pode ser outra.
+    """
+    from server import chave_web
+
+    inicio = time.time()
+    fim = inicio + segundos
+    ultima: dict | None = None
+    tentativa = 0
+    while True:
+        tentativa += 1
+        try:
+            janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        except PassoError:
+            montada = None
+        if montada is not None:
+            ultima = montada
+            achados = chave_web.procurar(montada, padroes)
+            if achados:
+                return janela, achados[0], montada
+        if alvo and tentativa % 2 == 0:
+            for outra, montada_outra in _ler_janelas(alvo, profundidade=PROFUNDA, limite=TETO_FUNDO):
+                if int(outra.get("handle") or 0) == int(janela.get("handle") or 0):
+                    continue
+                achados = chave_web.procurar(montada_outra, padroes)
+                if achados:
+                    return outra, achados[0], montada_outra
+        if time.time() >= fim:
+            break
+        if tentativa == 1:
+            print(f"     {rotulo} não veio na primeira leitura — releio por {int(segundos)}s…")
+        time.sleep(1.0)
+    detalhe = _diagnostico_da_leitura(ultima) if ultima is not None else "a leitura não devolveu árvore."
+    _gravar_relatorio(janela, extra=[f"{rotulo}: não encontrado em {int(segundos)}s ({tentativa} leituras)"])
+    raise PassoError(f"não achei {rotulo}. {detalhe}")
+
+
+def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 12.0):
     """Espera a página parar de mudar antes de clicar em “New key”.
 
     Medido no PC do dono (0.91.17): a página abriu ainda carregando, o clique
     caiu num botão que a página trocou em seguida, e o painel nunca abriu —
     “ele tentou antes de a página ficar pronta”, nas palavras do dono.
 
-    O sinal de “pronta” aqui é simples e não depende de palpite: o botão de
-    criar está na leitura **e** duas leituras seguidas trazem praticamente os
-    mesmos elementos. Não é garantia de fim de carregamento; é o suficiente
-    para não clicar num botão que vai sumir.
+    O sinal de “pronta” é simples: o botão de criar está na leitura **e** duas
+    leituras seguidas trazem praticamente os mesmos elementos. A leitura aqui é
+    funda — é a mesma que vai ser usada para clicar, e ela não pode ser mais
+    rasa do que o necessário para achar o botão (foi assim que a 0.91.19 parou
+    dizendo que o botão não existia).
     """
     from server import chave_web
 
@@ -844,13 +905,14 @@ def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 
         if tem_botao and agora >= LEITURA_POBRE and abs(agora - anterior) <= 2:
             return janela, montada
         if time.time() >= fim:
-            return janela, montada  # segue com o que há: quem clica diz o que deu
+            print(f"     a página não sossegou em {int(segundos)}s (a leitura trouxe {agora} elementos).")
+            return janela, montada
         if not avisou:
             print("     a página ainda está carregando — espero ela parar antes de clicar.")
             avisou = True
         anterior = agora
         time.sleep(1.0)
-        janela, montada = _reler(janela, 8, 1500)
+        janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
 
 
 def _abrir_lista(
@@ -1162,11 +1224,25 @@ def _criar_e_copiar(
                 # poderia abrir um painel em cima do outro.
                 print("     a leitura despencou — não repito o clique sem saber o que está na tela.")
                 break
-        achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR) if montada else []
-        if not achados:
-            print("  1. NÃO DEI: o botão de criar não está na árvore desta janela.")
-            return None
-        botao = achados[0]
+        if degrau == 1:
+            try:
+                janela, botao, montada = _achar_elemento(
+                    janela,
+                    chave_web.PADROES_CRIAR,
+                    alvo=args.alvo,
+                    rotulo="o botão “New key”",
+                )
+            except PassoError as exc:
+                print(f"  1. NÃO DEI: {exc}")
+                print("     A página pode estar ainda carregando, ou o botão mudou de nome.")
+                print("     Se ele está na tela, clique nele e rode `--pegar`.")
+                return None
+        else:
+            achados = chave_web.procurar(montada, chave_web.PADROES_CRIAR) if montada else []
+            if not achados:
+                print("  1. NÃO DEI: o botão de criar não está na árvore desta janela.")
+                return None
+            botao = achados[0]
         if estrategia == "mouse" and not _garantir_na_frente(janela):
             print("     não consegui pôr a janela na frente — o clique pode só ativá-la.")
             cliques.append("janela não veio para a frente")
