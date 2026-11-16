@@ -659,6 +659,64 @@ def _garantir_na_frente(janela: dict, segundos: float = 2.0) -> bool:
             return False
 
 
+def _acordar_leitura(janela: dict, montada: dict, *, avisar: bool = False, segundos: float = 1.2):
+    """Leitura pobre não é resposta: põe a janela na frente e lê de novo.
+
+    Medido no PC do dono (0.91.22): ele clicou em “New key”, o painel **abriu**,
+    e a leitura seguinte trouxe 3 elementos — “Chrome Legacy Window”, o título
+    da aba e mais nada. O script chamou isso de “o painel não abriu” e desistiu,
+    com o painel na tela e os campos vazios.
+
+    A causa **provável** é a janela: no print, o dono está olhando o console e
+    a janela do Chrome ficou atrás dele. Chrome coberto (ou minimizado) pode
+    parar de publicar a página e responder só a moldura. Trazer a janela para a
+    frente é o que um humano faz para ler a tela; aqui é o programa que faz.
+
+    Se não for isso, a leitura continua pobre — e aí a mensagem de desistência
+    diz que o problema foi **ver** a página, e não clicar nela.
+    """
+    if _nomes(montada) >= LEITURA_POBRE:
+        return janela, montada
+    em_foco = False
+    try:
+        em_foco = _garantir_na_frente(janela, segundos=segundos)
+    except Exception:  # noqa: BLE001 - COM de terceiros: não pode derrubar a espera
+        em_foco = False
+    if avisar:
+        if em_foco:
+            print(
+                "     a leitura tinha caído (só a moldura do Chrome) — trouxe a "
+                "janela para a frente; se ela for para trás, eu trago de novo."
+            )
+        else:
+            print(
+                "     a leitura caiu (só a moldura do Chrome) e o Windows não deixou eu "
+                "pôr a janela na frente — clique uma vez no Chrome para ela subir."
+            )
+    try:
+        janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+    except PassoError:
+        pass
+    return janela, montada
+
+
+def _outra_janela_com_dialogo(args, janela: dict):
+    """O painel abriu em **outra** janela do navegador? Devolve (janela, árvore)."""
+    from server import chave_web
+
+    handle = int(janela.get("handle") or 0)
+    try:
+        leituras = _ler_janelas(args.alvo, profundidade=PROFUNDA, limite=TETO_FUNDO)
+    except Exception:  # noqa: BLE001 - ler a vizinha é ajuda, não requisito
+        return None
+    for outra, montada in leituras:
+        if int(outra.get("handle") or 0) == handle:
+            continue
+        if chave_web.e_dialogo_de_criacao(montada):
+            return outra, montada
+    return None
+
+
 def _esperar_dialogo(args, janela: dict, segundos: float = 35.0, avisar: bool = True):
     """Espera o painel “Create API key” aparecer, com paciência e sem palpite.
 
@@ -671,7 +729,9 @@ def _esperar_dialogo(args, janela: dict, segundos: float = 35.0, avisar: bool = 
        travamento;
     2. **leitura pobre não é resposta.** Cada tentativa relê pela fonte que
        mostra a página (ver `_reler`); só quando o painel não aparece em
-       leitura boa é que ele conclui que não abriu.
+       leitura boa é que ele conclui que não abriu. Quando a leitura traz só a
+       moldura, a janela é posta na frente e a página é lida de novo — foi com
+       3 elementos que ele desistiu, na 0.91.21, com o painel aberto na tela.
 
     As outras janelas do navegador são conferidas a cada três tentativas — o
     clique pode abrir o painel na janela vizinha.
@@ -682,31 +742,54 @@ def _esperar_dialogo(args, janela: dict, segundos: float = 35.0, avisar: bool = 
     fim = inicio + segundos
     if avisar:
         print(f"     esperando o painel abrir (até {int(segundos)}s; a página pode estar carregando)…")
-    ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
+    janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
     tentativa = 0
+    avisou_caida = False
     while True:
-        if chave_web.e_dialogo_de_criacao(ultima[1]):
-            return ultima
+        if chave_web.e_dialogo_de_criacao(montada):
+            return janela, montada
+        if _nomes(montada) < LEITURA_POBRE:
+            # Leitura pobre **não é** “o painel não abriu”: é “eu não estou
+            # vendo a página”. Foi assim que ele desistiu com o painel na tela
+            # e a janela do Chrome atrás do console (print de 15/11).
+            janela, montada = _acordar_leitura(
+                janela, montada, avisar=not avisou_caida, segundos=1.2
+            )
+            avisou_caida = True
+            if chave_web.e_dialogo_de_criacao(montada):
+                return janela, montada
+            # Pobre na janela principal é justamente quando vale olhar a
+            # vizinha: o painel pode ter aberto na outra janela do navegador.
+            outra = _outra_janela_com_dialogo(args, janela)
+            if outra is not None:
+                return outra
+            if time.time() >= fim:
+                break
+            time.sleep(0.6)
+            continue
+
+        avisou_caida = False
         if time.time() >= fim:
             break
         tentativa += 1
         if tentativa % 3 == 0:
-            for outra, montada_outra in _ler_janelas(
-                args.alvo, profundidade=PROFUNDA, limite=TETO_FUNDO
-            ):
-                if int(outra.get("handle") or 0) == int(janela.get("handle") or 0):
-                    continue
-                if chave_web.e_dialogo_de_criacao(montada_outra):
-                    return outra, montada_outra
-        ultima = (janela, _reler(janela, PROFUNDA, TETO_FUNDO)[1])
+            outra = _outra_janela_com_dialogo(args, janela)
+            if outra is not None:
+                return outra
+        try:
+            janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        except PassoError:
+            pass
         if tentativa % 4 == 0:
             print(
                 f"     ainda procurando… ({int(time.time() - inicio)}s) — "
-                f"a leitura trouxe {_nomes(ultima[1])} elementos."
+                f"a leitura trouxe {_nomes(montada)} elementos."
             )
         time.sleep(1.0)
     relatorio = _gravar_relatorio(janela)
-    raise PassoError(_diagnostico_da_leitura(ultima[1]) + relatorio["recado"])
+    raise PassoError(
+        _diagnostico_da_leitura(montada, insistiu=time.time() - inicio) + relatorio["recado"]
+    )
 
 
 def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
@@ -723,8 +806,26 @@ def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
         "JARVIS — por que a leitura não achou o painel “Create API key”",
         f"quando: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
         f"janela: {str(janela.get('titulo') or '')!r} (handle {janela.get('handle')})",
-        "",
     ]
+    try:
+        from server import arvore_windows
+
+        em_foco = arvore_windows.janela_em_foco() or {}
+        handle_atual = int(em_foco.get("handle") or 0)
+        linhas.append(
+            "estado: "
+            + ("minimizada; " if janela.get("minimizada") else "não minimizada; ")
+            + (
+                "com o foco"
+                if handle_atual == int(janela.get("handle") or 0)
+                else "SEM o foco (o foco está em " + str(
+                    em_foco.get("titulo") or em_foco.get("processo") or "?"
+                ) + ")"
+            )
+        )
+    except Exception:  # noqa: BLE001 - diagnóstico não pode derrubar
+        pass
+    linhas.append("")
     if extra:
         # O que cada clique tentou fazer. Quando o painel não abre, a pergunta
         # “o clique saiu?” se responde aqui, e não no chute.
@@ -761,7 +862,7 @@ def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
     return {"arquivo": str(caminho), "recado": f" Detalhes em {caminho.name}."}
 
 
-def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
+def _diagnostico_da_leitura(montada: dict, quantos: int = 12, insistiu: float = 0.0) -> str:
     """O que a leitura viu, em uma frase — para o dono poder mandar de volta.
 
     “o diálogo não apareceu” não diz nada a quem está olhando a tela com o
@@ -783,6 +884,14 @@ def _diagnostico_da_leitura(montada: dict, quantos: int = 12) -> str:
             " A leitura veio pobre — isso é a moldura do Chrome, não a página: "
             "pode ser a página ainda carregando ou o painel ainda abrindo."
         )
+        if insistiu:
+            # Insistir e continuar pobre muda o conselho: não é lentidão, é a
+            # janela que não está publicando (atrás, minimizada ou coberta).
+            texto += (
+                f" Insisti por {int(insistiu)}s, tentei trazer a janela para a frente e a leitura "
+                "continuou pobre: deixe o Chrome visível (nada por cima, nada minimizado) "
+                "e rode de novo."
+            )
     if aviso:
         texto += f" Aviso da leitura: {aviso}"
     return texto
@@ -899,6 +1008,7 @@ def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 
     fim = time.time() + segundos
     anterior = -1
     avisou = False
+    avisou_caida = False
     while True:
         agora = _nomes(montada)
         tem_botao = bool(chave_web.procurar(montada, chave_web.PADROES_CRIAR))
@@ -913,6 +1023,10 @@ def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 
         anterior = agora
         time.sleep(1.0)
         janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        if agora < LEITURA_POBRE:
+            # Página que não aparece pode ser janela atrás, não página lenta.
+            janela, montada = _acordar_leitura(janela, montada, avisar=not avisou_caida)
+            avisou_caida = True
 
 
 def _abrir_lista(
@@ -1198,12 +1312,12 @@ def _criar_e_copiar(
     #    primeiro pode só ativar a janela) → ação do elemento. Cada degrau é
     #    conferido: se o painel abriu, para ali.
     plano = [
-        ("mouse", 12.0, "clique do mouse"),
-        ("mouse", 12.0, "clique do mouse, segunda vez"),
-        ("acao", 10.0, "ação do elemento"),
+        ("mouse", 20.0, "clique do mouse"),
+        ("mouse", 20.0, "clique do mouse, segunda vez"),
+        ("acao", 15.0, "ação do elemento"),
     ]
     if not mouse:
-        plano = [("acao", 20.0, "ação do elemento")]
+        plano = [("acao", 30.0, "ação do elemento")]
     falha = None
     cliques: list[str] = []
     # Quantos nomes a página tinha ao achar o botão: é a régua para saber se uma
@@ -1215,6 +1329,10 @@ def _criar_e_copiar(
                 janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
             except PassoError:
                 montada = None
+            if montada is not None and _nomes(montada) < LEITURA_POBRE:
+                # A leitura caiu depois do clique: é o Chrome que parou de
+                # publicar (janela atrás), não o painel que não abriu.
+                janela, montada = _acordar_leitura(janela, montada, avisar=True)
             if montada is not None and chave_web.e_dialogo_de_criacao(montada):
                 break
             if montada is None or not chave_web.procurar(montada, chave_web.PADROES_CRIAR):
@@ -1284,10 +1402,17 @@ def _criar_e_copiar(
         # arquivo já vem na mensagem de `falha`).
         _gravar_relatorio(janela, extra=[f"clique {item}" for item in cliques])
         print(f"  2. NÃO DEI: {falha}")
-        print("     Nada foi criado. O clique não abriu o painel — isso não é mais leitura:")
-        print("     a página foi lida inteira e o botão estava nela. Feche o que estiver na")
-        print("     frente do Chrome (eu coloco a janela na frente, mas o Windows recusa")
-        print("     enquanto outro programa tem o foco) e rode de novo.")
+        if montada is None or _nomes(montada) < LEITURA_POBRE:
+            # Honestidade: aqui o problema foi **ver** a página, não clicar.
+            print("     Nada foi criado. E o defeito não foi o clique: eu NÃO consegui ver a")
+            print("     página do Chrome — a leitura trouxe só a moldura. Deixe a janela do")
+            print("     Chrome na frente (não minimizada, nada por cima dela) e rode de novo;")
+            print("     se o painel estiver aberto na sua tela, rode `--pegar`.")
+        else:
+            print("     Nada foi criado. O clique não abriu o painel — isso não é mais leitura:")
+            print("     a página foi lida inteira e o botão estava nela. Feche o que estiver na")
+            print("     frente do Chrome (eu coloco a janela na frente, mas o Windows recusa")
+            print("     enquanto outro programa tem o foco) e rode de novo.")
         return None
     print("  2. preenchendo o diálogo:")
     montada, preenchidos = _preencher_dialogo(

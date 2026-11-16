@@ -1244,6 +1244,68 @@ def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
     assert "primeiros:" in texto
 
 
+def test_o_relatorio_diz_se_a_janela_estava_atras_ou_minimizada(tmp_path, monkeypatch):
+    """Print de 15/11 20:32: 3 elementos, painel aberto, e nada explicava por quê.
+
+    A explicação provável é a janela: o Chrome atrás do console (ou minimizado)
+    para de publicar a página. O relatório agora carrega essa linha — sem ela,
+    “3 elementos” continuaria sendo mistério.
+    """
+    script = _script()
+
+    class AtraComFoco(MolduraOuPagina):
+        def janela_em_foco(self):
+            return {"handle": 999, "titulo": "Prompt de Comando"}
+
+    falso = AtraComFoco(_moldura(), _moldura())
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    script._gravar_relatorio(dict(JANELA, minimizada=True))
+
+    texto = (tmp_path / "chave-leitura.txt").read_text(encoding="utf-8")
+    assert "estado:" in texto
+    assert "minimizada" in texto
+    assert "SEM o foco" in texto
+    assert "Prompt de Comando" in texto
+
+
+def test_acordar_leitura_traz_a_janela_para_a_frente_e_rele(monkeypatch, capsys):
+    """Leitura pobre não é resposta: quem a resolve é trazer a janela para a frente."""
+    script = _script()
+
+    class Dorminhoca(MolduraOuPagina):
+        def __init__(self) -> None:
+            super().__init__(_moldura(), _pagina_rica())
+            self.trazidas = 0
+            self.dormindo = True
+
+        def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+            tela = self.moldura if self.dormindo else self.pagina
+            return {"janela": self._janela(int(handle)), "raiz": tela["arvore"], "fonte": fonte}
+
+        def trazer_para_frente(self, _handle) -> bool:
+            self.trazidas += 1
+            self.dormindo = False
+            return True
+
+        def janela_em_foco(self):
+            return {"handle": 4242, "titulo": "Keys | Settings | OpenRouter"}
+
+    falso = Dorminhoca()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 1.0, sleep=lambda _s: None)
+    )
+
+    _janela, montada = script._acordar_leitura(JANELA, _moldura(), avisar=True)
+
+    assert falso.trazidas >= 1
+    assert script._nomes(montada) >= 8, "depois de acordar, a leitura é a da página"
+    assert "leitura tinha caído" in capsys.readouterr().out
+
+
 def test_espera_a_pagina_parar_de_carregar_antes_de_clicar(monkeypatch, capsys):
     """O print 1: clicar enquanto a página monta é o mesmo que não clicar."""
     script = _script()

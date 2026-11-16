@@ -89,8 +89,16 @@ class ChromeFalso:
         engole_o_primeiro_clique: bool = False,
         publica_valor: bool = False,
         nome_digitado: bool = True,
+        dorme_depois_do_clique: bool = False,
     ) -> None:
         self.atraso = atraso
+        # Print de 15/11 (0.91.21): o painel abriu, o dono foi olhar o console,
+        # a janela do Chrome ficou atrás — e a leitura passou a trazer 3
+        # elementos. Aqui a janela “dorme” depois do clique e só acorda quando
+        # alguém a traz para a frente.
+        self.dorme_depois_do_clique = dorme_depois_do_clique
+        self.dormindo = False
+        self.trouxe_para_frente = 0
         self.moldura_a_cada = moldura_a_cada
         self.acao_mente = acao_mente
         self.engole_o_primeiro_clique = engole_o_primeiro_clique
@@ -173,6 +181,8 @@ class ChromeFalso:
         ]
 
     def raiz(self) -> dict[str, Any]:
+        if self.dormindo:
+            return {"nome": "API keys", "papel": 1, "filhos": self._moldura()}
         if self.atraso > 0:
             self.atraso -= 1
             return {"nome": "API keys", "papel": 1, "filhos": self._moldura()}
@@ -202,6 +212,8 @@ class ChromeFalso:
         return dict((janelas or [self.janela])[0])
 
     def trazer_para_frente(self, _handle) -> bool:
+        self.trouxe_para_frente += 1
+        self.dormindo = False
         return True
 
     def teclado_na_janela(self, _handle) -> bool:
@@ -230,6 +242,7 @@ class ChromeFalso:
                 self._engoliu = True
                 return {**resultado, "como": "clique físico em 936,226", "cursor_voltou": True}
             self.tela = "dialogo"
+            self.dormindo = self.dorme_depois_do_clique
             return {**resultado, "como": "clique físico em 936,226", "cursor_voltou": True}
         if caixa == CX_EXPIRACAO:
             self.lista_aberta = "expiracao"
@@ -601,6 +614,63 @@ def test_regressao_0_91_20_o_botao_aparece_na_terceira_leitura(monkeypatch, tmp_
 
     assert _rodar(script) == 0
     assert _chave_gravada(env) == CHAVE_NOVA
+
+
+def test_regressao_0_91_22_janela_atras_do_console_nao_e_painel_fechado(monkeypatch, tmp_path, capsys):
+    """Print de 15/11 20:32: o painel aberto na tela e “NÃO DEI: 3 elementos”.
+
+    A sequência do print: ele clicou em “New key”, o painel abriu, o dono foi
+    olhar o console, a janela do Chrome ficou **atrás** — e a leitura passou a
+    devolver só a moldura (3 elementos). O script tratou isso como “o painel
+    não abriu”, desistiu, e ainda escreveu “a página foi lida inteira e o botão
+    estava nela” — que era falso.
+
+    Aqui o Chrome falso dorme exatamente assim: depois do clique, só publica a
+    moldura. Quem o acorda é o `trazer_para_frente`, que é o que o script tem
+    de fazer sozinho.
+    """
+    chrome = ChromeFalso(dorme_depois_do_clique=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert _rodar(script) == 0
+
+    saida = capsys.readouterr().out
+    assert chrome.trouxe_para_frente > 0, "acordar a janela é o que devolve a leitura"
+    assert "a leitura tinha caído" in saida, "o dono precisa ver por que a leitura mudou"
+    assert "lida inteira" not in saida, "ele não pode dizer que leu o que não leu"
+    assert chrome.tela == "criada"
+    assert _chave_gravada(env) == CHAVE_NOVA
+
+
+def test_regressao_0_91_22_sem_conseguir_ler_a_pagina_a_mensagem_e_a_verdadeira(
+    monkeypatch, tmp_path, capsys
+):
+    """Quando o Windows não deixa trazer a janela, a desculpa tem de ser a certa.
+
+    Antes: “o clique não abriu o painel — a página foi lida inteira”. Depois:
+    “não consegui ver a página do Chrome”. O dono precisa saber se o problema é
+    a leitura ou o clique — foi confundir os dois que custou cinco rodadas.
+    """
+    class NuncaAcorda(ChromeFalso):
+        def trazer_para_frente(self, _handle) -> bool:
+            self.trouxe_para_frente += 1
+            return False  # o Windows recusa: outro programa tem o foco
+
+        def janela_em_foco(self):
+            return {"handle": 999, "titulo": "Prompt de Comando"}
+
+    chrome = NuncaAcorda(dorme_depois_do_clique=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    _rodar(script)
+    saida = capsys.readouterr().out
+
+    assert _chave_gravada(env) == CHAVE_VELHA, "sem chave, o .env fica como estava"
+    assert "NÃO consegui ver a" in saida
+    assert "lida inteira" not in saida, "não pode afirmar uma leitura que não houve"
+    assert "clique uma vez no Chrome" in saida, "o dono tem de saber o que fazer"
 
 
 # ---------------------------------------------------------------------------

@@ -174,6 +174,40 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.22 — o painel estava na tela e a leitura era da moldura
+
+Print de 15/11, 20:32. Três coisas ao mesmo tempo: o painel **Create API key**
+aberto e vazio, o console com o log, e o veredito:
+
+    2. NÃO DEI: a leitura não trouxe o que eu procurava (3 elementos com nome,
+    fonte uia; os primeiros: Chrome Legacy Window, Keys | Settings | OpenRouter,
+    Notifications).
+
+O clique tinha funcionado. O que falhou foi **ver**: a janela do Chrome estava
+atrás do console (o dono foi ler o log), e a leitura passou a trazer só a
+moldura. O script leu 3 elementos, chamou de “o painel não abriu” e ainda
+escreveu “a página foi lida inteira” — que era falso.
+
+**Leitura pobre não é resposta.** É a mesma regra da 0.91.20, aplicada onde ela
+ainda faltava:
+
+| onde | o que passou a acontecer |
+|---|---|
+| `_acordar_leitura` (novo) | leitura com menos de 8 nomes → traz a janela para a frente, confirma o foco e relê |
+| `_esperar_dialogo` | leitura pobre acorda a janela e relê em vez de contar como tentativa; olha a janela vizinha nesse caso também |
+| `_esperar_pagina_pronta` | página que “não aparece” pode ser janela atrás — acorda antes de concluir lentidão |
+| degrau 2 do `_criar_e_copiar` | a queda depois do clique acorda a janela antes de decidir não repetir |
+| desistência | só diz “o clique não abriu o painel” se a leitura era **rica**; se era pobre, diz “não consegui ver a página” e o que fazer |
+| `chave-leitura.txt` | linha nova `estado:` com minimizada / com foco / **SEM o foco (o foco está em …)** |
+
+Paciência também subiu: 20 s por degrau de clique (era 12) e o aviso de leitura
+caída aparece uma vez, em português.
+
+O que **não** se sabe: se a janela atrás é mesmo a causa. O teste prova o
+comportamento — janela que para de publicar é acordada e o painel é lido —, não
+a causa no Chrome do dono. Se voltar a falhar, a linha `estado:` no
+`chave-leitura.txt` responde isso na primeira tentativa.
+
 ### 0.91.21 — a regra dos testes, e um buraco que ela encontrou
 
 Pedido do dono: *“toda vez q corrigir um bug crie um teste de regressao”*.
