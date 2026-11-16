@@ -266,6 +266,10 @@ def test_limite_prefere_o_que_nao_trava_a_chave():
     assert chave_web.melhor_limite(["5", "10", "No limit"]) == "No limit"
     assert chave_web.melhor_limite(["Sem limite", "5"]) == "Sem limite"
     assert chave_web.melhor_limite(["5", "10"]) is None
+    # 0.91.23 — o caminho automático não pode parar por falta de “sem limite”.
+    assert chave_web.melhor_limite(["5", "10"], aceitar_maior=True) == "10"
+    assert chave_web.melhor_limite(["$100", "$10", "$50"], aceitar_maior=True) == "$100"
+    assert chave_web.melhor_limite(["5", "No limit"], aceitar_maior=True) == "No limit"
 
 
 def test_nomes_novos_acha_as_opcoes_da_lista_aberta():

@@ -1,7 +1,7 @@
 {
   "name": "jarvis-nucleo-pessoal",
   "private": true,
-  "version": "0.91.22",
+  "version": "0.91.23",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",

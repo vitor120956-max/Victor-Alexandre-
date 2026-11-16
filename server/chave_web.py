@@ -97,17 +97,35 @@ def melhor_expiracao(opcoes: list[str]) -> str | None:
     return validas[0][1]
 
 
-def melhor_limite(opcoes: list[str]) -> str | None:
+def melhor_limite(opcoes: list[str], aceitar_maior: bool = False) -> str | None:
     """A opção de crédito que não trava a chave — “No limit”/“Sem limite”.
 
     Não escolher limite é o que evita a chave parar sozinha no meio do mês;
     se a lista só tiver valores (5, 10, 20…), devolve `None` e o dono decide.
+
+    `aceitar_maior` é para o caminho automático, quando parar significa não
+    criar chave nenhuma: aí o maior valor da lista é o mais perto de “sem
+    limite” que o site oferece — e quem chama avisa que foi isso que escolheu.
     """
     for opcao in opcoes:
         normalizada = normalizar(opcao)
         if any(marca in normalizada for marca in SEM_LIMITE):
             return opcao
-    return None
+    if not aceitar_maior:
+        return None
+    numeros: list[tuple[float, str]] = []
+    for opcao in opcoes:
+        achado = _NUMERO_E_UNIDADE.search(normalizar(opcao)) or re.search(r"(\d+(?:[.,]\d+)?)", normalizar(opcao))
+        if not achado:
+            continue
+        try:
+            valor = float(achado.group(1).replace(",", "."))
+        except ValueError:
+            continue
+        numeros.append((valor, opcao))
+    if not numeros:
+        return None
+    return max(numeros, key=lambda par: par[0])[1]
 
 
 # Marcas que **só** existem no diálogo de criação — valem mais que o título.

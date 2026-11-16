@@ -174,6 +174,48 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.23 — o problema não era a janela: era a vista
+
+Print de 16/11, 07:52. O painel **Create API key** aberto, e outra vez
+
+    2. NÃO DEI: … (3 elementos com nome, fonte uia; os primeiros:
+    Chrome Legacy Window, Keys | Settings | OpenRouter, Notifications)
+
+A 0.91.22 tinha uma teoria: a janela estava atrás do console e por isso a
+leitura caía. Nesse print, a 0.91.22 **fez** o que prometia — trouxe a janela
+para a frente, duas vezes — e a leitura continuou pobre. A teoria estava
+errada, e a mensagem estava certa em dizer que o defeito era **ver**, não
+clicar.
+
+A causa é a **vista** de acessibilidade. A UIAutomation tem três: controle
+(o que um teclado alcança), conteúdo e **crua**. Com um modal aberto, o site
+esconde a página da tecnologia assistiva — e a vista de controle, que era a
+única usada, passa a devolver a moldura. A vista crua continua vendo tudo,
+inclusive o painel, porque ela não respeita o que o site marcou como
+escondido.
+
+| peça | o que muda |
+|---|---|
+| `arvore_windows.UIA_VIEWS` | as três vistas (índices 14, 15, 16); `ler_janela` aceita `uia`, `uia_content`, `uia_raw` |
+| `_ler_pela_fonte` | a vista crua ganha orçamento maior (profundidade 18, 6.000 nós): o painel é o **último** nó do documento, e com o teto normal seria cortado |
+| `_reler` | quando a automática vem pobre, uma fonte extra por chamada, girando entre as quatro; achada a que mostra a página, ela passa a ser a primeira (`_FONTE_PREFERIDA`) |
+| `_leitura_boa` (novo) | contagem sozinha não decide: o painel tem 6 nomes e a página recém-criada também; moldura é o que tem “Chrome Legacy Window” no nome |
+| `chave-leitura.txt` | mede as cinco leituras (auto, uia, uia_raw, uia_content, msaa), para a próxima falha dizer qual vista vê |
+
+Duas correções menores que vieram do mesmo print:
+
+- **a espera da área de transferência não fica calada**: a cada 20 s uma linha
+  diz que ele continua olhando (o dono já apertou Ctrl+C numa espera muda de
+  120 s);
+- **lista de crédito sem “sem limite”**: ele escolhe o maior valor da lista e
+  diz que escolheu, em vez de parar sem criar chave nenhuma.
+
+O que **não** se sabe: se a vista crua é o que resolve no Chrome do dono. O
+teste prova o comportamento (com a vista de controle na moldura e a crua na
+página, o caminho inteiro termina com a chave no `.env`), não a causa. Se
+falhar de novo, o `chave-leitura.txt` agora traz a contagem das cinco leituras
+— e a linha com mais nomes é a resposta.
+
 ### 0.91.22 — o painel estava na tela e a leitura era da moldura
 
 Print de 15/11, 20:32. Três coisas ao mesmo tempo: o painel **Create API key**

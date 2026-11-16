@@ -90,6 +90,7 @@ class ChromeFalso:
         publica_valor: bool = False,
         nome_digitado: bool = True,
         dorme_depois_do_clique: bool = False,
+        so_na_leitura_crua: bool = False,
     ) -> None:
         self.atraso = atraso
         # Print de 15/11 (0.91.21): o painel abriu, o dono foi olhar o console,
@@ -99,6 +100,11 @@ class ChromeFalso:
         self.dorme_depois_do_clique = dorme_depois_do_clique
         self.dormindo = False
         self.trouxe_para_frente = 0
+        # Print de 16/11 07:52 (0.91.22): com o painel aberto, a leitura normal
+        # devolvia 3 elementos — a moldura. A vista **crua** da UIAutomation é
+        # a que enxerga o modal. Aqui só ela mostra a página.
+        self.so_na_leitura_crua = so_na_leitura_crua
+        self.fontes_pedidas: list[str] = []
         self.moldura_a_cada = moldura_a_cada
         self.acao_mente = acao_mente
         self.engole_o_primeiro_clique = engole_o_primeiro_clique
@@ -220,6 +226,14 @@ class ChromeFalso:
         return True
 
     def ler_janela(self, _handle, profundidade=8, limite=1500, fonte="auto"):
+        self.fontes_pedidas.append(fonte)
+        if self.so_na_leitura_crua and fonte != "uia_raw":
+            # A vista de controle não vê o conteúdo: sobra a moldura.
+            return {
+                "janela": dict(self.janela),
+                "raiz": {"nome": "API keys", "papel": 1, "filhos": self._moldura()},
+                "fonte": "uia" if fonte == "auto" else fonte,
+            }
         return {"janela": dict(self.janela), "raiz": self.raiz(), "fonte": "uia" if fonte == "auto" else fonte}
 
     def executar_ref(self, handle, caminho, acao, texto="", caixa=None, mouse=False, primeiro_mouse=False):
@@ -671,6 +685,54 @@ def test_regressao_0_91_22_sem_conseguir_ler_a_pagina_a_mensagem_e_a_verdadeira(
     assert "NÃO consegui ver a" in saida
     assert "lida inteira" not in saida, "não pode afirmar uma leitura que não houve"
     assert "clique uma vez no Chrome" in saida, "o dono tem de saber o que fazer"
+
+
+def test_regressao_0_91_23_a_vista_crua_enxerga_o_painel_que_a_de_controle_nao_ve(
+    monkeypatch, tmp_path, capsys
+):
+    """Print de 16/11 07:52: painel aberto na tela e “3 elementos” outra vez.
+
+    Na 0.91.22 ele acordou a janela e continuou vendo 3 elementos — porque o
+    problema não era a janela atrás: era a **vista** de acessibilidade. Com o
+    modal aberto, o site esconde a página da tecnologia assistiva, e a vista de
+    controle passa a devolver só a moldura. A vista **crua** continua vendo
+    tudo — inclusive o painel e os campos.
+
+    Este é o teste do fluxo inteiro nesse mundo: ele tem de achar o painel pela
+    leitura crua, digitar o nome, escolher “No expiration”, criar e gravar.
+    """
+    chrome = ChromeFalso(so_na_leitura_crua=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert _rodar(script) == 0
+
+    assert "uia_raw" in chrome.fontes_pedidas, "a vista crua é a que vê o painel"
+    assert chrome.tela == "criada"
+    assert chrome.nome.startswith("jarvis-")
+    assert chrome.expira == "Never"
+    assert _chave_gravada(env) == CHAVE_NOVA
+
+
+def test_regressao_0_91_23_depois_de_achar_a_vista_boa_ele_para_de_procurar(
+    monkeypatch, tmp_path
+):
+    """Achada a vista que mostra a página, ele não paga as outras de novo.
+
+    Ler cinco vistas a cada passo custaria caro (a crua lê centenas de nós) e
+    tornaria o caminho lento a ponto de a página mudar no meio.
+    """
+    chrome = ChromeFalso(so_na_leitura_crua=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert _rodar(script) == 0
+    assert _chave_gravada(env) == CHAVE_NOVA
+
+    depois_da_primeira = chrome.fontes_pedidas[chrome.fontes_pedidas.index("uia_raw") + 1 :]
+    assert "auto" not in depois_da_primeira, (
+        "com a fonte preferida conhecida, a leitura automática (que já falhou) não é paga de novo"
+    )
 
 
 # ---------------------------------------------------------------------------

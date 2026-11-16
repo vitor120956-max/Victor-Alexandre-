@@ -124,6 +124,16 @@ def _ler_janela(alvo: str, profundidade: int = 8, limite: int = 1500):
 # 3 nomes — e o script disse que o diálogo não estava lá.
 LEITURA_POBRE = 8
 
+# As fontes de leitura, na ordem em que são tentadas quando a automática vem
+# pobre. `uia_raw` é a vista **crua** da UIAutomation: medido no PC do dono
+# (0.91.23), com o painel “Create API key” aberto na tela, a vista de controle
+# devolvia 3 elementos (a moldura) e era por isso que o script desistia com o
+# painel à vista. A crua mostra o que o site marcou como escondido para
+# tecnologia assistiva — que é exatamente o que um modal faz com a página.
+FONTES_DE_LEITURA = ("uia_raw", "uia_content", "uia", "msaa")
+_FONTE_PREFERIDA: dict[int, str] = {}
+_ROTACAO_ATUAL: dict[int, int] = {}
+
 
 def _nomes(montada: dict) -> int:
     """Quantos elementos com nome a leitura trouxe — o tamanho da “cara” da página."""
@@ -132,10 +142,64 @@ def _nomes(montada: dict) -> int:
     return len(chave_web.elementos(montada))
 
 
+# Nomes que só existem na **moldura** do navegador, nunca na página.
+MARCAS_DE_MOLDURA = (
+    "chrome legacy window",
+    "chrome_renderwidgethosthwnd",
+    "chrome_widgetwin",
+    "mozilla windowclass",
+)
+
+
+def _parece_moldura(montada: dict) -> bool:
+    """A leitura veio da moldura do navegador, e não da página?"""
+    from server import chave_web
+
+    for no in chave_web.elementos(montada)[:12]:
+        nome = chave_web.normalizar(str(no.get("nome") or ""))
+        if any(marca in nome for marca in MARCAS_DE_MOLDURA):
+            return True
+    return False
+
+
+def _leitura_boa(montada: dict) -> bool:
+    """Esta leitura mostrou a página — ou o painel?
+
+    Contagem sozinha não decide, e cada régua errada custou uma rodada no PC do
+    dono:
+
+    - o painel “Create API key” aberto sobre a página tem 6 ou 7 elementos com
+      nome — menos que o piso de 8. Ver o painel contava como “leitura pobre”, e
+      o script ia procurar outras vistas com o painel à vista;
+    - a página logo depois de criar a chave também é pequena (6 nomes). Ela é
+      uma leitura **boa** — o que a denuncia como moldura é o nome
+      “Chrome Legacy Window”, não o tamanho.
+    """
+    from server import chave_web
+
+    nomes = _nomes(montada)
+    if nomes >= LEITURA_POBRE:
+        return True
+    if chave_web.e_dialogo_de_criacao(montada):
+        return True
+    if nomes < 3:
+        return False
+    return not _parece_moldura(montada)
+
+
 def _ler_pela_fonte(handle: int, profundidade: int, limite: int, fonte: str = "auto") -> dict:
-    """Uma leitura, por uma fonte escolhida. `auto` deixa o Windows decidir."""
+    """Uma leitura, por uma fonte escolhida. `auto` deixa o Windows decidir.
+
+    A vista **crua** ganha orçamento maior de propósito: ela mostra o documento
+    inteiro, e o painel de criação é o **último** nó do documento. Com o teto
+    da leitura normal, o painel seria cortado justamente por estar no fim —
+    mais uma vez “o painel não existe” com ele na tela.
+    """
     from server import arvore, arvore_windows
 
+    if fonte.endswith("raw"):
+        profundidade = max(int(profundidade), PROFUNDA + 4)
+        limite = max(int(limite), TETO_FUNDO * 2)
     if fonte == "auto":
         bruto = arvore_windows.ler_janela(handle, profundidade, limite)
     else:
@@ -163,16 +227,39 @@ def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
     handle = int(janela.get("handle") or 0)
     if not handle or not arvore_windows.janela_muda(handle):
         raise PassoError("a janela do navegador foi fechada no meio do caminho.")
+
+    # A fonte que já mostrou a página nesta janela vai primeiro: repetir a
+    # descoberta a cada leitura custaria caro (a vista crua lê centenas de nós).
+    preferida = _FONTE_PREFERIDA.get(handle)
+    if preferida:
+        try:
+            boa = _ler_pela_fonte(handle, profundidade, limite, preferida)
+        except Exception:  # noqa: BLE001 - COM de terceiros
+            boa = None
+        if boa is not None and _leitura_boa(boa):
+            return janela, boa
+        _FONTE_PREFERIDA.pop(handle, None)
+
     montada = _ler_pela_fonte(handle, profundidade, limite, "auto")
-    if _nomes(montada) >= LEITURA_POBRE:
+    if _leitura_boa(montada):
         return janela, montada
-    for fonte in ("uia", "msaa"):
+
+    # Uma fonte extra por chamada, girando entre elas. Duas razões para girar em
+    # vez de tentar todas: cada leitura custa segundos, e quem chama já está em
+    # laço — em duas ou três voltas todas as vistas foram medidas.
+    inicio = _ROTACAO_ATUAL.get(handle, 0)
+    for deslocamento in range(len(FONTES_DE_LEITURA)):
+        fonte = FONTES_DE_LEITURA[(inicio + deslocamento) % len(FONTES_DE_LEITURA)]
         try:
             tentativa = _ler_pela_fonte(handle, profundidade, limite, fonte)
         except Exception:  # noqa: BLE001 - COM de terceiros: uma fonte pode cair
             continue
         if _nomes(tentativa) > _nomes(montada):
             montada = tentativa
+            if _leitura_boa(montada):
+                _FONTE_PREFERIDA[handle] = fonte
+            break
+    _ROTACAO_ATUAL[handle] = (inicio + 1) % len(FONTES_DE_LEITURA)
     return janela, montada
 
 
@@ -295,17 +382,30 @@ def _chave_no_texto(modulo, texto: str) -> str:
     return chaves[0] if chaves else ""
 
 
-def _esperar_chave(modulo, anterior: str, segundos: float = 90.0) -> tuple[str, str] | None:
-    """Espera aparecer na área uma chave diferente da que já estava lá."""
-    fim = time.time() + segundos
+def _esperar_chave(
+    modulo, anterior: str, segundos: float = 90.0, avisar: bool = False
+) -> tuple[str, str] | None:
+    """Espera aparecer na área uma chave diferente da que já estava lá.
+
+    `avisar` existe porque esperar calado parece travamento: o dono já apertou
+    Ctrl+C numa espera de 120 s que não dizia nada. Com `avisar`, a cada 20 s
+    uma linha diz que ele continua olhando e por quanto tempo.
+    """
+    inicio = time.time()
+    fim = inicio + segundos
+    proximo_aviso = inicio + 20.0
     while True:
         texto = _texto_da_area()
         if texto and texto.strip() != (anterior or "").strip():
             chave = _chave_no_texto(modulo, texto)
             if chave:
                 return texto, chave
-        if time.time() >= fim:
+        agora = time.time()
+        if agora >= fim:
             return None
+        if avisar and agora >= proximo_aviso:
+            print(f"     continuo olhando a área de transferência… ({int(agora - inicio)}s de {int(segundos)}s)")
+            proximo_aviso = agora + 20.0
         time.sleep(0.7)
 
 
@@ -675,7 +775,7 @@ def _acordar_leitura(janela: dict, montada: dict, *, avisar: bool = False, segun
     Se não for isso, a leitura continua pobre — e aí a mensagem de desistência
     diz que o problema foi **ver** a página, e não clicar nela.
     """
-    if _nomes(montada) >= LEITURA_POBRE:
+    if _leitura_boa(montada):
         return janela, montada
     em_foco = False
     try:
@@ -748,7 +848,7 @@ def _esperar_dialogo(args, janela: dict, segundos: float = 35.0, avisar: bool = 
     while True:
         if chave_web.e_dialogo_de_criacao(montada):
             return janela, montada
-        if _nomes(montada) < LEITURA_POBRE:
+        if not _leitura_boa(montada):
             # Leitura pobre **não é** “o painel não abriu”: é “eu não estou
             # vendo a página”. Foi assim que ele desistiu com o painel na tela
             # e a janela do Chrome atrás do console (print de 15/11).
@@ -833,7 +933,11 @@ def _gravar_relatorio(janela: dict, extra: list[str] | None = None) -> dict:
         linhas.extend(f"  {linha}" for linha in extra)
         linhas.append("")
     handle = int(janela.get("handle") or 0)
-    for fonte in ("auto", "uia", "msaa"):
+    # Todas as vistas são medidas e escritas: quando o painel está na tela e a
+    # leitura não o traz, esta é a única pergunta que importa — **qual** vista
+    # enxerga a página. (0.91.23: a de controle devolvia 3 elementos; a crua,
+    # a página inteira com o painel.)
+    for fonte in ("auto", "uia", "uia_raw", "uia_content", "msaa"):
         try:
             montada = _ler_pela_fonte(handle, PROFUNDA, TETO_FUNDO, fonte)
         except Exception as exc:  # noqa: BLE001 - é diagnóstico, não pode derrubar
@@ -1023,7 +1127,7 @@ def _esperar_pagina_pronta(args, janela: dict, montada: dict, segundos: float = 
         anterior = agora
         time.sleep(1.0)
         janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
-        if agora < LEITURA_POBRE:
+        if not _leitura_boa(montada):
             # Página que não aparece pode ser janela atrás, não página lenta.
             janela, montada = _acordar_leitura(janela, montada, avisar=not avisou_caida)
             avisou_caida = True
@@ -1264,9 +1368,20 @@ def _preencher_dialogo(
     if prazo:
         preenchidos["expiração"] = prazo
 
-    # 3. limite de crédito — não é para caber mais, é para não travar sozinho
+    # 3. limite de crédito — não é para caber mais, é para não travar sozinho.
+    #    Sem opção “sem limite”, ele **não para**: escolhe o maior valor da lista
+    #    e diz que escolheu — parar aqui é não ter chave nenhuma.
+    def _limite_da_lista(nomes_da_lista: list[str]) -> str | None:
+        escolhido = chave_web.melhor_limite(nomes_da_lista, aceitar_maior=True)
+        if escolhido and not chave_web.melhor_limite(nomes_da_lista):
+            print(
+                f"     limite: a lista não tem “sem limite” — escolhendo o maior de lá "
+                f"(“{escolhido}”), para a chave não ficar sem criar."
+            )
+        return escolhido
+
     montada, limite = _preencher_uma_lista(
-        janela, montada, chave_web.PADROES_LIMITE, chave_web.melhor_limite, "limite",
+        janela, montada, chave_web.PADROES_LIMITE, _limite_da_lista, "limite",
         mouse=mouse, primeiro_mouse=primeiro_mouse,
     )
     if limite:
@@ -1329,7 +1444,7 @@ def _criar_e_copiar(
                 janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
             except PassoError:
                 montada = None
-            if montada is not None and _nomes(montada) < LEITURA_POBRE:
+            if montada is not None and not _leitura_boa(montada):
                 # A leitura caiu depois do clique: é o Chrome que parou de
                 # publicar (janela atrás), não o painel que não abriu.
                 janela, montada = _acordar_leitura(janela, montada, avisar=True)
@@ -1402,7 +1517,7 @@ def _criar_e_copiar(
         # arquivo já vem na mensagem de `falha`).
         _gravar_relatorio(janela, extra=[f"clique {item}" for item in cliques])
         print(f"  2. NÃO DEI: {falha}")
-        if montada is None or _nomes(montada) < LEITURA_POBRE:
+        if montada is None or not _leitura_boa(montada):
             # Honestidade: aqui o problema foi **ver** a página, não clicar.
             print("     Nada foi criado. E o defeito não foi o clique: eu NÃO consegui ver a")
             print("     página do Chrome — a leitura trouxe só a moldura. Deixe a janela do")
@@ -1656,7 +1771,7 @@ def passo_auto(args) -> int:
         print("     Create Key → dê um nome → Create → clique no botão COPIAR")
         print()
         print(f"  Estou olhando a área de transferência por {int(args.espera_colar)}s…")
-        achado = _esperar_chave(modulo, anterior, segundos=args.espera_colar)
+        achado = _esperar_chave(modulo, anterior, segundos=args.espera_colar, avisar=True)
         if not achado:
             print("  NÃO DEU: nada novo apareceu na área de transferência.")
             print("  Copie a chave pelo botão e rode `--pegar` — não precisa refazer o resto.")

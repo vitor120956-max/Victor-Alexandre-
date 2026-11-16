@@ -594,6 +594,18 @@ IID_IUIAutomation = GUID(
 #                         5 GetLastChildElement, 6 GetNextSiblingElement
 UIA_ELEMENT_FROM_HANDLE = 6
 UIA_CONTROL_VIEW_WALKER = 14
+UIA_CONTENT_VIEW_WALKER = 15
+UIA_RAW_VIEW_WALKER = 16
+# As três vistas da UIAutomation. A de **controle** é a do dia a dia (o que um
+# teclado alcança). A **crua** mostra tudo, inclusive o que o site escondeu de
+# tecnologia assistiva — e é a única que enxerga o painel do OpenRouter quando
+# ele abre sobre a página (medido no PC do dono, 0.91.23): com o painel na
+# tela, a vista de controle devolvia 3 elementos, a moldura.
+UIA_VIEWS = {
+    "control": UIA_CONTROL_VIEW_WALKER,
+    "content": UIA_CONTENT_VIEW_WALKER,
+    "raw": UIA_RAW_VIEW_WALKER,
+}
 UIA_EL_GET_PATTERN = 16
 UIA_EL_GET_CONTROL_TYPE = 21
 UIA_EL_GET_LOCALIZED_TYPE = 22
@@ -731,13 +743,15 @@ def _uia_da_janela(hwnd: int) -> int:
     return int(elemento.value or 0)
 
 
-def _uia_walker() -> int:
+def _uia_walker(vista: str = "control") -> int:
+    """O caminhante da UIAutomation — `control` (padrão), `content` ou `raw`."""
     raiz = _uia_obter()
     if not raiz:
         return 0
+    indice = UIA_VIEWS.get((vista or "control").strip().lower(), UIA_CONTROL_VIEW_WALKER)
     ponteiro = ctypes.c_void_p(0)
     try:
-        funcao = _metodo(raiz, UIA_CONTROL_VIEW_WALKER, [ctypes.POINTER(ctypes.c_void_p)])
+        funcao = _metodo(raiz, indice, [ctypes.POINTER(ctypes.c_void_p)])
         if funcao(raiz, ctypes.byref(ponteiro)) != S_OK:
             return 0
     except Exception:  # noqa: BLE001
@@ -970,12 +984,14 @@ def _e_conteudo(classe: str) -> bool:
     return any(marca in limpa for marca in CLASSES_DE_CONTEUDO)
 
 
-def _ler_uia_da_janela(hwnd: int, profundidade: int, limite: int) -> dict[str, Any] | None:
+def _ler_uia_da_janela(
+    hwnd: int, profundidade: int, limite: int, vista: str = "control"
+) -> dict[str, Any] | None:
     """Lê a UIA de **um** HWND. Separado para poder ser somado na varredura."""
     raiz = _uia_da_janela(int(hwnd))
     if not raiz:
         return None
-    walker = _uia_walker()
+    walker = _uia_walker(vista)
     try:
         if not walker:
             return None
@@ -989,7 +1005,9 @@ def _ler_uia_da_janela(hwnd: int, profundidade: int, limite: int) -> dict[str, A
     return arvore_no
 
 
-def varrer_uia(handle: int, profundidade: int, limite: int) -> dict[str, Any] | None:
+def varrer_uia(
+    handle: int, profundidade: int, limite: int, vista: str = "control"
+) -> dict[str, Any] | None:
     """Lê a UIA da janela **e** das filhas; fica com a que tem conteúdo.
 
     Ler só a janela de topo devolvia 4 elementos no Chrome. A página está na
@@ -1008,7 +1026,9 @@ def varrer_uia(handle: int, profundidade: int, limite: int) -> dict[str, Any] | 
         if examinadas >= FILHAS_MAXIMAS:
             break
         examinadas += 1
-        arvore_no = _ler_uia_da_janela(int(candidata["handle"]), profundidade, max(1, int(limite)))
+        arvore_no = _ler_uia_da_janela(
+            int(candidata["handle"]), profundidade, max(1, int(limite)), vista
+        )
         if arvore_no is None:
             continue
         total = arvore.total_bruto({"raiz": arvore_no})
@@ -1027,9 +1047,11 @@ def varrer_uia(handle: int, profundidade: int, limite: int) -> dict[str, Any] | 
     return melhor
 
 
-def _ler_uia(janela: dict[str, Any], profundidade: int, limite: int) -> dict[str, Any] | None:
+def _ler_uia(
+    janela: dict[str, Any], profundidade: int, limite: int, vista: str = "control"
+) -> dict[str, Any] | None:
     """UIA da janela e das filhas — a página do navegador está na filha."""
-    achada = varrer_uia(int(janela["handle"]), profundidade, limite)
+    achada = varrer_uia(int(janela["handle"]), profundidade, limite, vista)
     if not achada:
         return None
     # O usuário pediu a janela X: o `alvo` continua sendo X, mesmo que a árvore
@@ -1112,20 +1134,23 @@ def ler_janela(
 ) -> dict[str, Any]:
     """Lê a árvore de uma janela. Sem árvore, devolve `raiz: None` e o motivo.
 
-    `fonte`: `auto` (padrão — MSAA e, se ela vier pobre, UIAutomation), `msaa`
-    ou `uia`. No `auto`, quem decide é a leitura que mostrou mais elementos.
+    `fonte`: `auto` (padrão — MSAA e, se ela vier pobre, UIAutomation), `msaa`,
+    `uia` (vista de controle), `uia_content` (vista de conteúdo) ou `uia_raw`
+    (vista crua — a que enxerga o que o site marcou como escondido). No `auto`,
+    quem decide é a leitura que mostrou mais elementos.
     """
     janela = _janela(int(handle))
     pedido = (fonte or "auto").strip().lower()
 
-    if pedido == "uia":
-        bruto = _ler_uia(janela, profundidade, limite)
+    if pedido.startswith("uia"):
+        vista = pedido.split("_", 1)[1] if "_" in pedido else "control"
+        bruto = _ler_uia(janela, profundidade, limite, vista)
         if bruto:
             return bruto
         return {
             "janela": janela,
             "raiz": None,
-            "fonte": "uia",
+            "fonte": pedido,
             "aviso": (
                 "a UIAutomation não devolveu árvore para esta janela. "
                 "Rode `arvore_sonda.py --diagnostico` para ver em qual passo o COM parou."

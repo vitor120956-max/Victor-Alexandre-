@@ -322,7 +322,7 @@ def _montar(monkeypatch, paginas: list[dict[str, Any]], windows: WindowsFalso, c
     # que é o que o dono veria no Windows.
     monkeypatch.setattr(script, "_copiar_pela_pagina", lambda _janela: False)
     monkeypatch.setattr(
-        script, "_esperar_chave", lambda _modulo, _antes, segundos=0: (config.chave, config.chave)
+        script, "_esperar_chave", lambda _modulo, _antes, segundos=0, avisar=False: (config.chave, config.chave)
     )
     return script
 
@@ -344,7 +344,7 @@ def _com_mundo(monkeypatch, mundo: Mundo, config: ConfiguradorFalso | None = Non
     monkeypatch.setattr(script, "_gravar", lambda _modulo, chave: config.gravadas.append(chave) or 0)
     monkeypatch.setattr(script, "_copiar_pela_pagina", lambda _janela: False)
     monkeypatch.setattr(
-        script, "_esperar_chave", lambda _modulo, _antes, segundos=0: (config.chave, config.chave)
+        script, "_esperar_chave", lambda _modulo, _antes, segundos=0, avisar=False: (config.chave, config.chave)
     )
     return script, config
 
@@ -676,7 +676,7 @@ def test_auto_sem_botao_na_arvore_espera_o_dono_copiar(monkeypatch, capsys):
     paginas = [_pagina(_no("Settings"), _no("Docs"))]
     script, config, args = _auto(monkeypatch, paginas, area, espera_colar=4)
 
-    def copia_do_dono(_modulo, _antes, segundos=0):
+    def copia_do_dono(_modulo, _antes, segundos=0, avisar=False):
         assert segundos == 4
         return (CHAVE_NOVA, CHAVE_NOVA)
 
@@ -704,7 +704,7 @@ def test_auto_usa_o_site_do_provedor_pedido(monkeypatch, tmp_path):
     script, config, args = _auto(monkeypatch, paginas, area, provedor="groq")
     # a página do dublê não tem painel; a falha grava o relatório na pasta do script
     monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
-    monkeypatch.setattr(script, "_esperar_chave", lambda _m, _a, segundos=0: (CHAVE_NOVA, CHAVE_NOVA))
+    monkeypatch.setattr(script, "_esperar_chave", lambda _m, _a, segundos=0, avisar=False: (CHAVE_NOVA, CHAVE_NOVA))
 
     assert script.passo_auto(args) == 0
     assert config.abertos == ["console.groq.com/keys"]
@@ -1242,6 +1242,110 @@ def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
     for fonte in ("auto", "uia", "msaa"):
         assert fonte in texto
     assert "primeiros:" in texto
+
+
+def test_a_vista_crua_e_tentada_quando_a_de_controle_so_traz_moldura(monkeypatch):
+    """Print de 16/11 07:52: painel aberto, 3 elementos, e a vista de controle é que falhava.
+
+    A UIAutomation tem três vistas. O site, com o painel aberto, esconde a
+    página da vista de controle; a **crua** continua vendo. Esta é a leitura
+    que faltava entre a 0.91.20 e a 0.91.22 — as duas tentaram consertar a
+    janela, e o problema era a vista.
+    """
+    script = _script()
+
+    class SoNaCrua:
+        def __init__(self) -> None:
+            self.pedidas: list[str] = []
+
+        def janela_muda(self, _handle) -> bool:
+            return True
+
+        def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+            self.pedidas.append(fonte)
+            tela = _pagina_rica() if fonte == "uia_raw" else _moldura()
+            janela = {"handle": int(handle), "titulo": "Keys | Settings | OpenRouter", "processo": "chrome"}
+            return {"janela": janela, "raiz": tela["arvore"], "fonte": fonte}
+
+    falso = SoNaCrua()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+
+    _janela, montada = script._reler(JANELA, script.PROFUNDA, script.TETO_FUNDO)
+
+    assert script._nomes(montada) >= 8
+    assert "uia_raw" in falso.pedidas
+    assert script._FONTE_PREFERIDA.get(4242) == "uia_raw", (
+        "achada a vista que vê a página, ela é lembrada para as próximas leituras"
+    )
+
+
+def test_a_vista_que_funcionou_vai_primeiro_na_leitura_seguinte(monkeypatch):
+    """Ler quatro vistas a cada passo custaria segundos — e a página mudaria no meio."""
+    script = _script()
+
+    class SoNaCrua:
+        def __init__(self) -> None:
+            self.pedidas: list[str] = []
+
+        def janela_muda(self, _handle) -> bool:
+            return True
+
+        def ler_janela(self, handle, _profundidade=8, _limite=1500, fonte="auto"):
+            self.pedidas.append(fonte)
+            tela = _pagina_rica() if fonte == "uia_raw" else _moldura()
+            janela = {"handle": int(handle), "titulo": "Keys | Settings | OpenRouter", "processo": "chrome"}
+            return {"janela": janela, "raiz": tela["arvore"], "fonte": fonte}
+
+    falso = SoNaCrua()
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+
+    script._reler(JANELA, script.PROFUNDA, script.TETO_FUNDO)
+    antes = len(falso.pedidas)
+    script._reler(JANELA, script.PROFUNDA, script.TETO_FUNDO)
+
+    assert falso.pedidas[antes] == "uia_raw", "a fonte preferida é a primeira a ser lida"
+
+
+def test_pagina_pequena_nao_e_confundida_com_moldura(monkeypatch):
+    """Depois de criar, a página tem 6 nomes — e é uma leitura boa.
+
+    O piso de 8 existe para separar a página da moldura. Usá-lo sozinho fazia
+    a página pequena (pós-criação) ser lida cinco vezes, procurando uma vista
+    melhor que não existia.
+    """
+    script = _script()
+
+    assert script._leitura_boa(_pagina(_no("API keys"), _no("New key"), _no("Copy"), _no("jarvis-2026 (abc)")))
+    assert not script._leitura_boa(_moldura()), "“Chrome Legacy Window” é a assinatura da moldura"
+
+
+def test_o_relatorio_mede_todas_as_vistas(monkeypatch, tmp_path):
+    """Quando o painel está na tela e a leitura não o traz, a pergunta é *qual vista* vê."""
+    script = _script()
+    falso = MolduraOuPagina(_moldura(), _moldura())
+    monkeypatch.setitem(sys.modules, "server.arvore_windows", falso)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    script._gravar_relatorio(JANELA)
+
+    texto = (tmp_path / "chave-leitura.txt").read_text(encoding="utf-8")
+    for vista in ("uia_raw", "uia_content"):
+        assert vista in texto, f"o relatório tem de medir a vista {vista}"
+
+
+def test_a_espera_da_area_de_transferencia_nao_fica_calada(monkeypatch, capsys):
+    """O dono apertou Ctrl+C numa espera de 120 s que não dizia nada."""
+    script = _script()
+    relogio = itertools.count()
+    monkeypatch.setattr(
+        script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 10.0, sleep=lambda _s: None)
+    )
+    monkeypatch.setattr(script, "_texto_da_area", lambda: "")
+
+    assert script._esperar_chave(None, "", segundos=60, avisar=True) is None
+
+    saida = capsys.readouterr().out
+    assert "continuo olhando a área de transferência" in saida
 
 
 def test_o_relatorio_diz_se_a_janela_estava_atras_ou_minimizada(tmp_path, monkeypatch):
