@@ -331,7 +331,7 @@ def _com_mundo(monkeypatch, mundo: Mundo, config: ConfiguradorFalso | None = Non
     """Liga o script a um OpenRouter de mentira com estado (o diálogo de verdade)."""
     script = _script()
     monkeypatch.setattr(script, "_ler_janela", lambda _alvo, **_k: (JANELA, mundo.montar()))
-    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, mundo.montar()))
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, mundo.montar()))
     relogio = itertools.count()
     monkeypatch.setattr(
         script,
@@ -1204,7 +1204,7 @@ def test_esperar_dialogo_nao_desiste_por_causa_de_uma_leitura_pobre(monkeypatch,
         _no("Create API key"), _no("Key name", papel=42), _no("Select expiration"), _no("Create")
     )
     fila = [_moldura(), _moldura(), dialogo]
-    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0]))
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, fila.pop(0) if len(fila) > 1 else fila[0]))
     relogio = itertools.count()
     monkeypatch.setattr(
         script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 0.5, sleep=lambda _s: None)
@@ -1244,15 +1244,19 @@ def test_o_relatorio_da_falha_guarda_as_tres_leituras(tmp_path, monkeypatch):
     assert "primeiros:" in texto
 
 
-def test_o_sinal_de_leitor_de_tela_e_pedido_uma_vez_por_janela(monkeypatch, capsys):
-    """Print de 16/11 08:35: 3 elementos em todas as leituras, com o painel na tela.
+def test_o_sinal_de_leitor_de_tela_e_repetido_a_cada_leitura_pobre(monkeypatch, capsys):
+    """Print de 16/11: 85 elementos → 3, na mesma janela, sem nada mudar.
 
-    O sinal que faz o Chrome publicar a página é caro e mexe numa configuração
-    do Windows: uma vez por janela basta, e o dono tem de saber que ele foi
-    dado. Repetir a cada leitura seria mexer no sistema em laço.
+    O Chrome publica a página enquanto alguém a pede e desliga quando para de
+    pedir. Pedir “uma vez por janela” (o que a 0.91.25 fazia) deixa a página
+    sumir de novo no meio do caminho — foi o que aconteceu: o programa ligou o
+    sinal, leu o painel e, três passos depois, voltou a ver 3 elementos.
+
+    Aqui o pedido é repetido a cada leitura pobre — é ele que mantém a página
+    viva —, mas a **mensagem** aparece uma vez só: o dono não precisa ler a
+    mesma explicação em laço.
     """
     script = _script()
-    script._ACESSIBILIDADE_PEDIDA.clear()
 
     class SemPagina:
         def __init__(self) -> None:
@@ -1268,9 +1272,9 @@ def test_o_sinal_de_leitor_de_tela_e_pedido_uma_vez_por_janela(monkeypatch, caps
                 "fonte": fonte,
             }
 
-        def acordar_acessibilidade(self, _handle=0):
+        def acordar_acessibilidade(self, _handle=0, tentativas=3, espera=0.7):
             self.pedidos += 1
-            return {"antes": False, "ligado": True, "depois": True}
+            return {"antes": False, "ligado": True, "pedidos": 3, "depois": True}
 
         def trazer_para_frente(self, _handle) -> bool:
             return True
@@ -1288,8 +1292,9 @@ def test_o_sinal_de_leitor_de_tela_e_pedido_uma_vez_por_janela(monkeypatch, caps
     script._acordar_leitura(JANELA, _moldura(), avisar=True)
     script._acordar_leitura(JANELA, _moldura(), avisar=True)
 
-    assert falso.pedidos == 1, "o sinal é dado uma vez por janela, não a cada leitura"
-    assert "modo leitor de tela" in capsys.readouterr().out
+    assert falso.pedidos >= 2, "o pedido é o que mantém a página publicada: tem de se repetir"
+    saida = capsys.readouterr().out
+    assert saida.count("parou de publicar a página") == 1, "a explicação aparece uma vez"
 
 
 def test_o_diagnostico_mede_as_vistas_e_nao_clica_em_nada(monkeypatch, tmp_path, capsys):
@@ -1523,7 +1528,7 @@ def test_espera_a_pagina_parar_de_carregar_antes_de_clicar(monkeypatch, capsys):
     vazia = _pagina(_no("Nova guia"))
     fila = [vazia, _pagina_rica(), _pagina_rica()]
     monkeypatch.setattr(
-        script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
+        script, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
     )
     relogio = itertools.count()
     monkeypatch.setattr(
@@ -1998,7 +2003,7 @@ def test_ele_insiste_ate_o_botao_aparecer_na_leitura(monkeypatch, capsys):
         _pagina_rica(),      # a página, com “Create Key”
     ]
     monkeypatch.setattr(
-        script, "_reler", lambda janela, _p=8, _l=1500: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
+        script, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, fila.pop(0) if len(fila) > 1 else fila[0])
     )
     relogio = itertools.count()
     monkeypatch.setattr(
@@ -2016,7 +2021,7 @@ def test_ele_insiste_ate_o_botao_aparecer_na_leitura(monkeypatch, capsys):
 
 def test_se_o_botao_nunca_aparecer_ele_diz_o_que_viu(monkeypatch, capsys, tmp_path):
     script = _script()
-    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500: (janela, _moldura()))
+    monkeypatch.setattr(script, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, _moldura()))
     relogio = itertools.count()
     monkeypatch.setattr(
         script, "time", types.SimpleNamespace(time=lambda: next(relogio) * 10.0, sleep=lambda _s: None)
@@ -2038,7 +2043,7 @@ def test_a_espera_da_pagina_usa_leitura_funda(monkeypatch, capsys):
     script = _script()
     pedidas: list[int] = []
 
-    def reler(janela, profundidade=8, _limite=1500):
+    def reler(janela, profundidade=8, _limite=1500, **_k):
         pedidas.append(profundidade)
         return janela, _pagina_rica()
 
@@ -2058,7 +2063,7 @@ def test_pagina_que_nao_sossega_diz_quantos_elementos_viu(monkeypatch, capsys):
     # leituras sempre diferentes: a página nunca “para”
     leituras = itertools.count(3)
 
-    def reler(janela, _p=8, _l=1500):
+    def reler(janela, _p=8, _l=1500, **_k):
         quantidade = next(leituras)
         nomes = [_no(f"elemento {indice}", [100, 100 + indice * 10, 80, 20]) for indice in range(quantidade)]
         return janela, _pagina(*nomes)
@@ -2078,7 +2083,7 @@ def test_sem_botao_o_passo_nao_segue_para_o_create(monkeypatch, capsys, tmp_path
     """Sem o botão de criar, nada é clicado e nada é gravado."""
     mundo = Mundo()
     script_, config = _com_mundo(monkeypatch, mundo)
-    monkeypatch.setattr(script_, "_reler", lambda janela, _p=8, _l=1500: (janela, _moldura()))
+    monkeypatch.setattr(script_, "_reler", lambda janela, _p=8, _l=1500, **_k: (janela, _moldura()))
     monkeypatch.setattr(script_, "__file__", str(tmp_path / "chave-no-navegador.py"))
     relogio = itertools.count()
     monkeypatch.setattr(

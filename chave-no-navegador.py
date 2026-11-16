@@ -130,7 +130,10 @@ LEITURA_POBRE = 8
 # devolvia 3 elementos (a moldura) e era por isso que o script desistia com o
 # painel à vista. A crua mostra o que o site marcou como escondido para
 # tecnologia assistiva — que é exatamente o que um modal faz com a página.
-FONTES_DE_LEITURA = ("uia_raw", "uia_content", "uia", "msaa")
+# Ordem medida no PC do dono (16/11): com a acessibilidade ligada, a MSAA
+# trouxe 85 elementos e as vistas da UIAutomation 43 a 58 — e foi a **MSAA** a
+# única que viu o painel “Create API key” aberto. Então ela vai primeiro.
+FONTES_DE_LEITURA = ("msaa", "uia_raw", "uia_content", "uia")
 _FONTE_PREFERIDA: dict[int, str] = {}
 _ROTACAO_ATUAL: dict[int, int] = {}
 
@@ -207,20 +210,26 @@ def _ler_pela_fonte(handle: int, profundidade: int, limite: int, fonte: str = "a
     return arvore.montar(bruto, profundidade, limite, com_caminho=True)
 
 
-def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
+def _reler(
+    janela: dict, profundidade: int = 8, limite: int = 1500, *, curar: bool = True
+):
     """Relê **esta** janela (pelo handle), não “a janela do chrome”.
 
-    Duas coisas que esta função garante, e cada uma custou uma execução no PC
+    Três coisas que esta função garante, e cada uma custou uma execução no PC
     do dono:
 
     1. **o handle é a identidade.** A cada passo o código escolhia de novo a
        janela pelo nome; com duas janelas do Chrome abertas — a sua e a do
        site —, um passo podia ler (e clicar) na errada;
-    2. **leitura pobre é lida de novo, pelas duas fontes.** O Chrome moderno
-       publica a página pela UIAutomation; a MSAA devolve só a moldura. Se a
-       escolha automática cair na moldura (3 nomes), a página some da leitura —
-       e o script conclui “não apareceu”. Aqui, quando isso acontece, as fontes
-       são medidas na mão e fica a que mostrou a página.
+    2. **leitura pobre é lida de novo, por outra vista.** A escolha automática
+       pode cair na moldura (3 nomes) e a página some da leitura; aqui as
+       fontes são medidas na mão e fica a que mostrou a página;
+    3. **o Chrome desliga a página quando para de ser pedida.** Medido em
+       16/11: 85 elementos e, segundos depois, 3 — na mesma janela e no mesmo
+       processo. Então, quando a leitura vem pobre, esta função **pede a árvore
+       de novo** (`WM_GETOBJECT`) e relê. Fica aqui, e não em cada passo, porque
+       é por aqui que **toda** leitura passa: preencher o painel, achar o botão
+       “Create”, conferir o clique e copiar a chave.
     """
     from server import arvore_windows
 
@@ -247,6 +256,28 @@ def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
     # Uma fonte extra por chamada, girando entre elas. Duas razões para girar em
     # vez de tentar todas: cada leitura custa segundos, e quem chama já está em
     # laço — em duas ou três voltas todas as vistas foram medidas.
+    montada = _girar_fontes(handle, montada, profundidade, limite)
+
+    if curar and not _leitura_boa(montada):
+        # Pedir a árvore é o que reabre a página no Chrome. Duas tentativas
+        # porque ele leva de um a dois segundos para ligar o modo completo.
+        _acordar_a_acessibilidade(janela, avisar=True)
+        for _tentativa in range(2):
+            fonte = _FONTE_PREFERIDA.get(handle) or "auto"
+            try:
+                depois = _ler_pela_fonte(handle, profundidade, limite, fonte)
+            except Exception:  # noqa: BLE001 - COM de terceiros
+                continue
+            if _nomes(depois) > _nomes(montada):
+                montada = depois
+            if _leitura_boa(montada):
+                break
+            time.sleep(0.4)
+    return janela, montada
+
+
+def _girar_fontes(handle: int, montada: dict, profundidade: int, limite: int) -> dict:
+    """Uma fonte extra por chamada, girando: a leitura que mostrou mais vence."""
     inicio = _ROTACAO_ATUAL.get(handle, 0)
     for deslocamento in range(len(FONTES_DE_LEITURA)):
         fonte = FONTES_DE_LEITURA[(inicio + deslocamento) % len(FONTES_DE_LEITURA)]
@@ -260,7 +291,7 @@ def _reler(janela: dict, profundidade: int = 8, limite: int = 1500):
                 _FONTE_PREFERIDA[handle] = fonte
             break
     _ROTACAO_ATUAL[handle] = (inicio + 1) % len(FONTES_DE_LEITURA)
-    return janela, montada
+    return montada
 
 
 def _clicar(
@@ -377,20 +408,25 @@ def passo_diagnostico(args) -> int:
     """
     from server import arvore_windows, chave_web
 
+    leitor = getattr(arvore_windows, "leitor_de_tela", None)
+    antes_do_sinal = leitor() if leitor else None
+    _tomar_o_sinal(avisar=False)
     janela, _montada = _ler_janela(args.alvo)
     handle = int(janela.get("handle") or 0)
     print(f"  Janela: {janela.get('titulo') or '?'}  (handle {handle})")
     print("  Medindo o que cada leitura do Windows enxerga. Nada será clicado.")
     print()
 
-    leitor = getattr(arvore_windows, "leitor_de_tela", None)
     estado_leitor = leitor() if leitor else None
     if estado_leitor is None:
         print("  Modo leitor de tela do Windows: não deu para ler.")
+    elif antes_do_sinal is False:
+        print(
+            "  Modo leitor de tela do Windows: estava desligado — liguei para esta "
+            "medição (desligo no fim)."
+        )
     else:
         print(f"  Modo leitor de tela do Windows: {'LIGADO' if estado_leitor else 'desligado'}")
-        if not estado_leitor:
-            print("     O Chrome só publica a página para quem parece um leitor de tela.")
     filhas = []
     try:
         filhas = arvore_windows.janelas_filhas(handle, 12)
@@ -439,21 +475,33 @@ def passo_diagnostico(args) -> int:
     melhor = max(medidas, key=lambda item: (item[1], sum(item[2].values()))) if medidas else None
 
     if melhor is not None and not _medida_boa(melhor):
-        # Nada mostrou a página: a causa mais provável — e a única que o dono
-        # ainda não tinha visto medida — é o Chrome com a acessibilidade
-        # desligada. Liga, pede de novo e mede outra vez.
-        print("  Nenhuma leitura viu a página. Ligando o modo leitor de tela e medindo de novo…")
+        # Nada mostrou a página. O que o Chrome espera é um **pedido** de
+        # árvore — e ele leva alguns segundos para ligar o modo completo.
+        # Insistir aqui é o mesmo que o `pegar-chave.bat` faz, e é a medição
+        # que responde: “insistir resolve, ou o Chrome não publica de jeito
+        # nenhum nesta máquina?”.
+        print(
+            "  Nenhuma leitura viu a página. Insistindo com o pedido de árvore "
+            "(3 rodadas, como o JARVIS faz)…"
+        )
         print()
-        ligou = _acordar_a_acessibilidade(janela, avisar=False)
-        print(f"  Modo leitor de tela agora: {'LIGADO' if ligou else 'não consegui ligar'}")
-        print()
-        medidas = medir("  DEPOIS de ligar o modo leitor de tela:")
-        for medida in medidas:
-            if _medida_boa(medida):
-                print(f"  Funcionou: a leitura “{medida[0]}” viu {medida[1]} elementos.")
+        for rodada in range(1, 4):
+            _acordar_a_acessibilidade(janela, avisar=False)
+            time.sleep(1.0)
+            medidas = medir(f"  DEPOIS do pedido de árvore (rodada {rodada}):")
+            if any(_medida_boa(medida) for medida in medidas):
+                boa = next(medida for medida in medidas if _medida_boa(medida))
+                print(
+                    f"  Funcionou na rodada {rodada}: a leitura “{boa[0]}” viu "
+                    f"{boa[1]} elementos. É essa que o JARVIS usa."
+                )
                 break
         else:
-            print("  Continuou sem ver a página. O relatório abaixo tem o que cada leitura trouxe.")
+            print(
+                "  Continuou sem ver a página depois de três pedidos. O Chrome desta "
+                "máquina não está publicando a árvore — o relatório abaixo tem o que "
+                "cada leitura trouxe."
+            )
 
     print()
     if not medidas:
@@ -923,18 +971,47 @@ def _garantir_na_frente(janela: dict, segundos: float = 2.0) -> bool:
             return False
 
 
-_ACESSIBILIDADE_PEDIDA: set[int] = set()
+_ACESSIBILIDADE_AVISADA: set[int] = set()
+_MODO_LEITOR_ATIVO = False
+
+
+def _tomar_o_sinal(avisar: bool = True) -> bool:
+    """Liga o modo leitor de tela **no começo** e mantém até o fim do programa.
+
+    Por que no começo e não na primeira falha: medido no PC do dono (16/11),
+    a leitura trazia 85 elementos logo depois de reabrir o Chrome e voltava a 3
+    poucos segundos depois, no mesmo processo. O Chrome publica a página
+    enquanto acredita que existe um leitor de tela ativo. Ligar só quando a
+    leitura falha é chegar depois de a página já ter sumido — e cada leitura
+    custa segundos que o Chrome usa para desligar de novo.
+    """
+    global _MODO_LEITOR_ATIVO
+    try:
+        from server import arvore_windows
+    except Exception:  # noqa: BLE001 - fora do Windows (testes)
+        return False
+    ligar = getattr(arvore_windows, "ligar_leitor_de_tela", None)
+    if ligar is None:  # dublê de teste sem a função
+        return False
+    try:
+        _MODO_LEITOR_ATIVO = bool(ligar())
+    except Exception:  # noqa: BLE001 - configuração do sistema: melhor esforço
+        return False
+    if _MODO_LEITOR_ATIVO and avisar:
+        print(
+            "     (liguei o modo leitor de tela do Windows para o Chrome publicar a "
+            "página; desligo no fim)"
+        )
+    return _MODO_LEITOR_ATIVO
 
 
 def _acordar_a_acessibilidade(janela: dict, *, avisar: bool = False) -> bool:
-    """Liga o modo leitor de tela e pede a árvore — uma vez por janela.
+    """Pede a árvore ao Chrome de novo — a cada leitura pobre, não uma vez só.
 
-    Por que existe: no print de 16/11 08:35, com o painel aberto na tela,
-    **todas** as leituras (auto, uia, uia_raw, uia_content, msaa) devolveram 3
-    elementos. Não era a janela nem a vista: o Chrome estava com a
-    acessibilidade desligada. Ele liga quando o Windows diz que há um leitor de
-    tela — é a configuração `SPI_SETSCREENREADER`, a mesma que o NVDA usa.
-    Desfazemos no fim do programa.
+    O Chrome liga a acessibilidade da página quando alguém a pede e a desliga
+    quando para de pedir. No print de 16/11 a mesma janela passou de 85
+    elementos para 2 sem nada mudar na tela. Então o pedido é **repetido**,
+    com pausa: é ele que mantém a página publicada.
     """
     try:
         from server import arvore_windows
@@ -942,9 +1019,8 @@ def _acordar_a_acessibilidade(janela: dict, *, avisar: bool = False) -> bool:
         return False
 
     handle = int(janela.get("handle") or 0)
-    if not handle or handle in _ACESSIBILIDADE_PEDIDA:
+    if not handle:
         return False
-    _ACESSIBILIDADE_PEDIDA.add(handle)
     acordar = getattr(arvore_windows, "acordar_acessibilidade", None)
     if acordar is None:  # dublê de teste sem a função
         return False
@@ -952,11 +1028,12 @@ def _acordar_a_acessibilidade(janela: dict, *, avisar: bool = False) -> bool:
         feito = acordar(handle)
     except Exception:  # noqa: BLE001 - COM de terceiros: melhor esforço
         return False
-    if avisar:
+    if avisar and handle not in _ACESSIBILIDADE_AVISADA:
+        _ACESSIBILIDADE_AVISADA.add(handle)
         if feito.get("ligado"):
             print(
-                "     o Chrome estava sem publicar a página — liguei o modo leitor de "
-                "tela do Windows (desligo no fim) e pedi a leitura de novo."
+                "     o Chrome parou de publicar a página — pedi a leitura de novo "
+                "(modo leitor de tela ligado, desligo no fim)."
             )
         else:
             print(
@@ -968,6 +1045,8 @@ def _acordar_a_acessibilidade(janela: dict, *, avisar: bool = False) -> bool:
 
 def _desligar_a_acessibilidade() -> None:
     """Devolve a configuração do Windows como estava antes do programa."""
+    global _MODO_LEITOR_ATIVO
+    _MODO_LEITOR_ATIVO = False
     try:
         from server import arvore_windows
 
@@ -979,47 +1058,57 @@ def _desligar_a_acessibilidade() -> None:
 
 
 def _acordar_leitura(janela: dict, montada: dict, *, avisar: bool = False, segundos: float = 1.2):
-    """Leitura pobre não é resposta: põe a janela na frente e lê de novo.
+    """Leitura pobre não é resposta: põe a janela na frente, pede a árvore e relê.
 
-    Medido no PC do dono (0.91.22): ele clicou em “New key”, o painel **abriu**,
-    e a leitura seguinte trouxe 3 elementos — “Chrome Legacy Window”, o título
-    da aba e mais nada. O script chamou isso de “o painel não abriu” e desistiu,
-    com o painel na tela e os campos vazios.
+    Três coisas aprendidas em três prints, nesta ordem:
 
-    A causa **provável** é a janela: no print, o dono está olhando o console e
-    a janela do Chrome ficou atrás dele. Chrome coberto (ou minimizado) pode
-    parar de publicar a página e responder só a moldura. Trazer a janela para a
-    frente é o que um humano faz para ler a tela; aqui é o programa que faz.
+    - **0.91.22**: com o painel aberto a leitura trouxe 3 elementos — a janela
+      do Chrome estava atrás do console. Trazer para a frente é o primeiro remédio;
+    - **0.91.23**: janela na frente e ainda 3 — o problema podia ser a vista de
+      acessibilidade;
+    - **0.91.25**: o diagnóstico provou que eram 3 em **todas** as vistas, com o
+      painel na tela. O Chrome simplesmente não estava publicando a página.
 
-    Se não for isso, a leitura continua pobre — e aí a mensagem de desistência
-    diz que o problema foi **ver** a página, e não clicar nela.
+    Aqui as três coisas são tentadas **na ordem em que custam menos**, e a
+    última é a que importa: pedir a árvore de novo (`WM_GETOBJECT`) — é esse
+    pedido, repetido, que mantém a página publicada no Chrome.
     """
     if _leitura_boa(montada):
         return janela, montada
+
     em_foco = False
     try:
         em_foco = _garantir_na_frente(janela, segundos=segundos)
     except Exception:  # noqa: BLE001 - COM de terceiros: não pode derrubar a espera
         em_foco = False
-    # O Chrome só publica a página para quem parece um leitor de tela. Se ele
-    # estiver desligado, nenhuma vista mostra nada — foi o print de 16/11 08:35,
-    # com 3 elementos em todas as leituras e o painel na tela.
-    _acordar_a_acessibilidade(janela, avisar=avisar)
+
+    pediu = _acordar_a_acessibilidade(janela, avisar=avisar)
+
     if avisar:
-        if em_foco:
-            print(
-                "     a leitura tinha caído (só a moldura do Chrome) — trouxe a "
-                "janela para a frente; se ela for para trás, eu trago de novo."
-            )
-        else:
+        if not em_foco:
+            # Ação que o dono precisa tomar: sem foco, nada do resto adianta.
             print(
                 "     a leitura caiu (só a moldura do Chrome) e o Windows não deixou eu "
                 "pôr a janela na frente — clique uma vez no Chrome para ela subir."
             )
+        elif not pediu:
+            print(
+                "     a leitura tinha caído (só a moldura do Chrome) — trouxe a "
+                "janela para a frente; se ela for para trás, eu trago de novo."
+            )
     try:
-        janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO)
+        janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO, curar=False)
     except PassoError:
         pass
+    if not _leitura_boa(montada) and not pediu:
+        # Segunda tentativa, agora pedindo a árvore: o Chrome leva alguns
+        # segundos para publicar, e quem chama está em laço — repetir aqui custa
+        # menos do que desistir com a página na tela.
+        _acordar_a_acessibilidade(janela, avisar=avisar)
+        try:
+            janela, montada = _reler(janela, PROFUNDA, TETO_FUNDO, curar=False)
+        except PassoError:
+            pass
     return janela, montada
 
 
@@ -1860,6 +1949,7 @@ def passo_criar(args) -> int:
     """Cria uma chave nova: clica, nomeia, cria e copia. Gated por --autorizar."""
     from server import chave_web
 
+    _tomar_o_sinal()
     janela, montada = _ler_janela(args.alvo)
     estado = chave_web.onde_estou(montada, conta=getattr(args, "conta", ""))
     print(chave_web.texto_do_estado(estado))
@@ -1943,6 +2033,7 @@ def passo_auto(args) -> int:
         print(f"  Não sei onde ficam as chaves do provedor “{provedor}”.")
         return 1
 
+    _tomar_o_sinal()
     anterior = _texto_da_area()
     print(f"  Provedor: {guia['nome']}")
     print(f"  Página das chaves: {guia['onde']}")

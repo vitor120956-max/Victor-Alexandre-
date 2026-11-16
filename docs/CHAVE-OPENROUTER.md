@@ -160,12 +160,36 @@ filhas** do Chrome (a página mora numa filha, `Chrome_RenderWidgetHostHWND`) co
 a contagem de cada uma — e aí o problema não é leitura: é o Chrome não publicar
 nada, e o caminho é `chrome-acessibilidade.bat` (§7.2).
 
+### 7.1.1 O que o log de 16/11 mostrou (0.91.26)
+
+Duas rodadas do mesmo diagnóstico, na mesma janela, sem nada mudar na tela:
+
+    1a rodada:   msaa 85 elementos — diálogo: SIM
+    2a rodada:   auto 3 — uia 3 — uia_raw 3 — uia_content 3 — msaa 2
+
+O Chrome **liga** a árvore da página quando alguém a pede e **desliga** quando
+para de pedir. Ligar o sinal uma vez, no meio do caminho, não segura nada: a
+página aparece, é lida, e segundos depois já não está mais lá.
+
+Por isso, desde a 0.91.26:
+
+1. o sinal é dado **antes da primeira leitura**;
+2. **toda** leitura (a que preenche o painel, a que confere o botão, a que
+   copia) repete o pedido de árvore quando vem pobre;
+3. a **MSAA** é tentada primeiro: foi a única que viu o painel aberto
+   (85 elementos, contra 43–58 das vistas da UIAutomation).
+
 ### 7.2 `chrome-acessibilidade.bat`
 
 Fecha o Chrome e abre de novo com `--force-renderer-accessibility`. É a opção
 que o próprio Chrome oferece para publicar a árvore sempre, sem depender do
 sinal do Windows. **Fecha o Chrome** — as abas voltam, mas salve o que estiver
-escrevendo. Só é necessário se o §7.1 não resolver.
+escrevendo.
+
+Desde a 0.91.26 ele **espera o Chrome fechar de verdade** (até 15 s, conferindo
+a lista de processos) antes de abrir: reabrir cedo faz o Windows entregar a
+chamada ao processo antigo, e aí a opção é ignorada — foi por isso que, no log
+de 16/11, o Chrome voltou com 43 elementos uma vez e com 3 na seguinte.
 
 ## 8. De onde veio este manual
 

@@ -299,6 +299,9 @@ SPI_GETSCREENREADER = 0x0046
 SPI_SETSCREENREADER = 0x0047
 SPIF_SENDCHANGE = 0x02
 WM_GETOBJECT = 0x003D
+# `OBJID_CLIENT` como LPARAM tem de ir **com sinal**: no Windows de 64 bits,
+# 0xFFFFFFFC sem sinal vira 4294967292 e o programa ignora o pedido.
+OBJID_CLIENT_SINAL = -4
 
 _LEITOR_ANTES: list[bool] = []
 
@@ -347,22 +350,53 @@ def desligar_leitor_de_tela() -> bool:
     return leitor_de_tela() is False
 
 
-def acordar_acessibilidade(handle: int) -> dict[str, Any]:
-    """Pede ao programa que publique a página: sinal de leitor de tela + espiada.
+def _pedir_a_arvore(hwnd: int) -> bool:
+    """`WM_GETOBJECT` com `OBJID_CLIENT`: o pedido formal de árvore de acessibilidade.
 
-    A “espiada” é um `WM_GETOBJECT` na janela e nas filhas — é o pedido formal
-    de árvore de acessibilidade. Em navegador, esse pedido é o gatilho para ele
-    ligar a publicação da página.
+    Em navegador, é esse pedido — e não a leitura em si — que faz o Chrome
+    ligar a publicação da página. Quando ele responde só a moldura, a leitura
+    não gera pedido nenhum: ela é servida por um atalho do processo principal.
+    """
+    try:
+        user32.SendMessageW(
+            wintypes.HWND(int(hwnd)), WM_GETOBJECT, 0, ctypes.c_ssize_t(OBJID_CLIENT_SINAL)
+        )
+    except Exception:  # noqa: BLE001 - melhor esforço
+        return False
+    return True
+
+
+def acordar_acessibilidade(handle: int, tentativas: int = 3, espera: float = 0.7) -> dict[str, Any]:
+    """Insiste para o programa publicar a página: sinal de leitor + pedido de árvore.
+
+    Medido no PC do dono (16/11): logo depois de reabrir o Chrome, a leitura
+    trazia 85 elementos; poucos segundos depois, **no mesmo processo e na mesma
+    janela**, voltava a 3. O Chrome liga a árvore da página quando alguém a
+    pede e a desliga quando para de ser pedida.
+
+    Uma tentativa só não basta: o Chrome leva de um a dois segundos para ligar
+    o modo completo. Por isso aqui o pedido é repetido, com pausa, e o estado
+    da janela é conferido no fim.
     """
     antes = leitor_de_tela()
     ligado = ligar_leitor_de_tela()
-    for hwnd in [int(handle)] + [int(filha["handle"]) for filha in janelas_filhas(int(handle), 8)]:
-        try:
-            user32.SendMessageW(wintypes.HWND(hwnd), WM_GETOBJECT, 0, ctypes.c_long(OBJID_CLIENT - (1 << 32)))
-        except Exception:  # noqa: BLE001 - melhor esforço
-            continue
-    time.sleep(0.4)
-    return {"antes": antes, "ligado": ligado, "depois": leitor_de_tela()}
+    pedidos = 0
+    for tentativa in range(max(1, int(tentativas))):
+        alvos = [int(handle)] + [
+            int(filha["handle"]) for filha in janelas_filhas(int(handle), 8)
+        ]
+        for hwnd in alvos:
+            if _pedir_a_arvore(hwnd):
+                pedidos += 1
+        if tentativa + 1 < tentativas:
+            time.sleep(espera)
+    time.sleep(0.3)
+    return {
+        "antes": antes,
+        "ligado": ligado,
+        "pedidos": pedidos,
+        "depois": leitor_de_tela(),
+    }
 
 
 def _abrir(hwnd: int) -> int:

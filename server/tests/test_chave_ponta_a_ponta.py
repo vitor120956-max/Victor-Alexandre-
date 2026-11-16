@@ -92,6 +92,7 @@ class ChromeFalso:
         dorme_depois_do_clique: bool = False,
         so_na_leitura_crua: bool = False,
         acessibilidade_desligada: bool = False,
+        desliga_depois_de: int = 0,
     ) -> None:
         self.atraso = atraso
         # Print de 15/11 (0.91.21): o painel abriu, o dono foi olhar o console,
@@ -111,6 +112,11 @@ class ChromeFalso:
         # Windows. Aqui ele dorme assim até alguém ligar o sinal.
         self.acessibilidade_desligada = acessibilidade_desligada
         self.sinal_de_leitor_pedido = 0
+        # Medido em 16/11: a página publicou 85 elementos e, **sem nada mudar na
+        # tela**, voltou a 3 no mesmo processo. `desliga_depois_de` reproduz
+        # isso: depois de N leituras boas, o Chrome para de publicar de novo.
+        self.desliga_depois_de = desliga_depois_de
+        self.leituras_desde_que_ligou = 0
         self.fontes_pedidas: list[str] = []
         self.moldura_a_cada = moldura_a_cada
         self.acao_mente = acao_mente
@@ -236,12 +242,20 @@ class ChromeFalso:
     def leitor_de_tela(self):
         return not self.acessibilidade_desligada
 
-    def acordar_acessibilidade(self, _handle=0):
+    def ligar_leitor_de_tela(self):
         """O sinal de leitor de tela: o Chrome passa a publicar a página."""
+        self.sinal_de_leitor_pedido += 1
+        self.acessibilidade_desligada = False
+        self.leituras_desde_que_ligou = 0
+        return True
+
+    def acordar_acessibilidade(self, _handle=0, tentativas=3, espera=0.7):
+        """O pedido de árvore repetido: é ele que mantém a página publicada."""
         antes = not self.acessibilidade_desligada
         self.sinal_de_leitor_pedido += 1
         self.acessibilidade_desligada = False
-        return {"antes": antes, "ligado": True, "depois": True}
+        self.leituras_desde_que_ligou = 0
+        return {"antes": antes, "ligado": True, "pedidos": int(tentativas), "depois": True}
 
     def desligar_leitor_de_tela(self):
         return True
@@ -251,6 +265,10 @@ class ChromeFalso:
 
     def ler_janela(self, _handle, profundidade=8, limite=1500, fonte="auto"):
         self.fontes_pedidas.append(fonte)
+        if self.desliga_depois_de:
+            self.leituras_desde_que_ligou += 1
+            if self.leituras_desde_que_ligou > self.desliga_depois_de:
+                self.acessibilidade_desligada = True
         if self.acessibilidade_desligada:
             # Só a moldura, em qualquer fonte: é o retrato do print.
             return {
@@ -682,7 +700,9 @@ def test_regressao_0_91_22_janela_atras_do_console_nao_e_painel_fechado(monkeypa
 
     saida = capsys.readouterr().out
     assert chrome.trouxe_para_frente > 0, "acordar a janela é o que devolve a leitura"
-    assert "a leitura tinha caído" in saida, "o dono precisa ver por que a leitura mudou"
+    assert ("a leitura tinha caído" in saida or "parou de publicar a página" in saida), (
+        "o dono precisa ver por que a leitura mudou"
+    )
     assert "lida inteira" not in saida, "ele não pode dizer que leu o que não leu"
     assert chrome.tela == "criada"
     assert _chave_gravada(env) == CHAVE_NOVA
@@ -759,11 +779,94 @@ def test_regressao_0_91_25_o_diagnostico_mostra_o_sinal_e_as_janelas_filhas(monk
     assert script.main(["--diagnostico"]) == 0
 
     saida = capsys.readouterr().out
-    assert "Modo leitor de tela do Windows: desligado" in saida
+    assert "estava desligado" in saida, "o diagnóstico diz que o sinal foi dado por ele"
     assert "Janelas filhas do Chrome: 1" in saida
     assert "Chrome_RenderWidgetHostHWND" in saida
-    assert "DEPOIS de ligar o modo leitor de tela" in saida
-    assert "Funcionou: a leitura" in saida
+    # O sinal é dado **antes** da medição: é isso que a 0.91.25 consertou.
+    # Com ele, a leitura não vem vazia — vem com a página (e o painel, se aberto).
+    assert "Chrome Legacy Window, Keys | Settings | OpenRouter, Notifications" not in saida
+
+
+def test_regressao_0_91_26_a_pagina_some_sozinha_e_ele_pede_de_novo(monkeypatch, tmp_path, capsys):
+    """Log de 16/11: 85 elementos → 3 elementos, no mesmo processo, sem nada mudar.
+
+    A sequência literal do dono: o diagnóstico leu a página inteira (43/58/85) e,
+    poucos segundos depois, a mesma janela passou a devolver 3. O Chrome liga a
+    árvore da página quando alguém a pede e a desliga quando para de pedir.
+
+    Aqui a página some depois de 6 leituras — no meio do caminho. O programa tem
+    de **pedir de novo** e terminar com a chave no `.env`, sem reiniciar nada e
+    sem pedir ajuda ao dono.
+    """
+    chrome = ChromeFalso(desliga_depois_de=6)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert _rodar(script) == 0
+
+    assert chrome.sinal_de_leitor_pedido >= 1, "a página sumiu no meio: ele tem de pedir de novo"
+    assert chrome.tela == "criada"
+    assert _chave_gravada(env) == CHAVE_NOVA
+
+
+def test_regressao_0_91_26_o_sinal_e_tomado_antes_da_primeira_leitura(monkeypatch, tmp_path, capsys):
+    """Ligar só depois da falha é chegar tarde: o Chrome já desligou.
+
+    Medido no PC do dono: a página aparecia por poucos segundos. Se o programa
+    só pede o sinal quando a leitura falha, gasta esse tempo pedindo licença.
+    O sinal entra **antes** do primeiro clique.
+    """
+    chrome = ChromeFalso(acessibilidade_desligada=True)
+    script, _config, env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+
+    assert _rodar(script) == 0
+
+    saida = capsys.readouterr().out
+    frase = "liguei o modo leitor de tela do Windows para o Chrome publicar a página"
+    assert frase in saida
+    antes_do_clique = saida.split("clicando em “New key”")[0]
+    assert frase in antes_do_clique, "o sinal tem de ser dado antes do clique, não depois da falha"
+    assert _chave_gravada(env) == CHAVE_NOVA
+
+
+def test_regressao_0_91_25_quando_nem_o_sinal_resolve_o_diagnostico_insiste_e_avisa(
+    monkeypatch, tmp_path, capsys
+):
+    """Se o Chrome não publica de jeito nenhum, o diagnóstico tem de dizer isso.
+
+    Foi o caso da segunda rodada de 16/11: ligar o leitor de tela não bastou e
+    a leitura continuou em 3 elementos. Aí o relatório precisa mostrar as
+    rodadas de insistência e o que ainda dá para tentar — senão o dono fica
+    sem saída e sem saber o que mandar.
+    """
+    class Teimoso(ChromeFalso):
+        """O Chrome que ignora o sinal: nunca publica a página."""
+
+        def ligar_leitor_de_tela(self):
+            return False
+
+        def acordar_acessibilidade(self, _handle=0, tentativas=3, espera=0.7):
+            self.sinal_de_leitor_pedido += 1
+            return {"antes": False, "ligado": False, "pedidos": 0, "depois": False}
+
+        def ler_janela(self, *args, **kwargs):
+            return {
+                "janela": dict(self.janela),
+                "raiz": {"nome": "API keys", "papel": 1, "filhos": self._moldura()},
+                "fonte": "uia",
+            }
+
+    chrome = Teimoso()
+    script, _config, _env, _area = _ambiente(monkeypatch, tmp_path, chrome)
+    monkeypatch.setattr(script, "__file__", str(tmp_path / "chave-no-navegador.py"))
+
+    assert script.main(["--diagnostico"]) == 0
+
+    saida = capsys.readouterr().out
+    assert "rodada 1" in saida and "rodada 3" in saida, "insiste antes de desistir"
+    assert "três pedidos" in saida
+    assert "chrome://accessibility" in saida
+    assert "chrome-acessibilidade.bat" in saida
 
 
 def test_regressao_0_91_24_o_diagnostico_nao_cria_chave_nem_toca_no_env(monkeypatch, tmp_path):

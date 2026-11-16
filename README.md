@@ -197,10 +197,15 @@ Cada linha diz o que o JARVIS faz naquele ponto. Se a leitura falhar,
 chave e sem clicar em nada** — e grava `chave-leitura.txt` com a contagem de
 elementos, os campos que cada uma vê e as janelas filhas do Chrome. Ele também
 mostra o **modo leitor de tela** do Windows: o Chrome só publica a página para
-quem parece um leitor de tela, e é esse sinal (`SPI_SETSCREENREADER`) que o
-JARVIS dá quando a leitura vem pobre — devolvendo a configuração como estava no
-fim. Se nem isso resolver, `chrome-acessibilidade.bat` reabre o Chrome com
-`--force-renderer-accessibility` (fecha o Chrome; as abas voltam).
+quem parece um leitor de tela. Medido no PC do dono (16/11): a mesma janela
+passou de **85 elementos para 3** em segundos, sem nada mudar na tela — o Chrome
+liga a árvore da página quando alguém a pede e a desliga quando para de pedir.
+Por isso o JARVIS liga o sinal `SPI_SETSCREENREADER` **antes da primeira
+leitura** e **repete o pedido de árvore** (`WM_GETOBJECT`) a cada leitura pobre;
+a configuração do Windows volta ao que era no fim. Se nem isso resolver,
+`chrome-acessibilidade.bat` reabre o Chrome com `--force-renderer-accessibility`
+(espera o Chrome fechar de verdade antes — reabrir cedo faz o Windows entregar a
+chamada ao processo antigo e a opção é ignorada).
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -777,7 +782,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.25", "skills": 325}`.
+`{"version": "0.91.26", "skills": 325}`.
 
 ## Verificações
 

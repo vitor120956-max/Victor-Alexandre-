@@ -174,9 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
-### 0.91.25 — o Chrome não estava publicando a página
+### 0.91.26 — a página publicada e despublicada em segundos
 
-O `diagnostico-chave.bat` da 0.91.25 respondeu a pergunta, e a resposta não era
+O log do dono (16/11) trouxe a prova que faltava, e ela é de duas metades:
+
+    1a rodada:   msaa 85 elementos — diálogo: SIM
+    2a rodada:   auto 3 — uia 3 — uia_raw 3 — uia_content 3 — msaa 2
+
+**Mesma janela, mesmo processo, sem nada mudar na tela.** O Chrome liga a
+árvore da página quando alguém a pede e a desliga quando para de pedir. Ligar o
+sinal de leitor de tela **uma vez** (0.91.26) não segura a página: ela aparece,
+o programa lê, e três passos depois está de volta a moldura.
+
+| peça | o que muda |
+|---|---|
+| `_tomar_o_sinal` | o modo leitor de tela é ligado **antes da primeira leitura**, não na primeira falha; volta ao normal no `finally` |
+| `_reler(..., curar=True)` | quando a leitura vem pobre, **toda** leitura do programa pede a árvore de novo (`WM_GETOBJECT`) e relê — é por aqui que passam o preenchimento do painel, o “Create”, a conferência e a cópia |
+| `acordar_acessibilidade` | 3 pedidos com pausa (o Chrome leva 1–2 s para ligar o modo completo) e o `LPARAM` com sinal (`-4`), que no Windows de 64 bits era ignorado |
+| `FONTES_DE_LEITURA` | a **MSAA** vai primeiro: foi a única que viu o painel aberto (85 elementos, contra 43–58 das vistas da UIAutomation) |
+| `chrome-acessibilidade.bat` | espera o Chrome **fechar de verdade** (até 15 s) antes de abrir: reabrir cedo faz o Windows entregar a chamada ao processo antigo, e a opção de acessibilidade é ignorada |
+| `--diagnostico` | insiste três rodadas com pedido de árvore e diz em qual delas a página apareceu; se não aparecer em nenhuma, diz o que ainda dá para tentar |
+
+O teste do fluxo inteiro reproduz a sequência: a página existe, **some depois
+de seis leituras** e o programa tem de pedir de novo e terminar com a chave no
+`.env`. Contra o código da 0.91.26, ele falha — que é o que um teste de
+regressão tem de fazer.
+
+### 0.91.26 — o Chrome não estava publicando a página
+
+O `diagnostico-chave.bat` da 0.91.26 respondeu a pergunta, e a resposta não era
 nenhuma das que eu vinha tentando:
 
     auto        :   3 elementos — painel: não
@@ -205,7 +231,7 @@ O que continua não provado: se o sinal é suficiente no Chrome do dono. Se não
 for, o diagnóstico agora diz isso — e a diferença entre “o Chrome não publica
 nada” e “eu leio a janela errada” aparece nas linhas das filhas.
 
-### 0.91.25 — o manual da página, e um jeito de medir sem gastar chave
+### 0.91.26 — o manual da página, e um jeito de medir sem gastar chave
 
 Pedido do dono (16/11): *“eu vou ter que atualizar e testar de novo, você não
 consegue testar isso; leia o manual da página de como configurar, onde é o
