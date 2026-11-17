@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - criar a chave sem navegador
 echo.
 echo   JARVIS - criar a chave sem navegador
-echo   Versao: 0.91.30
+echo   Versao: 0.91.31
 echo   ----------------------------------------------------------------
 echo.
 echo   Este atalho NAO abre Chrome nenhum. Ele pede a chave ao proprio
@@ -46,8 +46,27 @@ goto pronto
 :pronto
 echo.
 echo   Pronto: a chave esta no .env e o JARVIS ja usa ela.
-echo   Para conferir que ela responde de verdade:
-echo     .venv\Scripts\python conferir-ia.py
+echo.
+echo   Conferindo a IA de verdade (8 tokens) e, se o modelo do .env
+echo   nao existir mais, escolhendo um que exista e gravando...
+echo.
+"%PYTHON%" conferir-ia.py --corrigir --testar
+if errorlevel 1 goto conferencia_falhou
+goto conferencia_ok
+
+:conferencia_falhou
+echo.
+echo   A chave esta gravada, mas a conferencia nao passou.
+echo   O motivo esta acima. Se falar de modelo, rode de novo este
+echo   atalho: ele escolhe outro. Se falar de credito, a conta esta
+echo   sem saldo ou o modelo e pago (use um terminado em :free).
+goto fim_ok
+
+:conferencia_ok
+echo.
+echo   A chave responde. Pode abrir o JARVIS.
+
+:fim_ok
 echo.
 pause
 exit /b 0

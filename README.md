@@ -235,6 +235,13 @@ próprio OpenRouter (`GET /key`, leitura que não gasta crédito) e mostra o
 crédito que sobrou — e avisa se a conta é gratuita mas o modelo do `.env` é
 pago. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.4.
 
+**O nome do modelo envelhece (0.91.31).** Os nomes mudam toda semana — e os
+“mais parecidos” costumam ser os **pagos**, que numa conta gratuita trocam o 404
+por um 402. `conferir-ia.py --corrigir` lê a lista que a sua conta vê, escolhe
+**grátis primeiro** (nada de embedding nem áudio), **testa cada candidato com
+8 tokens de verdade** e grava só a linha `JARVIS_AI_MODEL`, com cópia do `.env`
+antes. Se nenhum responder, nada é gravado. §7.5 do mesmo documento.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -810,7 +817,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.30", "skills": 325}`.
+`{"version": "0.91.31", "skills": 325}`.
 
 ## Verificações
 

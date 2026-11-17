@@ -681,6 +681,35 @@ def _testar_uma_detalhado(
     }
 
 
+def testar_modelo(
+    modelo: str,
+    *,
+    limite: float = 45.0,
+    postar: Any = None,
+) -> dict[str, Any]:
+    """Uma chamada de 8 tokens com **este** modelo, sem gravar nada.
+
+    Existe porque escolher não é provar (0.91.31). O `conferir-ia.py` recebe do
+    provedor uma lista de 435 nomes; escolher o melhor deles no papel e gravar
+    seria trocar um 404 por outro. Aqui a chave é usada de verdade, com o nome
+    candidato, e só depois de o provedor responder é que o `.env` muda.
+    """
+    valores = estado()
+    chaves = separar_chaves(ler_valor("JARVIS_AI_API_KEY"))
+    if not chaves:
+        raise ValueError("não há chave guardada para testar")
+    base = valores["base"] or "https://api.groq.com/openai/v1"
+    resultado = _testar_uma_detalhado(base, modelo, chaves[0], limite, postar)
+    codigo = int(resultado.get("codigo") or 0)
+    return {
+        "modelo": modelo,
+        "ok": codigo == 200,
+        "codigo": codigo,
+        "motivo": resultado.get("motivo") or "",
+        "detalhe": resultado.get("detalhe") or "",
+    }
+
+
 def _testar_uma(
     base: str,
     modelo: str,

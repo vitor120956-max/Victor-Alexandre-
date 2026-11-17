@@ -2665,6 +2665,25 @@ def _conferir_a_chave(modulo, chave: str) -> None:
         modelo = (modulo.ler_valor(texto, "JARVIS_AI_MODEL") or "").strip()
     except Exception:  # noqa: BLE001 - ler o .env é um extra
         modelo = ""
+    # O modelo do .env pode ter deixado de existir (no dono, 17/11: o
+    # `deepseek/…-v3-0324:free` saiu do catálogo). Perguntar o catálogo é
+    # leitura, não gasta crédito — e aqui a resposta chega antes do primeiro erro.
+    try:
+        from server import provedores
+
+        lista = provedores.listar_modelos(limite=10_000)
+        itens = lista.get("modelos") or lista.get("items") or []
+        nomes = [
+            str(item.get("id") or item.get("name") or item) if isinstance(item, dict) else str(item)
+            for item in itens
+        ]
+    except Exception:  # noqa: BLE001 - o catálogo é um extra
+        nomes = []
+    if nomes and modelo and modelo not in nomes:
+        print()
+        print(f"  ATENÇÃO: o modelo “{modelo}” não existe mais na sua conta.")
+        print("  Um comando escolhe um que existe, testa e grava (com backup):")
+        print("    .venv\\Scripts\\python conferir-ia.py --corrigir")
     if estado.get("is_free_tier") and modelo and not modelo.endswith(":free"):
         print()
         print(f"  ATENÇÃO: a conta é gratuita e o modelo gravado é “{modelo}”,")

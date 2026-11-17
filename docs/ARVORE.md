@@ -174,6 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.31 — o modelo do `.env` tinha morrido, e o conselho era pior que o erro
+
+O console de 17/11 mostrou a chave funcionando (73 caracteres, gravada) e, três
+linhas depois, o problema seguinte:
+
+    modelo: deepseek/deepseek-chat-v3-0324:free
+    NÃO  o modelo … NÃO está na lista.
+    Use um destes:  deepseek/deepseek-chat-v3-0324 · …-v3.1 · …/deepseek-chat
+
+Os três “use um destes” são **pagos**. Numa conta gratuita, trocar para qualquer
+um deles só muda o erro de lugar: sai o 404 e entra o 402. O `difflib` estava
+fazendo o que sabia — escolher o nome mais parecido — e o mais parecido era o
+vizinho pago.
+
+| antes | agora |
+|---|---|
+| `difflib` sugere o mais parecido | `server/escolha_modelo.py`: **grátis primeiro**, ferramenta fora (embedding, áudio, imagem), 8b+ na frente de 1.7b, família conhecida, empate por nome |
+| o conselho era trocar à mão e rezar | `conferir-ia.py --corrigir`: escolhe, **testa com 8 tokens de verdade** e só então grava |
+| gravaria por cima sem cópia | **backup** do `.env` antes (`env.antes-AAAAMMDD-HHMMSS`) |
+| nenhum candidato responde → ??? | nada é gravado e a frase diz o que fazer |
+
+A decisão que mais importa: **escolher não é provar**. A lista do provedor diz o
+que existe, não o que responde — e um nome recém-morto pode continuar na lista
+por um tempo. Por isso o primeiro candidato que responde 200 é o que entra; os
+outros dois ficam de reserva.
+
+O `chave-pela-api.bat` passou a terminar com esse comando: criar a chave e
+acertar o modelo viraram a mesma ação.
+
 ### 0.91.29 — o caminho em que não há página para carregar
 
 O dono perguntou o que qualquer pessoa perguntaria: “esse Chrome é muito lento,

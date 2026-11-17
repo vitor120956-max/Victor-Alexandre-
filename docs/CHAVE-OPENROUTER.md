@@ -299,6 +299,28 @@ JARVIS e receber um erro de crédito longe da causa. Se essa conferência falhar
 nada é apagado: a chave já está no `.env`, e o caminho é
 `conferir-ia.py --testar`.
 
+### 7.5 O nome do modelo morre, e ninguém avisa (0.91.31)
+
+A chave fica boa; o **nome do modelo** envelhece. Em 17/11 o `.env` do dono
+apontava para `deepseek/deepseek-chat-v3-0324:free`, que saiu do catálogo. O
+`conferir-ia.py` detectou e sugeriu os nomes mais parecidos — todos **pagos**.
+Numa conta gratuita, isso troca o 404 por um 402.
+
+Desde a 0.91.31:
+
+    .venv\Scripts\python conferir-ia.py --corrigir
+
+1. lê a lista que **esta conta** vê (`GET /models`, leitura, não gasta cota);
+2. escolhe os melhores candidatos — **grátis primeiro**, nada de embedding,
+   áudio ou imagem, 8b+ na frente de 1.7b, família conhecida, empate pelo nome;
+3. **testa cada um com uma chamada real de 8 tokens**;
+4. grava no `.env` o primeiro que responder, **só a linha `JARVIS_AI_MODEL`**, e
+   guarda uma cópia do `.env` antes (`env.antes-…`);
+5. se nenhum responder, **não grava nada** e diz o que fazer.
+
+O `chave-pela-api.bat` já termina com esse comando. Se a conta é gratuita, os
+candidatos são só terminados em `:free`.
+
 ## 8. De onde veio este manual
 
 - `openrouter.ai/docs` — *Creating an API key*: “dê um nome e, opcionalmente,

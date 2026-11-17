@@ -22,7 +22,6 @@ Só lê. Nunca imprime a chave: mostra a máscara, do mesmo jeito que a tela.
 from __future__ import annotations
 
 import argparse
-import difflib
 import sys
 from pathlib import Path
 
@@ -38,8 +37,102 @@ def _ambiente() -> None:
     load_dotenv(RAIZ / ".env")
 
 
-def _parecidos(modelo: str, disponiveis: list[str], quantos: int = 3) -> list[str]:
-    return difflib.get_close_matches(modelo, disponiveis, n=quantos, cutoff=0.4)
+# 0.91.31 — o `difflib` que ficava aqui escolhia pelo nome mais PARECIDO, e o
+# mais parecido com `deepseek/deepseek-chat-v3-0324:free` eram os `deepseek`
+# pagos. A escolha agora é `server/escolha_modelo.py`: grátis primeiro, nada de
+# ferramenta (embedding, áudio, imagem) e uma família que conversa bem.
+
+
+def _conta_gratuita(base: str) -> bool:
+    """A conta é gratuita? Só o OpenRouter sabe dizer — e é leitura, não gasta."""
+    if "openrouter" not in (base or "").lower():
+        return False
+    try:
+        from server import chaves, openrouter_api
+
+        lista = chaves.separar_chaves(chaves.ler_valor("JARVIS_AI_API_KEY"))
+        if not lista:
+            return False
+        estado = openrouter_api.estado_da_chave(lista[0])
+    except Exception:  # noqa: BLE001 - saber a conta é um extra
+        return False
+    return bool(estado.get("is_free_tier"))
+
+
+def _backup_do_env() -> Path | None:
+    """Uma cópia do `.env` antes de mexer — o dono pediu backup antes, sempre."""
+    from server import chaves
+
+    origem = chaves.env_path()
+    if not origem.is_file():
+        return None
+    from datetime import datetime
+
+    destino = origem.with_name(f".env.antes-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    destino.write_bytes(origem.read_bytes())
+    return destino
+
+
+def _gravar_modelo(novo: str) -> tuple[bool, str]:
+    """Troca só a linha do modelo no `.env`, com backup. Devolve (deu?, aviso)."""
+    from server import chaves
+
+    origem = chaves.env_path()
+    try:
+        texto = origem.read_bytes().decode("utf-8", errors="replace") if origem.is_file() else ""
+        backup = _backup_do_env()
+        chaves.gravar(chaves.definir(texto, "JARVIS_AI_MODEL", novo))
+    except OSError as exc:
+        return False, f"não consegui gravar o .env ({exc})"
+    aviso = f" (cópia do antigo em {backup.name})" if backup else ""
+    return True, aviso
+
+
+def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str:
+    """Escolhe um modelo que existe **e responde**, testa e grava. Devolve o escolhido.
+
+    Escolher no papel não basta: a lista diz o que existe, não o que responde.
+    Por isso cada candidato leva uma chamada de 8 tokens antes de virar `.env` —
+    e o primeiro que responde é o que entra.
+    """
+    from server import chaves, escolha_modelo
+
+    candidatos = escolha_modelo.candidatos(disponiveis, limite=8, atual=atual)
+    if so_gratis:
+        gratuitos = [nome for nome in candidatos if escolha_modelo.e_gratis(nome)]
+        if gratuitos:
+            candidatos = gratuitos
+        else:
+            print("  (nenhum modelo :free na lista — vou testar os outros, mas eles gastam crédito)")
+    candidatos = candidatos[:3]
+    if not candidatos:
+        print("  Não há nenhum modelo de conversa na lista que o provedor devolveu.")
+        return ""
+
+    print()
+    print("  Escolhendo um modelo que exista hoje (teste de 8 tokens em cada um):")
+    for nome in candidatos:
+        print(f"    testando {nome} …", end=" ", flush=True)
+        try:
+            resultado = chaves.testar_modelo(nome)
+        except Exception as exc:  # noqa: BLE001 - qualquer falha vira motivo
+            print(f"não deu ({type(exc).__name__})")
+            continue
+        if not resultado.get("ok"):
+            print(f"não ({resultado.get('motivo') or resultado.get('codigo')})")
+            continue
+        print("respondeu.")
+        deu, aviso = _gravar_modelo(nome)
+        if not deu:
+            print(f"  {aviso}")
+            return ""
+        print(f"  Gravei JARVIS_AI_MODEL={nome}{aviso}")
+        print("  Só essa linha mudou; o resto do .env ficou igual.")
+        return nome
+    print()
+    print("  Nenhum dos testados respondeu. Rode de novo em um minuto:")
+    print("    .venv\\Scripts\\python conferir-ia.py --corrigir")
+    return ""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,6 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Além de listar, manda um pedido de 8 tokens para ver se a chave responde.",
     )
     parser.add_argument("--json", action="store_true", help="Saída de máquina.")
+    parser.add_argument(
+        "--corrigir",
+        action="store_true",
+        help="Se o modelo do .env não existe mais, escolhe um que existe, testa e grava.",
+    )
     args = parser.parse_args(argv)
 
     _ambiente()
@@ -120,16 +218,28 @@ def main(argv: list[str] | None = None) -> int:
         if modelo in disponiveis:
             print(f"  OK  o modelo “{modelo}” está na lista.")
         else:
+            from server import escolha_modelo
+
+            # 0.91.31 — o `difflib` sugeria o nome mais PARECIDO, e os mais
+            # parecidos com `…-v3-0324:free` eram os pagos. Numa conta gratuita
+            # isso trocava um 404 por um 402. Agora: grátis primeiro, e nada de
+            # ferramenta (embedding, áudio, imagem).
+            so_gratis = _conta_gratuita(base)
             print(f"  NÃO  o modelo “{modelo}” NÃO está na lista.")
-            parecidos = _parecidos(modelo, disponiveis)
-            if parecidos:
-                print("  Use um destes:")
-                for nome in parecidos:
+            sugestoes = escolha_modelo.sugestoes(disponiveis, modelo, so_gratis=so_gratis)
+            if sugestoes:
+                print("  Use um destes:" if not so_gratis else "  Use um destes (grátis, porque a sua conta é gratuita):")
+                for nome in sugestoes:
                     print(f"    {nome}")
             print()
-            print("  Nos modelos gratuitos, o nome muda sem aviso: “llama-3.3-70b-versatile”")
-            print("  não existe no OpenRouter, que usa “meta-llama/llama-3.3-70b-instruct”.")
-            print("  Troque no cartão Modelos de IA (ou no .env, JARVIS_AI_MODEL).")
+            print("  O nome do modelo muda sem aviso. Troque no cartão Modelos de IA")
+            print("  (ou no .env, JARVIS_AI_MODEL) — ou deixe eu escolher e testar:")
+            print("    .venv\\Scripts\\python conferir-ia.py --corrigir")
+            if args.corrigir:
+                escolhido = _corrigir_modelo(disponiveis, modelo, so_gratis)
+                if escolhido:
+                    modelo = escolhido
+                    print(f"  Seguindo com “{modelo}”.")
 
     codigo = 0
     if args.testar:

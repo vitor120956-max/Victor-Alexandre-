@@ -680,6 +680,11 @@ def principal(argv: list[str] | None = None) -> int:
     else:
         print("  Encerre o processo da API e rode iniciar-jarvis.bat")
     print("Confira em http://127.0.0.1:8000/api/ai/status")
+    if "openrouter" in (base or "").lower():
+        print()
+        print("Os nomes de modelo do OpenRouter mudam toda semana. Se este não existir")
+        print("mais, o comando abaixo escolhe um que existe, testa e grava (com backup):")
+        print("  .venv\\Scripts\\python conferir-ia.py --corrigir")
     return 0
 
 
