@@ -2629,7 +2629,49 @@ def passo_api(args) -> int:
         print(f"  NÃO DEI: {exc}")
         return 1
     print(f"  Chave criada: {modulo.mascarar(chave)}")
-    return _gravar(modulo, chave)
+    codigo = _gravar(modulo, chave)
+    if codigo == 0:
+        _conferir_a_chave(modulo, chave)
+    return codigo
+
+
+def _conferir_a_chave(modulo, chave: str) -> None:
+    """Pergunta ao OpenRouter se a chave responde — leitura, não gasta crédito.
+
+    Gravar não é provar. O dono já ficou com “chave gravada” e o JARVIS
+    recusando por falta de crédito (ou por modelo que não é `:free`) — e a
+    mensagem dele culpava o modelo, longe da causa. Aqui a resposta sai na
+    mesma tela em que a chave foi criada.
+    """
+    from server import openrouter_api
+
+    print("  Conferindo com o OpenRouter se a chave responde…")
+    estado = openrouter_api.estado_da_chave(chave)
+    if not estado:
+        print("  Não deu para conferir agora (sem resposta do site).")
+        print("  A chave recém-criada costuma valer na hora; se o JARVIS recusar,")
+        print("  rode: .venv\\Scripts\\python conferir-ia.py --testar")
+        return
+    print("  A chave respondeu — ela é válida.")
+    resumo = openrouter_api.resumo_da_chave(estado)
+    if resumo:
+        print(f"  {resumo}")
+
+    # Conta gratuita com modelo pago no .env é a próxima pedra do caminho:
+    # o JARVIS abre, aceita a chave, e erra na primeira resposta.
+    modelo = ""
+    try:
+        texto = _texto_do_env(modulo)
+        modelo = (modulo.ler_valor(texto, "JARVIS_AI_MODEL") or "").strip()
+    except Exception:  # noqa: BLE001 - ler o .env é um extra
+        modelo = ""
+    if estado.get("is_free_tier") and modelo and not modelo.endswith(":free"):
+        print()
+        print(f"  ATENÇÃO: a conta é gratuita e o modelo gravado é “{modelo}”,")
+        print("  que é pago. Na sua conta, só os modelos terminados em :free")
+        print("  respondem — os outros dão erro de crédito.")
+        print("  Troque no cartão Modelos de IA (ou no .env, JARVIS_AI_MODEL).")
+        print("  Para ver quais existem hoje: .venv\\Scripts\\python conferir-ia.py")
 
 
 def passo_gestao(args) -> int:

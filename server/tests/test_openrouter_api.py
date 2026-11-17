@@ -389,3 +389,106 @@ def test_o_perfil_do_chrome_do_jarvis_fica_fora_do_atualizador():
     assert atualizacao.gerenciado(Path("perfil-cdp/Local State")) is False
     assert atualizacao.gerenciado(Path("chave-no-navegador.py")) is True
     assert "perfil-cdp/" in (RAIZ / ".gitignore").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# “Gravado” não é “funciona” (0.91.30)
+# ---------------------------------------------------------------------------
+
+def test_o_estado_da_chave_nao_gasta_nada_e_le_a_conta():
+    abrir = _abrir_de(
+        Resposta({"data": {"usage": 1.5, "limit_remaining": 8.5, "is_free_tier": False}})
+    )
+    estado = openrouter_api.estado_da_chave(CHAVE, abrir=abrir)
+    assert estado["limit_remaining"] == 8.5
+    assert abrir.pedidos[0].get_method() == "GET"
+    assert abrir.pedidos[0].full_url.endswith("/api/v1/key")
+
+
+def test_o_resumo_diz_credito_e_conta_gratuita():
+    assert "US$ 8.50" in openrouter_api.resumo_da_chave({"limit_remaining": 8.5})
+    texto = openrouter_api.resumo_da_chave({"is_free_tier": True})
+    assert "conta gratuita" in texto and ":free" in texto
+    assert openrouter_api.resumo_da_chave({}) == ""
+
+
+def test_conferir_que_falha_nao_apaga_a_chave_gravada():
+    """A conferência é um extra: se o site não responder, a chave continua salva."""
+    abrir = _abrir_de(_erro(503, {"error": {"message": "fora"}}))
+    assert openrouter_api.estado_da_chave(CHAVE, abrir=abrir) == {}
+
+
+def test_depois_de_criar_o_comando_confere_a_chave(monkeypatch, tmp_path, capsys):
+    script = _script()
+    modulo, _env = _configurador_falso(
+        tmp_path,
+        {
+            "JARVIS_AI_PROVIDER": "OpenRouter",
+            "JARVIS_OPENROUTER_GESTAO": "gestao-abc",
+            "JARVIS_AI_MODEL": "deepseek/deepseek-chat-v3-0324:free",
+        },
+    )
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: modulo)
+    monkeypatch.setattr(script, "_avisar_jarvis_aberto", lambda: False, raising=False)
+
+    from server import openrouter_api as api
+
+    monkeypatch.setattr(api, "criar_chave", lambda _g, _n: CHAVE)
+    monkeypatch.setattr(api, "estado_da_chave", lambda _c: {"limit_remaining": 0.0})
+    monkeypatch.setattr(api, "resumo_da_chave", lambda _e: "crédito restante: US$ 0.00")
+
+    codigo = script.passo_api(_args())
+    texto = capsys.readouterr().out
+
+    assert codigo == 0
+    assert "A chave respondeu" in texto
+    assert "US$ 0.00" in texto
+
+
+def test_conta_gratuita_com_modelo_pago_avisa_na_hora(monkeypatch, tmp_path, capsys):
+    """O aviso que evita a próxima rodada perdida: conta free + modelo pago."""
+    script = _script()
+    modulo, _env = _configurador_falso(
+        tmp_path,
+        {
+            "JARVIS_AI_PROVIDER": "OpenRouter",
+            "JARVIS_OPENROUTER_GESTAO": "gestao-abc",
+            "JARVIS_AI_MODEL": "deepseek/deepseek-chat-v3-0324",
+        },
+    )
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: modulo)
+    monkeypatch.setattr(script, "_avisar_jarvis_aberto", lambda: False, raising=False)
+
+    from server import openrouter_api as api
+
+    monkeypatch.setattr(api, "criar_chave", lambda _g, _n: CHAVE)
+    monkeypatch.setattr(api, "estado_da_chave", lambda _c: {"is_free_tier": True})
+    monkeypatch.setattr(api, "resumo_da_chave", lambda _e: "conta gratuita: só modelos terminados em :free")
+
+    assert script.passo_api(_args()) == 0
+    texto = capsys.readouterr().out
+    assert "ATENÇÃO" in texto
+    assert "conferir-ia.py" in texto
+
+
+def test_conta_gratuita_com_modelo_free_nao_avisa(monkeypatch, tmp_path, capsys):
+    script = _script()
+    modulo, _env = _configurador_falso(
+        tmp_path,
+        {
+            "JARVIS_AI_PROVIDER": "OpenRouter",
+            "JARVIS_OPENROUTER_GESTAO": "gestao-abc",
+            "JARVIS_AI_MODEL": "meta-llama/llama-3.3-70b-instruct:free",
+        },
+    )
+    monkeypatch.setattr(script, "_modulo_do_configurador", lambda: modulo)
+    monkeypatch.setattr(script, "_avisar_jarvis_aberto", lambda: False, raising=False)
+
+    from server import openrouter_api as api
+
+    monkeypatch.setattr(api, "criar_chave", lambda _g, _n: CHAVE)
+    monkeypatch.setattr(api, "estado_da_chave", lambda _c: {"is_free_tier": True})
+    monkeypatch.setattr(api, "resumo_da_chave", lambda _e: "")
+
+    assert script.passo_api(_args()) == 0
+    assert "ATENÇÃO" not in capsys.readouterr().out

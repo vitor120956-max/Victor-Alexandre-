@@ -290,6 +290,15 @@ O código está em `server/openrouter_api.py`; o comando é
 `chave-no-navegador.py --api --autorizar` (e `--gestao` para guardar a chave de
 gestão lida da área de transferência).
 
+**Gravado não é provado (0.91.30).** Depois de gravar, o JARVIS pergunta ao
+OpenRouter o estado da chave que acabou de criar (`GET /api/v1/key` — leitura de
+conta, não gasta crédito) e mostra na mesma tela o que sobrou: crédito restante,
+uso, ou “conta gratuita: só modelos terminados em `:free`”. Se a conta é
+gratuita e o modelo do `.env` é pago, o aviso sai ali — antes de o dono abrir o
+JARVIS e receber um erro de crédito longe da causa. Se essa conferência falhar,
+nada é apagado: a chave já está no `.env`, e o caminho é
+`conferir-ia.py --testar`.
+
 ## 8. De onde veio este manual
 
 - `openrouter.ai/docs` — *Creating an API key*: “dê um nome e, opcionalmente,

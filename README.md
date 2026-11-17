@@ -230,7 +230,10 @@ nenhuma, existe o caminho mais curto: `chave-pela-api.bat` cria a chave pelo
 que é pedida **uma vez**, copiada da página `openrouter.ai/settings/management-keys`
 no Chrome normal. O JARVIS confere que ela realmente pode criar chaves antes de
 guardá-la no `.env` (`JARVIS_OPENROUTER_GESTAO`). Daí em diante: sem janela, sem
-carregamento, sem login. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.4.
+carregamento, sem login. Depois de gravar, ele ainda **confere** a chave com o
+próprio OpenRouter (`GET /key`, leitura que não gasta crédito) e mostra o
+crédito que sobrou — e avisa se a conta é gratuita mas o modelo do `.env` é
+pago. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.4.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -807,7 +810,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.29", "skills": 325}`.
+`{"version": "0.91.30", "skills": 325}`.
 
 ## Verificações
 

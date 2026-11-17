@@ -163,6 +163,48 @@ def chave_de_gestao_vale(
     return True, ""
 
 
+def estado_da_chave(
+    chave: str,
+    *,
+    base: str = BASE_PADRAO,
+    abrir: Callable[..., Any] | None = None,
+    segundos: float = SEGUNDOS,
+) -> dict[str, Any]:
+    """O que o OpenRouter diz sobre **esta** chave — sem gastar nada.
+
+    `GET /api/v1/key` é leitura de conta, não é geração: não custa crédito.
+    É o teste mais barato de “a chave que acabei de criar responde mesmo?” e,
+    de quebra, diz se a conta é gratuita (só modelos `:free`) ou tem crédito.
+
+    Devolve `{}` quando não deu para perguntar: quem chama já tem a chave
+    gravada, e uma conferência que falha não pode apagar um trabalho que deu
+    certo.
+    """
+    try:
+        dados = _pedir("GET", "key", chave, base=base, abrir=abrir, segundos=segundos)
+    except OpenRouterError:
+        return {}
+    corpo = dados.get("data")
+    return corpo if isinstance(corpo, dict) else {}
+
+
+def resumo_da_chave(estado: dict[str, Any]) -> str:
+    """Uma linha em português sobre o que sobrou na conta."""
+    if not estado:
+        return ""
+    gratuita = bool(estado.get("is_free_tier"))
+    restante = estado.get("limit_remaining")
+    uso = estado.get("usage")
+    partes: list[str] = []
+    if isinstance(restante, (int, float)):
+        partes.append(f"crédito restante: US$ {restante:.2f}")
+    if isinstance(uso, (int, float)) and uso:
+        partes.append(f"usado: US$ {uso:.2f}")
+    if gratuita:
+        partes.append("conta gratuita: só modelos terminados em :free")
+    return " · ".join(partes)
+
+
 def criar_chave(
     gestao: str,
     nome: str,
