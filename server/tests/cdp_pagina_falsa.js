@@ -120,6 +120,7 @@ function montar() {
     body: corpo,
     documentElement: raiz,
     __painel: null,
+    readyState: "complete",
     querySelectorAll: (seletor) => procurarDentro(corpo, seletor),
     querySelector: (seletor) => procurarDentro(corpo, seletor)[0] || null,
   };

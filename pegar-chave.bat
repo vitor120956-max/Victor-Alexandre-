@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.91.27
+echo   Versao: 0.91.28
 echo   ----------------------------------------------------------------
 echo   (o jeito bom agora e o chrome-cdp.bat: ele nao le a tela)
 echo   Um duplo clique e o JARVIS abre a pagina, entra se preciso,

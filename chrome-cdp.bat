@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - criar a chave sem ler a tela
 echo.
 echo   JARVIS - criar a chave sem ler a tela
-echo   Versao: 0.91.27
+echo   Versao: 0.91.28
 echo   ----------------------------------------------------------------
 echo.
 echo   Este atalho abre um Chrome proprio do JARVIS e deixa o JARVIS
@@ -14,8 +14,12 @@ echo   Nada de ler a tela, nada de mexer no mouse, nada de area de
 echo   transferencia. O seu Chrome do dia a dia NAO e fechado.
 echo.
 echo   Na PRIMEIRA vez, entre na sua conta do OpenRouter na janela que
-echo   vai abrir. Ela fica guardada na pasta perfil-cdp desta pasta e
-echo   nao pede login de novo nas proximas vezes.
+echo   vai abrir (clique em Sign In ali dentro). Eu espero ate 5 minutos
+echo   e sigo sozinho quando a pagina das chaves aparecer. O login fica
+echo   guardado na pasta perfil-cdp e nao e pedido de novo.
+echo.
+echo   A pagina do OpenRouter as vezes demora. Eu espero ate 90 segundos
+echo   e vou mostrando o tempo aqui; se ela nao abrir, digo o que fazer.
 echo.
 set "segue="
 set /p "segue=Tecle Enter para abrir ou N para sair: "

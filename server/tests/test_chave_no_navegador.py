@@ -2154,8 +2154,21 @@ def test_sem_botao_o_passo_nao_segue_para_o_create(monkeypatch, capsys, tmp_path
 class PaginaFalsa:
     """Uma página do OpenRouter que responde às ordens como o site de verdade."""
 
-    def __init__(self, *, logado: bool = True, abre_painel: bool = True, da_chave: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        logado: bool = True,
+        abre_painel: bool = True,
+        da_chave: bool = True,
+        carregando_antes: int = 0,
+        entradas_antes: int = 0,
+    ) -> None:
         self.logado = logado
+        # Quantas perguntas “e agora?” a aba responde “ainda carregando”, e
+        # quantas responde “entre na conta” antes de virar a página das chaves.
+        # É a lentidão do print de 16/11 11:57, em forma de roteiro.
+        self.carregando_antes = carregando_antes
+        self.entradas_antes = entradas_antes
         self.abre_painel = abre_painel
         self.da_chave = da_chave
         self.painel = False
@@ -2178,7 +2191,28 @@ class PaginaFalsa:
     def responder(self, ordem: str, *argumentos):
         self.pedidos.append((ordem, *argumentos))
         if ordem == "pronta":
-            return {"url": "https://openrouter.ai/settings/keys", "texto": self.texto(), "tem_painel": self.painel}
+            if self.carregando_antes > 0:
+                self.carregando_antes -= 1
+                return {
+                    "url": "https://openrouter.ai/settings/keys",
+                    "texto": "",
+                    "tem_painel": False,
+                    "carregando": True,
+                }
+            if self.entradas_antes > 0:
+                self.entradas_antes -= 1
+                return {
+                    "url": "https://openrouter.ai/sign-in?redirect_url=x",
+                    "texto": "openrouter sign in sign up",
+                    "tem_painel": False,
+                    "carregando": False,
+                }
+            return {
+                "url": "https://openrouter.ai/settings/keys",
+                "texto": self.texto() if self.logado else "openrouter sign in log in",
+                "tem_painel": self.painel,
+                "carregando": False,
+            }
         if ordem == "texto":
             return self.texto()
         if ordem == "clicar":
@@ -2232,14 +2266,28 @@ class SessaoFalsa:
 def script_cdp(monkeypatch):
     """O script com as esperas em zero — a página falsa responde na hora."""
     script = _script()
-    monkeypatch.setattr(script, "ESPERA_PAGINA_CDP", 0.0)
-    monkeypatch.setattr(script, "ESPERA_PAINEL_CDP", 0.0)
-    monkeypatch.setattr(script, "ESPERA_CHAVE_CDP", 0.0)
+    # `raising=False`: contra o código de uma versão anterior — que é como se
+    # prova que o teste reproduz o defeito — a constante pode nem existir.
+    for nome in (
+        "ESPERA_PAINEL_CDP",
+        "ESPERA_CHAVE_CDP",
+        "ESPERA_CARREGAR_CDP",
+        "ESPERA_LOGIN_CDP",
+        "PASSO_CDP",
+    ):
+        monkeypatch.setattr(script, nome, 0.0, raising=False)
     return script
 
 
 def _args_cdp(**extra):
-    base = {"provedor": "openrouter", "nome": "jarvis-teste", "autorizar": True, "porta": 9222}
+    base = {
+        "provedor": "openrouter",
+        "nome": "jarvis-teste",
+        "autorizar": True,
+        "porta": 9222,
+        "espera_carregar": 0.0,
+        "espera_login": 0.0,
+    }
     base.update(extra)
     return types.SimpleNamespace(**base)
 
@@ -2332,3 +2380,72 @@ def test_o_pegar_escolhe_o_protocolo_quando_a_porta_esta_aberta(monkeypatch):
     script.main(["--pegar", "--autorizar"])
 
     assert "cdp" in chamado and "pegar" not in chamado
+
+
+def test_a_pagina_que_demora_e_esperada_em_vez_de_perder_a_vez(monkeypatch, script_cdp, capsys):
+    """0.91.28 — o print de 16/11 11:57: aba aberta, cartão branco, “demorando”.
+
+    A 0.91.27 dava 25 s e desistia. Lentidão não é recusa: aqui a aba responde
+    “ainda carregando” seis vezes antes de virar a página — e o trabalho tem
+    de continuar até a chave.
+    """
+    monkeypatch.setattr(script_cdp, "ESPERA_CARREGAR_CDP", 0.3, raising=False)
+    pagina = PaginaFalsa(carregando_antes=6)
+    gravadas: list[str] = []
+    monkeypatch.setattr(script_cdp, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    codigo = script_cdp._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+
+    assert codigo == 0, capsys.readouterr().out
+    assert gravadas and gravadas[0].startswith("sk-or-v1-")
+
+
+def test_a_tela_de_entrada_e_esperada_e_o_trabalho_segue_sozinho(monkeypatch, script_cdp, capsys):
+    """Caiu no “Sign In”? O programa espera o dono entrar — não manda rodar tudo de novo.
+
+    Antes, ver a tela de entrada era o fim: “entre e rode de novo”. Agora ele
+    explica onde clicar, fica esperando, e quando a página das chaves aparece
+    continua o serviço sem ninguém apertar nada.
+    """
+    monkeypatch.setattr(script_cdp, "ESPERA_CARREGAR_CDP", 0.1, raising=False)
+    monkeypatch.setattr(script_cdp, "ESPERA_LOGIN_CDP", 0.3, raising=False)
+    pagina = PaginaFalsa(entradas_antes=5)
+    gravadas: list[str] = []
+    monkeypatch.setattr(script_cdp, "_gravar", lambda _modulo, chave: gravadas.append(chave) or 0)
+
+    codigo = script_cdp._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+    texto = capsys.readouterr().out
+
+    assert codigo == 0, texto
+    assert "Sign In" in texto, "o programa tem de dizer onde entrar"
+    assert "página das chaves apareceu" in texto
+    assert gravadas and gravadas[0].startswith("sk-or-v1-")
+
+
+def test_sem_ninguem_entrar_o_programa_diz_o_que_fazer(monkeypatch, script_cdp, capsys):
+    """Janela sem conta e o dono não entrou: uma frase clara, e nada foi clicado."""
+    monkeypatch.setattr(script_cdp, "ESPERA_CARREGAR_CDP", 0.1, raising=False)
+    monkeypatch.setattr(script_cdp, "ESPERA_LOGIN_CDP", 0.1, raising=False)
+    pagina = PaginaFalsa(logado=False)
+
+    codigo = script_cdp._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+    texto = capsys.readouterr().out
+
+    assert codigo == 1
+    assert "NÃO DEI" in texto
+    assert "chrome-cdp.bat" in texto, "a saída tem de dizer qual atalho resolve"
+    assert ("clicar", "New key") not in pagina.pedidos
+
+
+def test_a_pagina_que_nunca_carrega_nao_culpa_o_clique(monkeypatch, script_cdp, capsys):
+    """Aba eternamente vazia: o programa diz que é carregamento e manda F5."""
+    monkeypatch.setattr(script_cdp, "ESPERA_CARREGAR_CDP", 0.1, raising=False)
+    pagina = PaginaFalsa(carregando_antes=10**6)
+
+    codigo = script_cdp._cdp_fluxo(_args_cdp(), SessaoFalsa(pagina))
+    texto = capsys.readouterr().out
+
+    assert codigo == 1
+    assert "não terminou de carregar" in texto
+    assert "F5" in texto
+    assert "New key" not in texto, "não se culpa o clique por uma página que não abriu"

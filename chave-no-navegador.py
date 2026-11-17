@@ -2153,7 +2153,12 @@ window.__JARVIS = function (op, a, b) {
 
   if (op === 'pronta') {
     const texto = norm(document.body.innerText);
-    return { url: location.href, texto: texto.slice(0, 4000), tem_painel: !!painel() };
+    return {
+      url: location.href,
+      texto: texto.slice(0, 4000),
+      tem_painel: !!painel(),
+      carregando: document.readyState !== 'complete',
+    };
   }
   if (op === 'texto') {
     const alvo = painel() || document.body;
@@ -2229,9 +2234,17 @@ true;
 # Quanto esperar, em segundos. Ficam aqui para o teste poder encurtar: com
 # espera cheia, a suíte passaria minutos parada esperando uma página que o
 # dublê já respondeu.
-ESPERA_PAGINA_CDP = 25.0
 ESPERA_PAINEL_CDP = 15.0
 ESPERA_CHAVE_CDP = 20.0
+# 0.91.28 — no PC do dono a página de entrada do OpenRouter demorou para
+# carregar (print de 16/11 11:57: aba aberta, cartão branco vazio). Desistir em
+# 25 s transformava lentidão em “não deu”. Agora: até 90 s carregando, com
+# aviso a cada 10 s, e — se cair na tela de entrada — até 5 minutos esperando o
+# dono entrar, em vez de mandar rodar tudo de novo.
+ESPERA_CARREGAR_CDP = 90.0
+ESPERA_LOGIN_CDP = 300.0
+# De quanto em quanto se pergunta à aba “e agora?”. Zero só nos testes.
+PASSO_CDP = 0.5
 
 
 def _cdp_chamar(sessao, op: str, *argumentos):
@@ -2262,6 +2275,148 @@ def _cdp_abrir_sessao(args, avisar=True):
             print(f"  não consegui falar com o Chrome pelo protocolo ({exc}).")
         return None, ""
     return sessao, str(pagina.get("url") or "")
+
+
+def _cdp_estado(sessao) -> dict | None:
+    """O estado da aba agora — `None` quando a conexão falhou (a aba pode estar navegando)."""
+    try:
+        estado = _cdp_chamar(sessao, "pronta")
+    except Exception:  # noqa: BLE001 - navegação derruba a conexão de vez em quando
+        return None
+    return estado if isinstance(estado, dict) else {}
+
+
+def _e_a_pagina_de_chaves(estado: dict) -> bool:
+    """A aba está na página das chaves, e não na tela de entrada?"""
+    texto = estado.get("texto") or ""
+    if "sign in" in texto or "log in" in texto:
+        return False
+    if "api keys" in texto:
+        return True
+    endereco = str(estado.get("url") or "")
+    return "/settings/keys" in endereco and "new key" in texto
+
+
+def _e_a_tela_de_entrada(estado: dict) -> bool:
+    """A aba está pedindo para entrar (a janela do JARVIS é nova)."""
+    texto = estado.get("texto") or ""
+    endereco = str(estado.get("url") or "")
+    if "/sign-in" in endereco or "/login" in endereco:
+        return True
+    return "sign in" in texto or "log in" in texto
+
+
+def _cdp_reconectar(sessao, args) -> bool:
+    """Refaz a conexão com a mesma aba. `False` quando não dá."""
+    if not hasattr(sessao, "reconectar"):
+        return False
+    from server import chrome_cdp
+
+    porta = int(getattr(args, "porta", 0) or chrome_cdp.PORTA_PADRAO)
+    pagina = chrome_cdp.achar_alvo(porta, "openrouter", segundos=1.0) or chrome_cdp.achar_alvo(
+        porta, "", segundos=0.5
+    )
+    if pagina is None:
+        return False
+    try:
+        sessao.reconectar(pagina)
+    except Exception:  # noqa: BLE001 - sem reconexão a gente só continua tentando
+        return False
+    print("     (a conexão com a aba caiu e foi refeita — continuando)")
+    return True
+
+
+def _esperar_carregar(sessao, args, guia) -> dict | None:
+    """Espera a aba sair do “carregando”. Devolve o estado decisivo, ou `None`.
+
+    Devolve assim que a página das chaves **ou** a tela de entrada aparecem.
+    `None` quer dizer que a página não terminou de carregar no tempo dado — e
+    aí o programa diz o que fazer, em vez de mandar o dono adivinhar.
+    """
+    limite = float(getattr(args, "espera_carregar", 0) or ESPERA_CARREGAR_CDP)
+    inicio = time.time()
+    proximo_aviso = inicio + 10.0
+    estado: dict | None = None
+    falhas = 0
+    vazio_desde: float | None = None
+    while True:
+        novo = _cdp_estado(sessao)
+        if novo is None:
+            falhas += 1
+            if falhas >= 5 and _cdp_reconectar(sessao, args):
+                falhas = 0
+        else:
+            estado, falhas = novo, 0
+            if _e_a_pagina_de_chaves(estado) or _e_a_tela_de_entrada(estado):
+                return estado
+            if estado.get("texto"):
+                vazio_desde = None
+            elif vazio_desde is None:
+                vazio_desde = time.time()
+        agora = time.time()
+        if agora - inicio >= limite:
+            print()
+            print(f"  NÃO DEI: a página do OpenRouter não terminou de carregar em {int(limite)} s.")
+            if vazio_desde is not None and agora - vazio_desde >= 20:
+                print("  A aba está aberta, mas vazia — ela não chegou a desenhar a página.")
+                print("  Quase sempre é internet lenta ou a própria página travada.")
+            print("  O que fazer: na janela do JARVIS, aperte F5 e rode o chrome-cdp.bat")
+            print("  de novo. Ele aproveita a janela que já está aberta — não precisa")
+            print("  entrar de novo.")
+            print(f"  (endereço da aba: {guia.get('onde') or 'openrouter.ai/settings/keys'})")
+            return None
+        if agora >= proximo_aviso:
+            print(f"     … ainda carregando ({int(agora - inicio)} s de {int(limite)} s).")
+            proximo_aviso = agora + 10.0
+        time.sleep(PASSO_CDP)
+
+
+def _esperar_entrada(sessao, args) -> bool:
+    """Espera o dono entrar na janela nova. `True` quando a página das chaves vem."""
+    limite = float(getattr(args, "espera_login", 0) or ESPERA_LOGIN_CDP)
+    print()
+    print("  Esta janela é nova e ainda não tem a sua conta — é assim na primeira vez.")
+    print("  Clique em “Sign In” aqui mesmo, na janela do JARVIS, e entre com a mesma")
+    print("  conta que você usa no OpenRouter. Eu espero e sigo sozinho quando a")
+    print("  página das chaves aparecer.")
+    print(f"  (espero até {int(limite)} s — não precisa apertar nada nesta janela preta)")
+    print()
+    inicio = time.time()
+    proximo_aviso = inicio + 15.0
+    falhas = 0
+    while True:
+        estado = _cdp_estado(sessao)
+        if estado is None:
+            falhas += 1
+            if falhas >= 5 and _cdp_reconectar(sessao, args):
+                falhas = 0
+        else:
+            falhas = 0
+            if _e_a_pagina_de_chaves(estado):
+                print("  Entrou — a página das chaves apareceu. Continuando daqui.")
+                return True
+        agora = time.time()
+        if agora - inicio >= limite:
+            print()
+            print(f"  NÃO DEI: passaram {int(limite)} s e a página das chaves não apareceu.")
+            print("  Se você entrou agora (ou vai entrar), é só rodar o chrome-cdp.bat")
+            print("  outra vez: a janela é a mesma e o login fica guardado.")
+            return False
+        if agora >= proximo_aviso:
+            print(f"     … esperando o login ({int(agora - inicio)} s de {int(limite)} s).")
+            proximo_aviso = agora + 15.0
+        time.sleep(PASSO_CDP)
+
+
+def _cdp_abrir_a_pagina(sessao, args, guia) -> bool:
+    """A aba está pronta para trabalhar? Carrega, espera login se preciso."""
+    print("  Esperando a página do OpenRouter terminar de abrir…")
+    estado = _esperar_carregar(sessao, args, guia)
+    if estado is None:
+        return False
+    if _e_a_pagina_de_chaves(estado):
+        return True
+    return _esperar_entrada(sessao, args)
 
 
 def _cdp_esperar(sessao, condicao, segundos: float, passo: float = 0.5):
@@ -2387,21 +2542,7 @@ def _cdp_fluxo(args, sessao) -> int:
     provedor = args.provedor or provedor
     guia = modulo.guia_do_provedor(provedor or "openrouter", base)
 
-    def pronta(item):
-        texto = item.get("texto") or ""
-        return "api keys" in texto or "sign in" in texto or "log in" in texto
-
-    estado = _cdp_esperar(sessao, pronta, ESPERA_PAGINA_CDP)
-    texto = estado.get("texto") or ""
-    if "api keys" not in texto:
-        if "sign in" in texto or "log in" in texto:
-            print("  NÃO DEI: esta janela do Chrome não está com a sua conta aberta.")
-            print("  Ela é separada da que você usa todo dia (o Chrome não deixa")
-            print("  controlar a janela normal). Entre NESTA janela uma vez — ela")
-            print("  fica guardada no perfil do JARVIS — e rode de novo.")
-            return 1
-        print("  NÃO DEI: a página de chaves não carregou nesta aba.")
-        print(f"  Abra {guia.get('onde') or 'openrouter.ai/keys'} no Chrome e rode de novo.")
+    if not _cdp_abrir_a_pagina(sessao, args, guia):
         return 1
     print("  1. página de chaves aberta.")
     if not getattr(args, "autorizar", False):
@@ -2498,6 +2639,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Cria a chave pelo protocolo do Chrome (exige o chrome-cdp.bat). Não lê a tela.",
     )
     parser.add_argument("--porta", type=int, default=9222, help="Porta de controle do Chrome (padrão: 9222).")
+    parser.add_argument(
+        "--espera-carregar",
+        type=float,
+        default=90.0,
+        help="Segundos esperando a página terminar de carregar (padrão: 90).",
+    )
+    parser.add_argument(
+        "--espera-login",
+        type=float,
+        default=300.0,
+        help="Segundos esperando você entrar na janela nova do Chrome (padrão: 300).",
+    )
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":

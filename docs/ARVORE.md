@@ -174,6 +174,27 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.28 — lentidão não é recusa; e a primeira vez pede um login
+
+O print de 16/11 11:57 mostrou o caminho novo funcionando até certo ponto: o
+`chrome-cdp.bat` abriu o Chrome do JARVIS, achou a porta 9222 — e a aba ficou
+num **cartão branco**, com o endereço `openrouter.ai/sign-in?redirect_url=…`.
+Duas coisas ao mesmo tempo: a página **demorando** para carregar e a janela
+nova **sem conta**.
+
+A 0.91.27 dava 25 s para a página e tratava “Sign In” como fim de linha
+(“entre e rode de novo”). As duas coisas estavam erradas:
+
+| antes | agora |
+|---|---|
+| 25 s e desiste | até **90 s** carregando, com o tempo aparecendo a cada 10 s |
+| “Sign In” = pare e recomece | **espera o dono entrar** na janela (até 5 min) e **segue sozinho** quando a página das chaves aparece |
+| conexão que cai no meio = erro | reconecta na mesma aba (5 falhas seguidas) e continua |
+| aba vazia = “não deu” | diz que a página **não terminou de carregar**, sugere F5 e lembra que a janela já está logada |
+
+O `--espera-carregar` e o `--espera-login` existem para isso, e o teste os usa
+para não dormir de verdade.
+
 ### 0.91.27 — o fim da loteria: a página responde pelo protocolo do Chrome
 
 O log de 16/11 fechou a conta do caminho antigo. Duas medidas, na mesma tarde:

@@ -221,16 +221,40 @@ class Sessao:
         endereco = str(pagina.get("webSocketDebuggerUrl") or "")
         if not endereco:
             raise CdpError("a página não expôs endereço de controle (webSocketDebuggerUrl).")
+        self.segundos = segundos
         self.ws = WebSocket(endereco, segundos=segundos)
         self._id = 0
         self.ultimo_erro = ""
 
+    def reconectar(self, pagina: dict[str, Any]) -> None:
+        """Troca a conexão sem trocar a sessão — a aba continua a mesma.
+
+        Serve para o caso que o dono viu em 16/11: a página leva muito tempo
+        carregando e a conexão de controle pode cair no meio. Em vez de
+        desistir e pedir que ele rode tudo de novo, a sessão se refaz.
+        """
+        endereco = str(pagina.get("webSocketDebuggerUrl") or "")
+        if not endereco:
+            raise CdpError("a página não expôs endereço de controle (webSocketDebuggerUrl).")
+        novo = WebSocket(endereco, segundos=self.segundos)
+        try:
+            self.ws.fechar()
+        except Exception:  # noqa: BLE001 - a conexão velha já pode estar morta
+            pass
+        self.ws = novo
+
     def chamar(self, metodo: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         self._id += 1
         pedido = {"id": self._id, "method": metodo, "params": params or {}}
-        self.ws.enviar(json.dumps(pedido))
+        try:
+            self.ws.enviar(json.dumps(pedido))
+        except OSError as exc:
+            raise CdpError(f"a conexão com o Chrome caiu ao mandar “{metodo}” ({exc}).") from exc
         while True:
-            bruto = self.ws.receber()
+            try:
+                bruto = self.ws.receber()
+            except OSError as exc:
+                raise CdpError(f"a conexão com o Chrome caiu ({exc}).") from exc
             if bruto is None:
                 raise CdpError("o Chrome fechou a conexão no meio do comando.")
             try:

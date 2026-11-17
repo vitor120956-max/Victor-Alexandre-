@@ -218,7 +218,10 @@ e grava a chave no `.env`. Duas regras do Chrome valem aqui: a porta só abre nu
 Chrome **iniciado** com `--remote-debugging-port`, e desde o Chrome 136 ela é
 **ignorada no perfil padrão** (proteção contra roubo de cookie). Por isso o
 perfil separado e o **único** login pedido, na primeira vez, dentro dessa
-janela. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.3.
+janela. Desde a 0.91.28 ele espera a página carregar até 90 s (dizendo o tempo)
+e, se a tela de entrada aparecer, espera você entrar nessa janela por até
+5 minutos e **continua sozinho** — lentidão não vira “não deu”. Detalhes em
+[`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.3.
 
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
@@ -795,7 +798,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.27", "skills": 325}`.
+`{"version": "0.91.28", "skills": 325}`.
 
 ## Verificações
 

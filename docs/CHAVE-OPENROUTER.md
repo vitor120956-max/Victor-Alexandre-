@@ -220,15 +220,25 @@ Duas condições do Chrome, e nenhuma é escolha nossa:
 - **desde o Chrome 136** essa opção é **ignorada no perfil padrão** (proteção
   contra roubo de cookie por porta de depuração). Por isso o perfil separado.
 
+O que o programa faz enquanto isso (0.91.28):
+
+- espera a página terminar de carregar por até **90 s**, dizendo o tempo;
+- se cair na tela de entrada, **espera você entrar nessa janela** por até
+  **5 minutos** e continua sozinho quando a página das chaves aparece — não
+  manda rodar tudo de novo;
+- se a conexão de controle cair no meio (página que recarrega sozinha), refaz a
+  conexão na mesma aba e continua.
+
 A consequência prática, e ela é uma vez só: na **primeira** execução, entre na
 sua conta do OpenRouter **na janela do JARVIS**. É uma janela separada da sua;
 o login fica guardado em `perfil-cdp`, e nas próximas vezes não é pedido de
 novo (o `perfil-cdp` também sobrevive a atualização do JARVIS — ele está na
 pasta do programa, não no zip).
 
-Se a janela abrir sem login, o programa diz exatamente isso e não clica em
-nada. Se a porta não abrir, o `chrome-cdp.bat` diz para rodar de novo (o Chrome
-às vezes leva mais que 20 s na primeira abertura de um perfil novo).
+Se a janela abrir sem login, o programa explica onde clicar e **espera** — com
+a 0.91.28 ele não pede para rodar tudo de novo. Se a porta não abrir, o
+`chrome-cdp.bat` diz para rodar de novo (o Chrome às vezes leva mais que 20 s na
+primeira abertura de um perfil novo).
 
 O `pegar-chave.bat` continua existindo: se a porta 9222 estiver aberta, ele vai
 por ela; se não, faz o caminho antigo (ler a tela, esperar a cópia do dono).
