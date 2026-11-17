@@ -174,6 +174,33 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.32 — duas telas que não diziam o que a pessoa precisava saber
+
+Dois consertos pequenos, os dois nascidos de uma pergunta que o dono fez no
+console e que a tela não respondia:
+
+**1. “Tem versão nova?” sem data.** O `atualizar.bat` dizia
+`Versão nova: 0.91.29 (a sua é 0.91.28)`. Número não é data: não dava para saber
+se aquela resposta era de hoje ou de três dias atrás — e o dono atualizou sem
+saber se havia algo mais no ar. O manifesto já trazia `gerado`; agora ele sai na
+frase (`publicada em 17/11 09:12 UTC`) e o `verificar()` devolve o campo
+`publicado`.
+
+**2. `--corrigir` numa cópia que não o conhece.** O comando foi rodado numa
+instalação **0.91.29**, publicada antes de a opção existir, e a resposta foi
+`conferir-ia.py: error: unrecognized arguments: --corrigi`. Isso é erro de
+ferramenta falando com quem não programa. Agora o script usa
+`parse_known_args`, e o que sobrar vira:
+
+    Esta cópia do JARVIS não conhece: --corrigir
+    Ela é a 0.91.29 — a opção pode ser de uma versão mais nova.
+    Rode o atualizar.bat (ele baixa só o que mudou) e tente de novo.
+
+De quebra, o cabeçalho passou a mostrar a versão (`JARVIS — conferir a IA
+(0.91.32)`) e o `--corrigir` passou a consertar também o caso em que o **nome
+está na lista mas dá 404** — a lista do provedor demora a tirar o morto, e o
+teste de verdade é que prova.
+
 ### 0.91.31 — o modelo do `.env` tinha morrido, e o conselho era pior que o erro
 
 O console de 17/11 mostrou a chave funcionando (73 caracteres, gravada) e, três

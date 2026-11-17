@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - chave do OpenRouter (DeepSeek de graca)
 echo.
 echo   JARVIS - usar o OpenRouter
-echo   Versao: 0.91.31
+echo   Versao: 0.91.32
 echo   ----------------------------------------------------------------
 echo   Serve para ter DeepSeek de graca, sem cartao.
 echo.

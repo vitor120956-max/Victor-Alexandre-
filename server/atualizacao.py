@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.91.31"
+VERSAO = "0.91.32"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -81,7 +81,7 @@ PASTAS_IGNORADAS = {
     ".git", ".venv", "storage", "node_modules", "__pycache__", "dist",
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".next", "out",
     "build", ".idea", ".vscode",
-    # O perfil do Chrome do JARVIS (0.91.31). Milhares de arquivos, centenas de
+    # O perfil do Chrome do JARVIS (0.91.32). Milhares de arquivos, centenas de
     # MB e dados de login: jamais no manifesto — e jamais baixado por cima do
     # perfil do dono.
     "perfil-cdp",
@@ -404,7 +404,25 @@ def verificar(
         "bytes": diferenca["bytes"],
         "extras": diferenca["extras"][:50],
         "ms": round((time.perf_counter() - inicio) * 1000, 1),
-        "resumo": _resumo(versao_local, versao_remota, len(diferenca["baixar"]), diferenca["bytes"]) if mudou else f"Já está na última: {versao_local}.",
+        "publicado": str(remoto.get("gerado") or ""),
+        "resumo": (
+            _resumo(
+                versao_local,
+                versao_remota,
+                len(diferenca["baixar"]),
+                diferenca["bytes"],
+                str(remoto.get("gerado") or ""),
+            )
+            if mudou
+            else _JA_NA_ULTIMA.format(
+                versao=versao_local,
+                quando=(
+                    f" (publicada em {data_publicada(str(remoto.get('gerado') or ''))})"
+                    if data_publicada(str(remoto.get("gerado") or ""))
+                    else ""
+                ),
+            )
+        ),
     }
     salvo = dict(estado(raiz))
     salvo.update({
@@ -418,23 +436,56 @@ def verificar(
     return resultado
 
 
-def _resumo(versao_local: str, versao_remota: str, quantos: int, bytes_: int) -> str:
+_JA_NA_ULTIMA = "Já está na última versão publicada: {versao}{quando}."
+
+
+def data_publicada(gerado: str) -> str:
+    """A data do manifesto numa forma curta e honesta: “17/11 09:12 UTC”.
+
+    O dono pergunta “tem versão nova?” e recebe um número. Só o número não diz
+    se a resposta é de hoje ou de semana passada — e foi assim que ele atualizou
+    e continuou sem saber se algo tinha mudado (0.91.32).
+    """
+    texto = (gerado or "").strip()
+    if not texto:
+        return ""
+    from datetime import datetime, timezone
+
+    try:
+        quando = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if quando.tzinfo is not None:
+        quando = quando.astimezone(timezone.utc)
+    nome = "UTC" if quando.tzinfo is not None else "local"
+    return f"{quando.strftime('%d/%m %H:%M')} {nome}"
+
+
+def _resumo(
+    versao_local: str,
+    versao_remota: str,
+    quantos: int,
+    bytes_: int,
+    gerado: str = "",
+) -> str:
     """A frase do aviso — e ela não pode mentir sobre a versão.
 
     Se o número da versão é o mesmo mas o conteúdo diverge (arquivo editado à
     mão, cópia antiga com um arquivo novo), dizer “versão nova: 0.75.0 (a sua é
     0.75.0)” confunde. Aí a frase é sobre arquivos, não sobre versão.
     """
+    quando = data_publicada(gerado)
+    quando_txt = f", publicada em {quando}" if quando else ""
     if versao_remota and versao_remota != versao_local:
         return (
-            f"Versão nova: {versao_remota} (a sua é {versao_local}). "
+            f"Versão nova: {versao_remota} (a sua é {versao_local}){quando_txt}. "
             f"{quantos} arquivo(s), {_mb(bytes_)} — em vez do zip inteiro."
         )
     if not versao_remota:
         return f"{quantos} arquivo(s) diferente(s) do publicado: {_mb(bytes_)}."
     return (
-        f"Mesma versão ({versao_local}), {quantos} arquivo(s) diferente(s) do "
-        f"publicado: {_mb(bytes_)}."
+        f"Mesma versão ({versao_local}){quando_txt.replace(', publicada', ', publicada')}, "
+        f"{quantos} arquivo(s) diferente(s) do publicado: {_mb(bytes_)}."
     )
 
 
@@ -709,7 +760,6 @@ def auto_atualizar(
 
 def _cli(argv: list[str] | None = None) -> int:
     import argparse  # noqa: PLC0415
-    import sys  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(description="Atualização delta do JARVIS (só o que mudou).")
     parser.add_argument("--verificar", action="store_true")

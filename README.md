@@ -242,6 +242,13 @@ por um 402. `conferir-ia.py --corrigir` lê a lista que a sua conta vê, escolhe
 8 tokens de verdade** e grava só a linha `JARVIS_AI_MODEL`, com cópia do `.env`
 antes. Se nenhum responder, nada é gravado. §7.5 do mesmo documento.
 
+**Atualizar mostra quando o publicado é de quando (0.91.32).** O aviso passou a
+trazer a data do manifesto (`Versão nova: 0.91.32 (a sua é 0.91.30), publicada em
+17/11 09:12 UTC`) — número sozinho não dizia se a resposta era de hoje. E, se
+você usar uma opção que a **sua cópia** ainda não tem, o script agora explica
+(“Esta cópia do JARVIS não conhece: --corrigir … rode o atualizar.bat”) em vez de
+responder `unrecognized arguments`.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -817,7 +824,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.31", "skills": 325}`.
+`{"version": "0.91.32", "skills": 325}`.
 
 ## Verificações
 

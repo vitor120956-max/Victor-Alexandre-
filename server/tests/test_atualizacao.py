@@ -540,3 +540,57 @@ def test_o_resumo_do_estado_diz_se_atualiza_sozinho():
         "palcos_prontos": [],
     })
     assert "desligado" in desligado and "atualizar.bat" in desligado
+
+
+def test_o_resumo_diz_quando_a_versao_nova_foi_publicada():
+    """0.91.32 — “Versão nova: 0.91.29” não dizia se a resposta era de hoje.
+
+    O dono atualizou, continuou na mesma, e a tela não dava como saber se havia
+    algo mais novo no ar. O manifesto já traz `gerado`; agora ele aparece.
+    """
+    texto = atualizacao._resumo(
+        "0.91.29", "0.91.31", 32, 578_000, "2026-11-17T09:12:44+00:00"
+    )
+    assert "Versão nova: 0.91.31 (a sua é 0.91.29)" in texto
+    assert "publicada em 17/11 09:12 UTC" in texto
+
+
+def test_sem_data_no_manifesto_a_frase_continua_certa():
+    texto = atualizacao._resumo("0.91.29", "0.91.31", 2, 2048)
+    assert "Versão nova: 0.91.31" in texto
+    assert "publicada em" not in texto
+
+
+def test_quando_ja_esta_na_ultima_a_frase_diz_a_data_do_publicado():
+    texto = atualizacao._JA_NA_ULTIMA.format(
+        versao="0.91.31",
+        quando=f" (publicada em {atualizacao.data_publicada('2026-11-17T09:12:44+00:00')})",
+    )
+    assert texto == "Já está na última versão publicada: 0.91.31 (publicada em 17/11 09:12 UTC)."
+
+
+@pytest.mark.parametrize("entrada", ["", "lixo", "2026-13-99T99:99:99"])
+def test_data_estragada_vira_texto_vazio_e_nao_quebra(entrada):
+    assert atualizacao.data_publicada(entrada) == ""
+
+
+def test_verificar_devolve_a_data_e_a_frase_com_a_data(tmp_path):
+    """O campo `publicado` é o que a tela e o `conferir-versao.bat` podem mostrar."""
+    projeto = tmp_path / "jarvis"
+    projeto.mkdir()
+    (projeto / "package.json").write_text('{"version": "0.1.0"}', encoding="utf-8")
+    (projeto / "a.txt").write_text("antigo", encoding="utf-8")
+    remoto = {
+        "versao": "9.9.9",
+        "gerado": "2026-11-17T09:12:44+00:00",
+        "arquivos": {"a.txt": {"sha256": "0" * 64, "bytes": 6}},
+    }
+    dados = atualizacao.verificar(
+        forcar=True,
+        baixar=lambda _url: json.dumps(remoto).encode(),
+        projeto=projeto,
+        raiz=tmp_path / "estado",
+    )
+    assert dados["checou"] is True, dados.get("motivo")
+    assert dados["publicado"] == "2026-11-17T09:12:44+00:00"
+    assert "publicada em 17/11 09:12 UTC" in dados["resumo"]

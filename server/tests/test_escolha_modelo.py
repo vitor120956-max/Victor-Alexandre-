@@ -242,3 +242,61 @@ def test_conta_gratuita_nao_recebe_sugestao_de_modelo_pago(monkeypatch, env_fals
     for linha in texto.splitlines():
         if linha.strip().startswith("deepseek/deepseek-chat-v3-0324") and ":free" not in linha:
             pytest.fail(f"sugeriu modelo pago numa conta gratuita: {linha!r}")
+
+
+# ---------------------------------------------------------------------------
+# Opção que a cópia não conhece (0.91.32)
+# ---------------------------------------------------------------------------
+
+def test_opcao_desconhecida_explica_em_vez_de_errar_com_usage(capsys):
+    """O console de 17/11: `--corrigir` numa cópia 0.91.29.
+
+    A resposta foi `unrecognized arguments: --corrigi`, que não diz nada a quem
+    não programa. Aqui a opção desconhecida vira uma frase com o próximo passo.
+    """
+    modulo = _conferir_ia()
+
+    codigo = modulo.main(["--opcao-que-nao-existe"])
+    texto = capsys.readouterr().out
+
+    assert codigo == 2
+    assert "--opcao-que-nao-existe" in texto
+    assert "atualizar.bat" in texto
+    assert "usage:" not in texto
+
+
+def test_o_cabecalho_mostra_a_versao(monkeypatch, env_falso, capsys):
+    """Sem a versão na tela, “a opção não existe” nunca é entendido."""
+    modulo, _ = _preparar(monkeypatch, {})
+    modulo.main([])
+    saida = capsys.readouterr().out
+    assert "JARVIS — conferir a IA (" in saida
+
+
+def test_nome_que_esta_na_lista_mas_da_404_tambem_e_consertado(monkeypatch, env_falso, capsys):
+    """A lista do provedor demora a tirar o morto; o teste é que é a prova."""
+    presente = "meta-llama/llama-3.3-70b-instruct:free"
+    env_falso.write_bytes(env_falso.read_bytes().replace(MORTO.encode(), presente.encode()))
+    bom = "qwen/qwen3-32b:free"
+    modulo, testados = _preparar(monkeypatch, {bom: True})
+
+    # `chaves.testar()` (o do --testar) falha; `testar_modelo` só aprova o bom.
+    monkeypatch.setattr(
+        chaves,
+        "testar",
+        lambda **_k: {
+            "ok": False,
+            "resultados": [{"indice": 1, "ok": False, "codigo": 404, "motivo": "não existe"}],
+        },
+    )
+    monkeypatch.setattr(chaves, "testar_modelo", lambda nome, **_k: (
+        testados.append(nome) or
+        {"modelo": nome, "ok": nome == bom, "codigo": 200 if nome == bom else 404, "motivo": ""}
+    ))
+
+    codigo = modulo.main(["--testar", "--corrigir"])
+    texto = capsys.readouterr().out
+
+    assert codigo == 0, texto
+    assert "respondeu com a sua chave" in texto
+    assert f"JARVIS_AI_MODEL={bom}" in env_falso.read_text(encoding="utf-8")

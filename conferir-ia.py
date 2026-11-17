@@ -148,7 +148,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Se o modelo do .env não existe mais, escolhe um que existe, testa e grava.",
     )
-    args = parser.parse_args(argv)
+    # `parse_known_args` de propósito (0.91.32). No PC do dono, `--corrigir`
+    # (que só existe desde a 0.91.31) caiu num `conferir-ia.py` da 0.91.29 e a
+    # resposta foi “unrecognized arguments” — um erro de ferramenta, não uma
+    # instrução. Aqui a opção desconhecida é **explicada**, com o que fazer.
+    args, sobras = parser.parse_known_args(argv)
+    if sobras:
+        print(f"  Esta cópia do JARVIS não conhece: {' '.join(sobras)}")
+        try:
+            from server import atualizacao
+
+            print(f"  Ela é a {atualizacao.VERSAO} — a opção pode ser de uma versão mais nova.")
+        except Exception:  # noqa: BLE001 - saber a versão é um extra
+            pass
+        print("  Rode o atualizar.bat (ele baixa só o que mudou) e tente de novo:")
+        print("    atualizar.bat")
+        return 2
 
     _ambiente()
     sys.path.insert(0, str(RAIZ))
@@ -159,7 +174,14 @@ def main(argv: list[str] | None = None) -> int:
     modelo = str(estado.get("modelo") or "")
     base = str(estado.get("base") or "")
 
-    print("  JARVIS — conferir a IA")
+    versao = ""
+    try:
+        from server import atualizacao
+
+        versao = atualizacao.VERSAO
+    except Exception:  # noqa: BLE001 - saber a versão é um extra
+        versao = ""
+    print(f"  JARVIS — conferir a IA{f' ({versao})' if versao else ''}")
     print()
     print(f"  provedor:  {estado.get('provedor_id') or estado.get('provedor') or 'nenhum'}")
     print(f"  endereço:  {base or 'nenhum'}")
@@ -261,6 +283,28 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"       quem respondeu: {item['modelo_que_respondeu']}")
         if not teste.get("ok"):
             codigo = 1
+
+    # O nome pode estar na lista e ainda assim dar 404 (a lista do provedor
+    # demora a tirar o morto). Com `--corrigir`, esse caso também é consertado:
+    # o teste de verdade é a prova, não a listagem (0.91.32).
+    if args.corrigir and codigo != 0 and lista_ok and disponiveis:
+        from server import escolha_modelo
+
+        escolhido = _corrigir_modelo(disponiveis, modelo, _conta_gratuita(base))
+        if escolhido:
+            print()
+            print("  Testando de novo com o modelo novo...")
+            try:
+                novo_teste = chaves.testar_modelo(escolhido)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  FALHOU ({type(exc).__name__}): {exc}")
+                return 1
+            if novo_teste.get("ok"):
+                print(f"  OK   {escolhido} respondeu com a sua chave.")
+                return 0
+            print(f"  NÃO  {escolhido} não respondeu: {novo_teste.get('motivo')}")
+            return 1
+        return 1
 
     print()
     if not estado.get("quantidade"):
