@@ -174,6 +174,34 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.34 — “funcionou?” era a pergunta errada para a tela certa
+
+Em 17/11 o dono abriu o JARVIS em `127.0.0.1:8000`, mandou “oi”, recebeu
+*“Olá, Victor. Estou por aqui. Você pode me pedir uma tarefa…”* e perguntou:
+**“funcionou?”**.
+
+Não tinha funcionado nada. Aquela frase é a skill local `case 'greeting'` do
+`AppContext`: texto fixo, sem chave, sem rede, sem modelo. O “oi” não gastou
+cota nenhuma. A tela é que não sabia dizer de onde a resposta veio — e por isso
+a primeira prova depois de doze versões de trabalho com chave não provava nada.
+
+Três mudanças, todas de texto, porque o defeito era de texto:
+
+| antes | agora |
+|---|---|
+| a saudação soava igual ao modelo | a saudação termina “(Essa resposta é local, sem IA… diga “testar ia”.)” |
+| não havia prova nenhuma na tela | `testar ia` (e “conferir a ia”, “a ia está funcionando?”, “status da ia”) pede ao modelo `Responda apenas: ok`, **cronometra** e imprime “A IA externa respondeu em N ms (provedor X)” |
+| falha virava silêncio | “A IA externa NÃO respondeu: …” + o comando que conserta (`conferir-ia.py --corrigir`); sem backend ou sem chave ele diz isso em vez de fingir |
+
+A resposta do teste sai marcada `· IA EXTERNA` no balão — a mesma marca que só
+aparece quando o texto veio de fora, pelo `/api/ai/chat`. E o parser ganhou 13
+formas de pedir o teste sem roubar os vizinhos (“status do sistema”, “testar
+python”, “testar conexão” continuam indo para onde iam).
+
+“oi” continua respondendo na hora, sem gastar cota, de propósito: mandar toda
+saudação ao modelo é pagar por uma frase que o programa já sabe. O que muda é
+que agora a resposta **avisa** que é local e ensina o comando que mede o resto.
+
 ### 0.91.33 — “respondeu” só vale se veio texto
 
 O console de 17/11 terminou com uma escolha: os dois `gemma` deram **429** e o

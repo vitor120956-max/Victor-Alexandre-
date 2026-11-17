@@ -6,6 +6,7 @@ export type Intent =
   | { type: 'greeting' }
   | { type: 'thanks' }
   | { type: 'identity' }
+  | { type: 'ai:testar' }
   | { type: 'time' }
   | { type: 'date' }
   | { type: 'status' }
@@ -173,6 +174,15 @@ export function parseCommand(rawInput: string): Intent {
   if (/^(?:oi|ola|eae|hey|bom dia|boa tarde|boa noite)[!.\s]*$/.test(text)) return { type: 'greeting' };
   if (/^(?:obrigado|obrigada|valeu|brigado|muito obrigado)[!.\s]*$/.test(text)) return { type: 'thanks' };
   if (/^(?:quem e voce|o que e voce|seu nome)\??$/.test(text)) return { type: 'identity' };
+  // 0.91.34 — “funcionou?” precisa de prova. `oi` e `que horas são` são
+  // respostas locais: não passam pelo modelo e não provam nada sobre ele.
+  if (
+    /^(?:testar|testa|teste|conferir|confere|verificar|verifica)\s+(?:a\s+)?ia(?:\s+externa)?\??$/.test(text)
+    || /^(?:a\s+)?ia(?:\s+externa)?\s+(?:esta\s+)?(?:funcionando|responde|ok|online|configurada)\??$/.test(text)
+    || /^(?:status|estado)\s+(?:da|de)\s+ia(?:\s+externa)?\??$/.test(text)
+  ) {
+    return { type: 'ai:testar' };
+  }
 
   if (/^(?:limpar|apagar|limpe|apague)(?: a| o)? (?:conversa|chat|historico)$/.test(text)) {
     return { type: 'clear' };
@@ -492,5 +502,6 @@ export const helpText = [
   '• GitHub — “ficha do repositório vercel-labs/agent-skills”, “lista os arquivos”, “lê o SKILL.md” ou “busca repositório de agent skills”. API pública, sem token, 60 pedidos por hora.',
   '• Correção — “não é essa, é a skill legal.article” ensina a correlação; “procure na web sobre isso” busca e guarda a resposta; “esqueça <pedido>” apaga as duas.',
   '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
+  '• Testar a IA de verdade — “testar ia” manda um pedido de verdade ao modelo, cronometra e diz qual provedor respondeu. As respostas de “oi”, “que horas são” e dos comandos são locais: não passam pelo modelo e não gastam nada.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

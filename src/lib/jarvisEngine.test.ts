@@ -34,6 +34,10 @@ describe('parseCommand — exemplos prometidos no helpText', () => {
     ['abrir lean', 'lean:workspace'],
     ['abrir agentes', 'agency:workspace'],
     ['executar resumo do dia', 'automation:summary'],
+    ['testar ia', 'ai:testar'],
+    ['conferir a ia', 'ai:testar'],
+    ['a ia está funcionando?', 'ai:testar'],
+    ['status da ia', 'ai:testar'],
   ];
 
   it.each(casos)('“%s” vira %s', (entrada, tipo) => {
@@ -263,5 +267,47 @@ describe('abertura com palavra de chamada na frente', () => {
 
   it('não transforma site desconhecido em abertura', () => {
     expect(parseCommand('chat abra um site de receitas')).not.toMatchObject({ type: 'web:open' });
+  });
+});
+
+
+/**
+ * 0.91.34 — “funcionou?” precisa de prova.
+ *
+ * O dono perguntou isso olhando um “oi” respondido na tela. Aquele texto é a
+ * skill local de saudação (`case 'greeting'`): não passa pelo modelo e não diz
+ * nada sobre ele. A resposta honesta é um comando que pede ao modelo de
+ * verdade — e o parser tem de reconhecer as formas que uma pessoa digita.
+ */
+describe('parseCommand — testar a IA de verdade', () => {
+  it.each([
+    'testar ia',
+    'testa a ia',
+    'teste ia',
+    'conferir ia',
+    'conferir a ia externa',
+    'confere a ia',
+    'verificar ia',
+    'ia está funcionando',
+    'a ia está funcionando?',
+    'a ia responde?',
+    'ia online?',
+    'status da ia',
+    'estado da IA externa',
+  ])('“%s” pede o teste da IA', (entrada) => {
+    expect(parseCommand(entrada).type).toBe('ai:testar');
+  });
+
+  it('não rouba comandos vizinhos', () => {
+    // `status do sistema` é do sistema; `python status` é das skills Python.
+    expect(parseCommand('status do sistema').type).toBe('status');
+    expect(parseCommand('python status').type).toBe('python:status');
+    expect(parseCommand('que horas são?').type).toBe('time');
+    expect(parseCommand('oi').type).toBe('greeting');
+  });
+
+  it('o texto de ajuda ensina o comando e diz que “oi” é local', () => {
+    expect(helpText).toContain('testar ia');
+    expect(helpText).toContain('locais');
   });
 });

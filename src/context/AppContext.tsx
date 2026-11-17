@@ -655,6 +655,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (intent.type === 'ai:testar') {
+      // 0.91.34 — o dono perguntou “funcionou?” olhando um “oi” respondido na
+      // tela. Aquele texto é a skill local de saudação: não passa pelo modelo e
+      // não prova nada sobre ele. Aqui a prova é um pedido de verdade,
+      // cronometrado, com o nome de quem respondeu.
+      if (!backendOnline) {
+        appendJarvisMessage(`A API Python não respondeu em ${enderecoDaApi()}, então não há como falar com o modelo.\n\nSuba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py`);
+        return;
+      }
+      if (!aiStatus.configured || !preferences.aiEnabled) {
+        appendJarvisMessage(
+          !aiStatus.configured
+            ? 'A IA externa não está configurada no servidor: chave vazia ou .env não lido.\n\nPara conferir sem abrir o JARVIS:\n  .venv\\Scripts\\python conferir-ia.py --testar'
+            : 'A IA externa está desativada nas suas configurações. Ligue em Configurações → Modelos de IA e diga “testar ia” de novo.',
+        );
+        return;
+      }
+      const inicioDoTeste = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      setProcessing('ai');
+      void requestAIChat({ message: 'Responda apenas: ok', history: [] })
+        .then((response) => {
+          const fim = typeof performance !== 'undefined' ? performance.now() : Date.now();
+          const ms = Math.round(fim - inicioDoTeste);
+          appendJarvisMessage(
+            `A IA externa respondeu em ${ms} ms (provedor ${response.provider || aiStatus.provider}).\n\nO modelo disse: “${response.content.trim()}”\n\nEsta mensagem veio do modelo. Já “oi”, “que horas são” e os comandos são respostas locais: não gastam nada.`,
+            'ai',
+          );
+        })
+        .catch((error: unknown) => {
+          appendJarvisMessage(
+            `A IA externa NÃO respondeu: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nPara ver o motivo exato e escolher outro modelo:\n  .venv\\Scripts\\python conferir-ia.py --corrigir`,
+          );
+          void refreshBackend();
+        })
+        .finally(() => setProcessing(null));
+      return;
+    }
+
     if (
       intent.type === 'python:analyze' || intent.type === 'python:status'
       || intent.type === 'legal:search' || intent.type === 'legal:article' || intent.type === 'legal:sources'
@@ -783,7 +821,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : 'A direção de arte precisa da API Python online. Suba a API com .venv\Scripts\python iniciar.py; nada foi analisado.';
         break;
       case 'greeting':
-        reply = `Olá, ${preferences.name}. Estou por aqui. Você pode me pedir uma tarefa, uma anotação, um cálculo ou dizer “ajuda”.`;
+        // 0.91.34 — o “oi” não passa pelo modelo. Dizer isso na resposta evita
+        // a pergunta “funcionou?” depois de uma saudação bonita.
+        reply = `Olá, ${preferences.name}. Estou por aqui. Você pode me pedir uma tarefa, uma anotação, um cálculo ou dizer “ajuda”.\n\n(Essa resposta é local, sem IA. Para saber se a IA externa responde de verdade, diga “testar ia”.)`;
         break;
       case 'thanks':
         reply = 'Por nada. Pode contar comigo para o próximo passo.';
@@ -1048,7 +1088,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     appendJarvisMessage(reply);
-  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, modoDono, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills, iniciarPedido, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
+  }, [addNote, addTask, aiStatus.configured, aiStatus.provider, appendJarvisMessage, automations, backendOnline, buildSummary, clearMessages, executeSkill, exportBackup, focus, hostToken, modoDono, logActivity, messages, notes, pauseFocus, preferences.aiEnabled, preferences.name, preferences.shareContextWithAI, processing, pushToast, pythonSkills, iniciarPedido, refreshBackend, responderComIA, resumeFocus, setPreferences, setTasks, startFocus, stopFocus, tasks, toggleTask]);
 
   const updatePreferences = useCallback((patch: Partial<Preferences>) => {
     if (patch.notifications && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {

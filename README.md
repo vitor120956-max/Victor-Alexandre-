@@ -255,6 +255,16 @@ com a resposta **vazia**. O teste de 8 tokens passou a exigir texto (não só
 200), a escolha prefere modelos de conversa, e quando a resposta é cortada por
 pensamento o JARVIS **repete uma vez** com mais espaço antes de desistir.
 
+**A resposta local se declara local (0.91.34).** O “oi” do JARVIS nunca passou
+pelo modelo: é uma skill local, instantânea e sem chave. O problema é que ela
+respondia exatamente como o modelo responderia, e nada na tela distinguia as
+duas coisas — foi a pergunta “funcionou?” olhando para uma saudação. Agora a
+saudação termina dizendo que é local e ensinando o comando que prova o resto:
+**`testar ia`** (também “conferir a ia”, “a ia está funcionando?”, “status da
+ia”) manda `Responda apenas: ok` para `/api/ai/chat`, cronometra e responde
+`A IA externa respondeu em 1204 ms (provedor openrouter)` — marcado `· IA
+EXTERNA` no balão. Se falhar, diz o erro e o comando que conserta.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -830,7 +840,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.33", "skills": 325}`.
+`{"version": "0.91.34", "skills": 325}`.
 
 ## Verificações
 
