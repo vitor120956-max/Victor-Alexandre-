@@ -300,3 +300,63 @@ def test_nome_que_esta_na_lista_mas_da_404_tambem_e_consertado(monkeypatch, env_
     assert codigo == 0, texto
     assert "respondeu com a sua chave" in texto
     assert f"JARVIS_AI_MODEL={bom}" in env_falso.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# HTTP 200 não é prova de que veio texto (0.91.33)
+# ---------------------------------------------------------------------------
+
+def test_modelo_de_raciocinio_fica_atras_de_um_de_conversa():
+    """O escolhido no PC do dono foi um `…-reasoning:free`.
+
+    Ele pensa antes de responder e o pensamento ocupa o limite de tokens — pode
+    voltar com `content` vazio. Funciona, mas vem depois de um modelo comum.
+    """
+    lista = [
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ]
+    assert escolha_modelo.e_raciocinio(lista[0]) is True
+    assert escolha_modelo.candidatos(lista)[0] == "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def test_raciocinio_nao_perde_para_modelo_de_tamanho_desconhecido():
+    """A ordem certa: primeiro um modelo de tamanho útil, depois o “pensa”."""
+    lista = ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "nvidia/nemotron-3.5-lightning:free"]
+    assert escolha_modelo.candidatos(lista)[0] == "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+
+
+def test_http_200_sem_texto_nao_aprova_o_modelo():
+    """0.91.33 — o teste dizia “respondeu” e o JARVIS devolvia resposta vazia."""
+    from server import chaves
+
+    def postar(_url, _corpo, _cabecalho):
+        return {"codigo": 200, "corpo": {"choices": [{"message": {"content": ""}}]}}
+
+    assert chaves.tem_resposta({"choices": [{"message": {"content": ""}}]}) == (False, False)
+    assert chaves.tem_resposta(
+        {"choices": [{"message": {"content": "", "reasoning": "pensando…"}}]}
+    ) == (False, True)
+    assert chaves.tem_resposta(
+        {"choices": [{"message": {"content": "ok"}}]}
+    ) == (True, False)
+
+
+def test_o_teste_de_modelo_exige_texto_e_nao_so_um_200():
+    from server import chaves
+
+    def postar_vazio(_url, _corpo, _cabecalho):
+        return {"codigo": 200, "corpo": {"choices": [{"message": {"content": ""}}]}}
+
+    def postar_bom(_url, _corpo, _cabecalho):
+        return {"codigo": 200, "corpo": {"choices": [{"message": {"content": "ok"}}]}}
+
+    vazio = chaves._testar_uma_detalhado(
+        "https://exemplo/v1", "modelo-x", "chave", 5.0, postar_vazio
+    )
+    bom = chaves._testar_uma_detalhado(
+        "https://exemplo/v1", "modelo-x", "chave", 5.0, postar_bom
+    )
+    assert vazio.get("sem_texto") is True
+    assert "sem nenhum texto" in vazio["motivo"]
+    assert bom.get("sem_texto") is None

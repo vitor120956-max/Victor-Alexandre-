@@ -558,3 +558,87 @@ def test_conferir_ia_lista_o_modelo_e_aponta_o_errado(monkeypatch, tmp_path, cap
     assert "NÃO está na lista" in saida
     assert "llama-3.3-70b-versatile" in saida
     assert "gsk_ABCDEF" not in saida, "a chave nunca aparece inteira"
+
+
+# ---------------------------------------------------------------------------
+# Modelo de raciocínio: 200 com texto vazio (0.91.33)
+# ---------------------------------------------------------------------------
+
+class FakeRespostaCorpo(FakeResponse):
+    """Uma resposta com corpo escolhido pelo teste."""
+
+    def __init__(self, corpo: dict[str, Any]) -> None:
+        super().__init__(200)
+        self._corpo = corpo
+
+    def json(self) -> dict[str, Any]:
+        return self._corpo
+
+
+class FakeClienteRoteiro(FakeClient):
+    """Devolve a próxima resposta do roteiro a cada POST, em qualquer instância.
+
+    A contagem é da **classe**: cada tentativa do provedor abre um `AsyncClient`
+    novo, e o segundo pedido (o de mais espaço) cai numa instância nova.
+    """
+
+    roteiro: list[dict[str, Any]] = []
+    feitos: list[dict[str, Any]] = []
+    ultimo: "FakeClienteRoteiro | None" = None
+
+    def __init__(self, **_kwargs: Any) -> None:
+        super().__init__()
+        self.calls: list[dict[str, Any]] = FakeClienteRoteiro.feitos
+        FakeClienteRoteiro.ultimo = self
+
+    async def post(self, url: str, **kwargs: Any) -> FakeResponse:
+        FakeClienteRoteiro.feitos.append({"url": url, **kwargs})
+        corpo = FakeClienteRoteiro.roteiro[
+            min(len(FakeClienteRoteiro.feitos) - 1, len(FakeClienteRoteiro.roteiro) - 1)
+        ]
+        return FakeRespostaCorpo(corpo)
+
+
+def _pedir(monkeypatch: pytest.MonkeyPatch, roteiro: list[dict[str, Any]]) -> tuple[str, list]:
+    monkeypatch.setenv("JARVIS_AI_API_KEY", "test-key-not-a-real-secret")
+    monkeypatch.setenv("JARVIS_AI_BASE_URL", "https://provider.example/v1")
+    monkeypatch.setenv("JARVIS_AI_MODEL", "modelo-raciocinio:free")
+    monkeypatch.setattr("server.ai.httpx.AsyncClient", FakeClienteRoteiro)
+    FakeClienteRoteiro.roteiro = roteiro
+    FakeClienteRoteiro.feitos = []
+    provedor = OpenAICompatibleProvider()
+    texto = asyncio.run(provedor._pedir([{"role": "user", "content": "oi"}], None, 30.0, 256))
+    return texto, FakeClienteRoteiro.feitos
+
+
+def test_resposta_cortada_por_pensamento_e_pedida_de_novo_com_mais_espaco(monkeypatch):
+    """O caso do dono: `finish_reason: length`, `content` vazio.
+
+    Uma segunda tentativa com espaço maior resolve — e é só uma, para não
+    gastar duas vezes sem motivo.
+    """
+    roteiro = [
+        {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]},
+        {"choices": [{"message": {"content": "pronto, aqui está"}, "finish_reason": "stop"}]},
+    ]
+    texto, chamadas = _pedir(monkeypatch, roteiro)
+
+    assert texto == "pronto, aqui está"
+    assert len(chamadas) == 2
+    assert chamadas[1]["json"]["max_tokens"] > chamadas[0]["json"]["max_tokens"]
+
+
+def test_sem_texto_e_sem_espaco_a_resposta_e_o_raciocinio(monkeypatch):
+    """Melhor mostrar o raciocínio do que “resposta vazia” na tela."""
+    roteiro = [
+        {"choices": [{"message": {"content": "", "reasoning": "analisei e concluí: 2+2=4"}}]}
+    ]
+    texto, _ = _pedir(monkeypatch, roteiro)
+    assert texto.startswith("analisei e concluí")
+
+
+def test_texto_vazio_sem_nada_mesmo_vira_erro_claro(monkeypatch):
+    roteiro = [{"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]}]
+    with pytest.raises(AIUnavailable) as erro:
+        _pedir(monkeypatch, roteiro)
+    assert "resposta vazia" in str(erro.value)

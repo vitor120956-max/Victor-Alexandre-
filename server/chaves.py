@@ -625,6 +625,35 @@ def _motivo_do_corpo(codigo: int, corpo: Any) -> str:
     return " — ".join(pedacos) or mensagem
 
 
+def tem_resposta(corpo: Any) -> tuple[bool, bool]:
+    """(tem texto, tem raciocínio) na resposta de um provedor.
+
+    Por que isto existe (0.91.33). O modelo escolhido no PC do dono foi o
+    `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` — um modelo de
+    **raciocínio**. Ele pode responder HTTP 200 com `content` vazio e o texto
+    todo em `reasoning`: o teste de 8 tokens dizia “respondeu”, o JARVIS abria
+    e devolvia “O provedor retornou uma resposta vazia”. HTTP 200 não é prova de
+    que veio alguma coisa.
+    """
+    if not isinstance(corpo, dict):
+        return False, False
+    escolhas = corpo.get("choices")
+    if not isinstance(escolhas, list) or not escolhas:
+        return False, False
+    primeira = escolhas[0] if isinstance(escolhas[0], dict) else {}
+    mensagem = primeira.get("message") if isinstance(primeira.get("message"), dict) else {}
+    conteudo = mensagem.get("content")
+    if isinstance(conteudo, list):
+        conteudo = "".join(
+            parte.get("text", "") for parte in conteudo if isinstance(parte, dict)
+        )
+    razao = mensagem.get("reasoning_content") or mensagem.get("reasoning") or ""
+    return (
+        isinstance(conteudo, str) and bool(conteudo.strip()),
+        isinstance(razao, str) and bool(razao.strip()),
+    )
+
+
 def _testar_uma_detalhado(
     base: str,
     modelo: str,
@@ -654,7 +683,18 @@ def _testar_uma_detalhado(
             corpo_resposta = None
         motivo = _MOTIVOS.get(codigo, f"respondeu HTTP {codigo}" if codigo != 200 else "respondeu")
         detalhe = _motivo_do_corpo(codigo, corpo_resposta) if codigo != 200 else ""
-        return {"codigo": codigo, "motivo": motivo, "detalhe": detalhe}
+        resultado: dict[str, Any] = {"codigo": codigo, "motivo": motivo, "detalhe": detalhe}
+        if codigo == 200:
+            texto, razao = tem_resposta(corpo_resposta)
+            if not texto:
+                resultado["motivo"] = (
+                    "respondeu com raciocínio em vez de texto"
+                    if razao
+                    else "respondeu HTTP 200 sem nenhum texto"
+                )
+                resultado["detalhe"] = "o modelo pode gastar o limite pensando e não sobrar resposta"
+                resultado["sem_texto"] = True
+        return resultado
 
     try:
         import httpx  # noqa: PLC0415 - só quem testa paga o import
@@ -669,7 +709,23 @@ def _testar_uma_detalhado(
             "detalhe": "",
         }
     if resposta.status_code == 200:
-        return {"codigo": 200, "motivo": "respondeu", "detalhe": ""}
+        try:
+            corpo_ok = resposta.json()
+        except Exception:  # noqa: BLE001 - corpo ilegível é resposta sem prova
+            corpo_ok = None
+        texto, razao = tem_resposta(corpo_ok)
+        if texto:
+            return {"codigo": 200, "motivo": "respondeu", "detalhe": ""}
+        return {
+            "codigo": 200,
+            "motivo": (
+                "respondeu com raciocínio em vez de texto"
+                if razao
+                else "respondeu HTTP 200 sem nenhum texto"
+            ),
+            "detalhe": "o modelo pode gastar o limite pensando e não sobrar resposta",
+            "sem_texto": True,
+        }
     try:
         corpo_resposta = resposta.json()
     except Exception:  # noqa: BLE001 - corpo que não é JSON não ajuda em nada
@@ -703,7 +759,9 @@ def testar_modelo(
     codigo = int(resultado.get("codigo") or 0)
     return {
         "modelo": modelo,
-        "ok": codigo == 200,
+        # HTTP 200 com `content` vazio não é aprovação: é um modelo que ainda
+        # não provou que fala (0.91.33).
+        "ok": codigo == 200 and not resultado.get("sem_texto"),
         "codigo": codigo,
         "motivo": resultado.get("motivo") or "",
         "detalhe": resultado.get("detalhe") or "",

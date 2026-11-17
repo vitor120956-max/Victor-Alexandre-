@@ -658,6 +658,7 @@ class OpenAICompatibleProvider:
         limite: float,
         max_tokens: int,
         indice: int | None = None,
+        orcar: bool = True,
     ) -> str:
         """Uma tentativa com uma chave. Traduz o HTTP em erro seguro em português.
 
@@ -717,7 +718,7 @@ class OpenAICompatibleProvider:
                     onde=self._onde_pegar_chave(),
                 )
             )
-        if indice is not None and chave:
+        if orcar and indice is not None and chave:
             self._anotar_ok(indice)
             self._anotar_restante(indice, recebidos)
         try:
@@ -728,6 +729,32 @@ class OpenAICompatibleProvider:
         if isinstance(content, list):
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
         if not isinstance(content, str) or not content.strip():
+            # 0.91.33 — o modelo escolhido no PC do dono é de **raciocínio**
+            # (`…-reasoning:free`). Ele gasta o limite pensando e devolve
+            # `content` vazio com `finish_reason: length`. Antes disso, o JARVIS
+            # abria e respondia “O provedor retornou uma resposta vazia”.
+            try:
+                escolha = (data.get("choices") or [{}])[0]
+            except (AttributeError, IndexError, TypeError):
+                escolha = {}
+            acabou = str(escolha.get("finish_reason") or "") == "length"
+            if acabou and orcar and max_tokens < 2_048:
+                # Uma segunda tentativa, com espaço para o raciocínio e a
+                # resposta. Só uma: gastar duas vezes já é caro.
+                return await self._pedir(
+                    messages,
+                    chave,
+                    limite=limite * 1.5,
+                    max_tokens=min(4_096, max(1_024, max_tokens * 3)),
+                    indice=indice,
+                    orcar=False,
+                )
+            razao = escolha.get("message") or {}
+            razao = razao.get("reasoning_content") or razao.get("reasoning") or ""
+            if isinstance(razao, str) and razao.strip():
+                # Sem texto e sem espaço para tentar de novo: entregar o
+                # raciocínio é melhor do que “resposta vazia” na tela.
+                return razao.strip()[:12_000]
             raise AIUnavailable("O provedor retornou uma resposta vazia.")
         return content.strip()[:12_000]
 

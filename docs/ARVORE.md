@@ -174,6 +174,28 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.33 — “respondeu” só vale se veio texto
+
+O console de 17/11 terminou com uma escolha: os dois `gemma` deram **429** e o
+terceiro candidato — `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` —
+“respondeu”. Respondeu **HTTP 200**, e o teste de 8 tokens aprovou.
+
+O problema é o tipo de modelo. Nome com `reasoning` pensa antes de falar, e o
+pensamento ocupa o mesmo limite de tokens. Com o JARVIS pedindo 800 tokens, o
+raciocínio pode consumir tudo: volta `finish_reason: length` e `content` vazio.
+O usuário abre o JARVIS e recebe *“O provedor retornou uma resposta vazia”* —
+longe da causa, de novo.
+
+| antes | agora |
+|---|---|
+| 200 = aprovado | **200 só aprova com texto** (`choices[0].message.content`); vazio vira “respondeu HTTP 200 sem nenhum texto” e o próximo candidato é testado |
+| resposta cortada = “vazia” | `finish_reason: length` → **um** segundo pedido com até 3× o espaço (teto de 4.096) |
+| vazio e sem espaço → erro | se veio `reasoning`, é ele que aparece — melhor que “resposta vazia” |
+| escolha podia cair em modelo de raciocínio | `escolha_modelo` põe `reasoning`/`thinking` **depois** dos de conversa da mesma faixa; e o `--corrigir` avisa “é um modelo de raciocínio: pode demorar” |
+
+E o `--corrigir` passou a contar os 429: eles não são defeito do modelo, são
+limite de pedidos da conta gratuita — e agora a tela diz isso.
+
 ### 0.91.32 — duas telas que não diziam o que a pessoa precisava saber
 
 Dois consertos pequenos, os dois nascidos de uma pergunta que o dono fez no

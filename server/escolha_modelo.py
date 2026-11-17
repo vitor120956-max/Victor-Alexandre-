@@ -79,6 +79,13 @@ FAMILIAS = (
 # Palavras que costumam indicar um modelo ajustado para conversar.
 BOAS_PALAVRAS = ("instruct", "chat", "versatile", "flash", "mini", "it")
 
+# Modelos de **raciocínio**: pensam antes de responder e o pensamento também
+# ocupa o limite de tokens. No PC do dono (17/11) o escolhido foi um deles — e
+# ele responde com `content` vazio quando o pensamento come o limite inteiro.
+# Funcionam, mas para o JARVIS (respostas curtas, conversa) vêm depois dos
+# modelos de conversa comuns: o custo é uma resposta em branco na tela.
+MARCAS_DE_RACIOCINIO = ("reasoning", "thinking", "qwq", "-r1")
+
 _TAMANHO = re.compile(r"(\d+(?:\.\d+)?)\s*b(?![a-z0-9])")
 
 
@@ -96,6 +103,12 @@ def serve_para_conversar(nome: str) -> bool:
 
 def e_gratis(nome: str) -> bool:
     return nome.lower().endswith(":free")
+
+
+def e_raciocinio(nome: str) -> bool:
+    """O nome diz que é modelo de raciocínio (pensa antes de responder)?"""
+    baixo = nome.lower()
+    return any(marca in baixo for marca in MARCAS_DE_RACIOCINIO)
 
 
 def _familia(nome: str) -> int:
@@ -123,6 +136,7 @@ def pontuar(nome: str) -> tuple:
     return (
         0 if e_gratis(nome) else 1,
         faixa,
+        1 if e_raciocinio(nome) else 0,
         _familia(nome),
         0 if palavras else 1,
         -tamanho,

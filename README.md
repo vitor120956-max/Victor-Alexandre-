@@ -249,6 +249,12 @@ você usar uma opção que a **sua cópia** ainda não tem, o script agora expli
 (“Esta cópia do JARVIS não conhece: --corrigir … rode o atualizar.bat”) em vez de
 responder `unrecognized arguments`.
 
+**“Respondeu” só vale com texto (0.91.33).** Modelos de **raciocínio**
+(`…-reasoning`) gastam o limite de tokens pensando e podem devolver HTTP 200
+com a resposta **vazia**. O teste de 8 tokens passou a exigir texto (não só
+200), a escolha prefere modelos de conversa, e quando a resposta é cortada por
+pensamento o JARVIS **repete uma vez** com mais espaço antes de desistir.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -824,7 +830,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.32", "skills": 325}`.
+`{"version": "0.91.33", "skills": 325}`.
 
 ## Verificações
 

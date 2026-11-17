@@ -111,6 +111,7 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
 
     print()
     print("  Escolhendo um modelo que exista hoje (teste de 8 tokens em cada um):")
+    ocupados = 0
     for nome in candidatos:
         print(f"    testando {nome} …", end=" ", flush=True)
         try:
@@ -119,6 +120,8 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
             print(f"não deu ({type(exc).__name__})")
             continue
         if not resultado.get("ok"):
+            if int(resultado.get("codigo") or 0) == 429:
+                ocupados += 1
             print(f"não ({resultado.get('motivo') or resultado.get('codigo')})")
             continue
         print("respondeu.")
@@ -128,6 +131,11 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
             return ""
         print(f"  Gravei JARVIS_AI_MODEL={nome}{aviso}")
         print("  Só essa linha mudou; o resto do .env ficou igual.")
+        if escolha_modelo.e_raciocinio(nome):
+            print("  É um modelo de raciocínio: pensa antes de responder e pode demorar um pouco.")
+        if ocupados:
+            print(f"  ({ocupados} modelo(s) responderam 429 — ocupados; a conta gratuita tem")
+            print("   limite de pedidos por minuto, e isso não é defeito do modelo.)")
         return nome
     print()
     print("  Nenhum dos testados respondeu. Rode de novo em um minuto:")

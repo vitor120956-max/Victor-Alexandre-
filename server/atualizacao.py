@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.91.32"
+VERSAO = "0.91.33"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -81,7 +81,7 @@ PASTAS_IGNORADAS = {
     ".git", ".venv", "storage", "node_modules", "__pycache__", "dist",
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".next", "out",
     "build", ".idea", ".vscode",
-    # O perfil do Chrome do JARVIS (0.91.32). Milhares de arquivos, centenas de
+    # O perfil do Chrome do JARVIS (0.91.33). Milhares de arquivos, centenas de
     # MB e dados de login: jamais no manifesto — e jamais baixado por cima do
     # perfil do dono.
     "perfil-cdp",
@@ -444,7 +444,7 @@ def data_publicada(gerado: str) -> str:
 
     O dono pergunta “tem versão nova?” e recebe um número. Só o número não diz
     se a resposta é de hoje ou de semana passada — e foi assim que ele atualizou
-    e continuou sem saber se algo tinha mudado (0.91.32).
+    e continuou sem saber se algo tinha mudado (0.91.33).
     """
     texto = (gerado or "").strip()
     if not texto:
