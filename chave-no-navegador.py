@@ -67,6 +67,10 @@ RAIZ = Path(__file__).resolve().parent
 # Sem isso, a tela de escolha de conta (que lista mais de uma) faria o JARVIS
 # perguntar em toda execução — ou pior, chutar.
 CONTA_GOOGLE = "JARVIS_CONTA_GOOGLE"
+# A chave de gestão (management/provisioning) do OpenRouter: ela não conversa
+# com modelo nenhum, só cria outras chaves. Fica no `.env` para o JARVIS poder
+# criar uma chave nova sem abrir navegador (0.91.29).
+GESTAO_OPENROUTER = "JARVIS_OPENROUTER_GESTAO"
 
 
 class PassoError(RuntimeError):
@@ -2584,6 +2588,94 @@ def _cdp_fluxo(args, sessao) -> int:
     return _gravar(modulo, chave)
 
 
+# ---------------------------------------------------------------------------
+# Pela porta do OpenRouter: sem navegador nenhum (0.91.29)
+# ---------------------------------------------------------------------------
+# O Chrome do JARVIS é um perfil novo, sem cache: no PC do dono a página demora.
+# Esperar 90 s funciona, mas é ruim. Com a chave de gestão, criar uma chave é um
+# `POST` e uma resposta — leva um segundo e não depende de janela nenhuma.
+
+
+def _texto_do_env(modulo) -> str:
+    return modulo.ler_texto(modulo.ENV) if modulo.ENV.is_file() else modulo.texto_base()
+
+
+def _gestao_do_env(modulo) -> str:
+    return (modulo.ler_valor(_texto_do_env(modulo), GESTAO_OPENROUTER) or "").strip()
+
+
+def passo_api(args) -> int:
+    """Cria a chave pelo `POST /api/v1/keys`. Sem Chrome, sem tela, sem espera."""
+    from server import chave_web, openrouter_api
+
+    modulo = _modulo_do_configurador()
+    gestao = _gestao_do_env(modulo)
+    if not gestao:
+        print("  NÃO DEI: falta a chave de gestão do OpenRouter no .env.")
+        print("  Rode o `chave-pela-api.bat`: ele abre a página certa uma vez e")
+        print("  guarda essa chave. Depois disso, criar chave aqui leva 1 segundo.")
+        return 1
+
+    nome = (args.nome or "").strip() or chave_web.nome_sugerido()
+    if not getattr(args, "autorizar", False):
+        print("  Sem --autorizar eu só olho: nada é criado.")
+        print(f"  Seria criada uma chave chamada {nome!r}, sem limite e sem validade.")
+        return 1
+
+    print(f"  Criando a chave {nome!r} no OpenRouter (direto pela API, sem navegador)…")
+    try:
+        chave = openrouter_api.criar_chave(gestao, nome)
+    except openrouter_api.OpenRouterError as exc:
+        print(f"  NÃO DEI: {exc}")
+        return 1
+    print(f"  Chave criada: {modulo.mascarar(chave)}")
+    return _gravar(modulo, chave)
+
+
+def passo_gestao(args) -> int:
+    """Guarda a chave de gestão copiada no site — uma vez na vida.
+
+    A chave de gestão tem o mesmo formato de uma chave comum. Por isso ela é
+    **verificada** antes de ser gravada (lendo a lista de chaves, que só uma
+    chave de gestão pode fazer): gravar uma chave comum aqui só daria erro na
+    próxima vez, com a mensagem errada.
+    """
+    from server import openrouter_api
+
+    modulo = _modulo_do_configurador()
+    texto = _texto_do_env(modulo)
+    atual = (modulo.ler_valor(texto, GESTAO_OPENROUTER) or "").strip()
+    if atual:
+        print(f"  A chave de gestão já está guardada: {modulo.mascarar(atual)}")
+        print("  Se quiser trocar, apague a linha JARVIS_OPENROUTER_GESTAO do .env.")
+        return 0
+
+    print("  Cole a chave de gestão na área de transferência (botão COPIAR do site).")
+    print("  Eu leio o que mudar nela — não precisa colar aqui na janela.")
+    print()
+    anterior = _texto_da_area()
+    espera = float(getattr(args, "espera_colar", 0) or 120.0)
+    resultado = _esperar_chave(modulo, anterior, segundos=espera, avisar=True)
+    if resultado is None:
+        print("  NÃO DEI: não apareceu chave nova na área de transferência.")
+        print("  No site, clique em COPIAR na chave de gestão e rode de novo.")
+        return 1
+    _, chave = resultado
+    print(f"  Chave recebida: {modulo.mascarar(chave)}")
+    print("  Conferindo no OpenRouter se ela pode criar chaves…")
+    ok, motivo = openrouter_api.chave_de_gestao_vale(chave)
+    if not ok:
+        print(f"  NÃO DEI: {motivo}")
+        print("  Abra openrouter.ai/settings/management-keys e copie a chave de lá")
+        print("  (não a chave comum, que fica em /settings/keys).")
+        return 1
+    texto = modulo.definir(texto, GESTAO_OPENROUTER, chave)
+    destino = modulo.gravar(texto)
+    print(f"  Guardada em {destino} — só a linha {GESTAO_OPENROUTER} mudou.")
+    print("  Agora dá para criar chave sem abrir navegador: chave-pela-api.bat.")
+    return 0
+
+
 def passo_abrir(args) -> int:
     modulo = _modulo_do_configurador()
     guia = modulo.guia_do_provedor("openrouter", "https://openrouter.ai/api/v1")
@@ -2640,6 +2732,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--porta", type=int, default=9222, help="Porta de controle do Chrome (padrão: 9222).")
     parser.add_argument(
+        "--api",
+        action="store_true",
+        help="Cria a chave direto pela API do OpenRouter (precisa da chave de gestão no .env).",
+    )
+    parser.add_argument(
+        "--gestao",
+        action="store_true",
+        help="Lê a chave de gestão da área de transferência, confere e guarda no .env.",
+    )
+    parser.add_argument(
         "--espera-carregar",
         type=float,
         default=90.0,
@@ -2661,6 +2763,10 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(RAIZ))
 
     try:
+        if args.gestao:
+            return passo_gestao(args)
+        if args.api:
+            return passo_api(args)
         if args.cdp:
             return passo_cdp(args)
         if args.diagnostico:

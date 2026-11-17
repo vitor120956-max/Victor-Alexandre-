@@ -223,6 +223,15 @@ e, se a tela de entrada aparecer, espera você entrar nessa janela por até
 5 minutos e **continua sozinho** — lentidão não vira “não deu”. Detalhes em
 [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.3.
 
+**Sem navegador nenhum (0.91.29).** E, para quem não quer esperar página
+nenhuma, existe o caminho mais curto: `chave-pela-api.bat` cria a chave pelo
+`POST /api/v1/keys` do OpenRouter, em um segundo. Ele usa a **chave de gestão**
+(*management key*) — uma chave que não conversa com modelo, só cria outras —,
+que é pedida **uma vez**, copiada da página `openrouter.ai/settings/management-keys`
+no Chrome normal. O JARVIS confere que ela realmente pode criar chaves antes de
+guardá-la no `.env` (`JARVIS_OPENROUTER_GESTAO`). Daí em diante: sem janela, sem
+carregamento, sem login. Detalhes em [`docs/CHAVE-OPENROUTER.md`](docs/CHAVE-OPENROUTER.md) §7.4.
+
 Para rodar de um pendrive — requisitos por sistema, cópia do projeto, dependências por máquina, limites de formato do drive e a skill que traz os arquivos da pasta Downloads — consulte [`docs/PENDRIVE.md`](docs/PENDRIVE.md).
 
 ## Legislação brasileira
@@ -798,7 +807,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.28", "skills": 325}`.
+`{"version": "0.91.29", "skills": 325}`.
 
 ## Verificações
 

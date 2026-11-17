@@ -4,9 +4,11 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.91.28
+echo   Versao: 0.91.29
 echo   ----------------------------------------------------------------
-echo   (o jeito bom agora e o chrome-cdp.bat: ele nao le a tela)
+echo   (o jeito mais rapido e o chave-pela-api.bat: ele nao abre navegador
+echo    nenhum, pede a chave direto ao OpenRouter; e o chrome-cdp.bat nao le
+echo    a tela)
 echo   Um duplo clique e o JARVIS abre a pagina, entra se preciso,
 echo   cria a chave, copia e grava no .env dele.
 echo   Na primeira vez ele pergunta qual conta do Google e lembra.

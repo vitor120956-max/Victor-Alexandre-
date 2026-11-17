@@ -174,6 +174,39 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.29 — o caminho em que não há página para carregar
+
+O dono perguntou o que qualquer pessoa perguntaria: “esse Chrome é muito lento,
+não tem outro jeito?”. Tem. O problema nunca foi o Chrome — foi **precisar de
+uma página** para criar uma chave.
+
+O OpenRouter tem a **chave de gestão** (management / provisioning): uma chave
+que não conversa com modelo, só cria outras, pelo `POST /api/v1/keys`. Com ela,
+criar a chave do JARVIS é um pedido HTTPS e uma resposta — sem janela, sem
+carregamento, sem login, sem espera.
+
+| peça | o que faz |
+|---|---|
+| `server/openrouter_api.py` | `criar_chave`, `listar_chaves`, `chave_de_gestao_vale`; erros do site traduzidos (401/403/429/5xx) com o próximo passo |
+| `chave-no-navegador.py --api` | cria a chave pelo `POST` e grava no `.env` (exige `--autorizar`) |
+| `chave-no-navegador.py --gestao` | lê a chave de gestão da área de transferência, **confere** e guarda em `JARVIS_OPENROUTER_GESTAO` |
+| `chave-pela-api.bat` | um duplo clique: na primeira vez ensina onde criar a chave de gestão; depois, cria a chave em um segundo |
+| `chrome-cdp.bat` | **não abre outro Chrome** se a janela do JARVIS já estiver de pé, e abre com as opções que tiram sincronização, extensões e pedidos de segundo plano |
+
+Duas decisões que custaram cuidado:
+
+1. **a chave de gestão é conferida antes de ser gravada.** Ela tem o mesmo
+   formato de uma chave comum; guardar a errada só daria erro na vez seguinte.
+   Ler a lista de chaves é o teste mais barato que existe — e só a de gestão
+   pode fazer isso;
+2. **o `POST` não manda `limit` nem `expires_at`.** “Sem limite e sem tempo de
+   expiração” é o que se pede **não** mandando nada; mandar `null` seria
+   adivinhar o que o site faz com nulo.
+
+O teste não precisa de rede: um OpenRouter falso devolve a chave, o 401, o 403,
+o 429, o servidor fora e a resposta sem `key` — e cada um tem de virar a frase
+certa, sem gravar nada quando não deu.
+
 ### 0.91.28 — lentidão não é recusa; e a primeira vez pede um login
 
 O print de 16/11 11:57 mostrou o caminho novo funcionando até certo ponto: o

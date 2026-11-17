@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.91.28"
+VERSAO = "0.91.29"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -81,6 +81,10 @@ PASTAS_IGNORADAS = {
     ".git", ".venv", "storage", "node_modules", "__pycache__", "dist",
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".next", "out",
     "build", ".idea", ".vscode",
+    # O perfil do Chrome do JARVIS (0.91.29). Milhares de arquivos, centenas de
+    # MB e dados de login: jamais no manifesto — e jamais baixado por cima do
+    # perfil do dono.
+    "perfil-cdp",
 }
 ARQUIVOS_IGNORADOS = {
     NOME_MANIFESTO, ".env", ".env.local", ".DS_Store", "Thumbs.db",

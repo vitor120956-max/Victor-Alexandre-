@@ -4,30 +4,28 @@ cd /d "%~dp0"
 title JARVIS - criar a chave sem ler a tela
 echo.
 echo   JARVIS - criar a chave sem ler a tela
-echo   Versao: 0.91.28
+echo   Versao: 0.91.29
 echo   ----------------------------------------------------------------
 echo.
-echo   Este atalho abre um Chrome proprio do JARVIS e deixa o JARVIS
-echo   trabalhar por dentro dele, pelo protocolo do proprio Chrome.
+echo   Este atalho usa um Chrome proprio do JARVIS e trabalha por dentro
+echo   dele, pelo protocolo do proprio Chrome.
 echo.
 echo   Nada de ler a tela, nada de mexer no mouse, nada de area de
 echo   transferencia. O seu Chrome do dia a dia NAO e fechado.
 echo.
-echo   Na PRIMEIRA vez, entre na sua conta do OpenRouter na janela que
-echo   vai abrir (clique em Sign In ali dentro). Eu espero ate 5 minutos
-echo   e sigo sozinho quando a pagina das chaves aparecer. O login fica
-echo   guardado na pasta perfil-cdp e nao e pedido de novo.
-echo.
-echo   A pagina do OpenRouter as vezes demora. Eu espero ate 90 segundos
-echo   e vou mostrando o tempo aqui; se ela nao abrir, digo o que fazer.
+echo   Se a janela do JARVIS ja estiver aberta, ele aproveita ela - nao
+echo   abre outra e nao recarrega a pagina.
 echo.
 set "segue="
-set /p "segue=Tecle Enter para abrir ou N para sair: "
+set /p "segue=Tecle Enter para continuar ou N para sair: "
 if /i "%segue%"=="N" goto fim
 echo.
 if not exist ".venv\Scripts\python.exe" goto semvenv
 if not exist "chave-no-navegador.py" goto semscript
 set "PYTHON=.venv\Scripts\python.exe"
+
+call :testa_porta
+if not errorlevel 1 goto ja_aberto
 
 set "CHROME="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
@@ -38,9 +36,18 @@ if not defined CHROME goto semchrome
 set "PERFIL=%~dp0perfil-cdp"
 if not exist "%PERFIL%" mkdir "%PERFIL%" >nul 2>&1
 echo   Abrindo o Chrome do JARVIS (o seu fica como esta)...
-start "" "%CHROME%" "--user-data-dir=%PERFIL%" --remote-debugging-port=9222 --no-first-run --no-default-browser-check "https://openrouter.ai/settings/keys"
+rem As opcoes abaixo so tiram trabalho do Chrome na abertura: sem sincronizar
+rem conta, sem extensoes, sem atualizacao de componente e sem os pedidos que
+rem ele faz sozinho em segundo plano. Num perfil novo isso faz diferenca.
+start "" "%CHROME%" "--user-data-dir=%PERFIL%" --remote-debugging-port=9222 --no-first-run --no-default-browser-check --disable-sync --disable-extensions --disable-background-networking --disable-component-update --disable-default-apps --no-service-autorun --disable-features=Translate,MediaRouter,OptimizationHints "https://openrouter.ai/settings/keys"
 call :esperar_porta
 if errorlevel 1 goto semporta
+goto trabalhar
+
+:ja_aberto
+echo   A janela do JARVIS ja esta aberta: vou aproveitar ela.
+
+:trabalhar
 echo   Chrome do JARVIS pronto na porta 9222.
 echo.
 "%PYTHON%" chave-no-navegador.py --cdp --autorizar
@@ -63,8 +70,9 @@ echo.
 echo   ----------------------------------------------------------------
 echo   Nao deu para terminar. O motivo esta escrito acima, em uma
 echo   frase comecando com "NAO DEI".
-echo   Se a mensagem falou de conta, entre na janela do JARVIS com a
-echo   sua conta do OpenRouter e rode este atalho de novo.
+echo.
+echo   Se o problema for a pagina demorando, ha um caminho que nao abre
+echo   navegador nenhum: chave-pela-api.bat (pede a chave por HTTPS).
 echo.
 pause
 exit /b 1
@@ -80,15 +88,19 @@ echo.
 pause
 exit /b 0
 
+:testa_porta
+powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 9222); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+exit /b %errorlevel%
+
 :esperar_porta
 rem O Chrome leva alguns segundos para abrir a porta. Aqui a espera e
-rem de verdade: ate 20 tentativas, uma por segundo.
+rem de verdade: ate 30 tentativas, uma por segundo.
 set /a "tentativas=0"
 :laco_porta
-powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 9222); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+call :testa_porta
 if not errorlevel 1 exit /b 0
 set /a "tentativas+=1"
-if %tentativas% GEQ 20 exit /b 1
+if %tentativas% GEQ 30 exit /b 1
 timeout /t 1 >nul
 goto laco_porta
 
@@ -106,7 +118,7 @@ exit /b 1
 
 :semchrome
 echo   Nao achei o chrome.exe nos lugares de sempre.
-echo   Abra o Chrome na mao e rode o pegar-chave.bat de novo.
+echo   Use o chave-pela-api.bat: ele cria a chave sem navegador.
 pause
 exit /b 1
 

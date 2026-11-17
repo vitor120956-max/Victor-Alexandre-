@@ -34,3 +34,6 @@ relatorio-lentidao.txt
 
 # relatório de leitura que o chave-no-navegador.py grava quando falha
 chave-leitura.txt
+
+# Perfil do Chrome próprio do JARVIS (chrome-cdp.bat): dados de login, não do projeto.
+perfil-cdp/

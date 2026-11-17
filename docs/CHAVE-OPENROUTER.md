@@ -243,6 +243,53 @@ primeira abertura de um perfil novo).
 O `pegar-chave.bat` continua existindo: se a porta 9222 estiver aberta, ele vai
 por ela; se não, faz o caminho antigo (ler a tela, esperar a cópia do dono).
 
+### 7.4 O caminho sem navegador: a chave de gestão (0.91.29)
+
+O Chrome do JARVIS é um perfil novo, sem cache. No PC do dono a página do
+OpenRouter demora; esperar funciona, mas é ruim. Existe uma porta melhor:
+
+> o OpenRouter tem a **chave de gestão** (*management* / *provisioning key*).
+> Ela não serve para conversar com modelo nenhum — só para criar outras
+> chaves, pelo endereço `POST /api/v1/keys`.
+
+Com ela, criar a chave do JARVIS é um pedido e uma resposta:
+
+    POST https://openrouter.ai/api/v1/keys
+    Authorization: Bearer <chave de gestão>
+    {"name": "jarvis-2026-11-16"}
+
+    → {"data": {...}, "key": "sk-or-v1-…"}
+
+Sem `limit` e sem `expires_at` no corpo, a chave nasce **sem limite e sem
+validade** — que é o que o dono pediu. A resposta traz a chave **uma única
+vez**, igual ao site; por isso ela é gravada na hora.
+
+O atalho é o `chave-pela-api.bat`:
+
+1. na **primeira** vez: ele abre `openrouter.ai/settings/management-keys` no
+   Chrome normal (o rápido, já logado), você clica em **Create New Key**, dá um
+   nome e clica em **COPIAR**; volta para a janela e aperta Enter. O JARVIS lê
+   a área de transferência, **confere** que aquela chave realmente pode criar
+   outras (lendo a lista) e guarda em `JARVIS_OPENROUTER_GESTAO` no `.env`;
+2. daí em diante, criar chave é um segundo: sem Chrome, sem tela, sem espera.
+
+Por que a conferência importa: a chave de gestão tem **o mesmo formato** de uma
+chave comum (`sk-or-v1-` + 64 hex). Se a comum fosse gravada por engano, o erro
+só apareceria na vez seguinte, com a mensagem errada. Lendo a lista — coisa que
+só a de gestão pode fazer — o erro aparece na hora, com a explicação certa.
+
+| resposta | o que o JARVIS diz |
+|---|---|
+| 401 | a chave de gestão não foi aceita — confira se copiou inteira e se ela existe |
+| 403 | essa chave é comum, não de gestão; ela é criada em `/settings/management-keys` |
+| 429 | o OpenRouter pediu para esperar; rode em um minuto |
+| 5xx | problema no servidor do OpenRouter; tente mais tarde |
+| sem internet | confira a conexão |
+
+O código está em `server/openrouter_api.py`; o comando é
+`chave-no-navegador.py --api --autorizar` (e `--gestao` para guardar a chave de
+gestão lida da área de transferência).
+
 ## 8. De onde veio este manual
 
 - `openrouter.ai/docs` — *Creating an API key*: “dê um nome e, opcionalmente,
