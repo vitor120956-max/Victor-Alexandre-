@@ -23,7 +23,7 @@ export interface ChatMessage {
   role: 'user' | 'jarvis';
   content: string;
   timestamp: string;
-  source?: 'local' | 'python' | 'ai';
+  source?: 'local' | 'python' | 'ai' | 'tempo';
 }
 
 export type AutomationAction = 'summary' | 'focus' | 'organize' | 'backup';

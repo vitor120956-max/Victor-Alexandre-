@@ -311,3 +311,77 @@ describe('parseCommand — testar a IA de verdade', () => {
     expect(helpText).toContain('locais');
   });
 });
+
+describe('parseCommand — previsão do tempo de verdade', () => {
+  // 0.91.36 — “vai chover hoje?” ia para o modelo, que não vê o tempo e podia
+  // inventar uma temperatura plausível. Agora a frase consulta o serviço de
+  // previsão — que devolve a fonte e a hora da leitura.
+  it.each([
+    'vai chover hoje?',
+    'vai chover',
+    'chove hoje',
+    'como está a previsão do tempo hoje?',
+    'qual a previsão do tempo hoje',
+    'que tempo faz hoje',
+    'como está o tempo',
+    'como está o clima hoje',
+    'vai fazer sol hoje',
+    'preciso de guarda-chuva?',
+    'qual a temperatura agora',
+  ])('“%s” vira uma consulta de previsão', (entrada) => {
+    const intent = parseCommand(entrada);
+    expect(intent.type).toBe('tempo:previsao');
+    if (intent.type === 'tempo:previsao') {
+      expect(intent.cidade).toBe('');
+      expect(intent.quando).toBe('hoje');
+    }
+  });
+
+  it.each([
+    ['vai chover amanhã?', 'amanha'],
+    ['previsão do tempo para amanhã', 'amanha'],
+  ])('“%s” pergunta pelo dia seguinte', (entrada, quando) => {
+    const intent = parseCommand(entrada);
+    expect(intent.type).toBe('tempo:previsao');
+    if (intent.type === 'tempo:previsao') expect(intent.quando).toBe(quando);
+  });
+
+  it.each([
+    ['previsão do tempo em São José', 'São José'],
+    ['como está o tempo em Curitiba hoje', 'Curitiba'],
+    ['vai chover hoje no Rio de Janeiro', 'Rio de Janeiro'],
+    ['previsão para o Rio de Janeiro', 'Rio de Janeiro'],
+    ['qual a temperatura agora em Palhoça', 'Palhoça'],
+    ['previsao em Palhoca, SC', 'Palhoca'],
+  ])('“%s” pergunta pela cidade da frase (%s)', (entrada, cidade) => {
+    const intent = parseCommand(entrada);
+    expect(intent.type).toBe('tempo:previsao');
+    if (intent.type === 'tempo:previsao') expect(intent.cidade).toBe(cidade);
+  });
+
+  it('não confunde “hoje”, “tempo” nem “guarda-chuva” com cidade', () => {
+    for (const frase of ['vai chover hoje?', 'como esta a previsao de tempo hj', 'preciso de guarda-chuva?']) {
+      const intent = parseCommand(frase);
+      expect(intent.type).toBe('tempo:previsao');
+      if (intent.type === 'tempo:previsao') expect(intent.cidade).toBe('');
+    }
+  });
+
+  it('quem pediu busca na web continua indo para a web', () => {
+    // A pessoa quer a página, não o número: não roubar o comando.
+    expect(parseCommand('pesquise a previsão do tempo').type).toBe('web:search');
+    expect(parseCommand('procure na web a previsão do tempo de hoje').type).toBe('web:search');
+  });
+
+  it('não rouba os vizinhos', () => {
+    expect(parseCommand('que horas são?').type).toBe('time');
+    expect(parseCommand('vai abrir o chrome').type).toBe('unknown');
+    expect(parseCommand('testar ia').type).toBe('ai:testar');
+    expect(parseCommand('que dia é hoje?').type).toBe('date');
+  });
+
+  it('o texto de ajuda diz que a previsão não passa pelo modelo', () => {
+    expect(helpText).toContain('previsão do tempo');
+    expect(helpText).toContain('Open-Meteo');
+  });
+});

@@ -32,6 +32,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 | `configura o google drive pra mim` · `tira a biblioteca do drive` | leva **só** biblioteca e repositórios para o Drive, confere arquivo por arquivo e grava o `.env` — depois do seu “sim” |
 | `importar Downloads/contabilidade.pdf` · `como funciona o rateio de custo` | biblioteca: lê livro, EPUB, DOCX, TXT, imagem e legenda de vídeo, e responde com trecho real + seção + página |
 | `importar Downloads/contrato-escaneado.pdf` · `importar Downloads/foto-da-pagina.jpg` | OCR: tira o texto da página digitalizada ou da foto e guarda na biblioteca |
+| `vai chover hoje?` · `previsão do tempo em São José` · `que tempo faz amanhã?` | previsão de verdade (Open-Meteo): agora, hoje e amanhã, com a chance de chuva e a hora da leitura — **sem modelo e sem chave** |
 | `baixar a legenda de https://youtu.be/dQw4w9WgXcQ` | pega sozinho a legenda publicada do YouTube (inclusive a automática) e importa como fonte — precisa de `JARVIS_HOST_REDE=1` |
 
 **O que precisa de chave:** qualquer pergunta aberta — “quem foi Machado de Assis”, “explique a diferença entre X e Y”. Sem chave, o JARVIS responde que a IA externa não foi configurada e lembra que os comandos locais continuam valendo.
@@ -254,6 +255,17 @@ responder `unrecognized arguments`.
 com a resposta **vazia**. O teste de 8 tokens passou a exigir texto (não só
 200), a escolha prefere modelos de conversa, e quando a resposta é cortada por
 pensamento o JARVIS **repete uma vez** com mais espaço antes de desistir.
+
+**Previsão do tempo sem modelo (0.91.36).** “Vai chover hoje?” era pergunta para
+o modelo — que não vê o tempo e podia inventar uma temperatura plausível. Agora
+a frase consulta o **Open-Meteo** (público, sem chave, sem cota): devolve o
+tempo de agora, a faixa de hoje e de amanhã, a **chance de chuva** com número, e
+a resposta termina com *“Fonte: Open-Meteo — quem respondeu foi o serviço de
+previsão, não o modelo”* e a hora da leitura. Sem cidade na frase, usa
+`JARVIS_CIDADE` do `.env` (padrão: Palhoça). Sem internet, ele diz que não
+conseguiu — **não inventa**. E o prompt do modelo passou a proibir estimar
+tempo, cotação ou placar: o que escapar do parser recebe um “não tenho esse
+dado”, não um número falso.
 
 **O teste da chave não aprova mais um modelo mudo (0.91.35).** O `--testar` do
 console de 17/11 dizia, na mesma tela, *“OK chave 1: HTTP 200”*, *“respondeu com
@@ -850,7 +862,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.35", "skills": 325}`.
+`{"version": "0.91.36", "skills": 325}`.
 
 ## Verificações
 

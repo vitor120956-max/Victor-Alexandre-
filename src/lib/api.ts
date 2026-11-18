@@ -689,6 +689,30 @@ export interface AgenteReceitas {
   receitas: Array<{ id: string; nome: string; descricao: string; exemplo: string; campo: string }>;
 }
 
+export type PrevisaoTempo = {
+  ok: boolean;
+  texto: string;
+  fonte: string;
+  result: {
+    cidade: { nome: string; estado: string; pais: string };
+    agora: { temperatura: number | null; sensacao: number | null; codigo: number | null };
+    hoje: { maxima: number | null; minima: number | null; chuva_probabilidade: number | null };
+    lido_em: string;
+  };
+};
+
+/**
+ * A previsão do tempo de verdade — sem modelo, sem chave (0.91.36).
+ *
+ * “vai chover hoje?” ia para o modelo, que não vê o tempo e podia inventar uma
+ * temperatura plausível. Aqui a resposta vem do serviço de previsão e diz isso.
+ */
+export async function requestTempo(cidade: string, quando: 'hoje' | 'amanha' = 'hoje'): Promise<PrevisaoTempo> {
+  const params = new URLSearchParams({ quando });
+  if (cidade.trim()) params.set('cidade', cidade.trim());
+  return apiFetch<PrevisaoTempo>(`/api/tempo?${params.toString()}`);
+}
+
 export async function requestAgenteLocal(
   pedido: string,
   autorizacao: string,

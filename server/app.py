@@ -45,6 +45,7 @@ from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
 from . import agenda as agenda_local
+from . import tempo as tempo_mod
 from . import sistema as sistema_mod
 from . import tokens
 from .sistema import SistemaError, token_host as sistema_token_host
@@ -505,6 +506,39 @@ def create_app(
         return {
             "ok": True,
             "result": interface_web.estado(versao_servidor=atualizacao_local.VERSAO, servida=interface),
+        }
+
+    @application.get("/api/tempo")
+    def tempo_previsao(
+        cidade: str = Query(default="", max_length=120),
+        quando: str = Query(default="hoje", pattern="^(hoje|amanha)$"),
+    ) -> Any:
+        """Previsão do tempo de verdade — fonte pública, sem chave, sem modelo.
+
+        Existe porque, até a 0.91.35, “vai chover hoje?” ia para o modelo — que
+        não vê o tempo e podia inventar uma temperatura plausível. Aqui a
+        resposta vem do Open-Meteo e **diz isso na tela**, com a hora da leitura.
+        Se a fonte não responder, a resposta é um erro explicado; nunca um
+        palpite (0.91.36).
+        """
+        try:
+            dados = tempo_mod.previsao(cidade or None)
+        except tempo_mod.TempoError as exc:
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "TEMPO_INDISPONIVEL",
+                        "message": f"{exc} Nada foi inventado: sem a fonte, não há previsão.",
+                    },
+                },
+            )
+        return {
+            "ok": True,
+            "texto": tempo_mod.formatar(dados, quando=quando),
+            "result": dados,
+            "fonte": tempo_mod.FONTE,
         }
 
     @application.get("/api/skills")

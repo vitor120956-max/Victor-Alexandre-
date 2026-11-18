@@ -174,6 +174,39 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.36 — “vai chover hoje?” era pergunta para o modelo
+
+Depois de a IA provar que respondeu — *“A IA externa respondeu em 2832 ms
+(provedor OpenRouter)”* —, a pergunta seguinte do dono foi sobre o que ele ainda
+não tinha:
+
+> deu isso e se eu perguntar como esta a previsao de tempo hj ou se vai chover hj?
+
+A resposta honesta, olhando o código: **ia para o modelo**. E o modelo não vê o
+tempo — não tem janela, nem relógio, nem previsão. Ou diz *“não tenho acesso a
+dados em tempo real”*, ou **inventa** uma temperatura plausível. Numa tela que
+acabou de mostrar `· IA EXTERNA`, as duas respostas parecem igualmente
+confiáveis. É o mesmo defeito de “prova”, uma camada abaixo.
+
+Agora a frase vira consulta ao **Open-Meteo** — serviço público, sem chave, sem
+cota, dois endereços fixos:
+
+| antes | agora |
+|---|---|
+| o modelo chutava (ou se esquivava) | `tempo.previsao()`: cidade → coordenadas → agora, hoje e amanhã |
+| nada dizia a origem | a resposta termina com *“Fonte: Open-Meteo … quem respondeu foi o serviço de previsão, não o modelo”* e a hora da leitura |
+| “vai chover?” era texto solto | **número**: `sim, deve chover — 80% de chance` / `não deve chover — 5%` / `talvez` entre 25% e 49% |
+| sem cidade, ficava sem resposta | `JARVIS_CIDADE` no `.env`; vazio, Palhoça |
+| rede fora virava silêncio | “não consegui falar com o serviço de previsão … e eu não vou inventar uma” |
+
+O parser ganhou as frases comuns (“vai chover”, “previsão do tempo”, “que tempo
+faz”, “guarda-chuva”, “temperatura agora”), com dois cuidados: “de hoje” e
+“guarda-chuva” **não** viram cidade, e quem escreve “pesquise a previsão do
+tempo” continua indo para a busca na web — a pessoa quer a página, não o número.
+
+E o modelo recebeu uma instrução nova: não estimar tempo, cotação nem placar. O
+que escapar do parser ganha um “não tenho esse dado”, não um número falso.
+
 ### 0.91.35 — o teste disse “OK” para um modelo que não fala
 
 O console do dono, logo depois do `atualizar.bat` da 0.91.34:

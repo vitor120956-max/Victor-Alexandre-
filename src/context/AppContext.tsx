@@ -4,7 +4,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { autorizacaoParaConfirmar } from '../lib/confirmacao';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa } from '../lib/api';
+import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente, respostaVeioDeSkill } from '../lib/agenteResposta';
@@ -220,7 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     speechSynthesis.speak(utterance);
   }, [preferences.voiceRate, preferences.voiceResponse]);
 
-  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' = 'local') => {
+  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' | 'tempo' = 'local') => {
     const message: ChatMessage = {
       id: createId('message'),
       role: 'jarvis',
@@ -652,6 +652,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
             : 'A IA externa está desativada nas suas configurações.';
         appendJarvisMessage(`${reason} Posso continuar com tarefas, notas, cálculos, foco, automações, legislação, documentos, engenharia, planos persistentes, análise reversa, produtividade, pesquisa e skills Python. Diga “ajuda” para ver exemplos.`);
       }
+      return;
+    }
+
+    if (intent.type === 'tempo:previsao') {
+      // 0.91.36 — “vai chover hoje?” não é pergunta para o modelo: ele não vê o
+      // tempo e podia inventar uma temperatura plausível. A resposta vem do
+      // serviço de previsão, cronometrada pela fonte e com a hora da leitura.
+      if (!backendOnline) {
+        appendJarvisMessage(`A API Python não respondeu em ${enderecoDaApi()}, e é ela quem consulta a previsão.\n\nSuba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py`);
+        return;
+      }
+      setProcessing('python');
+      void requestTempo(intent.cidade, intent.quando)
+        .then((resposta) => appendJarvisMessage(resposta.texto, 'tempo'))
+        .catch((error: unknown) => {
+          appendJarvisMessage(
+            `Não consegui a previsão do tempo: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\nNada foi inventado — sem a fonte, eu prefiro dizer que não sei a dar um número errado.`,
+          );
+          void refreshBackend();
+        })
+        .finally(() => setProcessing(null));
       return;
     }
 

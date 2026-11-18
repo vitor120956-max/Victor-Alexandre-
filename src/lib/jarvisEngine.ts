@@ -7,6 +7,7 @@ export type Intent =
   | { type: 'thanks' }
   | { type: 'identity' }
   | { type: 'ai:testar' }
+  | { type: 'tempo:previsao'; cidade: string; quando: 'hoje' | 'amanha' }
   | { type: 'time' }
   | { type: 'date' }
   | { type: 'status' }
@@ -162,6 +163,52 @@ export function normalizarPedidoDeAbertura(text: string): string {
   return saida;
 }
 
+/** Palavras que não são cidade, mesmo vindo depois de “de/em”: “de hoje”. */
+const NAO_E_CIDADE = new Set([
+  'hoje', 'hj', 'amanha', 'agora', 'tarde', 'noite', 'manha', 'madrugada', 'fim', 'semana',
+  'tempo', 'clima', 'previsao', 'chuva', 'sol', 'frio', 'calor', 'umidade', 'temperatura',
+  'guarda', 'guarda-chuva', 'la', 'aqui', 'casa', 'o', 'a', 'os', 'as', 'um', 'uma',
+]);
+
+/** Sobrou só isso? Não é cidade — e mandar “guarda” para o geocoding seria ruído. */
+const RUIDO = new Set([
+  'tempo', 'clima', 'previsao', 'chuva', 'sol', 'frio', 'calor', 'guarda', 'umidade', 'temperatura',
+]);
+
+/**
+ * A cidade dita na frase, se houver: “em São José”, “para o Rio de Janeiro”.
+ *
+ * A limpeza é de propósito: “previsão do tempo em São José” começa em “do tempo”,
+ * e “tempo” não é lugar. Sem cidade, quem manda é o `.env` (JARVIS_CIDADE) — e a
+ * resposta diz qual foi, para ninguém achar que ele adivinhou onde você está.
+ */
+export function cidadeDoPedido(input: string): string {
+  const achado = input.match(
+    /\b(?:em|de|do|da|no|na|para)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]*(?:[ ,]+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]*){0,3})/i,
+  );
+  if (!achado?.[1]) return '';
+  const partes = achado[1].split(',')[0].trim().split(/\s+/);
+  // “do tempo em São José” → “em São José” → “São José”.
+  while (partes.length && (NAO_E_CIDADE.has(normalizeText(partes[0])) || /^(?:em|de|do|da|no|na|para)$/.test(normalizeText(partes[0])))) partes.shift();
+  while (partes.length && NAO_E_CIDADE.has(normalizeText(partes[partes.length - 1]))) partes.pop();
+  const nome = partes.join(' ').trim();
+  if (nome.length < 2 || RUIDO.has(normalizeText(nome))) return '';
+  return nome;
+}
+
+/**
+ * “vai chover?”, “como está a previsão do tempo hoje?”, “que tempo faz amanhã?”.
+ * Deixa passar quem pediu busca na web — aí a pessoa quer a página, não o dado.
+ */
+export function lerPedidoDeTempo(text: string, input: string): Intent | null {
+  if (/^(?:pesquis|procur|busc|procure|busque|pesquise)/.test(text)) return null;
+  const sobreChuva = /\b(?:vai chover|chover|chove|vai fazer sol|vai fazer frio|vai fazer calor|guarda-chuva|guarda chuva)\b/.test(text);
+  const sobreTempo = /\b(?:previsao do tempo|previsao|como (?:esta|ta) o tempo|que tempo (?:faz|esta)|como (?:esta|ta) o clima|clima (?:de|em|hoje|amanha)|temperatura (?:agora|hoje|de|em))\b/.test(text);
+  if (!sobreChuva && !sobreTempo) return null;
+  const quando: 'hoje' | 'amanha' = /\bamanha\b/.test(text) ? 'amanha' : 'hoje';
+  return { type: 'tempo:previsao', cidade: cidadeDoPedido(input), quando };
+}
+
 export function parseCommand(rawInput: string): Intent {
   const raw = rawInput.trim();
   const input = raw.replace(/\s+/g, ' ');
@@ -183,6 +230,12 @@ export function parseCommand(rawInput: string): Intent {
   ) {
     return { type: 'ai:testar' };
   }
+
+  // 0.91.36 — “vai chover hoje?” não é pergunta para o modelo: ele não vê o
+  // tempo e pode inventar uma temperatura plausível. Aqui a frase vira uma
+  // consulta ao serviço de previsão, que devolve a fonte e a hora da leitura.
+  const tempo = lerPedidoDeTempo(text, input);
+  if (tempo) return tempo;
 
   if (/^(?:limpar|apagar|limpe|apague)(?: a| o)? (?:conversa|chat|historico)$/.test(text)) {
     return { type: 'clear' };
@@ -503,5 +556,6 @@ export const helpText = [
   '• Correção — “não é essa, é a skill legal.article” ensina a correlação; “procure na web sobre isso” busca e guarda a resposta; “esqueça <pedido>” apaga as duas.',
   '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
   '• Testar a IA de verdade — “testar ia” manda um pedido de verdade ao modelo, cronometra e diz qual provedor respondeu. As respostas de “oi”, “que horas são” e dos comandos são locais: não passam pelo modelo e não gastam nada.',
+  '• Previsão do tempo — “vai chover hoje?”, “previsão do tempo em São José” ou “que tempo faz amanhã?”. A resposta vem do Open-Meteo, com a hora da leitura: não passa pelo modelo e não gasta cota. Sem cidade na frase ele usa JARVIS_CIDADE (padrão: Palhoça).',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');
