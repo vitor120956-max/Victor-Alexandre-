@@ -174,6 +174,45 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.38 — o APK do jogo: analisar o pacote, não opinar sobre ele
+
+> eu to criando um jogo q ele e apk quero q o jarvis possa analisar meu jogo e
+> melhorar ele
+
+“Melhorar o jogo” é pedido grande, e a tentação é responder com conselho de
+game design que ninguém mediu. O que dá para fazer sem inventar é ler o
+**pacote** e dizer, com base no que está dentro dele, o que está errado e onde
+se conserta: manifesto, motor, ABIs, tamanho, assinatura, permissões.
+
+| antes | agora |
+|---|---|
+| “analisar meu jogo” caía no modelo, que não vê o APK | `server/jogo.py` lê o pacote e devolve achados |
+| motor do jogo: adivinhação pela conversa | marca **real** no ZIP: `libunity.so`, `libgodot*.so`, `libUE4.so`, `*.pck`, `assets/bin/Data`… |
+| “está grande” sem número | tamanho descompactado, por área (`assets/`, `lib/`, `res/`, dex) e os 10 maiores arquivos |
+| conselho genérico | cada achado diz **o que é**, **por que importa**, **como melhorar** e **onde** (motor, build) |
+
+Três decisões que valem registro:
+
+1. **Nada é descompactado no disco.** O APK é lido por dentro do ZIP, em
+   memória: 600 MB de teto, 60 mil entradas, manifesto até 4 MB. Análise local,
+   sem enviar o arquivo para lugar nenhum — e isso está escrito no relatório.
+2. **`classes.dex` não é marca de motor.** A primeira versão reconhecia LibGDX
+   por ele; o teste mostrou que **todo** APK tem `classes.dex`, então todo jogo
+   virava LibGDX. Marca genérica não identifica nada, e o teste que reprovou
+   isso ficou no arquivo.
+3. **O manifesto binário é lido de verdade.** Sem `aapt2`, sem Android SDK: o
+   AXML é interpretado com `struct` (pool UTF-16, resource map, start
+   elements). O molde do teste é montado byte a byte, e o teste exige que a
+   string esteja **em UTF-16** — procurar ASCII nos bytes não acharia nada.
+
+O caminho do dono é arrastar o APK no `analisar-jogo.bat`: ele copia para
+`storage/user-files/jogos`, sem sobrescrever, e imprime o relatório. Depois,
+“analisar jogo <nome>.apk” no chat responde o mesmo texto com o selo
+`· ANÁLISE DO JOGO (PC)`.
+
+Limite declarado: **este módulo não mede quadros por segundo nem diversão.**
+Ele lê o pacote; diz o que o pacote mostra e o que fazer a respeito.
+
 ### 0.91.37 — “que dia é hoje” funcionava; o resto ia para o modelo
 
 A pergunta, logo depois da previsão do tempo:

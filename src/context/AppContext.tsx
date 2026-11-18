@@ -5,7 +5,9 @@ import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { autorizacaoParaConfirmar } from '../lib/confirmacao';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
 import { conferirDia, contagemPara, resumoDeAmanha, resumoDoDia } from '../lib/calendario';
-import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestCalendario, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
+import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestCalendario,
+  requestJogos,
+  requestJogoAnalisar, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente, respostaVeioDeSkill } from '../lib/agenteResposta';
@@ -221,7 +223,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     speechSynthesis.speak(utterance);
   }, [preferences.voiceRate, preferences.voiceResponse]);
 
-  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' | 'tempo' | 'calendario' = 'local') => {
+  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' | 'tempo' | 'calendario' | 'jogo' = 'local') => {
     const message: ChatMessage = {
       id: createId('message'),
       role: 'jarvis',
@@ -674,6 +676,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
             `Não consegui consultar o calendário: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\n${resumoDoDia()}`,
           );
         })
+        .finally(() => setProcessing(null));
+      return;
+    }
+
+    if (intent.type === 'jogo:analisar') {
+      // 0.91.38 — o pedido é “analisa meu jogo” e a resposta sai do APK, não do
+      // modelo: manifesto, motor, ABIs, tamanho e assinatura. Sem arquivo dito
+      // na frase, ele mostra o que já está na pasta de jogos em vez de chutar um
+      // nome. Nada é descompactado, nada sai da máquina.
+      if (!backendOnline) {
+        appendJarvisMessage(
+          `A API Python não respondeu em ${enderecoDaApi()}, e é ela quem lê o APK.\n\n`
+          + 'Para enviar o jogo, arraste o APK em cima do analisar-jogo.bat.\n\n'
+          + 'Para analisar depois, suba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py',
+        );
+        return;
+      }
+      setProcessing('python');
+      const arquivo = intent.arquivo?.trim() ?? '';
+      const analisar = (nome: string) =>
+        requestJogoAnalisar(nome)
+          .then((relatorio) => appendJarvisMessage(relatorio.texto ?? `Analisei “${nome}”, mas o relatório veio sem texto.`, 'jogo'))
+          .catch((error: unknown) => {
+            appendJarvisMessage(
+              `Não consegui analisar “${nome}”: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\n`
+              + 'Se o arquivo não está na pasta de jogos, arraste o APK em cima do analisar-jogo.bat — ele copia para lá e já mostra o relatório.',
+            );
+          });
+      void (arquivo
+        ? analisar(arquivo)
+        : requestJogos()
+            .then((lista) => {
+              if (!lista.jogos.length) {
+                appendJarvisMessage(
+                  `Ainda não tem nenhum APK na pasta de jogos (${lista.pasta}).\n\n`
+                  + 'Arraste o APK do seu jogo em cima do analisar-jogo.bat: ele copia o arquivo para cá e mostra o relatório na hora.\n\n'
+                  + 'Depois, volte aqui e diga “analisar jogo <nome>.apk”.',
+                );
+                return;
+              }
+              const nomes = lista.jogos.map((jogo) => `• ${jogo.nome}`).join('\n');
+              if (lista.jogos.length === 1) {
+                return analisar(lista.jogos[0].nome);
+              }
+              appendJarvisMessage(
+                `Tenho ${lista.jogos.length} jogos aqui:\n${nomes}\n\nDiga “analisar jogo <nome>.apk” para eu analisar um deles.`,
+              );
+            })
+            .catch((error: unknown) => {
+              appendJarvisMessage(
+                `Não consegui listar os jogos: ${error instanceof Error ? error.message : 'falha desconhecida'}`,
+              );
+            }))
         .finally(() => setProcessing(null));
       return;
     }

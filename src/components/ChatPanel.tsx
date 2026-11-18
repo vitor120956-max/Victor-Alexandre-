@@ -62,7 +62,7 @@ export function ChatPanel({ full = false }: { full?: boolean }) {
             {message.role === 'jarvis' && <span className="message-avatar"><Sparkles size={13} /></span>}
             <div className="message-wrap">
               <div className="message-bubble">{message.content}</div>
-              <time>{new Date(message.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}{message.source === 'ai' ? ' · IA EXTERNA' : message.source === 'python' ? ' · SKILL PYTHON' : message.source === 'tempo' ? ' · PREVISÃO (Open-Meteo)' : message.source === 'calendario' ? ' · CALENDÁRIO (PC)' : ''}</time>
+              <time>{new Date(message.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}{message.source === 'ai' ? ' · IA EXTERNA' : message.source === 'python' ? ' · SKILL PYTHON' : message.source === 'tempo' ? ' · PREVISÃO (Open-Meteo)' : message.source === 'calendario' ? ' · CALENDÁRIO (PC)' : message.source === 'jogo' ? ' · ANÁLISE DO JOGO (PC)' : ''}</time>
             </div>
           </div>
         ))}

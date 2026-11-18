@@ -11,6 +11,7 @@ export type Intent =
   | { type: 'time' }
   | { type: 'date'; conferir?: string; amanha?: boolean; alvo?: string }
   | { type: 'calendario:feriados'; nome?: string; ano?: number; proximo?: boolean }
+  | { type: 'jogo:analisar'; arquivo?: string }
   | { type: 'status' }
   | { type: 'clear' }
   | { type: 'calculate'; expression: string }
@@ -211,6 +212,20 @@ export function lerPedidoDeTempo(text: string, input: string): Intent | null {
 }
 
 /** Nomes de feriado que se pergunta pelo nome: “quanto falta para o Natal?”. */
+/** “analisar jogo meu.apk”, “melhorar meu jogo”, “analisa o apk do jogo”. */
+export function lerPedidoDeJogo(text: string, input: string): Intent | null {
+  if (!/\b(?:jogo|apk)\b/.test(text)) return null;
+  if (/^(?:pesquis|procur|busc|procure|busque|pesquise)/.test(text)) return null;
+  const querAnalise =
+    /\b(?:analis|avali|revis|melhor|otimiz|diagnostic|confer|inspecion)\w*\b/.test(text)
+    || /\b(?:o que|como)\b.*\b(?:melhorar|deixar melhor|otimizar)\b/.test(text);
+  if (!querAnalise) return null;
+  // O nome do arquivo pode estar na frase: “analisar jogo meu-jogo.apk”.
+  const achado = input.match(/([A-Za-z0-9._\- ]+\.(?:apk|aab|apks|xapk))\b/i);
+  const arquivo = achado?.[1]?.trim().split(/\s+/).pop() ?? '';
+  return { type: 'jogo:analisar', ...(arquivo ? { arquivo } : {}) };
+}
+
 const FERIADOS_POR_NOME: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bnatal\b/, 'Natal'],
   [/\bcarnaval\b/, 'Carnaval'],
@@ -315,6 +330,11 @@ export function parseCommand(rawInput: string): Intent {
   // consulta ao serviço de previsão, que devolve a fonte e a hora da leitura.
   const tempo = lerPedidoDeTempo(text, input);
   if (tempo) return tempo;
+
+  // 0.91.38 — “analisa meu jogo” é sobre o pacote, não sobre o modelo: o
+  // diagnóstico sai do APK (manifesto, motor, tamanho, assinatura).
+  const jogo = lerPedidoDeJogo(text, input);
+  if (jogo) return jogo;
 
   if (/^(?:limpar|apagar|limpe|apague)(?: a| o)? (?:conversa|chat|historico)$/.test(text)) {
     return { type: 'clear' };
@@ -642,5 +662,7 @@ export const helpText = [
   '• Previsão do tempo — “vai chover hoje?”, “previsão do tempo em São José” ou “que tempo faz amanhã?”. A resposta vem do Open-Meteo, com a hora da leitura: não passa pelo modelo e não gasta cota. Sem cidade na frase ele usa JARVIS_CIDADE (padrão: Palhoça).',
   '• Calendário — “que dia é hoje?”, “hoje é quinta?”, “quantos dias faltam para o fim de semana?” e “quais os próximos feriados?”. '
   + 'É conta de calendário feita no PC: feriados nacionais fixos e os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) calculados pela Páscoa — sem modelo e sem internet.',
+  '• Seu jogo (APK) — “analisar jogo meu.apk” ou “como melhorar meu jogo?”. Ele lê o manifesto, descobre o motor (Unity, Godot, Unreal…), '
+  + 'mede o que pesa e diz o ajuste certo em cada achado — arraste o APK no analisar-jogo.bat para enviar. Nada sai da sua máquina.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

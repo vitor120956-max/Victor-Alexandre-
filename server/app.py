@@ -47,6 +47,7 @@ from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, lis
 from . import agenda as agenda_local
 from . import tempo as tempo_mod
 from . import calendario as calendario_mod
+from . import jogo as jogo_mod
 from . import sistema as sistema_mod
 from . import tokens
 from .sistema import SistemaError, token_host as sistema_token_host
@@ -759,6 +760,96 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return FileResponse(source, media_type="application/octet-stream", filename=source.name)
+
+    # ------------------------------------------------------------ o jogo (0.91.38)
+    #
+    # O dono está fazendo um jogo em APK e pediu que o JARVIS “analise e
+    # melhore”. O que dá para fazer de verdade com o pacote pronto: ler o
+    # manifesto binário, achar o motor, medir o que pesa e apontar o ajuste
+    # certo em cada achado. Nada é descompactado, descompilado ou executado.
+
+    @application.get("/api/jogo/arquivos")
+    def jogo_arquivos() -> dict[str, Any]:
+        return {"ok": True, "result": jogo_mod.listar(skill_registry.files_root)}
+
+    @application.post("/api/jogo/upload")
+    async def jogo_upload(
+        upload: UploadFile = File(...),
+        overwrite: bool = Form(default=False),
+        confirmed: bool = Form(default=False),
+    ) -> Any:
+        if not confirmed:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONFIRMATION_REQUIRED", "message": "Confirme o envio do APK do jogo."}},
+            )
+        filename = (upload.filename or "").strip().replace("\\", "/")
+        if not filename or filename != PurePosixPath(filename).name or filename.startswith("."):
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "INVALID_FILENAME", "message": "Use o nome do arquivo, sem pastas."}},
+            )
+        if Path(filename).suffix.lower() not in jogo_mod.EXTENSOES:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "INVALID_FORMAT", "message": "Envie o APK (ou AAB/APKS/XAPK) do jogo."}},
+            )
+        temporary_name = ""
+        try:
+            base = jogo_mod.raiz(skill_registry.files_root)
+            target = safe_path(base, filename)
+            if target.exists() and (not target.is_file() or target.is_symlink()):
+                raise ValueError("O destino existe, mas não é um arquivo comum.")
+            if target.exists() and not overwrite:
+                return JSONResponse(
+                    status_code=409,
+                    content={"ok": False, "error": {"code": "FILE_EXISTS", "message": "Esse APK já está na pasta. Marque a substituição para trocar."}},
+                )
+            total = 0
+            with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".upload", delete=False) as temporary:
+                temporary_name = temporary.name
+                while chunk := await upload.read(1_000_000):
+                    total += len(chunk)
+                    if total > jogo_mod.MAXIMO_BYTES:
+                        raise ValueError("SIZE_LIMIT")
+                    temporary.write(chunk)
+            if total == 0:
+                raise ValueError("O arquivo enviado está vazio.")
+            Path(temporary_name).replace(target)
+            return {"ok": True, "result": {"nome": filename, "bytes": total}}
+        except ValueError as exc:
+            if str(exc) == "SIZE_LIMIT":
+                return JSONResponse(
+                    status_code=413,
+                    content={"ok": False, "error": {"code": "FILE_TOO_LARGE", "message": f"O APK excede {jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB."}},
+                )
+            return JSONResponse(status_code=400, content={"ok": False, "error": {"code": "UPLOAD_ERROR", "message": str(exc)}})
+        finally:
+            await upload.close()
+            if temporary_name:
+                Path(temporary_name).unlink(missing_ok=True)
+
+    @application.get("/api/jogo/analisar")
+    def jogo_analisar(
+        arquivo: str = Query(min_length=1, max_length=180),
+        texto: bool = True,
+    ) -> Any:
+        try:
+            caminho = jogo_mod.arquivo(skill_registry.files_root, arquivo)
+            relatorio = jogo_mod.relatar(caminho)
+        except jogo_mod.JogoError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "JOGO_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "JOGO_NAO_LIDO", "message": f"não consegui ler o arquivo: {exc}"}},
+            )
+        if not texto:
+            relatorio.pop("texto", None)
+        return {"ok": True, "result": relatorio}
 
     # ------------------------------------------------------------ chaves de IA
     #

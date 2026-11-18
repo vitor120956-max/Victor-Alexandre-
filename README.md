@@ -33,6 +33,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 | `importar Downloads/contabilidade.pdf` · `como funciona o rateio de custo` | biblioteca: lê livro, EPUB, DOCX, TXT, imagem e legenda de vídeo, e responde com trecho real + seção + página |
 | `importar Downloads/contrato-escaneado.pdf` · `importar Downloads/foto-da-pagina.jpg` | OCR: tira o texto da página digitalizada ou da foto e guarda na biblioteca |
 | `que dia é hoje?` · `hoje é quinta?` · `quantos dias faltam para o fim de semana?` · `próximos feriados` | calendário do PC: dia da semana, contagem até o sábado e feriados nacionais — os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) saem da **Páscoa calculada** |
+| `analisar jogo meu-jogo.apk` · `como melhorar meu jogo?` | análise do **APK**: manifesto, motor (Unity, Godot, Unreal…), ABIs, tamanho por área, assinatura e permissões — cada achado com *o que é*, *por que importa*, *como melhorar* e **onde**. Arraste o APK no `analisar-jogo.bat` para enviar; nada é descompactado e nada sai da máquina |
 | `vai chover hoje?` · `previsão do tempo em São José` · `que tempo faz amanhã?` | previsão de verdade (Open-Meteo): agora, hoje e amanhã, com a chance de chuva e a hora da leitura — **sem modelo e sem chave** |
 | `baixar a legenda de https://youtu.be/dQw4w9WgXcQ` | pega sozinho a legenda publicada do YouTube (inclusive a automática) e importa como fonte — precisa de `JARVIS_HOST_REDE=1` |
 

@@ -737,6 +737,62 @@ export async function requestCalendario(opcoes: { nome?: string; ano?: number; l
   return apiFetch<CalendarioResposta>(`/api/calendario?${params.toString()}`);
 }
 
+export type JogoAchado = {
+  severidade: string;
+  titulo: string;
+  o_que_e?: string;
+  por_que_importa?: string;
+  como_melhorar?: string;
+  onde?: string;
+};
+
+export type JogoRelatorio = {
+  arquivo: string;
+  bytes: number;
+  pacote: string;
+  versao: string;
+  minSdk: string;
+  targetSdk: string;
+  motor: string;
+  editor: string;
+  versaoDoMotor: string;
+  abis: string[];
+  dexes: number;
+  permissoes: Array<{ nome: string; rotulo?: string; perigosa?: boolean }>;
+  assinatura: { v1: boolean; v2v3: boolean; manifestoMf: boolean };
+  entradas: number;
+  tamanhoDescompactado: number;
+  areas: Array<{ nome: string; bytes: number }>;
+  maiores: Array<{ nome: string; bytes: number }>;
+  achados: JogoAchado[];
+  texto?: string;
+};
+
+export type JogoLista = {
+  pasta: string;
+  quantidade: number;
+  jogos: Array<{ nome: string; bytes: number }>;
+};
+
+/**
+ * O APK que o dono arrastou no `analisar-jogo.bat`, já copiado para a pasta de
+ * jogos do JARVIS (0.91.38). Nada é descompactado: o servidor lê por dentro do
+ * ZIP sem escrever nada no disco.
+ */
+export async function requestJogos(): Promise<JogoLista> {
+  const resposta = await apiFetch<{ ok: boolean; result: JogoLista }>('/api/jogo/arquivos');
+  if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não listou os jogos.', 200, 'JOGO_LISTA');
+  return resposta.result;
+}
+
+/** Relatório do jogo: manifesto, motor, ABIs, tamanho e os ajustes, um por achado. */
+export async function requestJogoAnalisar(arquivo: string): Promise<JogoRelatorio> {
+  const params = new URLSearchParams({ arquivo, texto: 'true' });
+  const resposta = await apiFetch<{ ok: boolean; result: JogoRelatorio }>(`/api/jogo/analisar?${params.toString()}`);
+  if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não analisou o jogo.', 200, 'JOGO_ANALISE');
+  return resposta.result;
+}
+
 export async function requestAgenteLocal(
   pedido: string,
   autorizacao: string,

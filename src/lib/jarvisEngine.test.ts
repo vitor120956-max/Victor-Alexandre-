@@ -481,3 +481,51 @@ describe('parseCommand — calendário: dia, fim de semana e feriados (0.91.37)'
     expect(helpText).toContain('Páscoa');
   });
 });
+
+  // 0.91.38 — “analisar meu jogo”: o dono está criando um jogo em APK e quer o
+  // diagnóstico do pacote. O pedido tem de chegar na análise do arquivo, e não
+  // no modelo, que não vê o APK e inventaria um “problema de performance”.
+  describe('análise do próprio jogo (APK)', () => {
+    it('reconhece o pedido de análise', () => {
+      for (const frase of [
+        'analisar jogo',
+        'analisa meu jogo',
+        'analise o apk do jogo',
+        'analisar o apk do jogo',
+        'melhorar meu jogo',
+        'como melhorar meu jogo?',
+        'quero melhorar o jogo',
+        'otimizar meu jogo',
+      ]) {
+        expect(parseCommand(frase).type).toBe('jogo:analisar');
+      }
+    });
+
+    it('pega o nome do arquivo dito na frase', () => {
+      const intent = parseCommand('analisar jogo meu-jogo.apk');
+      expect(intent.type).toBe('jogo:analisar');
+      if (intent.type === 'jogo:analisar') expect(intent.arquivo).toBe('meu-jogo.apk');
+
+      const xapk = parseCommand('analisa o jogo corrida.XAPK');
+      if (xapk.type === 'jogo:analisar') expect(xapk.arquivo).toBe('corrida.XAPK');
+    });
+
+    it('sem o nome do arquivo, deixa o servidor dizer o que tem lá', () => {
+      const intent = parseCommand('analisar meu jogo');
+      expect(intent.type).toBe('jogo:analisar');
+      if (intent.type === 'jogo:analisar') expect(intent.arquivo).toBeUndefined();
+    });
+
+    it('não rouba os vizinhos', () => {
+      expect(parseCommand('que horas são?').type).toBe('time');
+      expect(parseCommand('vai chover hoje?').type).toBe('tempo:previsao');
+      expect(parseCommand('pesquise jogos de corrida para android').type).toBe('web:search');
+      expect(parseCommand('abrir o jogo').type).toBe('unknown');
+      expect(parseCommand('não gostei do jogo do brasil').type).toBe('unknown');
+    });
+
+    it('a ajuda ensina o comando e onde arrastar o APK', () => {
+      expect(helpText).toContain('analisar jogo');
+      expect(helpText).toContain('analisar-jogo.bat');
+    });
+  });
