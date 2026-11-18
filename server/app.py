@@ -48,6 +48,7 @@ from . import agenda as agenda_local
 from . import tempo as tempo_mod
 from . import calendario as calendario_mod
 from . import jogo as jogo_mod
+from . import jogo_web as jogo_web_mod
 from . import sistema as sistema_mod
 from . import tokens
 from .sistema import SistemaError, token_host as sistema_token_host
@@ -767,6 +768,15 @@ def create_app(
     # melhore”. O que dá para fazer de verdade com o pacote pronto: ler o
     # manifesto binário, achar o motor, medir o que pesa e apontar o ajuste
     # certo em cada achado. Nada é descompactado, descompilado ou executado.
+
+    @application.get("/api/jogo/web")
+    def jogo_web_lista() -> dict[str, Any]:
+        """Os exports HTML5 já guardados para testar no iPhone.
+
+        O servidor que entrega o jogo é outro processo (`testar-no-iphone.bat`),
+        em outra porta: esta rota só lista o que existe na pasta.
+        """
+        return {"ok": True, "result": jogo_web_mod.listar(skill_registry.files_root)}
 
     @application.get("/api/jogo/arquivos")
     def jogo_arquivos() -> dict[str, Any]:

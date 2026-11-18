@@ -12,6 +12,7 @@ export type Intent =
   | { type: 'date'; conferir?: string; amanha?: boolean; alvo?: string }
   | { type: 'calendario:feriados'; nome?: string; ano?: number; proximo?: boolean }
   | { type: 'jogo:analisar'; arquivo?: string }
+  | { type: 'jogo:iphone' }
   | { type: 'status' }
   | { type: 'clear' }
   | { type: 'calculate'; expression: string }
@@ -212,6 +213,18 @@ export function lerPedidoDeTempo(text: string, input: string): Intent | null {
 }
 
 /** Nomes de feriado que se pergunta pelo nome: “quanto falta para o Natal?”. */
+/** “testar no meu iphone”, “como rodo o jogo no iphone”, “jogar no iphone”. */
+export function lerPedidoDeIphone(text: string): Intent | null {
+  if (!/\b(?:iphone|ios)\b/.test(text)) return null;
+  // “qual o preço do iphone 17” é compra, não teste do jogo.
+  if (/\b(?:pre[çc]o|comprar|vale a pena|review|lan[çc]amento)\b/.test(text)) return null;
+  if (/^(?:pesquis|procur|busc|procure|busque|pesquise)/.test(text)) return null;
+  const falaDeTeste = /\b(?:test|rod|jog|abr|instal|public|port|pass|export)\w*\b/.test(text);
+  const falaDeJogo = /\b(?:jogo|apk|app|aplicativo)\b/.test(text);
+  if (!falaDeTeste && !falaDeJogo) return null;
+  return { type: 'jogo:iphone' };
+}
+
 /** “analisar jogo meu.apk”, “melhorar meu jogo”, “analisa o apk do jogo”. */
 export function lerPedidoDeJogo(text: string, input: string): Intent | null {
   if (!/\b(?:jogo|apk)\b/.test(text)) return null;
@@ -330,6 +343,11 @@ export function parseCommand(rawInput: string): Intent {
   // consulta ao serviço de previsão, que devolve a fonte e a hora da leitura.
   const tempo = lerPedidoDeTempo(text, input);
   if (tempo) return tempo;
+
+  // 0.91.39 — “testar no iPhone” tem de vir antes da análise do APK: a
+  // resposta não é sobre o pacote, é sobre o caminho (APK não roda no iOS).
+  const iphone = lerPedidoDeIphone(text);
+  if (iphone) return iphone;
 
   // 0.91.38 — “analisa meu jogo” é sobre o pacote, não sobre o modelo: o
   // diagnóstico sai do APK (manifesto, motor, tamanho, assinatura).
@@ -664,5 +682,8 @@ export const helpText = [
   + 'É conta de calendário feita no PC: feriados nacionais fixos e os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) calculados pela Páscoa — sem modelo e sem internet.',
   '• Seu jogo (APK) — “analisar jogo meu.apk” ou “como melhorar meu jogo?”. Ele lê o manifesto, descobre o motor (Unity, Godot, Unreal…), '
   + 'mede o que pesa e diz o ajuste certo em cada achado — arraste o APK no analisar-jogo.bat para enviar. Nada sai da sua máquina.',
+  '• Testar no iPhone — “quero testar no meu iphone”: o APK não roda no iOS (a Apple só deixa app assinado por ela). '
+  + 'O caminho de graça é exportar o MESMO jogo em WebGL/HTML5 e arrastar a pasta no testar-no-iphone.bat — '
+  + 'ele sobe o jogo no seu Wi-Fi e mostra o endereço para abrir no Safari.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

@@ -529,3 +529,35 @@ describe('parseCommand — calendário: dia, fim de semana e feriados (0.91.37)'
       expect(helpText).toContain('analisar-jogo.bat');
     });
   });
+
+  // 0.91.39 — “dps q esse apk estiver bom eu quero testar no meu iphone”.
+  // APK não roda no iOS; o pedido tem de chegar na resposta certa, e não no
+  // modelo (que responderia “sim, dá para instalar” com toda a confiança).
+  describe('testar o jogo no iPhone', () => {
+    it('reconhece o pedido', () => {
+      for (const frase of [
+        'quero testar no meu iphone',
+        'testar no iphone',
+        'testar meu jogo no iphone',
+        'como rodo o jogo no iphone',
+        'da para jogar no iphone',
+        'meu jogo no iphone funciona?',
+        'como instalar meu jogo no iphone',
+      ]) {
+        expect(parseCommand(frase).type).toBe('jogo:iphone');
+      }
+    });
+
+    it('não rouba compra de iphone nem a busca na web', () => {
+      expect(parseCommand('qual o preço do iphone 17?').type).not.toBe('jogo:iphone');
+      expect(parseCommand('pesquise iphone 17 no mercado').type).toBe('web:search');
+      expect(parseCommand('testar ia').type).toBe('ai:testar');
+      expect(parseCommand('quero testar no meu iphone').type).toBe('jogo:iphone');
+      expect(parseCommand('analisar meu jogo').type).toBe('jogo:analisar');
+    });
+
+    it('a ajuda explica o caminho do iPhone', () => {
+      expect(helpText).toContain('iPhone');
+      expect(helpText).toContain('testar-no-iphone.bat');
+    });
+  });

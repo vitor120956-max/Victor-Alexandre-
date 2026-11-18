@@ -174,6 +174,40 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.39 — “testar no meu iPhone”: o APK não roda lá
+
+> ta bom e dps q esse apk estiver bom eu quero testar no meu iphone
+
+A resposta fácil seria “sim” e um tutorial de instalar APK no iPhone — que não
+existe. O iOS só executa aplicativo assinado pela Apple; nenhum programa
+instala um `.apk` num iPhone.
+
+O caminho de graça é outro, e é o mesmo jogo: **exportar em WebGL/HTML5** e
+abrir no Safari. Quem faz o export é o motor; o JARVIS faz o que faltava —
+transformar a pasta do export em um endereço que o iPhone abre.
+
+| antes | agora |
+|---|---|
+| “testar no iphone” caía no modelo, que inventava um passo | `jogo_web.py` serve o export no Wi-Fi, e o chat diz o fato primeiro |
+| servir um export da Unity “na mão” dá tela preta | `.gz` sai com `Content-Encoding` (sem isso o Safari recebe lixo) |
+| zip do Unity vem com pasta dentro | `index.html` é procurado e a pasta é achatada |
+| abrir o JARVIS para o iPhone seria abrir a API | servidor separado, outra porta, só arquivos do export |
+
+Três decisões que valem registro:
+
+1. **O fato vem antes do passo.** A primeira linha da resposta é “APK não roda
+   em iPhone”, não uma lista de cliques que termina em frustração.
+2. **O servidor do jogo não é o JARVIS.** Outro processo, outra porta, nenhuma
+   rota da API. `/api/health`, chaves e `.env` dão `404` ali — e há teste
+   pedindo cada um deles.
+3. **O diagnóstico é a própria janela.** Cada arquivo que o iPhone pede aparece
+   com o código; nenhum pedido quer dizer “não chegou no PC” (rede, firewall,
+   Wi-Fi de visitante) — não “o jogo está quebrado”.
+
+Limites declarados: sem Mac, sem conta Apple e sem HTTPS, o que não roda é
+`SharedArrayBuffer` (export com threads); a App Store continua exigindo Mac +
+US$ 99/ano, e isso está escrito em `docs/JOGO-NO-IPHONE.md`.
+
 ### 0.91.38 — o APK do jogo: analisar o pacote, não opinar sobre ele
 
 > eu to criando um jogo q ele e apk quero q o jarvis possa analisar meu jogo e

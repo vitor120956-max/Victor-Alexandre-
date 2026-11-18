@@ -793,6 +793,32 @@ export async function requestJogoAnalisar(arquivo: string): Promise<JogoRelatori
   return resposta.result;
 }
 
+export type JogoWebItem = {
+  nome: string;
+  pasta: string;
+  temIndex: boolean;
+  arquivos: number;
+  bytes: number;
+};
+
+export type JogoWebLista = {
+  pasta: string;
+  quantidade: number;
+  jogos: JogoWebItem[];
+};
+
+/**
+ * Os exports WebGL guardados para testar no iPhone (0.91.39).
+ *
+ * A lista é do servidor; quem **entrega** o jogo é o `testar-no-iphone.bat`,
+ * em outra porta — a API não expõe arquivo nenhum por aqui.
+ */
+export async function requestJogosWeb(): Promise<JogoWebLista> {
+  const resposta = await apiFetch<{ ok: boolean; result: JogoWebLista }>('/api/jogo/web');
+  if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não listou os exports web.', 200, 'JOGO_WEB');
+  return resposta.result;
+}
+
 export async function requestAgenteLocal(
   pedido: string,
   autorizacao: string,

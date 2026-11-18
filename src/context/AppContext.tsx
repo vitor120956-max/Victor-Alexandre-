@@ -7,6 +7,7 @@ import { helpText, parseCommand } from '../lib/jarvisEngine';
 import { conferirDia, contagemPara, resumoDeAmanha, resumoDoDia } from '../lib/calendario';
 import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestCalendario,
   requestJogos,
+  requestJogosWeb,
   requestJogoAnalisar, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
@@ -675,6 +676,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
           appendJarvisMessage(
             `Não consegui consultar o calendário: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\n${resumoDoDia()}`,
           );
+        })
+        .finally(() => setProcessing(null));
+      return;
+    }
+
+    if (intent.type === 'jogo:iphone') {
+      // 0.91.39 — “quero testar no meu iphone”. A resposta começa pelo fato que
+      // evita uma tarde perdida: **APK não roda em iPhone**. O iOS só executa
+      // app assinado pela Apple; o caminho de graça é o mesmo jogo em WebGL no
+      // Safari. O texto abaixo é o passo a passo, e a lista sai do servidor.
+      const primeiro = [
+        'APK não roda em iPhone — e não é limitação minha: o iOS só executa app assinado pela Apple.',
+        '',
+        'O caminho de graça, sem Mac e sem conta de desenvolvedor: o MESMO jogo exportado em WebGL/HTML5 abre no Safari do iPhone.',
+        '',
+        '1. No motor, gere o export web:',
+        '   • Unity: File → Build Settings → WebGL → Build (é a pasta com index.html)',
+        '   • Godot: Projeto → Exportar → Web (HTML5)',
+        '2. Arraste essa pasta em cima do testar-no-iphone.bat.',
+        '3. Ele mostra um endereço tipo http://192.168.0.10:8099/ — abra no Safari do iPhone, no mesmo Wi-Fi.',
+        '',
+        'Se o iPhone não abrir: marque “Redes particulares” no aviso do firewall do Windows, e evite Wi-Fi de visitante.',
+        '',
+        'O que você NÃO precisa: Mac, Xcode, conta Apple Developer (US$ 99/ano) ou publicar na App Store.',
+        'O que não dá para fazer sem isso: instalar o APK no iPhone ou assinar um app iOS nativo.',
+      ].join('\n');
+      if (!backendOnline) {
+        appendJarvisMessage(`${primeiro}\n\n(A lista de exports precisa da API Python no ar — suba com iniciar-jarvis.bat.)`);
+        return;
+      }
+      setProcessing('python');
+      void requestJogosWeb()
+        .then((lista) => {
+          if (!lista.jogos.length) {
+            appendJarvisMessage(`${primeiro}\n\nAinda não tem nenhum export guardado (pasta: ${lista.pasta}).`);
+            return;
+          }
+          const linhas = lista.jogos
+            .map((jogo) => `• ${jogo.nome} (${jogo.arquivos} arquivos, ${(jogo.bytes / 1e6).toFixed(1)} MB)${jogo.temIndex ? '' : ' — sem index.html, não abre'}`)
+            .join('\n');
+          appendJarvisMessage(
+            `${primeiro}\n\nJá tenho estes exports guardados:\n${linhas}\n\n`
+            + `Para servir um deles:\n  .venv\\Scripts\\python testar-no-iphone.py --servir ${lista.jogos[0].nome}`,
+          );
+        })
+        .catch((error: unknown) => {
+          appendJarvisMessage(`${primeiro}\n\n(Não consegui listar os exports: ${error instanceof Error ? error.message : 'falha desconhecida'})`);
         })
         .finally(() => setProcessing(null));
       return;
