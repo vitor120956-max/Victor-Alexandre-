@@ -713,6 +713,30 @@ export async function requestTempo(cidade: string, quando: 'hoje' | 'amanha' = '
   return apiFetch<PrevisaoTempo>(`/api/tempo?${params.toString()}`);
 }
 
+export type CalendarioResposta = {
+  ok: boolean;
+  texto: string;
+  fonte: string;
+  result: {
+    feriados: Array<{ data: string; data_br: string; dia_semana: string; nome: string; tipo: string }>;
+    hoje: { data_br: string; dia_semana: string; dias_ate_sabado: number; fim_de_semana: string };
+  };
+};
+
+/**
+ * Feriados e o dia de hoje — conta de calendário do servidor (0.91.37).
+ *
+ * `nome` filtra pelo feriado (“Natal”, “Carnaval”); `ano` lista um ano inteiro.
+ * Nada aqui sai para a internet: é o calendário do PC, e o texto diz isso.
+ */
+export async function requestCalendario(opcoes: { nome?: string; ano?: number; limite?: number } = {}): Promise<CalendarioResposta> {
+  const params = new URLSearchParams({ tipo: 'feriados' });
+  if (opcoes.nome) params.set('nome', opcoes.nome);
+  if (opcoes.ano) params.set('ano', String(opcoes.ano));
+  params.set('limite', String(opcoes.limite ?? (opcoes.ano ? 20 : 4)));
+  return apiFetch<CalendarioResposta>(`/api/calendario?${params.toString()}`);
+}
+
 export async function requestAgenteLocal(
   pedido: string,
   autorizacao: string,

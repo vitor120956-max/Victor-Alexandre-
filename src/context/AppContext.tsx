@@ -4,7 +4,8 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { evaluateExpression, formatCalculation } from '../lib/calculator';
 import { autorizacaoParaConfirmar } from '../lib/confirmacao';
 import { helpText, parseCommand } from '../lib/jarvisEngine';
-import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
+import { conferirDia, contagemPara, resumoDeAmanha, resumoDoDia } from '../lib/calendario';
+import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatus, getBackendHealth, listPythonSkills, listarLembretes, listarSkillsLocais, pesquisarAgente, requestCalendario, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
 import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente, respostaVeioDeSkill } from '../lib/agenteResposta';
@@ -220,7 +221,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     speechSynthesis.speak(utterance);
   }, [preferences.voiceRate, preferences.voiceResponse]);
 
-  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' | 'tempo' = 'local') => {
+  const appendJarvisMessage = useCallback((content: string, source: 'local' | 'python' | 'ai' | 'tempo' | 'calendario' = 'local') => {
     const message: ChatMessage = {
       id: createId('message'),
       role: 'jarvis',
@@ -655,6 +656,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (intent.type === 'calendario:feriados') {
+      // 0.91.37 — feriado móvel não é chute: Carnaval, Sexta-feira Santa e
+      // Corpus Christi saem da Páscoa calculada, no servidor. Sem a API, o dia
+      // de hoje ainda é respondido aqui, para a pessoa não ficar sem nada.
+      if (!backendOnline) {
+        appendJarvisMessage(
+          `A API Python não respondeu em ${enderecoDaApi()}, e é ela quem calcula os feriados.\n\n${resumoDoDia()}\n\nPara os feriados, suba o servidor:\n  cd /d D:\\JARVIS\n  .venv\\Scripts\\python iniciar.py`,
+        );
+        return;
+      }
+      setProcessing('python');
+      void requestCalendario({ nome: intent.nome, ano: intent.ano, ...(intent.proximo ? { limite: 1 } : {}) })
+        .then((resposta) => appendJarvisMessage(resposta.texto, 'calendario'))
+        .catch((error: unknown) => {
+          appendJarvisMessage(
+            `Não consegui consultar o calendário: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\n${resumoDoDia()}`,
+          );
+        })
+        .finally(() => setProcessing(null));
+      return;
+    }
+
     if (intent.type === 'tempo:previsao') {
       // 0.91.36 — “vai chover hoje?” não é pergunta para o modelo: ele não vê o
       // tempo e podia inventar uma temperatura plausível. A resposta vem do
@@ -856,7 +879,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         reply = `Agora são ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`;
         break;
       case 'date':
-        reply = `Hoje é ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`;
+        // 0.91.37 — dia da semana, contagem até o sábado e conferência do
+        // palpite (“hoje é quinta?”): conta local, sem API e sem modelo.
+        if (intent.conferir) reply = conferirDia(intent.conferir);
+        else if (intent.alvo) reply = contagemPara(intent.alvo);
+        else if (intent.amanha) reply = resumoDeAmanha();
+        else reply = resumoDoDia();
         break;
       case 'status': {
         const pending = tasks.filter((task) => !task.completed).length;

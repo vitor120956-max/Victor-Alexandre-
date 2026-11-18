@@ -174,6 +174,40 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.37 — “que dia é hoje” funcionava; o resto ia para o modelo
+
+A pergunta, logo depois da previsão do tempo:
+
+> e se eu perguntar para o javis q dia e hj proximos feriados quantos dias
+> faltam para final de semana hj e quarta quinta...?
+
+Medido no parser: **só** “que dia é hoje” era local. “Quantos dias faltam para o
+fim de semana”, “hoje é quinta?” e “próximos feriados” caíam em `unknown` e iam
+para o modelo — que não tem relógio. O dia da semana ele pode acertar de
+memória; o **Carnaval** ele chuta com a mesma confiança com que acerta o Natal.
+
+| pergunta | antes | agora |
+|---|---|---|
+| que dia é hoje | local (só a data) | local: data, dia da semana e quanto falta para o sábado |
+| quantos dias faltam para o fim de semana | modelo | conta local (`Faltam 3 dias para o sábado (21/11/2026)`) |
+| hoje é quinta? | modelo | conta local: confirma ou corrige (“quinta-feira é amanhã”) |
+| próximos feriados | modelo | `server/calendario.py`: fixos por lei + móveis pela **Páscoa** |
+| quanto falta para o Natal | modelo | o próximo Natal de verdade, com a contagem em dias |
+
+Duas decisões que valem registro:
+
+1. **A Páscoa é calculada, não tabelada.** Meeus/Jones/Butcher, o mesmo
+   algoritmo da Igreja e do Excel. Dez anos conferidos no teste (2020–2038).
+   Tabela de feriado móvel envelhece; conta, não.
+2. **Ponto facultativo é dito como tal.** Carnaval e Corpus Christi não são
+   feriado nacional por lei. Chamá-los de feriado seria a mesma classe de erro
+   de inventar uma temperatura: parece certo e não é.
+
+O dia da semana e a contagem até o sábado ficam no **front** (`src/lib/
+calendario.ts`): não dependem de lei, funcionam com a API fora do ar e respondem
+na hora. Os feriados ficam no **servidor**, que é onde a lei muda. Sem a API, o
+chat ainda responde o dia de hoje e diz o que falta subir.
+
 ### 0.91.36 — “vai chover hoje?” era pergunta para o modelo
 
 Depois de a IA provar que respondeu — *“A IA externa respondeu em 2832 ms

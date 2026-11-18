@@ -9,7 +9,8 @@ export type Intent =
   | { type: 'ai:testar' }
   | { type: 'tempo:previsao'; cidade: string; quando: 'hoje' | 'amanha' }
   | { type: 'time' }
-  | { type: 'date' }
+  | { type: 'date'; conferir?: string; amanha?: boolean; alvo?: string }
+  | { type: 'calendario:feriados'; nome?: string; ano?: number; proximo?: boolean }
   | { type: 'status' }
   | { type: 'clear' }
   | { type: 'calculate'; expression: string }
@@ -209,6 +210,84 @@ export function lerPedidoDeTempo(text: string, input: string): Intent | null {
   return { type: 'tempo:previsao', cidade: cidadeDoPedido(input), quando };
 }
 
+/** Nomes de feriado que se pergunta pelo nome: “quanto falta para o Natal?”. */
+const FERIADOS_POR_NOME: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bnatal\b/, 'Natal'],
+  [/\bcarnaval\b/, 'Carnaval'],
+  [/\bpascoa\b/, 'Páscoa'],
+  [/\bsexta[ -]?feira santa\b/, 'Sexta-feira Santa'],
+  [/\bcorpus christi\b/, 'Corpus Christi'],
+  [/\btiradentes\b/, 'Tiradentes'],
+  [/\bfinados\b/, 'Finados'],
+  [/\bindependencia\b/, 'Independência do Brasil'],
+  [/\baparecida\b/, 'Nossa Senhora Aparecida'],
+  [/\bconsciencia negra\b/, 'Dia da Consciência Negra'],
+  [/\bconfraternizacao\b/, 'Confraternização Universal'],
+  [/\bdia do trabalho\b/, 'Dia do Trabalho'],
+];
+
+/** Dia da semana citado numa frase (“hoje é quinta?”). Vazio quando não há. */
+export function diaCitado(text: string): string {
+  const achado = text.match(
+    /\b(domingo|segunda(?:[ -]?feira)?|terca(?:[ -]?feira)?|quarta(?:[ -]?feira)?|quinta(?:[ -]?feira)?|sexta(?:[ -]?feira)?|sabado)\b/,
+  );
+  return achado?.[1] ? achado[1].replace(/[ -]?feira$/, '') : '';
+}
+
+/**
+ * “que dia é hoje?”, “hoje é quarta?”, “quanto falta para sexta?” e os feriados
+ * (0.91.37). Conta de calendário: não passa pelo modelo, que não tem relógio.
+ */
+export function lerPedidoDeCalendario(text: string): Intent | null {
+  if (/^(?:pesquis|procur|busc|procure|busque|pesquise)/.test(text)) return null;
+
+  const anoCitado = text.match(/\b(?:em|de|para|no)\s+(20\d{2})\b/);
+  const ano = anoCitado ? Number(anoCitado[1]) : undefined;
+  const citado = diaCitado(text);
+  const falaDeFeriado = /\bferiado/.test(text) || /\bferiad\w*\b/.test(text);
+  const nomeDeFeriado = FERIADOS_POR_NOME.find(([padrao]) => padrao.test(text))?.[1];
+  const perguntaDeData = /\b(?:quanto (?:falta|tem|demora)|quantos dias|quando (?:e|cai|vai ser)|que dia (?:e|cai|vai ser)|falta quanto)\b/.test(text);
+  const falaDeFimDeSemana = /\b(?:fim de semana|final de semana|sabado|domingo)\b/.test(text);
+
+  // Feriado pelo nome, com ou sem a palavra “feriado” na frase.
+  if (nomeDeFeriado && (falaDeFeriado || perguntaDeData)) {
+    return { type: 'calendario:feriados', nome: nomeDeFeriado, ano, proximo: !/\bferiados\b/.test(text) };
+  }
+  if (falaDeFeriado) {
+    return {
+      type: 'calendario:feriados',
+      ...(ano ? { ano } : {}),
+      ...(ano ? {} : { proximo: /\bproximo\b/.test(text) || !/\bferiados\b/.test(text) }),
+    };
+  }
+
+  // “hoje é quinta?”, “hoje é quinta-feira”
+  const palpite = text.match(/\b(?:hoje|hj)\s+(?:e|eh|ta|esta|sera)\s+(.+)$/);
+  if (palpite) {
+    const dia = diaCitado(palpite[1]);
+    if (dia) return { type: 'date', conferir: dia };
+  }
+  const palpite2 = text.match(/^(?:e|eh)\s+(?:hoje\s+)?(domingo|segunda[ -]?feira|terca[ -]?feira|quarta[ -]?feira|quinta[ -]?feira|sexta[ -]?feira|sabado)\??$/);
+  if (palpite2?.[1]) return { type: 'date', conferir: diaCitado(palpite2[1]) };
+
+  // “que dia é amanhã?”
+  if (/\b(?:que dia (?:e|sera|vai ser) amanha|amanha e (?:que dia|dia de|dia da semana)|que dia da semana e amanha)\b/.test(text)) {
+    return { type: 'date', amanha: true };
+  }
+
+  // “quantos dias faltam para o fim de semana / para sexta?”
+  if (perguntaDeData && (falaDeFimDeSemana || citado)) {
+    if (/\b(?:fim de semana|final de semana)\b/.test(text)) return { type: 'date', alvo: 'sabado' };
+    if (citado) return { type: 'date', alvo: citado };
+  }
+
+  // “que dia da semana é hoje”, “estamos em que dia”
+  if (/\b(?:que dia da semana|dia da semana (?:e|de) hoje|estamos em que dia|em que dia da semana)\b/.test(text)) {
+    return { type: 'date' };
+  }
+  return null;
+}
+
 export function parseCommand(rawInput: string): Intent {
   const raw = rawInput.trim();
   const input = raw.replace(/\s+/g, ' ');
@@ -263,6 +342,10 @@ export function parseCommand(rawInput: string): Intent {
   }
 
   if (/que horas|horas agora|^hora\??$/.test(text)) return { type: 'time' };
+  // 0.91.37 — “quantos dias faltam para o fim de semana”, “hoje é quinta?” e os
+  // feriados iam para o modelo, que não tem relógio. Agora são conta local.
+  const calendario = lerPedidoDeCalendario(text);
+  if (calendario) return calendario;
   if (/que dia (?:e hoje|estamos)|data de hoje|^data\??$/.test(text)) return { type: 'date' };
   if (/status do sistema|como voce esta|como esta o sistema|resumo do sistema/.test(text)) {
     return { type: 'status' };
@@ -557,5 +640,7 @@ export const helpText = [
   '• Agente local — quando a frase não é um comando conhecido, ele procura a skill certa, preenche os campos a partir da própria frase e executa sem modelo nenhum. Se não achar, monta uma skill local a partir de 20 receitas prontas (contar palavras, somar, converter unidades, datas…) e executa na hora. “minhas skills locais” mostra o que já foi criado.',
   '• Testar a IA de verdade — “testar ia” manda um pedido de verdade ao modelo, cronometra e diz qual provedor respondeu. As respostas de “oi”, “que horas são” e dos comandos são locais: não passam pelo modelo e não gastam nada.',
   '• Previsão do tempo — “vai chover hoje?”, “previsão do tempo em São José” ou “que tempo faz amanhã?”. A resposta vem do Open-Meteo, com a hora da leitura: não passa pelo modelo e não gasta cota. Sem cidade na frase ele usa JARVIS_CIDADE (padrão: Palhoça).',
+  '• Calendário — “que dia é hoje?”, “hoje é quinta?”, “quantos dias faltam para o fim de semana?” e “quais os próximos feriados?”. '
+  + 'É conta de calendário feita no PC: feriados nacionais fixos e os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) calculados pela Páscoa — sem modelo e sem internet.',
   '• Sistema — “que horas são?”, “status do sistema” ou “executar resumo do dia”.',
 ].join('\n');

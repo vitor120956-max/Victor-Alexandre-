@@ -32,6 +32,7 @@ O chat tem um interpretador local: se a frase casar com um comando conhecido, el
 | `configura o google drive pra mim` · `tira a biblioteca do drive` | leva **só** biblioteca e repositórios para o Drive, confere arquivo por arquivo e grava o `.env` — depois do seu “sim” |
 | `importar Downloads/contabilidade.pdf` · `como funciona o rateio de custo` | biblioteca: lê livro, EPUB, DOCX, TXT, imagem e legenda de vídeo, e responde com trecho real + seção + página |
 | `importar Downloads/contrato-escaneado.pdf` · `importar Downloads/foto-da-pagina.jpg` | OCR: tira o texto da página digitalizada ou da foto e guarda na biblioteca |
+| `que dia é hoje?` · `hoje é quinta?` · `quantos dias faltam para o fim de semana?` · `próximos feriados` | calendário do PC: dia da semana, contagem até o sábado e feriados nacionais — os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) saem da **Páscoa calculada** |
 | `vai chover hoje?` · `previsão do tempo em São José` · `que tempo faz amanhã?` | previsão de verdade (Open-Meteo): agora, hoje e amanhã, com a chance de chuva e a hora da leitura — **sem modelo e sem chave** |
 | `baixar a legenda de https://youtu.be/dQw4w9WgXcQ` | pega sozinho a legenda publicada do YouTube (inclusive a automática) e importa como fonte — precisa de `JARVIS_HOST_REDE=1` |
 
@@ -255,6 +256,16 @@ responder `unrecognized arguments`.
 com a resposta **vazia**. O teste de 8 tokens passou a exigir texto (não só
 200), a escolha prefere modelos de conversa, e quando a resposta é cortada por
 pensamento o JARVIS **repete uma vez** com mais espaço antes de desistir.
+
+**Calendário sem modelo (0.91.37).** “Que dia é hoje” já respondia; “quantos dias
+faltam para o fim de semana”, “hoje é quinta?” e os feriados caíam no modelo — que
+não tem relógio. Feriado fixo ele chuta certo por sorte; **feriado móvel** não:
+Carnaval, Sexta-feira Santa e Corpus Christi saem agora da **Páscoa calculada**
+(Meeus/Jones/Butcher), não de tabela que envelhece. A resposta diz o dia da
+semana, quanto falta para o sábado e os próximos feriados com a contagem em dias
+— o 20/11 aparece como feriado nacional (Lei 14.759/2023) e Carnaval/Corpus
+Christi como **ponto facultativo**, que é o que são. Tudo conta local: sem
+internet, sem chave, sem gastar cota.
 
 **Previsão do tempo sem modelo (0.91.36).** “Vai chover hoje?” era pergunta para
 o modelo — que não vê o tempo e podia inventar uma temperatura plausível. Agora
@@ -862,7 +873,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.36", "skills": 325}`.
+`{"version": "0.91.37", "skills": 325}`.
 
 ## Verificações
 

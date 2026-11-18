@@ -385,3 +385,99 @@ describe('parseCommand — previsão do tempo de verdade', () => {
     expect(helpText).toContain('Open-Meteo');
   });
 });
+
+describe('parseCommand — calendário: dia, fim de semana e feriados (0.91.37)', () => {
+  // O dono perguntou, em 18/11: “q dia e hj, próximos feriados, quantos dias
+  // faltam para final de semana?”. Só o “que dia é hoje” funcionava; o resto
+  // caía no modelo, que não tem relógio.
+  it.each([
+    'que dia é hoje',
+    'que dia é hoje?',
+    'que dia da semana é hoje',
+    'estamos em que dia da semana',
+    'data de hoje',
+  ])('“%s” é data local', (entrada) => {
+    expect(parseCommand(entrada).type).toBe('date');
+  });
+
+  it.each([
+    ['hoje é quarta?', 'quarta'],
+    ['hoje é quinta', 'quinta'],
+    ['hoje é quinta-feira?', 'quinta'],
+    // `diaCitado` trabalha sobre o texto normalizado: o nome volta sem acento,
+    // que é o que `numeroDoDia` entende.
+    ['hoje é sábado', 'sabado'],
+  ])('“%s” confere o dia (%s)', (entrada, dia) => {
+    const intent = parseCommand(entrada);
+    expect(intent.type).toBe('date');
+    if (intent.type === 'date') expect(intent.conferir).toBe(dia);
+  });
+
+  it.each([
+    'quantos dias faltam para o fim de semana',
+    'quantos dias faltam para o final de semana',
+    'falta quanto para o sábado',
+    'quanto falta para o sábado',
+  ])('“%s” conta até o sábado', (entrada) => {
+    const intent = parseCommand(entrada);
+    expect(intent.type).toBe('date');
+    if (intent.type === 'date') expect(intent.alvo).toBe('sabado');
+  });
+
+  it('conta até outro dia da semana', () => {
+    const intent = parseCommand('quantos dias faltam para sexta?');
+    expect(intent.type).toBe('date');
+    if (intent.type === 'date') expect(intent.alvo).toBe('sexta');
+  });
+
+  it('“que dia é amanhã?” pede o dia seguinte', () => {
+    const intent = parseCommand('que dia é amanhã?');
+    expect(intent.type).toBe('date');
+    if (intent.type === 'date') expect(intent.amanha).toBe(true);
+  });
+
+  it.each([
+    'próximos feriados',
+    'quais os próximos feriados',
+    'quais são os feriados',
+    'quando é o próximo feriado',
+  ])('“%s” consulta o calendário', (entrada) => {
+    expect(parseCommand(entrada).type).toBe('calendario:feriados');
+  });
+
+  it('entende feriado pelo nome', () => {
+    const natal = parseCommand('quanto falta para o natal?');
+    expect(natal.type).toBe('calendario:feriados');
+    if (natal.type === 'calendario:feriados') {
+      expect(natal.nome).toBe('Natal');
+      expect(natal.proximo).toBe(true);
+    }
+
+    const carnaval = parseCommand('quando é o carnaval');
+    expect(carnaval.type).toBe('calendario:feriados');
+    if (carnaval.type === 'calendario:feriados') expect(carnaval.nome).toBe('Carnaval');
+  });
+
+  it('entende o ano pedido', () => {
+    const intent = parseCommand('feriados de 2027');
+    expect(intent.type).toBe('calendario:feriados');
+    if (intent.type === 'calendario:feriados') expect(intent.ano).toBe(2027);
+  });
+
+  it('a pergunta composta (dia + feriados) cai nos feriados, que já trazem o dia', () => {
+    expect(parseCommand('que dia é hoje e os próximos feriados').type).toBe('calendario:feriados');
+  });
+
+  it('não rouba os vizinhos', () => {
+    expect(parseCommand('que horas são?').type).toBe('time');
+    expect(parseCommand('vai chover hoje?').type).toBe('tempo:previsao');
+    expect(parseCommand('testar ia').type).toBe('ai:testar');
+    expect(parseCommand('pesquise os feriados de 2027').type).toBe('web:search');
+    expect(parseCommand('abrir o calendário do google').type).toBe('unknown');
+  });
+
+  it('o texto de ajuda ensina o calendário e diz que feriado móvel é calculado', () => {
+    expect(helpText).toContain('quantos dias faltam para o fim de semana');
+    expect(helpText).toContain('Páscoa');
+  });
+});

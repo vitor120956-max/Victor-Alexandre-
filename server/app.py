@@ -46,6 +46,7 @@ from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
 from . import agenda as agenda_local
 from . import tempo as tempo_mod
+from . import calendario as calendario_mod
 from . import sistema as sistema_mod
 from . import tokens
 from .sistema import SistemaError, token_host as sistema_token_host
@@ -539,6 +540,53 @@ def create_app(
             "texto": tempo_mod.formatar(dados, quando=quando),
             "result": dados,
             "fonte": tempo_mod.FONTE,
+        }
+
+    @application.get("/api/calendario")
+    def calendario_rota(
+        tipo: str = Query(default="feriados", pattern="^(dia|feriados)$"),
+        nome: str = Query(default="", max_length=60),
+        ano: int | None = Query(default=None, ge=1900, le=2100),
+        limite: int = Query(default=4, ge=1, le=40),
+    ) -> Any:
+        """Que dia é hoje, quanto falta para o sábado e os próximos feriados.
+
+        Tudo conta de calendário feita na máquina — sem internet, sem chave e
+        sem modelo. Os feriados móveis saem da Páscoa calculada, não de tabela
+        (0.91.37).
+        """
+        try:
+            if tipo == "dia":
+                dados = calendario_mod.resumo_do_dia()
+                return {
+                    "ok": True,
+                    "texto": calendario_mod.formatar_dia(dados),
+                    "result": dados,
+                    "fonte": calendario_mod.FONTE,
+                }
+            lista = calendario_mod.proximos(
+                limite=limite, nome=nome, ano=calendario_mod.ano_do_pedido(ano) if ano else None
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CALENDARIO_INVALIDO", "message": str(exc)}},
+            )
+        itens = [
+            {
+                "data": item["data"].isoformat(),
+                "data_br": item["data"].strftime("%d/%m/%Y"),
+                "dia_semana": calendario_mod.dia_da_semana(item["data"]),
+                "nome": item["nome"],
+                "tipo": item["tipo"],
+            }
+            for item in lista
+        ]
+        return {
+            "ok": True,
+            "texto": calendario_mod.formatar_feriados(lista, nome=nome),
+            "result": {"feriados": itens, "hoje": calendario_mod.resumo_do_dia()},
+            "fonte": calendario_mod.FONTE,
         }
 
     @application.get("/api/skills")
