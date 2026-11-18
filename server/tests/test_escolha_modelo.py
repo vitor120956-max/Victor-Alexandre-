@@ -161,6 +161,20 @@ def _preparar(monkeypatch, respostas: dict[str, bool], disponiveis=None, gratis=
         return {"modelo": nome, "ok": ok, "codigo": 200 if ok else 404, "motivo": "" if ok else "não existe"}
 
     monkeypatch.setattr(chaves, "testar_modelo", testar_modelo)
+    # 0.91.35 — `--corrigir` passou a perguntar ao modelo quando o nome está na
+    # lista (antes ele nem testava e dizia “coerentes”). Nos testes de escolha
+    # nada sai da máquina: o teste da chave é um dublê que aprova.
+    monkeypatch.setattr(
+        chaves,
+        "testar",
+        lambda **_k: {
+            "ok": True,
+            "boas": 1,
+            "total": 1,
+            "resultados": [{"indice": 1, "ok": True, "codigo": 200, "motivo": "respondeu", "detalhe": ""}],
+            "resumo": "",
+        },
+    )
     return modulo, testados
 
 

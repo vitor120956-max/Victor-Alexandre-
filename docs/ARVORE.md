@@ -174,6 +174,42 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.35 — o teste disse “OK” para um modelo que não fala
+
+O console do dono, logo depois do `atualizar.bat` da 0.91.34:
+
+    TESTE DE VERDADE (8 tokens por chave)...
+    OK   chave 1: HTTP 200
+         motivo: respondeu com raciocínio em vez de texto
+         o provedor disse: “o modelo pode gastar o limite pensando e não sobrar resposta”
+
+    Pronto: provedor, modelo e chave estão coerentes.
+
+Três linhas que se contradizem, e todas na mesma tela. A 0.91.33 já tinha
+ensinado `_testar_uma_detalhado` a marcar `sem_texto` e `testar_modelo` a
+recusar — mas o `chaves.testar()`, que é quem responde ao `--testar` e ao botão
+“testar” da tela, continuou aprovando pelo **código HTTP**. O modelo escolhido
+na véspera era de raciocínio: gasta os 8 tokens pensando e devolve `content`
+vazio. O teste viu 200 e disse “OK”.
+
+E o conserto prometido não consertava: `--corrigir` só agia quando o nome
+**não estava** na lista. Com o nome na lista (o caso do mudo), ele não
+perguntava nada ao modelo e respondia “estão coerentes” — a mesma frase errada,
+agora numa execução que parecia um conserto.
+
+| antes | agora |
+|---|---|
+| 200 aprova, mesmo sem uma palavra | `ok` exige **texto**; 200 mudo é “a chave vale, o modelo não fala” |
+| resumo: “A chave respondeu. O cérebro está de pé.” | “A chave está válida: o modelo respondeu HTTP 200 e não mandou texto… — `conferir-ia.py --corrigir`” |
+| modelo de **socorro** com 200 mudo “provava” a chave | o socorro também precisa falar |
+| `--corrigir` com o nome na lista: nada testado, “coerentes” | `--corrigir` testa o modelo na hora e, se ele não fala, troca |
+| 3 candidatos testados | **6** (no console do dono os 3 primeiros eram dois 429 e o mudo) |
+| `.env` trocado e a API em memória com o antigo, sem aviso | “feche a janela da API no X e rode iniciar-jarvis.bat” |
+
+O `--corrigir` também passou a dizer o que aconteceu com cada candidato:
+*“respondeu, mas sem texto (gastou o limite pensando) — pulando”* é diferente de
+*“não (HTTP 429)”*.
+
 ### 0.91.34 — “funcionou?” era a pergunta errada para a tela certa
 
 Em 17/11 o dono abriu o JARVIS em `127.0.0.1:8000`, mandou “oi”, recebeu

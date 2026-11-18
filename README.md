@@ -255,6 +255,16 @@ com a resposta **vazia**. O teste de 8 tokens passou a exigir texto (não só
 200), a escolha prefere modelos de conversa, e quando a resposta é cortada por
 pensamento o JARVIS **repete uma vez** com mais espaço antes de desistir.
 
+**O teste da chave não aprova mais um modelo mudo (0.91.35).** O `--testar` do
+console de 17/11 dizia, na mesma tela, *“OK chave 1: HTTP 200”*, *“respondeu com
+raciocínio em vez de texto”* e *“Pronto: provedor, modelo e chave estão
+coerentes”*. A chave estava boa e o modelo não falava: ele gasta os 8 tokens
+pensando e devolve `content` vazio. Agora **200 sem texto reprova** (inclusive
+no modelo de socorro), o resumo separa “a chave está válida” de “o modelo não
+fala”, e o `--corrigir` — que antes só agia quando o nome não existia — passou a
+**testar o modelo que está na lista**, pula o mudo, tenta até 6 candidatos e
+avisa que a API aberta só troca de modelo depois de reiniciar.
+
 **A resposta local se declara local (0.91.34).** O “oi” do JARVIS nunca passou
 pelo modelo: é uma skill local, instantânea e sem chave. O problema é que ela
 respondia exatamente como o modelo responderia, e nada na tela distinguia as
@@ -840,7 +850,7 @@ git pull --ff-only
 ```
 
 Depois de qualquer atualização, confira em `http://127.0.0.1:8000/api/health`:
-`{"version": "0.91.34", "skills": 325}`.
+`{"version": "0.91.35", "skills": 325}`.
 
 ## Verificações
 

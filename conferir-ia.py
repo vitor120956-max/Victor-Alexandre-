@@ -104,7 +104,11 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
             candidatos = gratuitos
         else:
             print("  (nenhum modelo :free na lista — vou testar os outros, mas eles gastam crédito)")
-    candidatos = candidatos[:3]
+    # 0.91.35 — eram 3. No console do dono os 3 primeiros foram dois `gemma`
+    # ocupados (429) e o `nemotron`, que respondeu sem texto; o script parou
+    # ali com “nenhum dos testados respondeu”. Seis é o que a conta gratuita
+    # aguenta de 8 tokens sem castigar a cota.
+    candidatos = candidatos[:6]
     if not candidatos:
         print("  Não há nenhum modelo de conversa na lista que o provedor devolveu.")
         return ""
@@ -112,6 +116,7 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
     print()
     print("  Escolhendo um modelo que exista hoje (teste de 8 tokens em cada um):")
     ocupados = 0
+    mudos = 0
     for nome in candidatos:
         print(f"    testando {nome} …", end=" ", flush=True)
         try:
@@ -122,6 +127,13 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
         if not resultado.get("ok"):
             if int(resultado.get("codigo") or 0) == 429:
                 ocupados += 1
+            # 200 sem texto é outra coisa: o modelo está lá, só não fala com
+            # 8 tokens. Dizer “não” sem distinguir manda o dono investigar a
+            # chave (0.91.35).
+            if resultado.get("sem_texto"):
+                mudos += 1
+                print("respondeu, mas sem texto (gastou o limite pensando) — pulando")
+                continue
             print(f"não ({resultado.get('motivo') or resultado.get('codigo')})")
             continue
         print("respondeu.")
@@ -131,14 +143,25 @@ def _corrigir_modelo(disponiveis: list[str], atual: str, so_gratis: bool) -> str
             return ""
         print(f"  Gravei JARVIS_AI_MODEL={nome}{aviso}")
         print("  Só essa linha mudou; o resto do .env ficou igual.")
+        # O .env é lido uma vez, no start. A janela da API que já está aberta
+        # continua com o modelo antigo — sem esta frase o dono testa de novo na
+        # tela e vê o mesmo silêncio, com o `.env` certo (0.91.35).
+        print("  O JARVIS que já está aberto segue com o modelo antigo: feche a janela")
+        print("  da API no X e rode iniciar-jarvis.bat para ele usar este.")
         if escolha_modelo.e_raciocinio(nome):
             print("  É um modelo de raciocínio: pensa antes de responder e pode demorar um pouco.")
+        if mudos:
+            print(f"  ({mudos} modelo(s) responderam sem texto: não falam em 8 tokens — ficaram de fora.)")
         if ocupados:
             print(f"  ({ocupados} modelo(s) responderam 429 — ocupados; a conta gratuita tem")
             print("   limite de pedidos por minuto, e isso não é defeito do modelo.)")
         return nome
     print()
-    print("  Nenhum dos testados respondeu. Rode de novo em um minuto:")
+    if mudos and not ocupados:
+        print("  Esses modelos respondem, mas não falam em 8 tokens (gastam o limite pensando).")
+        print("  Nenhum foi gravado. Rode de novo para tentar os próximos da lista:")
+    else:
+        print("  Nenhum dos testados respondeu. Rode de novo em um minuto:")
     print("    .venv\\Scripts\\python conferir-ia.py --corrigir")
     return ""
 
@@ -272,7 +295,12 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  Seguindo com “{modelo}”.")
 
     codigo = 0
-    if args.testar:
+    # 0.91.35 — `--corrigir` sozinho também testa, quando o nome **está** na
+    # lista. Sem isso o conserto prometido pela mensagem de erro não fazia
+    # nada: o script via o nome na lista, não perguntava nada ao modelo e
+    # respondia “estão coerentes” — a mesma frase errada do print do dono.
+    testar_agora = args.testar or (args.corrigir and lista_ok and modelo in disponiveis)
+    if testar_agora:
         print()
         print("  TESTE DE VERDADE (8 tokens por chave)...")
         try:
@@ -291,6 +319,20 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"       quem respondeu: {item['modelo_que_respondeu']}")
         if not teste.get("ok"):
             codigo = 1
+            # 0.91.35 — o console do dono dizia “OK chave 1: HTTP 200” e, três
+            # linhas depois, “Pronto: provedor, modelo e chave estão coerentes”.
+            # A chave estava boa e o modelo não falava. Aqui as duas coisas são
+            # ditas separadas, com o comando que troca o modelo.
+            mudos = [item for item in teste.get("resultados") or [] if item.get("sem_texto")]
+            if mudos:
+                print()
+                print("  Isto NÃO é problema de chave: a chave respondeu.")
+                print("  O que não fala é o MODELO — ele devolveu HTTP 200 sem texto.")
+                if args.corrigir:
+                    print("  Trocando agora (cada candidato é testado antes de ser gravado)…")
+                else:
+                    print("  Troque por um de conversa (o comando testa e grava o que responder):")
+                    print("    .venv\\Scripts\\python conferir-ia.py --corrigir")
 
     # O nome pode estar na lista e ainda assim dar 404 (a lista do provedor
     # demora a tirar o morto). Com `--corrigir`, esse caso também é consertado:
@@ -323,7 +365,14 @@ def main(argv: list[str] | None = None) -> int:
         print("  Troque o nome (cartão Modelos de IA ou JARVIS_AI_MODEL no .env) e rode de novo.")
         return 1
     if codigo == 0 and lista_ok and modelo in disponiveis:
-        print("  Pronto: provedor, modelo e chave estão coerentes.")
+        if testar_agora:
+            print("  Pronto: provedor, modelo e chave estão coerentes — e o modelo falou.")
+        else:
+            # Sem `--testar` nada foi perguntado ao modelo: dizer “coerentes”
+            # aqui era o começo do print do dono (0.91.35).
+            print("  O nome existe na lista e a chave tem cara de chave. Só isso.")
+            print("  Para provar que o modelo responde de verdade (8 tokens por chave):")
+            print("    .venv\\Scripts\\python conferir-ia.py --testar")
     elif codigo == 0:
         print("  Se o JARVIS continuar recusando, rode de novo com --testar para ver o HTTP exato.")
     return codigo

@@ -30,6 +30,11 @@ COLADO = (
 )
 CHAVES = [linha.rsplit(" ", 1)[1] for linha in COLADO.splitlines()]
 
+# Resposta boa de verdade: 200 com texto. Um `200` sem corpo (o que os dublês
+# faziam antes da 0.91.35) é indistinguível de resposta muda — e resposta muda
+# não aprova nada.
+CORPO_OK = {"choices": [{"message": {"content": "ok"}}]}
+
 
 @pytest.fixture()
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -187,7 +192,7 @@ def test_testar_uma_chave_responde_e_nao_mostra_o_valor(env: Path):
 
     def postar(url, corpo, cabecalho):
         calls.append(cabecalho["Authorization"])
-        return 200
+        return {"codigo": 200, "corpo": CORPO_OK}
 
     resultado = chaves.testar(postar=postar)
     assert resultado["boas"] == 4 and resultado["total"] == 4
@@ -198,7 +203,12 @@ def test_testar_uma_chave_responde_e_nao_mostra_o_valor(env: Path):
 
 def test_testar_conta_so_as_que_respondem(env: Path):
     chaves.salvar(COLADO)
-    respostas = {CHAVES[0]: 200, CHAVES[1]: 429, CHAVES[2]: 401, CHAVES[3]: 200}
+    respostas = {
+        CHAVES[0]: {"codigo": 200, "corpo": CORPO_OK},
+        CHAVES[1]: {"codigo": 429, "corpo": CORPO_429},
+        CHAVES[2]: {"codigo": 401, "corpo": None},
+        CHAVES[3]: {"codigo": 200, "corpo": CORPO_OK},
+    }
 
     def postar(_url, _corpo, cabecalho):
         return respostas[cabecalho["Authorization"].removeprefix("Bearer ")]
@@ -212,7 +222,7 @@ def test_testar_conta_so_as_que_respondem(env: Path):
 
 def test_testar_uma_so_por_indice(env: Path):
     chaves.salvar(COLADO)
-    resultado = chaves.testar(indice=2, postar=lambda *_a: 200)
+    resultado = chaves.testar(indice=2, postar=lambda *_a: {"codigo": 200, "corpo": CORPO_OK})
     assert resultado["total"] == 1
     assert resultado["resultados"][0]["indice"] == 2
 
@@ -220,12 +230,12 @@ def test_testar_uma_so_por_indice(env: Path):
 def test_testar_indice_que_nao_existe_explica(env: Path):
     chaves.salvar(COLADO)
     with pytest.raises(ValueError, match="não existe chave 9"):
-        chaves.testar(indice=9, postar=lambda *_a: 200)
+        chaves.testar(indice=9, postar=lambda *_a: {"codigo": 200, "corpo": CORPO_OK})
 
 
 def test_testar_sem_chave_guardada_recusa(env: Path):
     with pytest.raises(ValueError, match="não há chave"):
-        chaves.testar(postar=lambda *_a: 200)
+        chaves.testar(postar=lambda *_a: {"codigo": 200, "corpo": CORPO_OK})
 
 
 def test_testar_falha_de_rede_vira_motivo_em_portugues(env: Path):
@@ -437,7 +447,7 @@ def test_429_em_um_modelo_e_200_no_outro_prova_que_a_chave_e_boa(env: Path):
     def postar(_url, corpo, _cabecalho):
         vistas.append(corpo["model"])
         if corpo["model"] == chaves.MODELO_DE_SOCORRO:
-            return 200
+            return {"codigo": 200, "corpo": CORPO_OK}
         return {"codigo": 429, "corpo": CORPO_429}
 
     resultado = chaves.testar(postar=postar, modelo_socorro=chaves.MODELO_DE_SOCORRO)

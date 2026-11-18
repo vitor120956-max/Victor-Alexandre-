@@ -394,6 +394,12 @@ def testar(
     Quando a primeira tentativa falha por 429 ou 404, a segunda usa um modelo com
     cota separada. Se ele responde, a chave está viva e o problema é o modelo:
     a resposta já diz qual usar. Custa 8 tokens, e só quando há falha.
+
+    **O que conta como “respondeu” (0.91.35).** HTTP 200 com `content` vazio não
+    conta — é o mesmo critério de `tem_resposta`. O console do dono de 17/11
+    terminou com *“OK chave 1: HTTP 200”*, *“motivo: respondeu com raciocínio em
+    vez de texto”* e *“Pronto: provedor, modelo e chave estão coerentes”*. As
+    três linhas juntas diziam que estava tudo bem quando o modelo não falava.
     """
     valores = estado()
     chaves = separar_chaves(ler_valor("JARVIS_AI_API_KEY"))
@@ -418,16 +424,24 @@ def testar(
         codigo = int(primeira["codigo"])
         item: dict[str, Any] = {
             "indice": posicao,
-            "ok": codigo == 200,
+            # 0.91.35 — HTTP 200 com `content` vazio **não** aprova. No PC do
+            # dono o `--testar` imprimiu “OK  chave 1: HTTP 200” e, na linha
+            # debaixo, “motivo: respondeu com raciocínio em vez de texto”; o
+            # script terminou com “provador, modelo e chave estão coerentes”.
+            # Estava tudo errado: quem não fala não serve para conversar.
+            "ok": codigo == 200 and not primeira.get("sem_texto"),
             "codigo": codigo,
             "motivo": primeira["motivo"],
             "detalhe": primeira["detalhe"],
             "modelo": modelo,
         }
+        if primeira.get("sem_texto"):
+            item["sem_texto"] = True
         # Falhou por limite ou por modelo inexistente: a chave pode estar ótima.
         if codigo in (404, 429) and tentar_outro:
             segunda = _testar_uma_detalhado(base, socorro, chave, limite, postar)
-            if int(segunda["codigo"]) == 200:
+            # O socorro também tem de falar: 200 mudo não prova nada (0.91.35).
+            if int(segunda["codigo"]) == 200 and not segunda.get("sem_texto"):
                 item["ok"] = True
                 item["codigo"] = codigo  # o código que a pessoa precisa ver
                 item["chave_valida"] = True
@@ -435,7 +449,9 @@ def testar(
                 item["motivo"] = f"a chave é válida: só o modelo {modelo} está indisponível agora"
             else:
                 item["chave_valida"] = False
-                if segunda["detalhe"]:
+                if segunda.get("sem_texto"):
+                    item["detalhe"] = f"{item['detalhe']} | com {socorro}: {segunda['motivo']}".strip(" |")
+                elif segunda["detalhe"]:
                     item["detalhe"] = f"{item['detalhe']} | com {socorro}: {segunda['detalhe']}".strip(" |")
         resultados.append(item)
 
@@ -481,6 +497,16 @@ def _resumo_teste(boas: int, total: int, resultados: list[dict[str, Any]] | None
         return (
             f"{quantas}: o modelo {modelo} é que está indisponível. "
             f"Troque para {socorro} no cartão Modelos de IA e a conversa volta."
+        )
+
+    # 0.91.35 — 200 mudo. A frase tem de separar as duas coisas que estavam
+    # juntas na tela do dono: a chave está boa; o modelo é que não fala.
+    mudos = [item for item in itens if item.get("sem_texto")]
+    if mudos and len(mudos) == len(itens):
+        return (
+            "A chave está válida: o modelo respondeu HTTP 200 e não mandou texto "
+            "(gastou os 8 tokens pensando). Troque por um de conversa: "
+            ".venv\\Scripts\\python conferir-ia.py --corrigir"
         )
 
     if boas == total:
@@ -765,6 +791,9 @@ def testar_modelo(
         "codigo": codigo,
         "motivo": resultado.get("motivo") or "",
         "detalhe": resultado.get("detalhe") or "",
+        # 0.91.35 — quem grava o modelo novo precisa saber **por que** ele não
+        # passou: mudo (200 sem texto) é diferente de 404 ou 429.
+        "sem_texto": bool(resultado.get("sem_texto")),
     }
 
 
