@@ -19,6 +19,7 @@ import {
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { listReverseArtifacts, uploadReverseArtifact } from '../lib/api';
+import { classificarArquivos, resumoDaTriagem } from '../lib/artefatos';
 import type { ReverseArtifact } from '../lib/api';
 import '../reverse.css';
 
@@ -508,25 +509,27 @@ export function ReversePage() {
     event.target.value = '';
     setFolderError('');
     if (!files.length) return;
-    if (files.length > MAX_BATCH_FILES) {
-      setFolderError(`Selecione no máximo ${MAX_BATCH_FILES} arquivos por lote para respeitar o limite da API.`);
-      return;
-    }
-    const accepted = files.filter((file) => {
-      const name = file.name;
-      const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath || name;
-      const suffix = name.slice(name.lastIndexOf('.')).toLowerCase();
-      return !relative.split('/').some((part) => part.startsWith('.')) && file.size > 0 && file.size <= MAX_ARTIFACT_BYTES && ALLOWED_EXTENSIONS.has(suffix);
+    // 0.91.43 — a triagem agora DIZ o que ficou de fora. Antes, arquivo
+    // grande ou de extensão estranha era descartado em silêncio e a tela
+    // ainda anunciava “pasta enviada”.
+    const triagem = classificarArquivos(files, {
+      limiteBytes: MAX_ARTIFACT_BYTES,
+      extensoes: ALLOWED_EXTENSIONS,
+      limiteTotalBytes: MAX_BATCH_BYTES,
+      limiteArquivos: MAX_BATCH_FILES,
     });
-    const totalBytes = accepted.reduce((sum, file) => sum + file.size, 0);
+    const aviso = resumoDaTriagem(triagem, {
+      limiteBytes: MAX_ARTIFACT_BYTES,
+      limiteTotalBytes: MAX_BATCH_BYTES,
+      limiteArquivos: MAX_BATCH_FILES,
+    });
+    if (aviso) setFolderError(aviso);
+    const accepted = triagem.aceitos;
     if (!accepted.length) {
-      setFolderError('Nenhum arquivo compatível foi encontrado nessa pasta.');
+      if (!aviso) setFolderError('Nenhum arquivo compatível foi encontrado nessa pasta.');
       return;
     }
-    if (totalBytes > MAX_BATCH_BYTES) {
-      setFolderError('O lote excede 100 MB no total. Envie menos arquivos por vez.');
-      return;
-    }
+    if (triagem.excedeTotal || triagem.excedeQuantidade) return;
     setBatch({ done: 0, total: accepted.length });
     let failed = 0;
     for (const [index, file] of accepted.entries()) {
@@ -545,8 +548,13 @@ export function ReversePage() {
     if (rootFolder) setTreePath(rootFolder);
     await load();
     setBatch(null);
-    if (failed) setFolderError(`${failed} de ${accepted.length} arquivos não puderam ser enviados.`);
-    else pushToast('Pasta enviada', `${accepted.length} arquivos enviados. Use “Analisar árvore” para o conjunto.`);
+    if (failed) {
+      setFolderError(`${failed} de ${accepted.length} arquivos não puderam ser enviados.`);
+    } else {
+      // `aviso` (se houve) fica na tela: dizer “pasta enviada” com arquivos
+      // fora seria a mesma mentira silenciosa de antes.
+      pushToast('Pasta enviada', `${accepted.length} arquivos enviados. Use “Analisar árvore” para o conjunto.`);
+    }
   };
 
   const analyze = (skillId: string) => {
@@ -592,7 +600,26 @@ export function ReversePage() {
             <section className="panel reverse-library">
               <div className="section-heading compact-heading"><div><span className="eyebrow">ÁREA CONFINADA</span><h2>Artefatos</h2></div><button className="icon-button small" onClick={() => void load()} disabled={loading} aria-label="Atualizar artefatos"><RefreshCw size={14} className={loading ? 'legal-spinner' : ''} /></button></div>
               <form className="reverse-upload" onSubmit={upload}>
-                <label className="document-file-picker"><Upload size={16} /><span>{uploadFile ? uploadFile.name : 'Escolher artefato para upload'}</span><input type="file" accept={ACCEPTED} onChange={(event) => { setUploadFile(event.target.files?.[0] ?? null); setUploadConfirmed(false); setUploadError(''); }} /></label>
+                <label className="document-file-picker"><Upload size={16} /><span>{uploadFile ? uploadFile.name : 'Escolher artefato para upload'}</span><input
+                  type="file"
+                  accept={ACCEPTED}
+                  onChange={(event) => {
+                    const escolhido = event.target.files?.[0] ?? null;
+                    setUploadFile(escolhido);
+                    setUploadConfirmed(false);
+                    // 0.91.43 — antes, um APK de 90 MB deixava o botão morto e
+                    // mudo: o aviso só existia no envio, que nunca acontecia.
+                    if (escolhido) {
+                      const triagem = classificarArquivos([escolhido], {
+                        limiteBytes: MAX_ARTIFACT_BYTES,
+                        extensoes: ALLOWED_EXTENSIONS,
+                      });
+                      setUploadError(resumoDaTriagem(triagem, { limiteBytes: MAX_ARTIFACT_BYTES }));
+                    } else {
+                      setUploadError('');
+                    }
+                  }}
+                /></label>
                 {uploadFile && <div className="reverse-upload-details"><span>{bytesLabel(uploadFile.size)}</span><label>Pasta de destino<input value={uploadDirectory} onChange={(event) => setUploadDirectory(event.target.value)} maxLength={120} placeholder="ex.: app" /></label></div>}
                 {uploadFile && <><label className="document-check"><input type="checkbox" checked={uploadOverwrite} onChange={(event) => setUploadOverwrite(event.target.checked)} /><span>Permitir sobrescrever</span></label><label className="document-check confirmation"><input type="checkbox" checked={uploadConfirmed} onChange={(event) => setUploadConfirmed(event.target.checked)} /><span>Confirmo a gravação deste artefato na área isolada.</span></label></>}
                 {uploadError && <p className="document-form-error">{uploadError}</p>}

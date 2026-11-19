@@ -174,6 +174,67 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.43 — “e o engenharia reversa ta funcionando?”
+
+> e o engenharia reversa ta funcionando?
+
+“Deve estar” não é resposta. Então a pergunta virou medição: subi o JARVIS,
+mandei quatro arquivos de verdade para a área reversa e apertei os cinco
+botões. Nada de opinião sobre o código — o que a tela devolveu:
+
+| botão | arquivo | o que voltou |
+|---|---|---|
+| Inspecionar | APK de teste | “ZIP / arquivo compactado”, entropia **7,2747**, 4 entradas, 46 strings |
+| Layout | APK de teste | as 4 entradas do ZIP, com tamanho comprimido e CRC |
+| Strings | APK de teste | achou `lib/arm64-v8a/libunity.so` e `classes.dex` — os dois nomes que identificam o pacote |
+| Entropia | APK de teste | 7,2747 no arquivo; blocos sem região cifrada |
+| JavaScript | `app.js` com `ipcRenderer` | 1 módulo, fato `electron.ipc-renderer` na **linha 2** |
+
+Para não testar só ZIP: um ELF de verdade (`/bin/ls`) voltou “ELF64
+little-endian”, **31 seções** e 2 imports; um PNG voltou com entropia
+**7,7625**. Em todas as respostas, `executed: false` e `readOnly: true` — a
+Reversa lê, não roda. E `server/tests/test_reverse.py`: 15 testes passando
+(agora 16).
+
+Então: **funciona**. O que não funcionava era o que ela fazia quando
+**recusava** — e recusar calado é pior que recusar, porque parece que o botão
+não respondeu.
+
+Dois defeitos, os dois do tipo que só aparece usando:
+
+1. **APK acima de 25 MB.** Escolher o arquivo no seletor não fazia nada. Nem
+   erro, nem “grande demais”, nem envio. O `input` voltava vazio e a tela
+   ficava igual. Quem arrastou um APK de verdade (todo APK de jogo passa de
+   25 MB) conclui que a Reversa está quebrada — e não está: o teto é 25 MB, e
+   o APK do jogo tem a aba “Meu jogo”, com 600 MB.
+2. **Pasta com arquivo descartado.** Arrastar uma pasta filtrava o que não
+   cabia e ainda anunciava “pasta enviada”, com a contagem dos que sobraram.
+   O arquivo grande sumia sem nome e sem motivo.
+
+A correção saiu do componente e virou uma função pura,
+`src/lib/artefatos.ts`: `classificarArquivos()` devolve `aceitos`,
+`recusados[{nome, motivo, bytes}]` (motivo `grande`, `formato`, `oculto` ou
+`vazio`), `totalBytes`, `excedeTotal` e `excedeQuantidade`;
+`explicarRecusa()` transforma o motivo em frase — e, no caso do APK grande,
+manda para a aba certa com o teto de lá. `resumoDaTriagem()` cita até três
+recusados e conta o resto. A tela passou a usar isso nos dois caminhos (o
+seletor de arquivo e o arrastar de pasta), e o aviso de sucesso agora fala
+**só** dos aceitos. São 14 testes em `artefatos.test.ts`, um por jeito de
+sumir calado.
+
+Terceiro ajuste, menor e da mesma família: quem chama a API direto recebia
+`413` com a frase “A requisição excede o limite de tamanho.” — sem número e
+sem saída. Agora a resposta diz o teto (25 MB), para onde ir (aba “Meu jogo”,
+600 MB) e devolve `limitBytes`; o teto de 600 MB do jogo tem a mesma frase, e
+as duas estão presas por teste (`test_reverse.py` e `test_jogo.py`).
+
+**O que continua feio, e fica escrito:** mandar 26 MB pela API, no fio, ainda
+termina em conexão cortada antes do JSON chegar — o servidor recusa pelo
+`content-length` e fecha sem ler o corpo, e o cliente que está escrevendo
+recebe *reset*. Pela tela isso não acontece (a triagem barra antes de enviar),
+e drenar 26 MB só para recusar seria pior que o sintoma. É limitação
+registrada, não promessa de conserto.
+
 ### 0.91.42 — “em qual aba ta? e onde eu jogo o apk”
 
 > e eu perguntei pq o unico lugar do jarvis q achei para jogar e analisar o

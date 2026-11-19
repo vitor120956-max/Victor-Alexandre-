@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import struct
 import zipfile
 from pathlib import Path
@@ -311,3 +310,43 @@ def test_api_executes_reverse_features_without_side_effects(tmp_path: Path):
         for path in ({"path": "../amostra.elf"}, {"path": ""}):
             refused = client.post("/api/skills/reverse.inspect/execute", json={"parameters": path}).json()
             assert refused["ok"] is False
+
+
+def test_upload_acima_do_teto_diz_o_limite_e_para_onde_ir(tmp_path: Path):
+    """0.91.43 — a recusa por tamanho era muda: nem teto, nem saída.
+
+    O dono escolhia um APK grande, a tela não fazia nada (corrigido em
+    `src/lib/artefatos.ts`), e quem chamava a API direto recebia
+    “A requisição excede o limite de tamanho.” — sem número e sem dizer que o
+    APK do jogo tem uma aba própria, com teto de 600 MB.
+    """
+    with _app(tmp_path) as client:
+        # O corpo real é pequeno de propósito: o middleware decide pelo
+        # `content-length`, então o teste não precisa enviar 26 MB de verdade.
+        recusa = client.post(
+            "/api/reverse/upload",
+            content=b"x" * 64,
+            headers={
+                "content-length": str(reverse.MAX_ARTIFACT_BYTES + 1_000_001),
+                "content-type": "application/octet-stream",
+            },
+        )
+        assert recusa.status_code == 413
+        erro = recusa.json()["error"]
+        assert erro["code"] == "BODY_TOO_LARGE"
+        # O número anunciado é o teto da Reversa (25 MB), não o do transporte
+        # (25 MB + 1 MB de folga do multipart) — senão a tela explicaria um
+        # limite e o servidor cobraria outro.
+        assert erro["limitBytes"] == reverse.MAX_ARTIFACT_BYTES
+        assert "25 MB" in erro["message"]
+        assert "Meu jogo" in erro["message"]
+        assert "600 MB" in erro["message"]
+
+        # A folga do multipart continua aceita: 25 MB de arquivo não pode ser
+        # recusado por causa dos bytes do formulário.
+        dentro = client.post(
+            "/api/reverse/upload",
+            files={"upload": ("dentro.js", b"console.log('ok');\n")},
+            data={"directory": "", "confirmed": "true"},
+        )
+        assert dentro.status_code == 200

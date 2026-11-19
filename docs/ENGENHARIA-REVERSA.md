@@ -67,7 +67,7 @@ POST /api/reverse/upload      # confirmação obrigatória, 25 MB
 GET  /api/reverse/download
 ```
 
-Uploads aceitam somente extensões de artefato, recusam nomes ocultos, arquivos vazios e caminhos com `..`, e nunca sobrescrevem sem autorização explícita. Downloads saem como `application/octet-stream` com `Content-Disposition: attachment`; a interface não renderiza HTML nem executa JavaScript de um artefato.
+Uploads aceitam somente extensões de artefato, recusam nomes ocultos, arquivos vazios e caminhos com `..`, e nunca sobrescrevem sem autorização explícita. Acima do teto, a resposta é `413` com `BODY_TOO_LARGE`, o campo `limitBytes` e uma frase que diz qual é o teto e para onde ir (o APK do jogo tem a aba **Meu jogo**, com 600 MB). Downloads saem como `application/octet-stream` com `Content-Disposition: attachment`; a interface não renderiza HTML nem executa JavaScript de um artefato.
 
 As skills usam a área reversa como raiz e recusam caminhos absolutos, ocultos, symlinks e destinos fora dela. Um symlink dentro da árvore não é seguido.
 
@@ -98,3 +98,4 @@ Ficaram fora do escopo: MCP, CLI upstream, Hopper, Ghidra, IDA, Kuna, JADX, Apkt
 - ELF sem tabela de seções pode não expor dependências dinâmicas.
 - Comparações usam amostras; ausência em uma lista limitada não prova ausência no artefato.
 - O resultado é evidência estática, não laudo pericial, atestado de malware ou garantia de segurança.
+- Corpo maior que o teto é recusado pelo `content-length` antes de ser lido: quem envia muitos MB pela API, no fio, pode ver a conexão ser cortada antes do JSON de recusa. Pela tela isso não acontece — a triagem barra antes de enviar.

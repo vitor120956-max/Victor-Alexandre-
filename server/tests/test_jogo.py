@@ -754,3 +754,26 @@ def test_o_limite_da_rota_de_jogo_e_o_do_jogo_e_nao_o_documento(cliente):
     do jogo — e continuar recusando o que passa dele."""
     assert jogo.MAXIMO_BYTES > 25_000_000
     assert jogo.MAXIMO_BYTES == 600_000_000
+
+
+def test_a_recusa_por_tamanho_diz_o_teto_do_jogo(cliente):
+    """0.91.43 — 413 genérico não dizia qual teto nem para onde ir.
+
+    O corpo real é pequeno: o middleware decide pelo `content-length`, então
+    não é preciso montar 600 MB para provar a mensagem.
+    """
+    base, _ = cliente
+    recusa = base.post(
+        "/api/jogo/upload",
+        content=b"x" * 64,
+        headers={
+            "content-length": str(jogo.MAXIMO_BYTES + 1_000_001),
+            "content-type": "application/octet-stream",
+        },
+    )
+    assert recusa.status_code == 413
+    erro = recusa.json()["error"]
+    assert erro["code"] == "BODY_TOO_LARGE"
+    assert erro["limitBytes"] == jogo.MAXIMO_BYTES
+    assert "600 MB" in erro["message"]
+    assert "Meu jogo" in erro["message"]

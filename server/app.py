@@ -419,7 +419,36 @@ def create_app(
             except ValueError:
                 too_large = True
             if too_large:
-                return JSONResponse(status_code=413, content={"ok": False, "error": {"code": "BODY_TOO_LARGE", "message": "A requisição excede o limite de tamanho."}})
+                # 0.91.43 — dizer o teto e para onde ir, em vez de “excede o
+                # limite”. Quem chama a API direto lia uma frase sem número e
+                # sem saída; a tela da Reversa já explica isso (artefatos.ts).
+                if request.url.path == "/api/reverse/upload":
+                    limite, destino = MAX_ARTIFACT_BYTES, (
+                        f"O arquivo passa de {MAX_ARTIFACT_BYTES / 1e6:.0f} MB, o teto da engenharia "
+                        "reversa. Para o APK do jogo, use a aba “Meu jogo” (até "
+                        f"{jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB)."
+                    )
+                elif request.url.path == "/api/jogo/upload":
+                    limite, destino = jogo_mod.MAXIMO_BYTES, (
+                        f"O APK passa de {jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB, o teto da aba “Meu jogo”."
+                    )
+                elif request.url.path == "/api/files/upload":
+                    limite, destino = MAX_DOCUMENT_BYTES, (
+                        f"O arquivo passa de {MAX_DOCUMENT_BYTES / 1e6:.0f} MB, o teto dos documentos."
+                    )
+                else:
+                    limite, destino = MAX_BODY_BYTES, "A requisição excede o limite de tamanho."
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "BODY_TOO_LARGE",
+                            "message": destino,
+                            "limitBytes": limite,
+                        },
+                    },
+                )
             if request.method == "POST":
                 is_ai = request.url.path == "/api/ai/chat"
                 key = f"{request.client.host if request.client else 'unknown'}:{'ai' if is_ai else 'skill'}"
