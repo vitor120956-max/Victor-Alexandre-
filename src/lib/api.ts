@@ -768,10 +768,20 @@ export type JogoRelatorio = {
   texto?: string;
 };
 
+export type JogoParte = {
+  nome: string;
+  pasta: string;
+  bytes: number;
+  apks: string[];
+  analisado: boolean;
+};
+
 export type JogoLista = {
   pasta: string;
   quantidade: number;
-  jogos: Array<{ nome: string; bytes: number }>;
+  /** Uma pasta por APK (0.91.41): dois testes não se misturam. */
+  partes: JogoParte[];
+  jogos: Array<{ nome: string; bytes: number; parte?: string; pasta?: string; analisado?: boolean }>;
 };
 
 /**

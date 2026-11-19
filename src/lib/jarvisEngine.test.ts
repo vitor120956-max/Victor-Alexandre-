@@ -561,3 +561,52 @@ describe('parseCommand — calendário: dia, fim de semana e feriados (0.91.37)'
       expect(helpText).toContain('testar-no-iphone.bat');
     });
   });
+
+  // 0.91.41 — “nn sao diferentes mas quero usar os dois para teste”.
+  // Os dois APKs são do mesmo jogo, mas são dois pacotes para testar: cada um
+  // tem a pasta dele, e o chat tem de conseguir pedir os dois de uma vez.
+  describe('dois APKs, cada um na sua pasta', () => {
+    it('“analisar os dois jogos” analisa todos', () => {
+      for (const frase of [
+        'analisar os dois jogos',
+        'analisa os dois jogos',
+        'analisar ambos',
+        'analisar os dois',
+        'analisar todos os jogos',
+        'confere os dois apks',
+      ]) {
+        const intent = parseCommand(frase);
+        expect(intent.type, frase).toBe('jogo:analisar');
+        if (intent.type === 'jogo:analisar') expect(intent.todos, frase).toBe(true);
+      }
+    });
+
+    it('o caminho com a pasta vai inteiro, não só o nome do arquivo', () => {
+      const intent = parseCommand('analisar jogo build-teste-1/build-teste-1.apk');
+      expect(intent.type).toBe('jogo:analisar');
+      if (intent.type === 'jogo:analisar') {
+        expect(intent.arquivo).toBe('build-teste-1/build-teste-1.apk');
+        expect(intent.todos).toBeUndefined();
+      }
+    });
+
+    it('nomear um arquivo não vira “todos”', () => {
+      const intent = parseCommand('analisar os dois jogos: analisar jogo pasta/jogo.apk');
+      if (intent.type === 'jogo:analisar') {
+        expect(intent.arquivo).toBe('pasta/jogo.apk');
+        expect(intent.todos).toBeUndefined();
+      }
+    });
+
+    it('não rouba os vizinhos', () => {
+      expect(parseCommand('o preço dos dois jogos na steam').type).toBe('unknown');
+      expect(parseCommand('pesquise jogos de corrida').type).toBe('web:search');
+      expect(parseCommand('abrir o jogo').type).toBe('unknown');
+      expect(parseCommand('quero testar no meu iphone').type).toBe('jogo:iphone');
+    });
+
+    it('a ajuda explica as pastas', () => {
+      expect(helpText).toContain('analisar os dois jogos');
+      expect(helpText).toContain('analise.txt');
+    });
+  });

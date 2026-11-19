@@ -174,6 +174,50 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.41 — dois APKs: separar, analisar e guardar cada um na sua pasta
+
+> ta vou testar com dois apks meus
+> nn sao diferentes mas quero usar os dois para teste
+
+Dois pacotes do mesmo jogo, para testar. O que não podia acontecer era o que
+estava acontecendo em dois lugares:
+
+1. **o `.bat` entregava só o primeiro.** A chamada era `analisar-jogo.py "%~1"`,
+   e o segundo APK era ignorado **em silêncio** — o dono arrastava dois e
+   achava que tinha analisado os dois;
+2. **os dois caíam soltos na mesma pasta**, e as análises não tinham dono. Com
+   dois builds do mesmo jogo, não dava para saber qual relatório era de qual.
+
+Agora cada pacote tem a pasta dele:
+
+    storage/user-files/jogos/
+      teste-1/
+        teste-1.apk
+        analise.txt
+        analise.json
+      teste-2/
+        teste-2.apk
+        analise.txt
+        analise.json
+
+Três decisões que valem registro:
+
+1. **A análise fica ao lado do APK.** `analise.txt` é o que se lê; `analise.json`
+   é o mesmo relatório para a tela. Quem abre a pasta meses depois sabe de qual
+   build é aquele texto sem procurar em outro lugar.
+2. **Nada se mistura nem se sobrescreve.** O mesmo arquivo arrastado de novo
+   reaproveita a pasta (`novo=False`); dois arquivos de mesmo nome viram `jogo/`
+   e `jogo-1/`. Nome igual em duas pastas, o chat **pede qual** em vez de
+   escolher calado.
+3. **O formato antigo continua valendo.** APK solto na raiz de `jogos/`
+   (0.91.38–0.91.40) é listado e analisado como antes — atualizar não quebra o
+   que já estava guardado.
+
+O `.bat` passou a chamar `%*` (todos os arquivos arrastados), e o `--lista`
+mostra `teste-1/ — teste-1.apk — 8,4 MB (analisado)`. A comparação entre dois
+pacotes continua existindo (`--comparar`), mas como ferramenta opcional: o dono
+disse que os dois são para teste, não antes/depois.
+
 ### 0.91.40 — “não dá para baixar no iPhone?”
 
 > entao so da para rodar via web?? nao da para baixar no iphone?

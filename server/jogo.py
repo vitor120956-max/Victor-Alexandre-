@@ -27,6 +27,24 @@ jogo melhor” no sentido de diversão. O que ele entrega é: **o diagnóstico d
 pacote** e um **plano priorizado** com o lugar exato onde cada ajuste é feito —
 a maioria no próprio motor, antes de gerar o APK de novo.
 
+## Uma pasta por APK (0.91.41)
+
+O dono testa com **dois APKs do mesmo jogo**. Para não misturar, cada pacote
+ganha a própria pasta em `storage/user-files/jogos/`:
+
+    jogos/
+      meu-jogo/            <- parte 1
+        meu-jogo.apk
+        analise.txt        <- o relatório em português
+        analise.json       <- o mesmo relatório, para a tela
+      meu-jogo-beta/       <- parte 2
+        meu-jogo-beta.apk
+        analise.txt
+        analise.json
+
+APK solto na raiz de `jogos/` (das versões anteriores) continua sendo lido e
+analisado — nada quebra. O que muda é onde o que chega agora é guardado.
+
 ## As regras
 
 1. **Nada é extraído.** Só cabeçalhos, diretório central e o manifesto (que é
@@ -38,7 +56,9 @@ a maioria no próprio motor, antes de gerar o APK de novo.
 """
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import struct
 import zipfile
 from pathlib import Path
@@ -68,19 +88,122 @@ def raiz(files_root: Path) -> Path:
     return destino
 
 
-def arquivo(files_root: Path, nome: str) -> Path:
-    """Um APK pelo nome, dentro da pasta de jogos — nunca fora dela."""
+def _slug(nome: str) -> str:
+    """O nome de uma pasta a partir do nome do APK: sem espaço, acento ou “.”."""
+    limpo = []
+    for letra in nome:
+        if letra.isalnum() and letra.isascii():
+            limpo.append(letra.lower())
+        elif letra in {"-", "_", " ", "."}:
+            limpo.append("-")
+    texto = "".join(limpo)
+    while "--" in texto:
+        texto = texto.replace("--", "-")
+    texto = texto.strip("-._")
+    return texto[:60] or "jogo"
+
+
+def partes(files_root: Path) -> list[dict[str, Any]]:
+    """As pastas de jogo que existem (cada uma com um ou mais APKs dentro)."""
+    base = raiz(files_root)
+    itens: list[dict[str, Any]] = []
+    for caminho in sorted(base.iterdir()):
+        if not caminho.is_dir() or caminho.is_symlink() or caminho.name.startswith("."):
+            continue
+        apks = _apks_em(caminho)
+        if not apks:
+            continue
+        itens.append(
+            {
+                "nome": caminho.name,
+                "pasta": str(caminho),
+                "bytes": sum(item.stat().st_size for item in apks),
+                "apks": [item.name for item in apks],
+                "analisado": (caminho / "analise.txt").is_file(),
+            }
+        )
+    return itens
+
+
+def _apks_em(pasta: Path) -> list[Path]:
     try:
-        caminho = safe_path(raiz(files_root), nome)
-    except ValueError as exc:
-        raise JogoError(str(exc)) from exc
+        itens = sorted(pasta.iterdir())
+    except OSError:
+        return []
+    return [
+        item
+        for item in itens
+        if item.is_file() and not item.is_symlink() and item.suffix.lower() in EXTENSOES
+    ]
+
+
+def _unico_apk(pasta: Path, referencia: str) -> Path:
+    apks = _apks_em(pasta)
+    if len(apks) == 1:
+        return apks[0]
+    if not apks:
+        raise JogoError(f"A pasta “{referencia}” não tem nenhum APK dentro.")
+    nomes = ", ".join(item.name for item in apks)
+    raise JogoError(
+        f"A pasta “{referencia}” tem {len(apks)} APKs ({nomes}). Diga qual: "
+        f"analisar jogo {referencia}/{apks[0].name}"
+    )
+
+
+def arquivo(files_root: Path, nome: str) -> Path:
+    """Um APK pelo nome — solto na raiz, dentro da parte, ou pela pasta (“jogo/”).
+
+    O que chega do dono é sempre um nome curto: `meu-jogo.apk`, `meu-jogo-beta/`
+    ou `meu-jogo-beta/meu-jogo.apk`. Caminho com `..` continua recusado.
+    """
+    base = raiz(files_root)
+    bruto = (nome or "").strip()
+    if not bruto:
+        raise JogoError("Diga qual APK analisar (ou arraste o arquivo no analisar-jogo.bat).")
+
+    caminho: Path | None = None
+    if "/" in bruto or "\\" in bruto:
+        try:
+            caminho = safe_path(base, bruto)
+        except ValueError as exc:
+            raise JogoError(str(exc)) from exc
+    else:
+        try:
+            direto = safe_path(base, bruto)
+        except ValueError as exc:
+            raise JogoError(str(exc)) from exc
+        if direto.is_file():
+            caminho = direto
+        elif direto.is_dir():
+            caminho = _unico_apk(direto, bruto)
+        else:
+            achados = [
+                pasta / bruto
+                for pasta in (base.iterdir() if base.exists() else [])
+                if pasta.is_dir()
+                and not pasta.is_symlink()
+                and (pasta / bruto).is_file()
+                and not (pasta / bruto).is_symlink()
+            ]
+            if len(achados) == 1:
+                caminho = achados[0]
+            elif len(achados) > 1:
+                onde = " e ".join(f"{item.parent.name}/" for item in achados)
+                raise JogoError(
+                    f"“{bruto}” existe em {len(achados)} pastas ({onde}). Diga qual: "
+                    f"analisar jogo {achados[0].parent.name}/{bruto}"
+                )
+            else:
+                raise JogoError(
+                    f"Não achei “{bruto}” na pasta de jogos. Envie o APK primeiro "
+                    "(Engenharia reversa → enviar arquivo, ou arraste o arquivo em cima "
+                    "do analisar-jogo.bat — ele copia para storage/user-files/jogos)."
+                )
+
     if caminho.suffix.lower() not in EXTENSOES:
         raise JogoError("A análise aceita APK, AAB, APKS ou XAPK do seu jogo.")
     if not caminho.is_file() or caminho.is_symlink():
-        raise JogoError(
-            f"Não achei “{nome}” na pasta de jogos. Envie o APK primeiro "
-            "(Engenharia reversa → enviar arquivo, ou copie para storage/user-files/jogos)."
-        )
+        raise JogoError(f"Não achei “{bruto}” na pasta de jogos.")
     tamanho = caminho.stat().st_size
     if tamanho <= 0:
         raise JogoError("O arquivo está vazio.")
@@ -90,16 +213,106 @@ def arquivo(files_root: Path, nome: str) -> Path:
 
 
 def listar(files_root: Path) -> dict[str, Any]:
-    """Os jogos já enviados, para a tela e para o chat."""
+    """Os jogos já enviados, por parte (pasta) e por arquivo."""
     base = raiz(files_root)
-    itens = []
+    itens: list[dict[str, Any]] = []
     for caminho in sorted(base.iterdir()):
-        if not caminho.is_file() or caminho.is_symlink():
-            continue
-        if caminho.suffix.lower() not in EXTENSOES:
-            continue
-        itens.append({"nome": caminho.name, "bytes": caminho.stat().st_size})
-    return {"pasta": str(base), "quantidade": len(itens), "jogos": itens}
+        if caminho.is_file() and not caminho.is_symlink() and caminho.suffix.lower() in EXTENSOES:
+            # Formato antigo (0.91.38–0.91.40): APK solto na raiz de jogos/.
+            itens.append(
+                {
+                    "nome": caminho.name,
+                    "bytes": caminho.stat().st_size,
+                    "parte": "",
+                    "pasta": str(base),
+                    "analisado": False,
+                }
+            )
+        elif caminho.is_dir() and not caminho.is_symlink() and not caminho.name.startswith("."):
+            for apk in _apks_em(caminho):
+                itens.append(
+                    {
+                        "nome": apk.name,
+                        "bytes": apk.stat().st_size,
+                        "parte": caminho.name,
+                        "pasta": str(caminho),
+                        "analisado": (caminho / "analise.txt").is_file(),
+                    }
+                )
+    return {
+        "pasta": str(base),
+        "quantidade": len(itens),
+        "partes": partes(files_root),
+        "jogos": itens,
+    }
+
+
+def _gravar_analise(pasta: Path, relatorio: dict[str, Any]) -> None:
+    """Grava a análise ao lado do APK: `analise.txt` e `analise.json`."""
+    (pasta / "analise.txt").write_text(relatorio.get("texto", ""), encoding="utf-8")
+    dados = {chave: valor for chave, valor in relatorio.items() if chave != "texto"}
+    (pasta / "analise.json").write_text(
+        json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def guardar(origem: Path, files_root: Path) -> dict[str, Any]:
+    """Guarda o APK na pasta DELE e analisa ali dentro.
+
+    Duas coisas não se misturam: cada pacote fica na própria parte, e a análise
+    fica ao lado do pacote a que pertence. Arrastar o mesmo arquivo de novo
+    reaproveita a parte (não cria cópia nem pasta nova).
+    """
+    origem = Path(origem).expanduser()
+    if not origem.exists():
+        raise JogoError(f"Não achei “{origem}”.")
+    if origem.is_symlink() or not origem.is_file():
+        raise JogoError("Arraste o arquivo do APK, não uma pasta nem um atalho.")
+    if origem.suffix.lower() not in EXTENSOES:
+        raise JogoError("A análise aceita APK, AAB, APKS ou XAPK do seu jogo.")
+    tamanho = origem.stat().st_size
+    if tamanho <= 0:
+        raise JogoError("O arquivo está vazio.")
+    if tamanho > MAXIMO_BYTES:
+        raise JogoError(f"O arquivo tem {tamanho / 1e6:.0f} MB; o limite é {MAXIMO_BYTES / 1e6:.0f} MB.")
+
+    base = raiz(files_root)
+
+    # Mesmo arquivo (nome e tamanho) já guardado? Reaproveita a parte.
+    for pasta in sorted(item["pasta"] for item in partes(files_root)):
+        alvo = Path(pasta) / origem.name
+        if alvo.is_file() and not alvo.is_symlink() and alvo.stat().st_size == tamanho:
+            relatorio = relatar(alvo, parte=Path(pasta).name, pasta=str(pasta))
+            _gravar_analise(Path(pasta), relatorio)
+            return {
+                "parte": Path(pasta).name,
+                "pasta": str(pasta),
+                "apk": alvo.name,
+                "bytes": tamanho,
+                "novo": False,
+                "relatorio": relatorio,
+            }
+
+    nome = _slug(origem.stem)
+    candidato = nome
+    contador = 1
+    while (base / candidato).exists():
+        candidato = f"{nome}-{contador}"
+        contador += 1
+    pasta = base / candidato
+    pasta.mkdir(parents=True, exist_ok=False)
+    destino = pasta / origem.name
+    shutil.copy2(origem, destino)
+    relatorio = relatar(destino, parte=candidato, pasta=str(pasta))
+    _gravar_analise(pasta, relatorio)
+    return {
+        "parte": candidato,
+        "pasta": str(pasta),
+        "apk": destino.name,
+        "bytes": tamanho,
+        "novo": True,
+        "relatorio": relatorio,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -792,10 +1005,216 @@ def texto(relatorio: dict[str, Any]) -> str:
         "e o ajuste é feito no motor e no build de novo."
     )
     linhas.append("(Análise feita no seu PC, sem enviar o APK para lugar nenhum.)")
+    # 0.91.41 — cada APK mora na própria pasta; dizer qual é fecha o ciclo
+    # (“guardei ali, e o relatório está do lado do APK”).
+    if relatorio.get("parte"):
+        linhas.append(
+            f"(Guardado em jogos/{relatorio['parte']}/ — o APK, o analise.txt e o "
+            "analise.json ficam juntos, um jogo por pasta.)"
+        )
     return "\n".join(linhas)
 
 
-def relatar(caminho: Path) -> dict[str, Any]:
+def relatar(caminho: Path, parte: str = "", pasta: str = "") -> dict[str, Any]:
+    """O relatório completo, já com o texto — e com a pasta onde ele vive."""
     relatorio = analisar(caminho)
+    if parte:
+        relatorio["parte"] = parte
+    if pasta:
+        relatorio["pasta"] = pasta
     relatorio["texto"] = texto(relatorio)
     return relatorio
+
+
+# ---------------------------------------------------------------------------
+# Dois APKs: “antes” e “depois” do mesmo jogo (0.91.41)
+#
+# O pedido (18/11): *“ta vou testar com dois apks meus”*. Com dois pacotes na
+# pasta, a pergunta natural é o que mudou de um para o outro — e essa é uma
+# comparação de **fatos**: tamanho, versão, SDKs, ABIs, permissões, assinatura
+# e achados. Nada de “qual é mais divertido”: isso não se lê de um ZIP.
+# ---------------------------------------------------------------------------
+
+def _resumo(relatorio: dict[str, Any]) -> dict[str, Any]:
+    """Só o que a comparação usa — o relatório inteiro é grande demais."""
+    return {
+        "arquivo": relatorio["arquivo"],
+        "pacote": relatorio["pacote"],
+        "versao": relatorio["versao"],
+        "motor": relatorio["motor"],
+        "versaoDoMotor": relatorio["versaoDoMotor"],
+        "bytes": relatorio["bytes"],
+        "tamanhoDescompactado": relatorio["tamanhoDescompactado"],
+        "entradas": relatorio["entradas"],
+        "abis": list(relatorio["abis"]),
+        "permissoes": list(relatorio["permissoes"]),
+        "assinatura": dict(relatorio["assinatura"]),
+        "minSdk": relatorio["minSdk"],
+        "targetSdk": relatorio["targetSdk"],
+        "achados": [
+            {"severidade": item["severidade"], "titulo": item["titulo"]}
+            for item in relatorio["achados"]
+        ],
+    }
+
+
+def _assinatura_texto(assinatura: dict[str, Any]) -> str:
+    partes = []
+    if assinatura.get("v1"):
+        partes.append("v1")
+    if assinatura.get("v2v3"):
+        partes.append("v2/v3")
+    return " + ".join(partes) if partes else "sem assinatura"
+
+
+def _variacao(antes: float, depois: float) -> str:
+    """“+15,4 MB (+17%)” ou “−15,4 MB (−17%)”, com sinal e vírgula."""
+    if antes == depois:
+        return "sem mudança"
+    delta = depois - antes
+    sinal = "+" if delta > 0 else "−"
+    texto_delta = f"{sinal}{_mb(abs(delta))}"
+    if antes > 0:
+        porcento = abs(delta) / antes * 100
+        texto_delta += f" ({sinal}{porcento:.0f}%)"
+    return texto_delta
+
+
+def comparar(caminho_a: Path, caminho_b: Path) -> dict[str, Any]:
+    """Compara dois APKs já guardados (opcional: antes/depois do mesmo jogo)."""
+    a = _resumo(relatar(Path(caminho_a)))
+    b = _resumo(relatar(Path(caminho_b)))
+
+    permissoes_a, permissoes_b = set(a["permissoes"]), set(b["permissoes"])
+    titulos_a = {item["titulo"] for item in a["achados"]}
+    titulos_b = {item["titulo"] for item in b["achados"]}
+
+    return {
+        "a": a,
+        "b": b,
+        "mesmoJogo": bool(a["pacote"]) and a["pacote"] == b["pacote"],
+        "variacaoBytes": b["bytes"] - a["bytes"],
+        "variacaoDescompactado": b["tamanhoDescompactado"] - a["tamanhoDescompactado"],
+        "permissoesNovas": sorted(permissoes_b - permissoes_a),
+        "permissoesRemovidas": sorted(permissoes_a - permissoes_b),
+        "achadosResolvidos": [item for item in a["achados"] if item["titulo"] not in titulos_b],
+        "achadosNovos": [item for item in b["achados"] if item["titulo"] not in titulos_a],
+        "texto": "",
+    }
+
+
+def guardar_comparacao(files_root: Path, comparacao: dict[str, Any]) -> str:
+    """Grava a comparação numa pasta própria, para não se misturar com os jogos."""
+    pasta = raiz(files_root) / "comparacoes"
+    pasta.mkdir(parents=True, exist_ok=True)
+    nome = f"{_slug(comparacao['a']['arquivo'])}-vs-{_slug(comparacao['b']['arquivo'])}"
+    destino = pasta / f"{nome}.txt"
+    contador = 1
+    while destino.exists():
+        destino = pasta / f"{nome}-{contador}.txt"
+        contador += 1
+    destino.write_text(comparacao.get("texto", ""), encoding="utf-8")
+    return str(destino)
+
+
+def texto_comparacao(comparacao: dict[str, Any]) -> str:
+    """A comparação em português — só fatos, com o que fazer no fim."""
+    a, b = comparacao["a"], comparacao["b"]
+    linhas = ["Comparação dos dois pacotes:", ""]
+
+    for rotulo, item in (("A", a), ("B", b)):
+        identidade = [item["arquivo"]]
+        detalhe = [item["pacote"] or "pacote não lido"]
+        if item["versao"]:
+            detalhe.append(f"versão {item['versao']}")
+        if item["motor"]:
+            motor = item["motor"] + (f" {item['versaoDoMotor']}" if item["versaoDoMotor"] else "")
+            detalhe.append(motor)
+        linhas.append(f"{rotulo}) {' — '.join(identidade)}")
+        linhas.append(f"   {' · '.join(detalhe)}")
+        linhas.append(
+            f"   {_mb(item['tamanhoDescompactado'])} descompactado · "
+            f"{_mb(item['bytes'])} de arquivo · {item['entradas']} arquivos"
+        )
+        linhas.append("")
+
+    if comparacao["mesmoJogo"]:
+        linhas.append(f"É o mesmo jogo (pacote {a['pacote']}) — então dá para comparar antes e depois.")
+    elif a["pacote"] and b["pacote"]:
+        linhas.append(
+            f"São jogos diferentes ({a['pacote']} e {b['pacote']}) — a comparação vale como "
+            "retrato de cada um, não como “antes e depois”."
+        )
+    else:
+        linhas.append("Um dos dois está sem manifesto legível — comparei só o que deu para ver.")
+    linhas.append("")
+
+    linhas.append("O que mudou de A para B:")
+    mudancas = []
+    if a["versao"] != b["versao"]:
+        mudancas.append(f"  versão: {a['versao'] or '?'} → {b['versao'] or '?'}")
+    if a["motor"] != b["motor"]:
+        mudancas.append(f"  motor: {a['motor'] or 'não identificado'} → {b['motor'] or 'não identificado'}")
+    mudancas.append(
+        f"  tamanho descompactado: {_mb(a['tamanhoDescompactado'])} → "
+        f"{_mb(b['tamanhoDescompactado'])} ({_variacao(a['tamanhoDescompactado'], b['tamanhoDescompactado'])})"
+    )
+    mudancas.append(
+        f"  tamanho do arquivo: {_mb(a['bytes'])} → {_mb(b['bytes'])} "
+        f"({_variacao(a['bytes'], b['bytes'])})"
+    )
+    if a["abis"] != b["abis"]:
+        saiu = [abi for abi in a["abis"] if abi not in b["abis"]]
+        entrou = [abi for abi in b["abis"] if abi not in a["abis"]]
+        pedacos = []
+        if entrou:
+            pedacos.append("entrou " + ", ".join(entrou))
+        if saiu:
+            pedacos.append("saiu " + ", ".join(saiu))
+        mudancas.append(
+            f"  arquiteturas: {', '.join(a['abis']) or 'nenhuma'} → {', '.join(b['abis']) or 'nenhuma'}"
+            + (f" ({'; '.join(pedacos)})" if pedacos else "")
+        )
+    if (a["minSdk"], a["targetSdk"]) != (b["minSdk"], b["targetSdk"]):
+        mudancas.append(
+            f"  Android: minSdk {a['minSdk'] or '?'} → {b['minSdk'] or '?'} · "
+            f"targetSdk {a['targetSdk'] or '?'} → {b['targetSdk'] or '?'}"
+        )
+    if a["assinatura"] != b["assinatura"]:
+        mudancas.append(
+            f"  assinatura: {_assinatura_texto(a['assinatura'])} → {_assinatura_texto(b['assinatura'])}"
+        )
+    if comparacao["permissoesRemovidas"]:
+        mudancas.append("  permissões que saíram: " + ", ".join(comparacao["permissoesRemovidas"]))
+    if comparacao["permissoesNovas"]:
+        mudancas.append("  permissões que entraram: " + ", ".join(comparacao["permissoesNovas"]))
+    linhas += mudancas
+    linhas.append("")
+
+    resolvidos = comparacao["achadosResolvidos"]
+    novos = comparacao["achadosNovos"]
+    linhas.append(f"Achados: A tinha {len(a['achados'])} · B tem {len(b['achados'])}.")
+    if resolvidos:
+        linhas.append("  Saíram em B (bom sinal — confira se foi de propósito):")
+        for item in resolvidos:
+            linhas.append(f"    - {item['titulo']}")
+    if novos:
+        linhas.append("  Apareceram em B:")
+        for item in novos:
+            linhas.append(f"    - [{_SEVERIDADE[item['severidade']]}] {item['titulo']}")
+    if not resolvidos and not novos:
+        linhas.append("  Os mesmos achados nos dois pacotes.")
+    linhas.append("")
+
+    if b["achados"]:
+        linhas.append("O que ainda está em B (por ordem de gravidade):")
+        for item in b["achados"]:
+            linhas.append(f"  - [{_SEVERIDADE[item['severidade']]}] {item['titulo']}")
+        linhas.append("")
+
+    linhas.append(
+        "Isto compara os dois **pacotes**. Não mede quadros por segundo nem se o jogo ficou "
+        "mais divertido — isso só roda no aparelho."
+    )
+    linhas.append("(Comparação feita no seu PC, sem enviar os APKs para lugar nenhum.)")
+    return "\n".join(linhas)

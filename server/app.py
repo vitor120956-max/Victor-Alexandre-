@@ -807,14 +807,31 @@ def create_app(
         temporary_name = ""
         try:
             base = jogo_mod.raiz(skill_registry.files_root)
-            target = safe_path(base, filename)
-            if target.exists() and (not target.is_file() or target.is_symlink()):
-                raise ValueError("O destino existe, mas não é um arquivo comum.")
-            if target.exists() and not overwrite:
-                return JSONResponse(
-                    status_code=409,
-                    content={"ok": False, "error": {"code": "FILE_EXISTS", "message": "Esse APK já está na pasta. Marque a substituição para trocar."}},
-                )
+            # 0.91.41 — o APK não fica solto: entra na pasta do jogo dele
+            # (`jogos/<nome>/apk`), e a análise é gravada ali do lado.
+            parte = jogo_mod._slug(Path(filename).stem)
+            candidato = parte
+            contador = 1
+            while True:
+                destino_pasta = base / candidato
+                alvo = destino_pasta / filename
+                if alvo.is_file() and alvo.stat().st_size > 0 and not overwrite:
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "ok": False,
+                            "error": {
+                                "code": "FILE_EXISTS",
+                                "message": f"Esse APK já está em jogos/{candidato}/. Marque a substituição para trocar.",
+                            },
+                        },
+                    )
+                if not destino_pasta.exists() or alvo.is_file():
+                    break
+                candidato = f"{parte}-{contador}"
+                contador += 1
+            destino_pasta.mkdir(parents=True, exist_ok=True)
+            target = safe_path(destino_pasta, filename)
             total = 0
             with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".upload", delete=False) as temporary:
                 temporary_name = temporary.name
@@ -826,7 +843,18 @@ def create_app(
             if total == 0:
                 raise ValueError("O arquivo enviado está vazio.")
             Path(temporary_name).replace(target)
-            return {"ok": True, "result": {"nome": filename, "bytes": total}}
+            relatorio = jogo_mod.relatar(target, parte=candidato, pasta=str(destino_pasta))
+            jogo_mod._gravar_analise(destino_pasta, relatorio)
+            return {
+                "ok": True,
+                "result": {
+                    "nome": filename,
+                    "bytes": total,
+                    "parte": candidato,
+                    "pasta": str(destino_pasta),
+                    "relatorio": relatorio,
+                },
+            }
         except ValueError as exc:
             if str(exc) == "SIZE_LIMIT":
                 return JSONResponse(
@@ -846,7 +874,15 @@ def create_app(
     ) -> Any:
         try:
             caminho = jogo_mod.arquivo(skill_registry.files_root, arquivo)
-            relatorio = jogo_mod.relatar(caminho)
+            base = jogo_mod.raiz(skill_registry.files_root)
+            parte = caminho.parent.name if caminho.parent != base else ""
+            relatorio = jogo_mod.relatar(
+                caminho, parte=parte, pasta=str(caminho.parent) if parte else ""
+            )
+            if parte:
+                # Deixa a análise registrada ao lado do APK: pedir de novo pelo
+                # chat (ou comparar depois) não depende de refazer a leitura.
+                jogo_mod._gravar_analise(caminho.parent, relatorio)
         except jogo_mod.JogoError as exc:
             return JSONResponse(
                 status_code=400,

@@ -11,7 +11,7 @@ export type Intent =
   | { type: 'time' }
   | { type: 'date'; conferir?: string; amanha?: boolean; alvo?: string }
   | { type: 'calendario:feriados'; nome?: string; ano?: number; proximo?: boolean }
-  | { type: 'jogo:analisar'; arquivo?: string }
+  | { type: 'jogo:analisar'; arquivo?: string; todos?: boolean }
   | { type: 'jogo:iphone' }
   | { type: 'status' }
   | { type: 'clear' }
@@ -227,16 +227,27 @@ export function lerPedidoDeIphone(text: string): Intent | null {
 
 /** “analisar jogo meu.apk”, “melhorar meu jogo”, “analisa o apk do jogo”. */
 export function lerPedidoDeJogo(text: string, input: string): Intent | null {
-  if (!/\b(?:jogo|apk)\b/.test(text)) return null;
+  // 0.91.41 — “os dois jogos”: plural conta. Só “jogo” deixava “analisar os
+  // dois jogos” cair em `unknown` e ir para o modelo, que não vê APK nenhum.
+  const menciona = /\b(?:jogo|jogos|apk|apks)\b/.test(text);
+  const todos = /\b(?:os dois|as duas|ambos|todos|todas)\b/.test(text);
+  if (!menciona && !(todos && /^(?:analis|avali|confer|revis|inspecion)/.test(text))) return null;
   if (/^(?:pesquis|procur|busc|procure|busque|pesquise)/.test(text)) return null;
   const querAnalise =
     /\b(?:analis|avali|revis|melhor|otimiz|diagnostic|confer|inspecion)\w*\b/.test(text)
     || /\b(?:o que|como)\b.*\b(?:melhorar|deixar melhor|otimizar)\b/.test(text);
   if (!querAnalise) return null;
-  // O nome do arquivo pode estar na frase: “analisar jogo meu-jogo.apk”.
-  const achado = input.match(/([A-Za-z0-9._\- ]+\.(?:apk|aab|apks|xapk))\b/i);
-  const arquivo = achado?.[1]?.trim().split(/\s+/).pop() ?? '';
-  return { type: 'jogo:analisar', ...(arquivo ? { arquivo } : {}) };
+  // O nome pode vir com a pasta na frente — é assim que o chat identifica um
+  // APK quando há dois: “analisar jogo build-teste-1/build-teste-1.apk”.
+  const achado = input.match(/([A-Za-z0-9._\-/ ]+\.(?:apk|aab|apks|xapk))\b/i);
+  const bruto = achado?.[1]?.trim().split(/\s+/).pop() ?? '';
+  const arquivo = bruto.replace(/^\/+/, '');
+  return {
+    type: 'jogo:analisar',
+    ...(arquivo ? { arquivo } : {}),
+    // “os dois” só vale como “todos” quando nenhum arquivo foi nomeado.
+    ...(todos && !arquivo ? { todos: true } : {}),
+  };
 }
 
 const FERIADOS_POR_NOME: ReadonlyArray<readonly [RegExp, string]> = [
@@ -681,7 +692,8 @@ export const helpText = [
   '• Calendário — “que dia é hoje?”, “hoje é quinta?”, “quantos dias faltam para o fim de semana?” e “quais os próximos feriados?”. '
   + 'É conta de calendário feita no PC: feriados nacionais fixos e os móveis (Carnaval, Sexta-feira Santa, Corpus Christi) calculados pela Páscoa — sem modelo e sem internet.',
   '• Seu jogo (APK) — “analisar jogo meu.apk” ou “como melhorar meu jogo?”. Ele lê o manifesto, descobre o motor (Unity, Godot, Unreal…), '
-  + 'mede o que pesa e diz o ajuste certo em cada achado — arraste o APK no analisar-jogo.bat para enviar. Nada sai da sua máquina.',
+  + 'mede o que pesa e diz o ajuste certo em cada achado — arraste um ou dois APKs no analisar-jogo.bat. Nada sai da sua máquina.',
+  '• Dois APKs — “analisar os dois jogos”: cada pacote fica na pasta dele, com o APK, o analise.txt e o analise.json juntos.',
   '• Testar no iPhone — “quero testar no meu iphone”: o APK não roda no iOS (a Apple só deixa app assinado por ela). '
   + 'O caminho de graça é exportar o MESMO jogo em WebGL/HTML5 e arrastar a pasta no testar-no-iphone.bat — '
   + 'ele sobe o jogo no seu Wi-Fi e mostra o endereço para abrir no Safari.',

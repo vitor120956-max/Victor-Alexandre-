@@ -10,7 +10,7 @@ import { ApiError, ensinarAgente, esquecerAgente, executePythonSkill, getAIStatu
   requestJogosWeb,
   requestJogoAnalisar, requestAgenteLocal, requestAIChat, requestPesquisa, requestTempo } from '../lib/api';
 import { rotuloDoPedido, type Etapa } from '../lib/progresso';
-import type { AIStatus, PythonSkill, SkillExecution } from '../lib/api';
+import type { AIStatus, JogoLista, PythonSkill, SkillExecution } from '../lib/api';
 import { montarRespostaAgente, respostaVeioDeSkill } from '../lib/agenteResposta';
 import { formatPythonChatResult } from '../lib/skillResults';
 import { createId, downloadJSON, formatDuration, formatTime, normalizeText, todayISO } from '../lib/utils';
@@ -750,40 +750,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setProcessing('python');
       const arquivo = intent.arquivo?.trim() ?? '';
+      // 0.91.41 — cada APK mora na própria pasta. O chat diz qual é qual e
+      // analisa pela pasta, para dois APKs de teste não se confundirem.
+      const etiqueta = (item: { nome: string; parte?: string }) =>
+        item.parte ? `${item.parte}/${item.nome}` : item.nome;
       const analisar = (nome: string) =>
         requestJogoAnalisar(nome)
-          .then((relatorio) => appendJarvisMessage(relatorio.texto ?? `Analisei “${nome}”, mas o relatório veio sem texto.`, 'jogo'))
+          .then((relatorio) => {
+            appendJarvisMessage(relatorio.texto ?? `Analisei “${nome}”, mas o relatório veio sem texto.`, 'jogo');
+            return true;
+          })
           .catch((error: unknown) => {
             appendJarvisMessage(
               `Não consegui analisar “${nome}”: ${error instanceof Error ? error.message : 'falha desconhecida'}\n\n`
               + 'Se o arquivo não está na pasta de jogos, arraste o APK em cima do analisar-jogo.bat — ele copia para lá e já mostra o relatório.',
             );
+            return false;
           });
-      void (arquivo
-        ? analisar(arquivo)
-        : requestJogos()
-            .then((lista) => {
-              if (!lista.jogos.length) {
+      const listarPartes = (lista: JogoLista) =>
+        lista.partes.length
+          ? lista.partes.map((parte) => `• ${parte.nome}/ — ${parte.apks[0]}${parte.analisado ? ' (já analisado)' : ''}`).join('\n')
+          : lista.jogos.map((item) => `• ${etiqueta(item)}`).join('\n');
+      void (intent.todos && !arquivo
+        ? // “analisar os dois jogos”: um relatório por pasta, na ordem. Se um
+          // falhar, o outro ainda é analisado.
+          requestJogos()
+            .then(async (lista) => {
+              const alvos = lista.partes.length
+                ? lista.partes.map((parte) => `${parte.nome}/${parte.apks[0]}`)
+                : lista.jogos.map((item) => etiqueta(item));
+              if (!alvos.length) {
                 appendJarvisMessage(
                   `Ainda não tem nenhum APK na pasta de jogos (${lista.pasta}).\n\n`
-                  + 'Arraste o APK do seu jogo em cima do analisar-jogo.bat: ele copia o arquivo para cá e mostra o relatório na hora.\n\n'
-                  + 'Depois, volte aqui e diga “analisar jogo <nome>.apk”.',
+                  + 'Arraste os APKs em cima do analisar-jogo.bat — pode arrastar dois de uma vez.',
                 );
                 return;
               }
-              const nomes = lista.jogos.map((jogo) => `• ${jogo.nome}`).join('\n');
-              if (lista.jogos.length === 1) {
-                return analisar(lista.jogos[0].nome);
-              }
               appendJarvisMessage(
-                `Tenho ${lista.jogos.length} jogos aqui:\n${nomes}\n\nDiga “analisar jogo <nome>.apk” para eu analisar um deles.`,
+                `Vou analisar ${alvos.length} ${alvos.length === 1 ? 'pacote' : 'pacotes'}, um de cada vez `
+                + '(cada um tem a pasta dele):\n'
+                + alvos.map((nome, indice) => `${indice + 1}. ${nome}`).join('\n'),
               );
+              for (const nome of alvos) {
+                await analisar(nome);
+              }
             })
             .catch((error: unknown) => {
               appendJarvisMessage(
                 `Não consegui listar os jogos: ${error instanceof Error ? error.message : 'falha desconhecida'}`,
               );
-            }))
+            })
+        : arquivo
+          ? analisar(arquivo)
+          : requestJogos()
+              .then((lista) => {
+                if (!lista.jogos.length) {
+                  appendJarvisMessage(
+                    `Ainda não tem nenhum APK na pasta de jogos (${lista.pasta}).\n\n`
+                    + 'Arraste o APK do seu jogo em cima do analisar-jogo.bat: ele copia o arquivo para cá e mostra o relatório na hora.\n\n'
+                    + 'Depois, volte aqui e diga “analisar jogo <pasta>/<arquivo>.apk”.',
+                  );
+                  return;
+                }
+                if (lista.jogos.length === 1) {
+                  return analisar(etiqueta(lista.jogos[0]));
+                }
+                appendJarvisMessage(
+                  `Tenho ${lista.jogos.length} pacotes, cada um na pasta dele:\n${listarPartes(lista)}\n\n`
+                  + 'Diga “analisar jogo <pasta>/<arquivo>.apk” para um, ou “analisar os dois jogos” para todos.',
+                );
+              })
+              .catch((error: unknown) => {
+                appendJarvisMessage(
+                  `Não consegui listar os jogos: ${error instanceof Error ? error.message : 'falha desconhecida'}`,
+                );
+              }))
         .finally(() => setProcessing(null));
       return;
     }

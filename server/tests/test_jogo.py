@@ -433,7 +433,11 @@ def test_a_rota_envia_o_apk_com_confirmacao(cliente):
         data={"confirmed": "true"},
     )
     assert confirmado.status_code == 200, confirmado.text
-    assert (root / "jogos" / "envio.apk").is_file()
+    # 0.91.41 — o APK não fica solto: entra em jogos/<parte>/envio.apk
+    corpo = confirmado.json()["result"]
+    assert corpo["parte"] == "envio"
+    assert (root / "jogos" / "envio" / "envio.apk").is_file()
+    assert (root / "jogos" / "envio" / "analise.txt").is_file()
 
 
 def test_a_rota_recusa_extensao_errada(cliente):
@@ -466,3 +470,226 @@ def test_o_manifesto_do_teste_e_um_axml_de_verdade():
     assert tamanho == len(dados)
     # O pool é UTF-16: o nome do elemento aparece com um byte nulo entre letras.
     assert "uses-permission".encode("utf-16-le") in dados
+
+
+# ---------------------------------------------------------------------------
+# 0.91.41 — dois APKs, duas pastas: separar, analisar e guardar cada um no seu
+# ---------------------------------------------------------------------------
+#
+# Pedido do dono: *“faça e ele separar e analisar e guardar em pastas/partes
+# diferentes”*. As duas armadilhas que os testes prendem:
+#
+# 1. o `.bat` entregava só o primeiro APK (`%~1`) e o segundo sumia calado;
+# 2. os dois pacotes eram gravados lado a lado em `jogos/`, com as análises
+#    sem dono — impossível saber qual relatório era de qual build.
+
+def _projeto(tmp_path, nome="files"):
+    base = tmp_path / nome
+    (base / "jogos").mkdir(parents=True)
+    return base, base / "jogos"
+
+
+def _apk_de(nome: str, destino_dir: Path, *, pacote="com.exemplo.jogo", motor="unity") -> Path:
+    caminho = destino_dir / nome
+    return _apk(caminho, manifest=manifesto(pacote=pacote), motor=motor)
+
+
+def test_dois_apks_viram_duas_partes_e_nao_se_misturam(tmp_path):
+    files, jogos = _projeto(tmp_path)
+    fora = tmp_path / "entrada"
+    um = _apk_de("teste-1.apk", fora)
+    dois = _apk_de("teste-2.apk", fora, pacote="com.exemplo.jogo.beta", motor="godot")
+
+    primeiro = jogo.guardar(um, files)
+    segundo = jogo.guardar(dois, files)
+
+    assert primeiro["parte"] == "teste-1"
+    assert segundo["parte"] == "teste-2"
+    assert primeiro["pasta"] != segundo["pasta"]
+
+    # cada pasta tem o SEU apk e a SUA análise, e nada do outro
+    for guardado, nome in ((primeiro, "teste-1"), (segundo, "teste-2")):
+        pasta = Path(guardado["pasta"])
+        assert pasta.name == nome
+        assert (pasta / f"{nome}.apk").is_file()
+        assert (pasta / "analise.txt").is_file()
+        assert (pasta / "analise.json").is_file()
+        assert sorted(item.name for item in pasta.iterdir()) == [
+            "analise.json",
+            "analise.txt",
+            f"{nome}.apk",
+        ]
+
+    # e a análise de cada um fala do pacote certo
+    texto_um = (Path(primeiro["pasta"]) / "analise.txt").read_text(encoding="utf-8")
+    texto_dois = (Path(segundo["pasta"]) / "analise.txt").read_text(encoding="utf-8")
+    assert "teste-1.apk" in texto_um and "teste-2.apk" not in texto_um
+    assert "teste-2.apk" in texto_dois and "teste-1.apk" not in texto_dois
+    assert "Godot" in texto_dois
+
+
+def test_a_analise_gravada_ao_lado_do_apk_abre_como_json(tmp_path):
+    import json
+
+    files, _ = _projeto(tmp_path)
+    guardado = jogo.guardar(_apk_de("meu-jogo.apk", tmp_path / "entrada"), files)
+    dados = json.loads((Path(guardado["pasta"]) / "analise.json").read_text(encoding="utf-8"))
+    assert dados["pacote"] == "com.exemplo.jogo"
+    assert dados["motor"] == "Unity"
+    assert "achados" in dados
+    assert "texto" not in dados  # o texto é o .txt; o json é para a tela
+
+
+def test_o_mesmo_arquivo_de_novo_reaproveita_a_parte(tmp_path):
+    files, _ = _projeto(tmp_path)
+    origem = _apk_de("igual.apk", tmp_path / "entrada")
+    primeiro = jogo.guardar(origem, files)
+    segundo = jogo.guardar(origem, files)
+
+    assert primeiro["pasta"] == segundo["pasta"]
+    assert segundo["novo"] is False
+    # não criou “igual-1/” nem uma segunda cópia
+    assert [item.name for item in (files / "jogos").iterdir()] == ["igual"]
+
+
+def test_dois_arquivos_com_o_mesmo_nome_viram_partes_diferentes(tmp_path):
+    files, _ = _projeto(tmp_path)
+    a = _apk_de("jogo.apk", tmp_path / "build-a", pacote="com.a")
+    b = _apk_de("jogo.apk", tmp_path / "build-b", pacote="com.b")
+    b.write_bytes(b.read_bytes() + b"x")  # tamanho diferente: não é o mesmo arquivo
+
+    primeiro = jogo.guardar(a, files)
+    segundo = jogo.guardar(b, files)
+    assert primeiro["parte"] == "jogo"
+    assert segundo["parte"] == "jogo-1"
+    assert primeiro["pasta"] != segundo["pasta"]
+
+
+def test_o_nome_da_parte_nao_leva_espaco_acento_nem_ponto(tmp_path):
+    files, _ = _projeto(tmp_path)
+    curto = _apk_de("Meu Jogo Épico!.apk", tmp_path / "entrada")
+    guardado = jogo.guardar(curto, files)
+    assert guardado["parte"] == "meu-jogo-pico"
+    assert Path(guardado["pasta"]).name == "meu-jogo-pico"
+
+
+def test_arquivo_acha_pela_parte_e_pelo_caminho_dentro_dela(tmp_path):
+    files, _ = _projeto(tmp_path)
+    guardado = jogo.guardar(_apk_de("meu-jogo.apk", tmp_path / "entrada"), files)
+    parte = guardado["parte"]
+
+    pela_parte = jogo.arquivo(files, parte)
+    pelo_caminho = jogo.arquivo(files, f"{parte}/meu-jogo.apk")
+    pelo_nome_solto = jogo.arquivo(files, "meu-jogo.apk")
+    assert pela_parte == pelo_caminho == pelo_nome_solto
+    assert pela_parte.name == "meu-jogo.apk"
+
+
+def test_nome_igual_em_duas_partes_pede_qual_em_vez_de_escolher(tmp_path):
+    files, _ = _projeto(tmp_path)
+    a = _apk_de("jogo.apk", tmp_path / "build-a", pacote="com.a")
+    b = _apk_de("jogo.apk", tmp_path / "build-b", pacote="com.b")
+    b.write_bytes(b.read_bytes() + b"x")
+    jogo.guardar(a, files)
+    jogo.guardar(b, files)
+
+    with pytest.raises(jogo.JogoError) as erro:
+        jogo.arquivo(files, "jogo.apk")
+    assert "existe em 2 pastas" in str(erro.value)
+    assert "jogo/" in str(erro.value) and "jogo-1/" in str(erro.value)
+
+
+def test_pasta_com_dois_apks_pede_o_nome(tmp_path):
+    files, jogos = _projeto(tmp_path)
+    pasta = jogos / "misturada"
+    pasta.mkdir()
+    _apk_de("um.apk", pasta)
+    _apk_de("dois.apk", pasta)
+    with pytest.raises(jogo.JogoError) as erro:
+        jogo.arquivo(files, "misturada")
+    assert "tem 2 APKs" in str(erro.value)
+
+
+def test_listar_mostra_as_partes_e_quem_ja_tem_analise(tmp_path):
+    files, jogos = _projeto(tmp_path)
+    jogo.guardar(_apk_de("um.apk", tmp_path / "entrada"), files)
+    jogo.guardar(_apk_de("dois.apk", tmp_path / "entrada"), files)
+    # APK antigo, solto na raiz (formato da 0.91.38)
+    _apk_de("antigo.apk", jogos)
+
+    lista = jogo.listar(files)
+    assert lista["quantidade"] == 3
+    assert len(lista["partes"]) == 2
+    assert {item["nome"] for item in lista["partes"]} == {"um", "dois"}
+    assert all(item["analisado"] for item in lista["partes"])
+    antigo = [item for item in lista["jogos"] if item["nome"] == "antigo.apk"][0]
+    assert antigo["parte"] == ""
+    assert antigo["analisado"] is False
+
+
+def test_o_apk_solto_da_versao_anterior_continua_sendo_analisado(tmp_path):
+    files, jogos = _projeto(tmp_path)
+    solto = _apk_de("antigo.apk", jogos)
+    caminho = jogo.arquivo(files, "antigo.apk")
+    assert caminho == solto
+    relatorio = jogo.relatar(caminho)
+    assert relatorio["pacote"] == "com.exemplo.jogo"
+
+
+def test_o_texto_diz_em_qual_pasta_a_analise_ficou(tmp_path):
+    files, _ = _projeto(tmp_path)
+    guardado = jogo.guardar(_apk_de("meu-jogo.apk", tmp_path / "entrada"), files)
+    texto = guardado["relatorio"]["texto"]
+    assert "Guardado em jogos/meu-jogo/" in texto
+    assert "analise.txt" in texto and "analise.json" in texto
+
+
+def test_a_rota_de_upload_guarda_cada_apk_na_parte_dele(cliente):
+    base, root = cliente
+    dados_um = _apk(Path("/tmp") / "teste-1.apk", manifest=manifesto(pacote="com.um"))
+    dados_dois = _apk(Path("/tmp") / "teste-2.apk", manifest=manifesto(pacote="com.dois"))
+
+    resposta_um = base.post(
+        "/api/jogo/upload",
+        files={"upload": ("teste-1.apk", dados_um.read_bytes())},
+        data={"confirmed": "true"},
+    )
+    resposta_dois = base.post(
+        "/api/jogo/upload",
+        files={"upload": ("teste-2.apk", dados_dois.read_bytes())},
+        data={"confirmed": "true"},
+    )
+    assert resposta_um.status_code == 200, resposta_um.text
+    assert resposta_dois.status_code == 200, resposta_dois.text
+
+    assert (root / "jogos" / "teste-1" / "teste-1.apk").is_file()
+    assert (root / "jogos" / "teste-2" / "teste-2.apk").is_file()
+    assert (root / "jogos" / "teste-1" / "analise.txt").is_file()
+    assert (root / "jogos" / "teste-2" / "analise.txt").is_file()
+
+    lista = base.get("/api/jogo/arquivos").json()["result"]
+    assert {item["parte"] for item in lista["jogos"]} == {"teste-1", "teste-2"}
+    assert len(lista["partes"]) == 2
+
+
+def test_a_lista_do_console_nao_troca_o_ponto_do_nome_por_virgula(monkeypatch, capsys, tmp_path):
+    """Defeito visto rodando de verdade: o `--lista` imprimia
+    “build-teste-1,apk”, porque a vírgula de decimal era aplicada à linha toda."""
+    import importlib.util as importlib_util
+
+    raiz = Path(__file__).resolve().parents[2]
+    spec = importlib_util.spec_from_file_location("analisar_jogo_cli", raiz / "analisar-jogo.py")
+    cli = importlib_util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(cli)
+
+    files, _ = _projeto(tmp_path)
+    jogo.guardar(_apk_de("build-teste-1.apk", tmp_path / "entrada"), files)
+    monkeypatch.setattr(cli, "_pasta_de_jogos", lambda: files / "jogos")
+
+    assert cli.main(["--lista"]) == 0
+    saida = capsys.readouterr().out
+    assert "build-teste-1.apk" in saida
+    assert "build-teste-1,apk" not in saida
+    assert "build-teste-1/" in saida
+    assert "analisado" in saida
