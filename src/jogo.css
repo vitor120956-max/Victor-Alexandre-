@@ -1,0 +1,94 @@
+/* Meu jogo: arrastar o APK e ler a análise do pacote (0.91.42). */
+.jogo-page { display: flex; flex-direction: column; gap: 18px; }
+.jogo-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.jogo-header h1 { margin: 6px 0 8px; font-size: 26px; font-weight: 620; letter-spacing: -.02em; }
+.jogo-header h1 span { color: var(--accent); }
+.jogo-header p { max-width: 70ch; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.jogo-header p strong { color: var(--text-soft); font-weight: 560; }
+.jogo-header .button { flex: 0 0 auto; }
+
+/* A zona de arrastar: o pedaço que responde “onde eu jogo o APK”. */
+.jogo-drop {
+  display: flex; align-items: center; gap: 16px; padding: 22px 20px;
+  border: 1px dashed rgba(var(--accent-rgb), .42); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), .05), rgba(var(--accent-rgb), .015));
+  color: var(--accent); transition: border-color 160ms, background 160ms, transform 160ms;
+}
+.jogo-drop.is-over { border-color: var(--accent); background: rgba(var(--accent-rgb), .11); transform: translateY(-1px); }
+.jogo-drop > div { display: flex; flex-direction: column; gap: 5px; }
+.jogo-drop strong { color: var(--text); font-size: 12px; font-weight: 580; }
+.jogo-drop span { color: var(--muted); font-size: 9px; line-height: 1.6; }
+.jogo-drop button { padding: 0; border: 0; background: none; color: var(--accent); font-size: inherit; text-decoration: underline; cursor: pointer; }
+.jogo-drop input { display: none; }
+
+.jogo-status { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-family: var(--mono); font-size: 8px; }
+.jogo-status.is-ok { color: var(--accent); }
+.jogo-status.is-error { color: var(--danger, #ef7a7a); }
+.jogo-spin { animation: jogo-girar .9s linear infinite; }
+@keyframes jogo-girar { to { transform: rotate(360deg); } }
+
+.jogo-layout { display: grid; grid-template-columns: minmax(240px, .78fr) minmax(0, 1.22fr); align-items: start; gap: 18px; }
+.jogo-lista { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.jogo-lista h2 { margin: 0 0 3px; font-family: var(--mono); font-size: 7.5px; font-weight: 560; letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft); }
+.jogo-hint { margin: 0 0 8px; overflow-wrap: anywhere; color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; }
+.jogo-vazio { margin: 8px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 9px; line-height: 1.65; }
+.jogo-vazio code { color: var(--accent); font-family: var(--mono); font-size: 8px; }
+
+.jogo-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 11px;
+  border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .012);
+  color: var(--muted); text-align: left; cursor: pointer; transition: background 140ms, border-color 140ms;
+}
+.jogo-item:hover { background: rgba(var(--accent-rgb), .04); }
+.jogo-item.is-selected { border-color: rgba(var(--accent-rgb), .38); background: rgba(var(--accent-rgb), .07); }
+.jogo-item svg { flex: 0 0 auto; color: var(--accent); }
+.jogo-item > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.jogo-item strong { overflow: hidden; color: var(--text-soft); font-size: 9px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
+.jogo-item small { overflow: hidden; color: var(--muted-2); font-family: var(--mono); font-size: 6.4px; text-overflow: ellipsis; white-space: nowrap; }
+.jogo-item em { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-family: var(--mono); font-size: 5.8px; font-style: normal; text-transform: uppercase; }
+.jogo-item em.is-ok { border-color: rgba(var(--accent-rgb), .4); color: var(--accent); }
+
+.jogo-analise { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.jogo-analise-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.jogo-analise-topo h2 { margin: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 600; }
+.jogo-analise-topo p { margin: 5px 0 0; color: var(--muted); font-size: 8.5px; line-height: 1.5; }
+.jogo-parte { flex: 0 0 auto; padding: 4px 7px; border: 1px solid rgba(var(--accent-rgb), .35); border-radius: 5px; color: var(--accent); font-family: var(--mono); font-size: 6.4px; }
+
+.jogo-metricas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.jogo-metricas article { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .012); }
+.jogo-metricas span { display: block; color: var(--muted-2); font-family: var(--mono); font-size: 5.8px; letter-spacing: .07em; text-transform: uppercase; }
+.jogo-metricas strong { display: block; overflow: hidden; margin-top: 5px; color: var(--text-soft); font-size: 11px; font-weight: 570; text-overflow: ellipsis; white-space: nowrap; }
+.jogo-metricas small { display: block; margin-top: 3px; color: var(--muted-2); font-size: 6.4px; }
+
+.jogo-abis { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: 0; color: var(--muted); font-family: var(--mono); font-size: 7px; }
+.jogo-abis svg { color: var(--accent); }
+
+.jogo-titulo-achados { margin: 6px 0 0; color: var(--text-soft); font-family: var(--mono); font-size: 7.5px; font-weight: 560; letter-spacing: .08em; text-transform: uppercase; }
+
+.jogo-achado { display: flex; flex-direction: column; gap: 6px; padding: 12px 13px; border: 1px solid var(--line); border-left-width: 2px; border-radius: 8px; background: rgba(255, 255, 255, .012); }
+.jogo-achado.is-critico { border-left-color: #e8736c; }
+.jogo-achado.is-atencao { border-left-color: #e6bb70; }
+.jogo-achado.is-info { border-left-color: rgba(var(--accent-rgb), .6); }
+.jogo-achado header { display: flex; align-items: center; gap: 7px; }
+.jogo-achado header svg { flex: 0 0 auto; }
+.jogo-achado.is-critico header svg, .jogo-achado.is-critico em { color: #e8736c; }
+.jogo-achado.is-atencao header svg, .jogo-achado.is-atencao em { color: #e6bb70; }
+.jogo-achado.is-info header svg, .jogo-achado.is-info em { color: var(--accent); }
+.jogo-achado header em { font-family: var(--mono); font-size: 5.9px; font-style: normal; letter-spacing: .08em; }
+.jogo-achado header strong { color: var(--text); font-size: 10px; font-weight: 570; }
+.jogo-achado p { margin: 0; color: var(--muted); font-size: 8.6px; line-height: 1.65; }
+.jogo-achado p b { color: var(--text-soft); font-weight: 560; }
+.jogo-achado .jogo-onde { color: var(--muted-2); }
+
+.jogo-maiores { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.jogo-maiores li { display: flex; align-items: baseline; gap: 10px; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.jogo-maiores span { flex: 0 0 64px; color: var(--accent); font-family: var(--mono); font-size: 6.8px; text-align: right; }
+.jogo-maiores code { overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 6.8px; text-overflow: ellipsis; white-space: nowrap; }
+
+.jogo-rodape { margin: 6px 0 0; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted-2); font-size: 7.6px; line-height: 1.6; }
+
+@media (max-width: 980px) {
+  .jogo-layout { grid-template-columns: minmax(0, 1fr); }
+  .jogo-metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jogo-header { flex-direction: column; }
+}

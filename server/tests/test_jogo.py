@@ -693,3 +693,64 @@ def test_a_lista_do_console_nao_troca_o_ponto_do_nome_por_virgula(monkeypatch, c
     assert "build-teste-1,apk" not in saida
     assert "build-teste-1/" in saida
     assert "analisado" in saida
+
+
+def test_o_relatorio_tem_o_formato_que_a_tela_consome(tmp_path):
+    """Contrato da aba “Meu jogo” (0.91.42).
+
+    O `tsc` pegou três campos que o tipo do front dizia errado: `maiores`
+    vinha com `mb` (não `bytes`), `areas` era objeto nome→bytes (não lista) e
+    `permissoes` era lista de strings (não de objetos). O teste prende o
+    formato, para o front não quebrar calado numa mudança do servidor.
+    """
+    arquivo = _apk_de("tela.apk", tmp_path / "entrada")
+    relatorio = jogo.relatar(arquivo)
+
+    assert isinstance(relatorio["permissoes"], list)
+    assert all(isinstance(item, str) for item in relatorio["permissoes"])
+
+    assert isinstance(relatorio["areas"], dict)
+    assert all(isinstance(item, int) for item in relatorio["areas"].values())
+
+    assert relatorio["maiores"], "o relatório precisa dos maiores arquivos"
+    for item in relatorio["maiores"]:
+        assert set(item) == {"nome", "mb"}, item
+        assert isinstance(item["mb"], (int, float))
+
+    assert set(relatorio["assinatura"]) == {"v1", "v2v3", "manifestoMf"}
+    for achado in relatorio["achados"]:
+        assert set(achado) >= {"severidade", "titulo", "o_que_e", "por_que_importa", "como_melhorar", "onde"}
+        assert achado["severidade"] in {"critico", "atencao", "info"}
+
+
+def test_o_upload_de_apk_nao_e_cortado_pelo_limite_de_corpo(cliente):
+    """Defeito real da 0.91.41, achado ao subir a aba “Meu jogo”.
+
+    A rota dizia aceitar 600 MB, mas o middleware de corpo só liberava
+    `MAX_UPLOAD_BODY_BYTES` (~26 MB) para `/api/files` e `/api/reverse` — e
+    `MAX_BODY_BYTES` (2 MB) para todo o resto, incluindo `/api/jogo/upload`.
+    Na prática, **qualquer APK de verdade** voltava `413` antes de chegar na
+    rota: o `.bat` funcionava (não passa por HTTP) e a tela não.
+    """
+    base, root = cliente
+    # 3 MB passa do limite global de 2 MB e é bem menor que um APK real
+    grande = _apk(Path("/tmp") / "grande.apk", manifest=manifesto())
+    with zipfile.ZipFile(grande, "a") as pacote:
+        pacote.writestr("assets/peso.bin", b"\0" * (3 * 1024 * 1024))
+    assert grande.stat().st_size > 2_000_000
+
+    resposta = base.post(
+        "/api/jogo/upload",
+        files={"upload": ("grande.apk", grande.read_bytes())},
+        data={"confirmed": "true"},
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["result"]["parte"] == "grande"
+    assert (root / "jogos" / "grande" / "grande.apk").is_file()
+
+
+def test_o_limite_da_rota_de_jogo_e_o_do_jogo_e_nao_o_documento(cliente):
+    """O teto do APK é 600 MB; o de documento, outro. O middleware tem de usar o
+    do jogo — e continuar recusando o que passa dele."""
+    assert jogo.MAXIMO_BYTES > 25_000_000
+    assert jogo.MAXIMO_BYTES == 600_000_000

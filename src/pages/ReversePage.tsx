@@ -7,6 +7,7 @@ import {
   Download,
   FileSearch,
   Fingerprint,
+  Gamepad2,
   GitCompare,
   ListTree,
   LoaderCircle,
@@ -572,6 +573,16 @@ export function ReversePage() {
         <div><span className="eyebrow">ANÁLISE ESTÁTICA DE ARTEFATOS</span><h1>Engenharia reversa<span>.</span></h1><p>Entenda binários, pacotes e aplicações sem executar o alvo.</p></div>
         <span className="local-badge"><ShieldCheck size={12} /> NENHUM ARTEFATO É EXECUTADO</span>
       </header>
+
+      <div className="reverse-aviso-jogo">
+        <Gamepad2 size={14} />
+        <p>
+          <strong>É o APK do seu jogo?</strong> Use a aba{' '}
+          <Link to="/jogo">Meu jogo</Link>: ela lê o manifesto, o motor, as ABIs e o tamanho,
+          guarda cada pacote na própria pasta e diz o que melhorar. Aqui a Reversa é para
+          qualquer artefato (até 25 MB); lá o limite é 600 MB.
+        </p>
+      </div>
 
       {!backendOnline ? (
         <div className="legal-offline panel"><span><Binary size={25} /></span><div><h2>Análise reversa indisponível offline</h2><p>Inicie a API Python com <code>.venv\Scripts\python iniciar.py</code>. Nenhum artefato será simulado, executado ou enviado à IA.</p></div></div>

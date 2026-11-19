@@ -15,6 +15,7 @@ const pageNames: Record<string, string> = {
   '/engenharia': 'Engenharia',
   '/planejamento': 'Planos',
   '/reversa': 'Reversa',
+  '/jogo': 'Meu jogo',
   '/lean': 'Enxuto',
   '/agencia': 'Agentes',
   '/estudio': 'Estúdio',

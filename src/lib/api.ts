@@ -748,6 +748,8 @@ export type JogoAchado = {
 
 export type JogoRelatorio = {
   arquivo: string;
+  parte?: string;
+  pasta?: string;
   bytes: number;
   pacote: string;
   versao: string;
@@ -758,12 +760,15 @@ export type JogoRelatorio = {
   versaoDoMotor: string;
   abis: string[];
   dexes: number;
-  permissoes: Array<{ nome: string; rotulo?: string; perigosa?: boolean }>;
+  /** Nomes crus do manifesto (ex.: `android.permission.CAMERA`). */
+  permissoes: string[];
   assinatura: { v1: boolean; v2v3: boolean; manifestoMf: boolean };
   entradas: number;
   tamanhoDescompactado: number;
-  areas: Array<{ nome: string; bytes: number }>;
-  maiores: Array<{ nome: string; bytes: number }>;
+  /** Nome da área → bytes. Ex.: `{ lib: 3145728, assets: 4194304 }`. */
+  areas: Record<string, number>;
+  /** Os dez maiores arquivos, já com MB calculado pelo servidor. */
+  maiores: Array<{ nome: string; mb: number }>;
   achados: JogoAchado[];
   texto?: string;
 };
@@ -792,6 +797,24 @@ export type JogoLista = {
 export async function requestJogos(): Promise<JogoLista> {
   const resposta = await apiFetch<{ ok: boolean; result: JogoLista }>('/api/jogo/arquivos');
   if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não listou os jogos.', 200, 'JOGO_LISTA');
+  return resposta.result;
+}
+
+/**
+ * Manda o APK direto da tela para a pasta dele (0.91.42).
+ *
+ * `confirmed` vai sempre `true` porque quem escolheu o arquivo foi o dono, na
+ * própria tela — não há passo intermediário para confirmar.
+ */
+export async function uploadJogo(file: File): Promise<{ nome: string; parte: string; pasta: string }> {
+  const body = new FormData();
+  body.append('upload', file, file.name);
+  body.append('confirmed', 'true');
+  const resposta = await apiFetch<{ ok: boolean; result: { nome: string; parte: string; pasta: string } }>(
+    '/api/jogo/upload',
+    { method: 'POST', body },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não guardou o APK.', 200, 'JOGO_UPLOAD');
   return resposta.result;
 }
 

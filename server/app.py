@@ -405,7 +405,15 @@ def create_app(
                 )
         if request.url.path.startswith("/api/"):
             content_length = request.headers.get("content-length")
-            body_limit = MAX_UPLOAD_BODY_BYTES if request.url.path in {"/api/files/upload", "/api/reverse/upload"} else MAX_BODY_BYTES
+            # 0.91.42 — o APK do jogo tem teto próprio (600 MB). Sem esta linha,
+            # a rota aceitava 600 MB e o middleware cortava em 2 MB: todo upload
+            # de verdade voltava 413, e a aba “Meu jogo” não funcionava.
+            if request.url.path == "/api/jogo/upload":
+                body_limit = jogo_mod.MAXIMO_BYTES + 1_000_000
+            elif request.url.path in {"/api/files/upload", "/api/reverse/upload"}:
+                body_limit = MAX_UPLOAD_BODY_BYTES
+            else:
+                body_limit = MAX_BODY_BYTES
             try:
                 too_large = bool(content_length and int(content_length) > body_limit)
             except ValueError:

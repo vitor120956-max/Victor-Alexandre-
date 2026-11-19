@@ -174,6 +174,39 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.42 — “em qual aba ta? e onde eu jogo o apk”
+
+> e eu perguntei pq o unico lugar do jarvis q achei para jogar e analisar o
+> arquivo foi na aba reversa
+
+Ele estava certo, e a resposta era incômoda: **não havia aba**. O upload de
+APK existia em dois lugares e nenhum era o jogo:
+
+- a **Reversa** aceitava `.apk` como artefato genérico — 25 MB de teto, sem
+  manifesto, sem motor, sem “o que melhorar”;
+- o `analisar-jogo.bat` fazia a análise certa, **fora da tela**.
+
+Quem procura “onde eu jogo o apk” abre o menu, vê “Reversa” (que aceita
+`.apk`) e para ali. O caminho existia, mas não tinha endereço.
+
+| antes | agora |
+|---|---|
+| só Reversa, 25 MB, sem análise de jogo | aba **Meu jogo**, 600 MB, com a análise inteira |
+| arrastar o APK no `.bat` (fora da tela) | arrastar o APK **na aba**, que envia para `jogos/<parte>/` e já analisa |
+| relatório só no console | cartões de métrica + achados com severidade, na tela |
+| dois APKs soltos na mesma pasta | cada um na pasta dele, com `analise.txt` e `analise.json` ao lado |
+
+Três decisões que valem registro:
+
+1. **A aba fica ao lado da Reversa, no menu.** É o vizinho que o dono já
+   conhecia; esconder em “Configurações” ou só no chat repetiria o erro.
+2. **A Reversa aponta para lá.** Quem chegar primeiro na Reversa (como ele
+   chegou) lê, no topo, que o APK do jogo tem aba própria — e o porquê: 600 MB
+   contra 25 MB, e a análise de pacote que a Reversa não faz.
+3. **O contrato do relatório virou teste.** O `tsc` reprovou três campos que o
+   front declarava errados (`maiores.mb`, `areas` como objeto, `permissoes` como
+   string). O teste prende o formato para os dois lados não se afastarem.
+
 ### 0.91.41 — dois APKs: separar, analisar e guardar cada um na sua pasta
 
 > ta vou testar com dois apks meus

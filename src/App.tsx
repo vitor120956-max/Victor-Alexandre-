@@ -10,6 +10,7 @@ import { DocumentsPage } from './pages/DocumentsPage';
 import { EngineeringPage } from './pages/EngineeringPage';
 import { PlanningPage } from './pages/PlanningPage';
 import { ReversePage } from './pages/ReversePage';
+import { JogoPage } from './pages/JogoPage';
 import { LeanPage } from './pages/LeanPage';
 import { AgencyPage } from './pages/AgencyPage';
 import { EstudioPage } from './pages/EstudioPage';
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="engenharia" element={<EngineeringPage />} />
         <Route path="planejamento" element={<PlanningPage />} />
         <Route path="reversa" element={<ReversePage />} />
+        <Route path="jogo" element={<JogoPage />} />
         <Route path="lean" element={<LeanPage />} />
         <Route path="agencia" element={<AgencyPage />} />
         <Route path="estudio" element={<EstudioPage />} />
