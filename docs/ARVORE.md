@@ -174,6 +174,29 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.46 — “e o que mais o JARVIS não faz?”
+
+> e oq mais o jarvis atualmente ele nao faz?
+
+Pergunta de inventário, não de recurso. A resposta fácil seria listar os
+módulos “estáticos” do README — mas essa lista mistura três coisas que não se
+misturam: o que **não tem como**, o que **não faz de propósito** e o que **não
+faz por falta**. Quem lê “o navegador não abre aba” e “não roda no iPhone” na
+mesma lista conclui que o projeto é menor do que é; quem lê “não faz OCR” (como
+o README dizia) conclui que é maior do que é.
+
+A lista foi para `docs/NAO-FAZ.md`, em três seções, com o caminho que existe em
+cada caso. E — o ponto desta versão — **virou teste**: `test_nao_faz.py`
+confere as lacunas (a rota de comparação de APKs continua ausente, `jogo.*` não
+existe como skill, `celular.instalar` não existe), confere as decisões (IA sem
+visão, sem streaming, host `127.0.0.1`) e confere o “já faz” (OCR de PDF, voz do
+navegador, OBB, teto de 2 GB). Fechar uma lacuna quebra o teste de propósito.
+
+O defeito que apareceu no caminho: o README dizia **“PDF não tem OCR”** e o
+`server/ocr.py` existe, é usado por `biblioteca.py` e lê PDF escaneado com
+Tesseract + `pypdfium2`. A frase estava errada desde que o OCR entrou, e
+sobreviveu porque nada a cobrava. Agora o teste reprova se ela voltar.
+
 ### 0.91.45 — “pq o obb não é analisado? pode fazer o javis analisar pfv”
 
 > pq o obb mao e analisado? pode fazer o javis analisar pfv

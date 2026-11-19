@@ -977,10 +977,12 @@ docs/                    # arquitetura, legislação, IA e inventário legado
 
 ## Limites desta etapa
 
+A lista completa — o que é **limite duro**, o que é **decisão** (lê e planeja, não executa) e o que é **lacuna com custo** — está em [`docs/NAO-FAZ.md`](docs/NAO-FAZ.md), e é conferida por teste.
+
 - A IA externa só funciona depois da configuração do provedor no `.env`.
 - O acervo jurídico é um recorte, não uma base completa nem um serviço de atualização automática.
 - A busca jurídica é lexical e não interpreta casos concretos; texto e vigência precisam ser conferidos na fonte oficial.
-- Documentos são limitados a 25 MB; PDF não tem OCR e análise de reunião não transcreve áudio nem faz diagnóstico.
+- Documentos são limitados a 25 MB. **PDF escaneado e foto de página têm OCR** (Tesseract, quando instalado; sem ele o JARVIS diz o que instalar em vez de falhar calado) — a frase antiga desta lista dizia o contrário. Análise de reunião não transcreve áudio nem faz diagnóstico: recebe o texto pronto.
 - Changelog usa somente mensagens fornecidas, não o histórico do Git; o sorteio não possui auditoria pública externa.
 - Revisão de código é heurística; Web Vitals e gates usam valores declarados, sem coleta, teste ou deploy automático.
 - Submissão é lexical: o front matter é lido por um parser de subconjunto, o risco não pega frase reescrita e a licença é conferida por identificador SPDX, não pelo texto do arquivo `LICENSE`. Nada é publicado — o rótulo do GitHub continua com a revisão humana.
