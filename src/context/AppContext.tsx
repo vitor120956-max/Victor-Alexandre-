@@ -699,8 +699,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         '',
         'Se o iPhone não abrir: marque “Redes particulares” no aviso do firewall do Windows, e evite Wi-Fi de visitante.',
         '',
+        'Para ficar como APP no iPhone (ícone na tela de início, sem App Store e sem custo):',
+        '  1. abra o endereço no Safari;',
+        '  2. toque em Compartilhar (o quadrado com a seta para cima);',
+        '  3. escolha “Adicionar à Tela de Início”.',
+        '  Vira um ícone com o jogo, e abre em tela cheia — sem a barra do Safari.',
+        '',
         'O que você NÃO precisa: Mac, Xcode, conta Apple Developer (US$ 99/ano) ou publicar na App Store.',
-        'O que não dá para fazer sem isso: instalar o APK no iPhone ou assinar um app iOS nativo.',
+        'O que não dá sem isso: instalar o APK no iPhone, ou ter um .ipa de verdade',
+        '(o iOS só executa app assinado pela Apple — nem o Windows nem eu assinamos por você).',
       ].join('\n');
       if (!backendOnline) {
         appendJarvisMessage(`${primeiro}\n\n(A lista de exports precisa da API Python no ar — suba com iniciar-jarvis.bat.)`);

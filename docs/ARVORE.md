@@ -174,6 +174,35 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.40 — “não dá para baixar no iPhone?”
+
+> entao so da para rodar via web?? nao da para baixar no iphone?
+
+A pergunta tem duas respostas, e misturá-las é o que faz o dono perder tempo:
+
+| o que ele quis dizer | resposta |
+|---|---|
+| ícone na tela de início, abre em tela cheia | **sim, de graça** — e é o que esta versão faz |
+| app `.ipa` instalado | só com conta Apple Developer (US$ 99/ano) + Mac |
+| APK instalado | não existe no iOS |
+
+A 0.91.39 servia o export, mas o Safari mostrava a barra de endereço e um
+favicon qualquer. Agora a página servida sai com `apple-touch-icon`,
+`apple-mobile-web-app-capable` e `manifest`, e o ícone (180 e 512) é
+**desenhado no próprio servidor** — sem Pillow, sem arquivo extra no export.
+
+Três decisões que valem registro:
+
+1. **O arquivo do export não é tocado.** As tags entram na resposta HTTP; o
+   `index.html` no disco continua igual ao que o motor gerou. Teste compara os
+   bytes antes e depois.
+2. **A injeção é idempotente.** A marca `data-jarvis-pwa` impede que uma
+   página já preparada ganhe as tags duas vezes (e o `count` está no teste).
+3. **O ícone foi olhado, não só testado.** O primeiro PNG saiu com três linhas
+   atravessando o fundo: a distância era à **reta** da aresta, e o
+   prolongamento dela pintava o ícone inteiro. Virou teste de regressão que
+   conta pixels fora da marca.
+
 ### 0.91.39 — “testar no meu iPhone”: o APK não roda lá
 
 > ta bom e dps q esse apk estiver bom eu quero testar no meu iphone

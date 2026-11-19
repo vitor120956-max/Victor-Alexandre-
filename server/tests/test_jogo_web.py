@@ -20,8 +20,11 @@ O que estes testes cobrem, e por quê:
 from __future__ import annotations
 
 import http.client
+import json
+import struct
 import threading
 import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -393,3 +396,166 @@ def test_as_instrucoes_mostram_o_segundo_endereco_quando_existe(monkeypatch):
     assert "http://192.168.0.10:8099/" in texto
     assert "http://10.0.0.7:8099/" in texto
     assert "ipconfig" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.91.40 — “não dá para baixar no iPhone?”: o jogo vira ícone na tela inicial
+# ---------------------------------------------------------------------------
+
+def _png_tamanho(dados: bytes) -> tuple[int, int]:
+    assert dados[:8] == b"\x89PNG\r\n\x1a\n", "não é um PNG"
+    largura, altura = struct.unpack(">II", dados[16:24])
+    return largura, altura
+
+
+def test_o_icone_e_um_png_de_verdade_no_tamanho_que_o_ios_pede():
+    for tamanho in (180, 512):
+        png = jogo_web.icone_png(tamanho)
+        assert _png_tamanho(png) == (tamanho, tamanho)
+    # e o triângulo está lá: o centro da imagem tem a cor de marca
+    png = jogo_web.icone_png(180)
+    cru = zlib.decompress(_idat(png))
+    largura = 180
+    # filtro (1 byte) + 90 linhas + 90 pixels na linha 90
+    centro = 90 * (1 + largura * 3) + 1 + 90 * 3
+    pixel = tuple(cru[centro : centro + 3])
+    assert pixel == tuple(jogo_web._COR_MARCA), pixel
+
+
+def _idat(png: bytes) -> bytes:
+    """Junta os blocos IDAT do PNG — só para o teste conferir pixels."""
+    pos = 8
+    partes = []
+    while pos < len(png):
+        tamanho = struct.unpack(">I", png[pos : pos + 4])[0]
+        tipo = png[pos + 4 : pos + 8]
+        dados = png[pos + 8 : pos + 8 + tamanho]
+        if tipo == b"IDAT":
+            partes.append(dados)
+        pos += 12 + tamanho
+    return b"".join(partes)
+
+
+def test_o_icone_e_cacheado_e_nao_muda_entre_pedidos():
+    assert jogo_web.icone_png(180) is jogo_web.icone_png(180)
+
+
+def test_o_manifest_leva_o_nome_do_jogo_e_modo_standalone():
+    dados = jogo_web.manifest("Meu-Jogo")
+    assert dados["name"] == "Meu-Jogo"
+    assert dados["display"] == "standalone"
+    assert dados["start_url"] == "/"
+    assert {icone["sizes"] for icone in dados["icons"]} == {"180x180", "512x512"}
+
+
+def test_a_pagina_servida_ganha_as_tags_do_icone_e_o_arquivo_do_disco_nao_muda(tmp_path):
+    base = _export(tmp_path / "export")
+    original = (base / "index.html").read_bytes()
+    srv = jogo_web.subir(base, porta=0, host="127.0.0.1")
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        resposta, corpo = _pedir(srv.server_address[1], "/")
+        pagina = corpo.decode("utf-8")
+        assert resposta.status == 200
+        assert 'rel="apple-touch-icon"' in pagina
+        assert "/jarvis-icone-180.png" in pagina
+        assert 'name="apple-mobile-web-app-capable"' in pagina
+        assert 'rel="manifest"' in pagina
+        assert 'apple-mobile-web-app-title" content="export"' in pagina
+        assert pagina.count('rel="apple-touch-icon"') == 1
+
+        # o arquivo no disco continua como o motor gerou
+        assert (base / "index.html").read_bytes() == original
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5)
+
+
+def test_as_tags_nao_entram_duas_vezes_em_pagina_ja_preparada():
+    pagina = b"<html><head></head><body>x</body></html>"
+    uma = jogo_web._injetar_pwa(pagina, "jogo")
+    duas = jogo_web._injetar_pwa(uma, "jogo")
+    assert uma == duas
+    assert uma.count(b"apple-touch-icon") == 1
+
+
+def test_pagina_sem_head_recebe_as_tags_no_comeco():
+    injetada = jogo_web._injetar_pwa(b"<body>jogo</body>", "jogo")
+    assert injetada.index(b"apple-touch-icon") < injetada.index(b"<body>")
+
+
+def test_o_servidor_entrega_o_icone_e_o_manifest(servidor):
+    _, porta, _ = servidor
+    resposta, corpo = _pedir(porta, "/jarvis-icone-180.png")
+    assert resposta.status == 200
+    assert resposta.getheader("Content-Type") == "image/png"
+    assert _png_tamanho(corpo) == (180, 180)
+
+    resposta, corpo = _pedir(porta, "/jarvis-icone-512.png")
+    assert _png_tamanho(corpo) == (512, 512)
+
+    resposta, corpo = _pedir(porta, "/manifest.webmanifest")
+    assert resposta.status == 200
+    assert "manifest" in resposta.getheader("Content-Type")
+    dados = json.loads(corpo)
+    assert dados["display"] == "standalone"
+    assert dados["short_name"]
+
+
+def test_com_pwa_desligado_nada_disso_existe(tmp_path):
+    base = _export(tmp_path / "export")
+    srv = jogo_web.subir(base, porta=0, host="127.0.0.1", pwa=False)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        porta = srv.server_address[1]
+        for caminho in ("/jarvis-icone-180.png", "/manifest.webmanifest"):
+            resposta, _ = _pedir(porta, caminho)
+            assert resposta.status == 404
+        resposta, corpo = _pedir(porta, "/")
+        assert b"apple-touch-icon" not in corpo
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5)
+
+
+def test_o_icone_nao_e_servido_fora_da_pasta_nem_com_a_api(servidor):
+    _, porta, _ = servidor
+    # o manifesto é virtual, mas o resto da API continua sem existir
+    resposta, _ = _pedir(porta, "/api/health")
+    assert resposta.status == 404
+    resposta, _ = _pedir(porta, "/jarvis-icone-180.png/../../.env")
+    assert resposta.status == 404
+
+
+def test_as_instrucoes_ensinam_a_tela_de_inicio(monkeypatch):
+    monkeypatch.setattr(jogo_web, "endereco_local", lambda: "192.168.0.10")
+    texto = jogo_web.instrucoes("Meu-Jogo", porta=8099)
+    assert "Adicionar à Tela de Início" in texto
+    assert "Compartilhar" in texto
+    assert "sem a barra do Safari" in texto
+
+
+def test_o_icone_nao_tem_linhas_atravessando_o_fundo():
+    """Regressão: a primeira versão usava distância à RETA da aresta e o PNG
+    saiu com três linhas cruzando o ícone inteiro (visto ao abrir o arquivo)."""
+    png = jogo_web.icone_png(180)
+    cru = zlib.decompress(_idat(png))
+    largura = altura = 180
+    marca = bytes(jogo_web._COR_MARCA)
+    misturados = 0
+    for y in range(altura):
+        linha = cru[y * (1 + largura * 3) + 1 : (y + 1) * (1 + largura * 3)]
+        for x in range(largura):
+            pixel = linha[x * 3 : x * 3 + 3]
+            if pixel == marca:
+                continue
+            # fundo puro: o gradiente não tem o verde da marca
+            if pixel[1] > 160:
+                misturados += 1
+    # só a borda suavizada do triângulo pode misturar; as linhas do defeito
+    # somavam milhares de pixels espalhados
+    assert misturados < 900, misturados

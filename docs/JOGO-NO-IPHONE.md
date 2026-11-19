@@ -8,6 +8,20 @@ O caminho de graça, sem Mac e sem conta de desenvolvedor, é **exportar o mesmo
 jogo em WebGL/HTML5** e abrir no Safari do iPhone. O JARVIS serve esse export
 na sua rede Wi-Fi e mostra o endereço.
 
+## “Baixar no iPhone” tem dois sentidos
+
+| o que você quer | dá? | o que custa |
+|---|---|---|
+| **ícone na tela de início** (abre em tela cheia, parece app) | **sim, de graça** | nada: Safari → Compartilhar → “Adicionar à Tela de Início” |
+| **arquivo `.ipa` instalado** (app de verdade, assinado) | só com conta **Apple Developer** | US$ 99/ano + Mac (ou build na nuvem) |
+| **APK instalado** | **não** | não existe: o iOS não executa `.apk` |
+| **publicar na App Store** | sim, com conta paga | US$ 99/ano + revisão da Apple |
+
+O JARVIS faz o primeiro: a página servida já sai com `apple-touch-icon`,
+`apple-mobile-web-app-capable` e `manifest` injetados (o arquivo do export no
+disco continua intacto), e o ícone é desenhado por ele — um PNG de 180×180 e
+512×512, sem depender de arquivo extra no export.
+
 ---
 
 ## 1. Exportar o jogo para web
@@ -74,6 +88,17 @@ isolada dos outros arquivos do JARVIS; dá para mudar com `JARVIS_FILES_ROOT`).
 
 3. Para parar: **feche a janela no X**. (Não precisa de `Ctrl+C`.)
 
+### Deixar como app na tela de início
+
+Com a página aberta no Safari:
+
+1. toque em **Compartilhar** (o quadrado com a seta para cima);
+2. **Adicionar à Tela de Início**;
+3. confirme o nome — o ícone do jogo já está lá.
+
+Abre em tela cheia, sem a barra do Safari. **Não** é um app assinado: é o mesmo
+site, com ícone e sem moldura. Não passa pela App Store e não tem custo.
+
 ### Se não abrir
 
 | o que aparece | o que fazer |
@@ -99,6 +124,10 @@ isolada dos outros arquivos do JARVIS; dá para mudar com `JARVIS_FILES_ROOT`).
   recebe lixo binário e a tela fica preta) e `Accept-Ranges` para áudio/vídeo.
 - Manda `Cross-Origin-Opener-Policy` e `Cross-Origin-Embedder-Policy`, que o
   export com threads precisa.
+- Serve `/jarvis-icone-180.png`, `/jarvis-icone-512.png` e
+  `/manifest.webmanifest` — gerados em memória, não existem no disco.
+- Injeta as tags do ícone no `index.html` **servido**; o arquivo do export
+  nunca é alterado.
 
 ---
 
@@ -111,6 +140,10 @@ Aí o caminho muda de assunto e de custo:
 - **App Store** — mesma conta, mais revisão da Apple;
 - converter o projeto: Unity e Godot exportam para iOS, mas o build e a
   assinatura só acontecem em macOS.
+
+**Nada disso é “baixar no iPhone” de graça.** O que dá para baixar de graça é o
+ícone na tela de início (seção 3). Para o jogo existir como app instalado de
+verdade, o caminho é `.ipa` assinado — e a assinatura é da Apple, não do JARVIS.
 
 Nada disso é o que você pediu agora — para **testar no seu iPhone**, o export
 WebGL resolve hoje, de graça, e é o mesmo jogo.

@@ -17,7 +17,21 @@ módulo serve essa pasta na rede local:
 - manda `Content-Encoding` para os `.gz`/`.br` que o export da Unity gera
   (sem isso a Unity WebGL baixa 404 e a tela fica preta);
 - aceita `Range`, para áudio e vídeo do jogo funcionarem;
-- manda COOP/COEP, que o export com *threads* do Godot exige.
+- manda COOP/COEP, que o export com *threads* do Godot exige;
+- prepara o **ícone na tela de início** do iPhone (0.91.40): injeta
+  `apple-touch-icon`, `apple-mobile-web-app-capable` e um `manifest` na página
+  servida, sem tocar no arquivo do export no disco.
+
+## Ícone na tela de início ≠ app assinado
+
+“Baixar no iPhone” tem dois sentidos, e só um deles é de graça:
+
+- **ícone na tela de início** (o que este módulo faz): o Safari abre em tela
+  cheia, sem a barra do navegador, com ícone próprio. Custa zero e não precisa
+  de conta Apple;
+- **app assinado** (`.ipa`, TestFlight, App Store): exige conta **Apple
+  Developer** (US$ 99/ano) e um Mac (ou build na nuvem) para assinar. Nenhum
+  programa no Windows transforma um APK em `.ipa`.
 
 ## As regras
 
@@ -32,11 +46,14 @@ módulo serve essa pasta na rede local:
 from __future__ import annotations
 
 import html
+import json
 import os
 import secrets
 import shutil
 import socket
+import struct
 import zipfile
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -299,6 +316,152 @@ def _resolver(base: Path, relativo: str) -> Path:
     return alvo
 
 
+# ---------------------------------------------------------------------------
+# O ícone da tela de início (0.91.40)
+#
+# “Baixar no iPhone” como ícone: o iOS não lê SVG nem usa o favicon da página
+# para isso — ele quer um PNG de 180x180 em `apple-touch-icon`. O export não
+# traz um, então o ícone é desenhado aqui, sem Pillow e sem arquivo extra.
+# ---------------------------------------------------------------------------
+
+_CORES = ((12, 18, 34), (58, 76, 150))  # fundo: azul-noite
+_COR_MARCA = (96, 232, 214)  # triângulo de “play”: verde-água
+
+_CACHE_ICONE: dict[int, bytes] = {}
+
+
+def _bloco_png(tipo: bytes, dados: bytes) -> bytes:
+    return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", zlib.crc32(tipo + dados) & 0xFFFFFFFF)
+
+
+def _distancia_ao_segmento(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> float:
+    """Distância do ponto ao **segmento** (não à reta que o contém).
+
+    A primeira versão usava a distância à reta: fora do triângulo, o
+    prolongamento de cada aresta virava uma linha atravessando o ícone
+    inteiro — apareceu no primeiro PNG gerado.
+    """
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0 and dy == 0:
+        return ((px - x1) ** 2 + (py - y1) ** 2) ** 0.5
+    t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
+    t = max(0.0, min(1.0, t))
+    ex, ey = x1 + t * dx, y1 + t * dy
+    return ((px - ex) ** 2 + (py - ey) ** 2) ** 0.5
+
+
+def _distancia_ao_triangulo(px: float, py: float, ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> float:
+    """Distância com sinal: negativa dentro. Serve para a borda não serrilhar."""
+    def lado(x1: float, y1: float, x2: float, y2: float) -> float:
+        return (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2)
+
+    d1, d2, d3 = lado(ax, ay, bx, by), lado(bx, by, cx, cy), lado(cx, cy, ax, ay)
+    if (d1 >= 0 and d2 >= 0 and d3 >= 0) or (d1 <= 0 and d2 <= 0 and d3 <= 0):
+        return -1.0
+    return min(
+        _distancia_ao_segmento(px, py, ax, ay, bx, by),
+        _distancia_ao_segmento(px, py, bx, by, cx, cy),
+        _distancia_ao_segmento(px, py, cx, cy, ax, ay),
+    )
+
+
+def icone_png(tamanho: int = 180) -> bytes:
+    """O ícone do jogo: fundo em gradiente e o triângulo de “play”."""
+    if tamanho in _CACHE_ICONE:
+        return _CACHE_ICONE[tamanho]
+    ax, ay, bx, by, cx, cy = 0.34, 0.22, 0.34, 0.78, 0.78, 0.50
+    borda = 1.5 / tamanho  # meia-largura do suavizado, em fração
+    (r0, g0, b0), (r1, g1, b1) = _CORES
+    linhas: list[bytes] = []
+    for y in range(tamanho):
+        linha = bytearray()
+        vy = (y + 0.5) / tamanho
+        for x in range(tamanho):
+            vx = (x + 0.5) / tamanho
+            t = (vx * 0.35 + vy * 0.65)
+            fundo = (
+                int(r0 + (r1 - r0) * t),
+                int(g0 + (g1 - g0) * t),
+                int(b0 + (b1 - b0) * t),
+            )
+            d = _distancia_ao_triangulo(vx, vy, ax, ay, bx, by, cx, cy)
+            cobertura = 0.0
+            if d <= -borda:
+                cobertura = 1.0
+            elif d < borda:
+                cobertura = (borda - d) / (2 * borda)
+            if cobertura > 0:
+                cor = tuple(
+                    int(round(fundo[i] + (_COR_MARCA[i] - fundo[i]) * cobertura)) for i in range(3)
+                )
+            else:
+                cor = fundo
+            linha += bytes(cor)
+        linhas.append(bytes(linha))
+    dados = b"".join(b"\x00" + linha for linha in linhas)
+    png = b"\x89PNG\r\n\x1a\n"
+    png += _bloco_png(b"IHDR", struct.pack(">IIBBBBB", tamanho, tamanho, 8, 2, 0, 0, 0))
+    png += _bloco_png(b"IDAT", zlib.compress(dados, 9))
+    png += _bloco_png(b"IEND", b"")
+    _CACHE_ICONE[tamanho] = png
+    return png
+
+
+def manifest(nome: str) -> dict[str, Any]:
+    """O `manifest.webmanifest` do jogo — usado por Android e por Safari novo."""
+    return {
+        "name": nome,
+        "short_name": nome[:12],
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#0c1222",
+        "theme_color": "#12172a",
+        "icons": [
+            {"src": "/jarvis-icone-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any"},
+            {"src": "/jarvis-icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        ],
+    }
+
+
+_MARCA_PWA = "data-jarvis-pwa"
+
+
+def _injetar_pwa(original: bytes, nome: str) -> bytes:
+    """Mete as tags do ícone no `index.html` servido — o arquivo do disco não muda.
+
+    Safari usa `apple-touch-icon`; o `manifest` serve para o resto. A marca
+    `data-jarvis-pwa` impede que uma página que já veio preparada ganhe tudo
+    duas vezes.
+    """
+    texto = original.decode("utf-8", errors="replace")
+    if _MARCA_PWA in texto:
+        return original
+    titulo = html.escape(nome, quote=True)
+    tags = (
+        f'<link rel="apple-touch-icon" sizes="180x180" href="/jarvis-icone-180.png" {_MARCA_PWA}>'
+        f'<link rel="icon" type="image/png" href="/jarvis-icone-180.png" {_MARCA_PWA}>'
+        f'<link rel="manifest" href="/manifest.webmanifest" {_MARCA_PWA}>'
+        f'<meta name="apple-mobile-web-app-capable" content="yes" {_MARCA_PWA}>'
+        f'<meta name="mobile-web-app-capable" content="yes" {_MARCA_PWA}>'
+        f'<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" {_MARCA_PWA}>'
+        f'<meta name="apple-mobile-web-app-title" content="{titulo}" {_MARCA_PWA}>'
+        f'<meta name="application-name" content="{titulo}" {_MARCA_PWA}>'
+        f'<meta name="theme-color" content="#12172a" {_MARCA_PWA}>'
+    )
+    minusculo = texto.lower()
+    if "</head>" in minusculo:
+        corte = minusculo.index("</head>")
+        texto = texto[:corte] + tags + texto[corte:]
+    elif "<body" in minusculo:
+        corte = minusculo.index("<body")
+        texto = texto[:corte] + tags + texto[corte:]
+    else:
+        texto = tags + texto
+    return texto.encode("utf-8")
+
+
 def _tipo(nome: str) -> str:
     return TIPOS.get(Path(nome).suffix.lower(), "application/octet-stream")
 
@@ -395,6 +558,24 @@ class _Handler(BaseHTTPRequestHandler):
     def _isolamento(self) -> bool:
         return bool(getattr(self.server, "isolamento", True))
 
+    @property
+    def _pwa(self) -> bool:
+        return bool(getattr(self.server, "pwa", False))
+
+    def _virtual(self, caminho: str) -> tuple[bytes, str] | None:
+        """O ícone e o manifesto: gerados aqui, não existem no disco do export."""
+        if not self._pwa:
+            return None
+        nome = getattr(self.server, "nome", "jogo")
+        if caminho == "/jarvis-icone-180.png":
+            return icone_png(180), "image/png"
+        if caminho == "/jarvis-icone-512.png":
+            return icone_png(512), "image/png"
+        if caminho in {"/manifest.webmanifest", "/manifest.json"}:
+            corpo = json.dumps(manifest(nome), ensure_ascii=False).encode("utf-8")
+            return corpo, "application/manifest+json; charset=utf-8"
+        return None
+
     def do_GET(self) -> None:  # noqa: N802 - nome exigido pelo BaseHTTPRequestHandler
         self._servir(com_corpo=True)
 
@@ -404,6 +585,22 @@ class _Handler(BaseHTTPRequestHandler):
     def _servir(self, *, com_corpo: bool) -> None:
         caminho = urlsplit(self.path).path or "/"
         aceita = self.headers.get("Accept-Encoding", "") or ""
+        virtual = self._virtual(caminho)
+        if virtual is not None:
+            corpo, tipo = virtual
+            self.send_response(200)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(corpo)))
+            self.send_header("Cache-Control", "no-store")
+            if self._isolamento:
+                self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+                self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            if com_corpo:
+                self.wfile.write(corpo)
+            return
+
         arquivo, codificacao, nome_logico, precisa_barra = _alvo(self._base, caminho, aceita)
 
         if precisa_barra:
@@ -431,9 +628,28 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(500, "Não consegui ler o arquivo")
             return
 
+        # 0.91.40 — o índice sai com as tags do ícone, mas o arquivo no disco
+        # continua intacto; por isso a página é montada em memória e a faixa
+        # (`Range`) não vale para ela.
+        conteudo: bytes | None = None
+        if self._pwa and nome_logico == "index.html" and not codificacao:
+            try:
+                original = arquivo.read_bytes()
+            except OSError:
+                original = b""
+            if original:
+                novo = _injetar_pwa(original, getattr(self.server, "nome", "jogo"))
+                if novo != original:
+                    conteudo = novo
+                    tamanho = len(conteudo)
+
         # Faixa em arquivo comprimido é faixa do comprimido, não do conteúdo:
         # o navegador montaria um arquivo corrompido. Nesse caso, inteiro.
-        faixa = None if codificacao else _intervalo(self.headers.get("Range", "") or "", tamanho)
+        faixa = (
+            None
+            if codificacao or conteudo is not None
+            else _intervalo(self.headers.get("Range", "") or "", tamanho)
+        )
         inicio, fim = faixa if faixa else (0, tamanho - 1)
         enviar = 0 if tamanho == 0 else fim - inicio + 1
 
@@ -454,6 +670,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if not com_corpo or enviar == 0:
+            return
+        if conteudo is not None:
+            try:
+                self.wfile.write(conteudo)
+            except (BrokenPipeError, ConnectionResetError):
+                return
             return
         try:
             with arquivo.open("rb") as fh:
@@ -482,10 +704,13 @@ class ServidorJogo(ThreadingHTTPServer):
         base: Path,
         isolamento: bool = True,
         registrar: bool = False,
+        pwa: bool = True,
     ) -> None:
         self.base = Path(base).resolve()
+        self.nome = self.base.name
         self.isolamento = isolamento
         self.registrar = registrar
+        self.pwa = pwa
         super().__init__(endereco, _Handler)
 
 
@@ -495,12 +720,15 @@ def subir(
     host: str = "0.0.0.0",
     isolamento: bool = True,
     registrar: bool = False,
+    pwa: bool = True,
 ) -> ServidorJogo:
     """Sobe o servidor do export. `porta=0` deixa o sistema escolher (testes)."""
     pasta = Path(base)
     if not (pasta / "index.html").is_file():
         raise JogoWebError("Essa pasta não tem index.html — não é um export HTML5.")
-    return ServidorJogo((host, porta), pasta, isolamento=isolamento, registrar=registrar)
+    return ServidorJogo(
+        (host, porta), pasta, isolamento=isolamento, registrar=registrar, pwa=pwa
+    )
 
 
 def _prioridade(ip: str) -> int:
@@ -585,6 +813,12 @@ def instrucoes(
             "",
         ]
     linhas += [
+        "  Para ficar como APP no iPhone (sem App Store, sem custo):",
+        "    1. abra o endereço acima no Safari;",
+        "    2. toque em Compartilhar (o quadrado com a seta para cima);",
+        "    3. escolha “Adicionar à Tela de Início”.",
+        "    Vira um ícone com o jogo e abre em tela cheia, sem a barra do Safari.",
+        "",
         "  Detalhes que fazem diferença:",
         "    - se o Windows perguntar do firewall, marque “Redes particulares”;",
         "    - Wi-Fi de visitante (ou “isolamento de clientes” no roteador) bloqueia;",
