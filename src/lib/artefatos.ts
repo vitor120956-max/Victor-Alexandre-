@@ -106,7 +106,7 @@ export function explicarRecusa(recusado: Recusado, limiteBytes: number): string 
       if (eApk) {
         return (
           `“${recusado.nome}” tem ${tamanho(recusado.bytes)} e a Reversa aceita até ${limite}. `
-          + 'Para o APK do seu jogo use a aba “Meu jogo” (até 600 MB): ela lê o manifesto, '
+          + 'Para o APK do seu jogo use a aba “Meu jogo” (até 2 GB): ela lê o manifesto, '
           + 'descobre o motor e diz o que melhorar.'
         );
       }

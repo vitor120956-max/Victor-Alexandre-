@@ -426,11 +426,13 @@ def create_app(
                     limite, destino = MAX_ARTIFACT_BYTES, (
                         f"O arquivo passa de {MAX_ARTIFACT_BYTES / 1e6:.0f} MB, o teto da engenharia "
                         "reversa. Para o APK do jogo, use a aba “Meu jogo” (até "
-                        f"{jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB)."
+                        f"{jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)})."
                     )
                 elif request.url.path == "/api/jogo/upload":
                     limite, destino = jogo_mod.MAXIMO_BYTES, (
-                        f"O APK passa de {jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB, o teto da aba “Meu jogo”."
+                        f"O APK passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto da aba "
+                        "“Meu jogo”. Acima disso, envie o APK sem o OBB (o OBB não é analisado) "
+                        "ou o AAB do jogo."
                     )
                 elif request.url.path == "/api/files/upload":
                     limite, destino = MAX_DOCUMENT_BYTES, (
@@ -869,13 +871,27 @@ def create_app(
                 contador += 1
             destino_pasta.mkdir(parents=True, exist_ok=True)
             target = safe_path(destino_pasta, filename)
+            # 0.91.44 — 2 GB de teto só é honesto se o disco couber. O envio
+            # passa duas vezes pelo disco (temporário do pedido + a pasta do
+            # jogo), então a conta é feita antes de escrever o primeiro byte, e
+            # repetida a cada 64 MB enquanto o arquivo chega.
+            previsto = upload.size or 0
+            livre = jogo_mod.espaco_livre(target.parent)
+            if previsto and livre is not None and livre < previsto + jogo_mod.MARGEM_DISCO:
+                raise ValueError("DISK_FULL")
             total = 0
+            conferido = 0
             with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".upload", delete=False) as temporary:
                 temporary_name = temporary.name
                 while chunk := await upload.read(1_000_000):
                     total += len(chunk)
                     if total > jogo_mod.MAXIMO_BYTES:
                         raise ValueError("SIZE_LIMIT")
+                    if total - conferido >= 64_000_000:
+                        conferido = total
+                        livre = jogo_mod.espaco_livre(target.parent)
+                        if livre is not None and livre < jogo_mod.MARGEM_DISCO:
+                            raise ValueError("DISK_FULL")
                     temporary.write(chunk)
             if total == 0:
                 raise ValueError("O arquivo enviado está vazio.")
@@ -896,7 +912,35 @@ def create_app(
             if str(exc) == "SIZE_LIMIT":
                 return JSONResponse(
                     status_code=413,
-                    content={"ok": False, "error": {"code": "FILE_TOO_LARGE", "message": f"O APK excede {jogo_mod.MAXIMO_BYTES / 1e6:.0f} MB."}},
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "FILE_TOO_LARGE",
+                            "message": (
+                                f"O APK passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto da "
+                                "aba “Meu jogo”. Acima disso, envie o APK sem o OBB (o OBB não é "
+                                "analisado) ou o AAB do jogo."
+                            ),
+                            "limitBytes": jogo_mod.MAXIMO_BYTES,
+                        },
+                    },
+                )
+            if str(exc) == "DISK_FULL":
+                livre = jogo_mod.espaco_livre(skill_registry.files_root)
+                return JSONResponse(
+                    status_code=507,
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "DISK_FULL",
+                            "message": (
+                                "Não há espaço no disco para este APK"
+                                + (f": o disco tem {jogo_mod.rotulo_bytes(livre)} livres" if livre is not None else "")
+                                + f", e o envio precisa de {jogo_mod.rotulo_bytes(jogo_mod.MARGEM_DISCO)} "
+                                "de folga. Nada foi guardado — libere espaço e envie de novo."
+                            ),
+                        },
+                    },
                 )
             return JSONResponse(status_code=400, content={"ok": False, "error": {"code": "UPLOAD_ERROR", "message": str(exc)}})
         finally:

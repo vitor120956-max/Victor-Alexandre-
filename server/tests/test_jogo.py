@@ -750,17 +750,113 @@ def test_o_upload_de_apk_nao_e_cortado_pelo_limite_de_corpo(cliente):
 
 
 def test_o_limite_da_rota_de_jogo_e_o_do_jogo_e_nao_o_documento(cliente):
-    """O teto do APK é 600 MB; o de documento, outro. O middleware tem de usar o
-    do jogo — e continuar recusando o que passa dele."""
+    """O teto do APK é o do jogo (2 GB desde a 0.91.44), não o de documento.
+
+    0.91.42 — a rota dizia 600 MB e o middleware cortava em 2 MB.
+    0.91.44 — o dono perguntou “e se o jogo tiver 1 GB?”: o teto subiu para 2 GB
+    e este teste é o que impede a tela de anunciar um número que o middleware
+    não cobra.
+    """
     assert jogo.MAXIMO_BYTES > 25_000_000
-    assert jogo.MAXIMO_BYTES == 600_000_000
+    assert jogo.MAXIMO_BYTES == 2_000_000_000
+    assert jogo.rotulo_bytes(jogo.MAXIMO_BYTES) == "2 GB"
+
+
+def test_um_apk_de_1_gb_passa_do_middleware(cliente):
+    """0.91.44 — “e se o meu jogo tiver 1 GB?” passa a ter resposta: entra.
+
+    O corpo real é pequeno (o middleware decide pelo `content-length`); o que
+    se prova aqui é que o teto anunciado **não** recusa 1 GB — era o que
+    acontecia com o teto de 600 MB.
+    """
+    base, _ = cliente
+    resposta = base.post(
+        "/api/jogo/upload",
+        content=b"x" * 64,
+        headers={
+            "content-length": str(1_100_000_000),
+            "content-type": "application/octet-stream",
+        },
+    )
+    assert resposta.status_code != 413, resposta.text
+
+
+def test_o_teto_tambem_e_cobrado_sem_content_length(cliente, monkeypatch):
+    """Envio em fluxo (sem `content-length`) não escapa do teto.
+
+    Quem manda o corpo em pedaços — é o que o navegador faz quando o tamanho
+    não é conhecido — chega ao próprio manipulador, e é lá que o limite tem de
+    valer. Sem este teste, a única barreira era o cabeçalho, que o cliente
+    escolhe.
+    """
+    base, root = cliente
+    monkeypatch.setattr(jogo, "MAXIMO_BYTES", 1_000_000)
+    corpo = (
+        b"--limite\r\n"
+        b'Content-Disposition: form-data; name="confirmed"\r\n\r\n'
+        b"true\r\n"
+        b"--limite\r\n"
+        b'Content-Disposition: form-data; name="upload"; filename="fluxo.apk"\r\n'
+        b"Content-Type: application/octet-stream\r\n\r\n"
+        + b"A" * 2_000_000
+        + b"\r\n--limite--\r\n"
+    )
+
+    def pedacos():
+        for inicio in range(0, len(corpo), 200_000):
+            yield corpo[inicio : inicio + 200_000]
+
+    resposta = base.post(
+        "/api/jogo/upload",
+        content=pedacos(),
+        headers={"content-type": "multipart/form-data; boundary=limite"},
+    )
+    assert resposta.status_code == 413, resposta.text
+    erro = resposta.json()["error"]
+    assert erro["code"] == "FILE_TOO_LARGE"
+    assert erro["limitBytes"] == 1_000_000
+    # Nada de arquivo pela metade na pasta do jogo.
+    sobras = [caminho for caminho in (root / "jogos").rglob("*") if caminho.is_file()]
+    assert sobras == []
+
+
+def test_disco_cheio_e_dito_antes_de_encher_o_disco(cliente, monkeypatch):
+    """0.91.44 — um APK de 1 GB precisa de espaço; disco cheio tem de ser frase.
+
+    Antes, o disco enchia no meio da escrita e o que sobrava era um erro de
+    sistema em inglês e uma pasta pela metade. Agora a conta é feita antes do
+    primeiro byte.
+    """
+    base, root = cliente
+    dados = _apk(Path("/tmp") / "sem-espaco.apk", manifest=manifesto())
+    monkeypatch.setattr(jogo, "espaco_livre", lambda _pasta: 120_000_000)
+
+    resposta = base.post(
+        "/api/jogo/upload",
+        files={"upload": ("sem-espaco.apk", dados.read_bytes())},
+        data={"confirmed": "true"},
+    )
+    assert resposta.status_code == 507, resposta.text
+    erro = resposta.json()["error"]
+    assert erro["code"] == "DISK_FULL"
+    assert "120 MB" in erro["message"]
+    assert "Nada foi guardado" in erro["message"]
+    sobras = [caminho for caminho in (root / "jogos").rglob("*") if caminho.is_file()]
+    assert sobras == []
+
+
+def test_rotulo_de_tamanho_fala_a_mesma_lingua_da_tela():
+    assert jogo.rotulo_bytes(524_290_107) == "524 MB"
+    assert jogo.rotulo_bytes(1_100_000_000) == "1,1 GB"
+    assert jogo.rotulo_bytes(2_000_000_000) == "2 GB"
+    assert jogo.rotulo_bytes(0) == "0 MB"
 
 
 def test_a_recusa_por_tamanho_diz_o_teto_do_jogo(cliente):
     """0.91.43 — 413 genérico não dizia qual teto nem para onde ir.
 
     O corpo real é pequeno: o middleware decide pelo `content-length`, então
-    não é preciso montar 600 MB para provar a mensagem.
+    não é preciso montar 2 GB para provar a mensagem.
     """
     base, _ = cliente
     recusa = base.post(
@@ -775,5 +871,6 @@ def test_a_recusa_por_tamanho_diz_o_teto_do_jogo(cliente):
     erro = recusa.json()["error"]
     assert erro["code"] == "BODY_TOO_LARGE"
     assert erro["limitBytes"] == jogo.MAXIMO_BYTES
-    assert "600 MB" in erro["message"]
+    assert "2 GB" in erro["message"]
     assert "Meu jogo" in erro["message"]
+    assert "OBB" in erro["message"]

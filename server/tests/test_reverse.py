@@ -340,7 +340,10 @@ def test_upload_acima_do_teto_diz_o_limite_e_para_onde_ir(tmp_path: Path):
         assert erro["limitBytes"] == reverse.MAX_ARTIFACT_BYTES
         assert "25 MB" in erro["message"]
         assert "Meu jogo" in erro["message"]
-        assert "600 MB" in erro["message"]
+        # 0.91.44 — o teto da aba do jogo subiu para 2 GB, e a frase da Reversa
+        # tem de citar o número **de agora**: “(até 2000 MB)” era o defeito.
+        assert "2 GB" in erro["message"]
+        assert "2000" not in erro["message"]
 
         # A folga do multipart continua aceita: 25 MB de arquivo não pode ser
         # recusado por causa dos bytes do formulário.

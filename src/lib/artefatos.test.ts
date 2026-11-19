@@ -115,7 +115,7 @@ describe('explicarRecusa', () => {
       25_000_000,
     );
     expect(frase).toContain('Meu jogo');
-    expect(frase).toContain('600 MB');
+    expect(frase).toContain('2 GB');
     expect(frase).toContain('90,0 MB');
     expect(frase).toContain('25,0 MB');
   });

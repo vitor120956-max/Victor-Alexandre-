@@ -19,7 +19,13 @@ import type { JogoLista, JogoRelatorio } from '../lib/api';
 import '../jogo.css';
 
 const EXTENSOES = ['.apk', '.aab', '.apks', '.xapk'];
-const LIMITE_MB = 600;
+
+// 0.91.44 — o dono perguntou “e se o jogo tiver 1 GB?”. O teto era 600 MB.
+// O envio sempre foi em pedaços (a memória do servidor não cresce com o
+// arquivo), então o teto novo é 2 GB; o número da tela tem de ser o mesmo que
+// o servidor cobra em `server/jogo.py` (`MAXIMO_BYTES`).
+const LIMITE_BYTES = 2_000_000_000;
+const LIMITE_TEXTO = '2 GB';
 
 function mb(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB`;
@@ -97,9 +103,15 @@ export function JogoPage() {
       } else {
         setAviso('');
       }
-      const grandes = validos.filter((arquivo) => arquivo.size > LIMITE_MB * 1_000_000);
+      const grandes = validos.filter((arquivo) => arquivo.size > LIMITE_BYTES);
       if (grandes.length) {
-        setErro(`${grandes.map((arquivo) => arquivo.name).join(', ')} passa de ${LIMITE_MB} MB.`);
+        // Dizer o número **e** o caminho: um APK de 3 GB não fica menor por
+        // insistir, e o OBB não é analisado — mandar o APK sem ele é o que
+        // resolve de verdade.
+        setErro(
+          `${grandes.map((arquivo) => `${arquivo.name} (${mb(arquivo.size)})`).join(', ')} `
+          + `passa de ${LIMITE_TEXTO}. Acima disso, envie o APK sem o OBB (o OBB não é analisado) ou o AAB.`,
+        );
         return;
       }
       if (!validos.length) return;
@@ -168,7 +180,7 @@ export function JogoPage() {
           <strong>{arrastando ? 'Solte o APK aqui' : 'Jogue o APK (ou os dois) nesta área'}</strong>
           <span>
             ou <button type="button" onClick={() => entrada.current?.click()}>escolha o arquivo</button>
-            {' '}— aceita {EXTENSOES.join(', ')} até {LIMITE_MB} MB, vários de uma vez
+            {' '}— aceita {EXTENSOES.join(', ')} até {LIMITE_TEXTO}, vários de uma vez
           </span>
         </div>
         <input

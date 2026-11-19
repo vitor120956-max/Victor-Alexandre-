@@ -588,7 +588,7 @@ export function ReversePage() {
           <strong>É o APK do seu jogo?</strong> Use a aba{' '}
           <Link to="/jogo">Meu jogo</Link>: ela lê o manifesto, o motor, as ABIs e o tamanho,
           guarda cada pacote na própria pasta e diz o que melhorar. Aqui a Reversa é para
-          qualquer artefato (até 25 MB); lá o limite é 600 MB.
+          qualquer artefato (até 25 MB); lá o limite é 2 GB.
         </p>
       </div>
 

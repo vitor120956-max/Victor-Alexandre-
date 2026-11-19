@@ -355,7 +355,7 @@ Criação e atualização exigem simulação e confirmação. Atualizações usa
 
 A página **Reversa** (`/reversa`) adapta o modelo de evidências de [`morluto/rea`](https://github.com/morluto/rea) em seis skills locais: inspeção, layout binário, strings, entropia por blocos, análise JavaScript/Electron e comparação de artefatos.
 
-O recorte é deliberadamente **estático**. Parsers próprios leem ELF, PE, Mach-O, ZIP/APK/AAR/JAR, ASAR, WASM, PDF, safetensors, GGUF, PYC e BEAM sem extrair, importar ou executar o alvo. O teto é de **25 MB por artefato**: a tela explica cada recusa com nome, tamanho e motivo — e manda o APK do jogo para a aba **Meu jogo**, que aceita 600 MB. Cada resultado traz SHA-256, fatos observados, achados, cobertura e limitações; `executed` permanece `false`. O REA completo, seu MCP, CLI, hooks e provedores Hopper/Ghidra/IDA/JADX não são instalados. Consulte [`docs/ENGENHARIA-REVERSA.md`](docs/ENGENHARIA-REVERSA.md).
+O recorte é deliberadamente **estático**. Parsers próprios leem ELF, PE, Mach-O, ZIP/APK/AAR/JAR, ASAR, WASM, PDF, safetensors, GGUF, PYC e BEAM sem extrair, importar ou executar o alvo. O teto é de **25 MB por artefato**: a tela explica cada recusa com nome, tamanho e motivo — e manda o APK do jogo para a aba **Meu jogo**, que aceita 2 GB (e diz o que fazer acima disso: APK sem o OBB, ou o AAB). Cada resultado traz SHA-256, fatos observados, achados, cobertura e limitações; `executed` permanece `false`. O REA completo, seu MCP, CLI, hooks e provedores Hopper/Ghidra/IDA/JADX não são instalados. Consulte [`docs/ENGENHARIA-REVERSA.md`](docs/ENGENHARIA-REVERSA.md).
 
 ## Engenharia enxuta
 

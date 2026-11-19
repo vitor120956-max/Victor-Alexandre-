@@ -67,10 +67,45 @@ from typing import Any
 from .workspace import safe_path
 
 EXTENSOES = {".apk", ".aab", ".apks", ".xapk"}
-MAXIMO_BYTES = 600_000_000
+
+# 0.91.44 — o teto era 600 MB, e o dono perguntou o que acontece com 1 GB.
+# A resposta honesta era “não entra” — e não precisava ser: o envio já é feito
+# em pedaços de 1 MB (a memória do servidor não cresce com o tamanho do APK) e
+# a análise lê só o diretório central do ZIP. O que faltava era espaço em disco,
+# e disso dá para cuidar antes de escrever. 2 GB cobre um APK de jogo com OBB
+# embutido; acima disso a recusa diz o número e o que fazer.
+MAXIMO_BYTES = 2_000_000_000
+
+# Quanto precisa sobrar no disco depois do APK. Durante o envio o arquivo
+# existe duas vezes por alguns segundos: o pedido HTTP é guardado num
+# temporário do sistema e só depois copiado para `jogos/<parte>/`.
+MARGEM_DISCO = 500_000_000
+
 MAX_ENTRADAS = 60_000
 MAX_MANIFESTO = 4 * 1024 * 1024
 MAX_BIBLIOTECA = 12 * 1024 * 1024
+
+
+def rotulo_bytes(total: int | None) -> str:
+    """“2 GB”, “600 MB” — o número que a pessoa lê, com a mesma régua da tela."""
+    if not total:
+        return "0 MB"
+    if total >= 1_000_000_000:
+        texto = f"{total / 1e9:.1f}".rstrip("0").rstrip(".")
+        return f"{texto} GB".replace(".", ",")
+    return f"{total / 1e6:.0f} MB"
+
+
+def espaco_livre(pasta: Path) -> int | None:
+    """Espaço livre no disco de `pasta` — `None` quando não dá para saber.
+
+    `None` não bloqueia nada: um sistema de arquivos que não responde ao
+    `statvfs` não pode virar recusa de um APK que caberia.
+    """
+    try:
+        return shutil.disk_usage(pasta).free
+    except OSError:
+        return None
 
 
 class JogoError(ValueError):
@@ -208,7 +243,10 @@ def arquivo(files_root: Path, nome: str) -> Path:
     if tamanho <= 0:
         raise JogoError("O arquivo está vazio.")
     if tamanho > MAXIMO_BYTES:
-        raise JogoError(f"O arquivo tem {tamanho / 1e6:.0f} MB; o limite é {MAXIMO_BYTES / 1e6:.0f} MB.")
+        raise JogoError(
+            f"O arquivo tem {rotulo_bytes(tamanho)}; o limite é {rotulo_bytes(MAXIMO_BYTES)}. "
+            "Acima disso, envie o APK sem o OBB (o OBB não é analisado) ou o AAB."
+        )
     return caminho
 
 
@@ -274,9 +312,22 @@ def guardar(origem: Path, files_root: Path) -> dict[str, Any]:
     if tamanho <= 0:
         raise JogoError("O arquivo está vazio.")
     if tamanho > MAXIMO_BYTES:
-        raise JogoError(f"O arquivo tem {tamanho / 1e6:.0f} MB; o limite é {MAXIMO_BYTES / 1e6:.0f} MB.")
+        raise JogoError(
+            f"O arquivo tem {rotulo_bytes(tamanho)}; o limite é {rotulo_bytes(MAXIMO_BYTES)}. "
+            "Acima disso, envie o APK sem o OBB (o OBB não é analisado) ou o AAB."
+        )
 
     base = raiz(files_root)
+    # 0.91.44 — a cópia para `jogos/` precisa caber no disco. Sem esta
+    # conferência, um APK grande enchia o disco e o erro que aparecia era
+    # “No space left on device”, em inglês, no meio de uma pasta pela metade.
+    livre = espaco_livre(base)
+    if livre is not None and livre < tamanho + MARGEM_DISCO:
+        raise JogoError(
+            f"Não há espaço no disco para guardar este APK: ele tem {rotulo_bytes(tamanho)} "
+            f"e o disco tem {rotulo_bytes(livre)} livres (preciso de mais "
+            f"{rotulo_bytes(MARGEM_DISCO)} de folga). Libere espaço e arraste de novo."
+        )
 
     # Mesmo arquivo (nome e tamanho) já guardado? Reaproveita a parte.
     for pasta in sorted(item["pasta"] for item in partes(files_root)):

@@ -174,6 +174,47 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.44 — “e se o meu app ou jogo tiver 1 GB ou 500 MB?”
+
+> ta mas e se o meu app ou jogo tiver 1gb ou 500 mb?
+
+A pergunta veio logo depois de a Reversa explicar que o APK grande pertence à
+aba “Meu jogo”. Faltava o outro lado da frase: a aba dizia aceitar **600 MB**,
+e o dono tem jogo que pode passar de 1 GB. “Aceita até 600 MB” é uma resposta
+para um problema que ninguém tem — jogo grande é o normal.
+
+Medido antes de mexer:
+
+| arquivo | teto de 600 MB | teto de 2 GB |
+|---|---|---|
+| 500 MB (524 MB de APK) | 200 em **3,1 s** | 200 |
+| 1 GB (1.101 MB de APK) | **413** “O APK passa de 600 MB” | 200 em **6,8 s**, análise gravada em `jogos/<parte>/` |
+| 2,1 GB | 413 | 413 em **8 ms**, zero bytes enviados |
+
+O envio já era em pedaços de 1 MB desde a 0.91.38: o pico de memória do
+servidor foi de **83,8 MB para 89,7 MB** num envio de 1 GB. Não era a
+transmissão que impedia — era o número, e o disco.
+
+O que mudou:
+
+- `MAXIMO_BYTES` de 600 MB para **2 GB**; a tela anuncia o mesmo valor
+  (`LIMITE_TEXTO`) e os dois são presos pelo mesmo teste.
+- `MARGEM_DISCO` (500 MB) e `espaco_livre()`: a conta é feita **antes** de
+  escrever o primeiro byte e repetida a cada 64 MB — durante o envio o arquivo
+  existe duas vezes (temporário do pedido + pasta do jogo). Sem espaço, `507`
+  com “o disco tem X livres, preciso de mais 500 MB de folga. Nada foi
+  guardado”. Antes, o disco enchia e sobrava erro de sistema em inglês e pasta
+  pela metade.
+- `rotulo_bytes()`: 2 GB, 600 MB, 1,1 GB — o número que a pessoa lê é o mesmo
+  que o servidor cobra.
+- Acima de 2 GB, a recusa manda para o **AAB** (a aba aceita) e lembra que o
+  OBB não é analisado.
+
+O que a medição **não** muda: o Android só instala APK até um certo tamanho e a
+Play trabalha com **APK de 100 MB + OBB de até 2 GB cada** (ou AAB com Play
+Asset Delivery). Ou seja: 1 GB serve para testar no aparelho; para publicar, o
+caminho é dividir o pacote.
+
 ### 0.91.43 — “e o engenharia reversa ta funcionando?”
 
 > e o engenharia reversa ta funcionando?
