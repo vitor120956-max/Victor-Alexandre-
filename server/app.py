@@ -430,9 +430,9 @@ def create_app(
                     )
                 elif request.url.path == "/api/jogo/upload":
                     limite, destino = jogo_mod.MAXIMO_BYTES, (
-                        f"O APK passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto da aba "
-                        "“Meu jogo”. Acima disso, envie o APK sem o OBB (o OBB não é analisado) "
-                        "ou o AAB do jogo."
+                        f"O arquivo passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto da "
+                        "aba “Meu jogo”. Acima disso, divida os dados em main + patch (até 2 GB "
+                        "cada) ou use Play Asset Delivery com o AAB."
                     )
                 elif request.url.path == "/api/files/upload":
                     limite, destino = MAX_DOCUMENT_BYTES, (
@@ -838,21 +838,64 @@ def create_app(
                 status_code=400,
                 content={"ok": False, "error": {"code": "INVALID_FILENAME", "message": "Use o nome do arquivo, sem pastas."}},
             )
-        if Path(filename).suffix.lower() not in jogo_mod.EXTENSOES:
+        if Path(filename).suffix.lower() not in jogo_mod.EXTENSOES_ACEITAS:
             return JSONResponse(
                 status_code=400,
-                content={"ok": False, "error": {"code": "INVALID_FORMAT", "message": "Envie o APK (ou AAB/APKS/XAPK) do jogo."}},
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "INVALID_FORMAT",
+                        "message": "Envie o APK (ou AAB/APKS/XAPK) do jogo — ou o OBB dele (.obb).",
+                    },
+                },
             )
         temporary_name = ""
         try:
             base = jogo_mod.raiz(skill_registry.files_root)
             # 0.91.41 — o APK não fica solto: entra na pasta do jogo dele
             # (`jogos/<nome>/apk`), e a análise é gravada ali do lado.
-            parte = jogo_mod._slug(Path(filename).stem)
-            candidato = parte
-            contador = 1
-            while True:
-                destino_pasta = base / candidato
+            # 0.91.45 — o OBB não ganha pasta pelo nome próprio: ele entra na
+            # pasta do APK do mesmo pacote (é o que permite conferir um com o
+            # outro). Sem APK ainda, a pasta é criada pelo pacote do nome.
+            if Path(filename).suffix.lower() in jogo_mod.EXTENSOES_OBB:
+                destino_pasta, candidato = jogo_mod.parte_do_obb(skill_registry.files_root, filename)
+                alvo = destino_pasta / filename
+                if alvo.is_file() and alvo.stat().st_size > 0 and not overwrite:
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "ok": False,
+                            "error": {
+                                "code": "FILE_EXISTS",
+                                "message": f"Esse OBB já está em jogos/{candidato}/. Marque a substituição para trocar.",
+                            },
+                        },
+                    )
+            else:
+                # 0.91.45 — se o OBB chegou primeiro, a pasta dele já existe com
+                # o nome do pacote. O APK entra nela em vez de criar outra e
+                # deixar o par separado. O manifesto é lido do próprio upload,
+                # antes do streaming (e o arquivo volta ao começo).
+                pacote = ""
+                try:
+                    await upload.seek(0)
+                    pacote = jogo_mod.pacote_do_zip(upload.file)
+                    await upload.seek(0)
+                except (OSError, ValueError):
+                    pacote = ""
+                achada = jogo_mod.parte_do_obb_orfao(skill_registry.files_root, pacote)
+                parte = jogo_mod._slug(Path(filename).stem)
+                if achada is not None:
+                    destino_pasta, candidato = achada
+                else:
+                    candidato = parte
+                    contador = 1
+                    while True:
+                        destino_pasta = base / candidato
+                        if not destino_pasta.exists() or (destino_pasta / filename).is_file():
+                            break
+                        candidato = f"{parte}-{contador}"
+                        contador += 1
                 alvo = destino_pasta / filename
                 if alvo.is_file() and alvo.stat().st_size > 0 and not overwrite:
                     return JSONResponse(
@@ -865,10 +908,6 @@ def create_app(
                             },
                         },
                     )
-                if not destino_pasta.exists() or alvo.is_file():
-                    break
-                candidato = f"{parte}-{contador}"
-                contador += 1
             destino_pasta.mkdir(parents=True, exist_ok=True)
             target = safe_path(destino_pasta, filename)
             # 0.91.44 — 2 GB de teto só é honesto se o disco couber. O envio
@@ -896,7 +935,9 @@ def create_app(
             if total == 0:
                 raise ValueError("O arquivo enviado está vazio.")
             Path(temporary_name).replace(target)
-            relatorio = jogo_mod.relatar(target, parte=candidato, pasta=str(destino_pasta))
+            # 0.91.45 — relatar o que ficou na pasta: o APK (que já traz o OBB
+            # conferido) ou o OBB sozinho, quando o APK ainda não chegou.
+            relatorio = jogo_mod.relatar_parte(destino_pasta, parte=candidato)
             jogo_mod._gravar_analise(destino_pasta, relatorio)
             return {
                 "ok": True,
@@ -917,9 +958,9 @@ def create_app(
                         "error": {
                             "code": "FILE_TOO_LARGE",
                             "message": (
-                                f"O APK passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto da "
-                                "aba “Meu jogo”. Acima disso, envie o APK sem o OBB (o OBB não é "
-                                "analisado) ou o AAB do jogo."
+                                f"O arquivo passa de {jogo_mod.rotulo_bytes(jogo_mod.MAXIMO_BYTES)}, o teto "
+                                "da aba “Meu jogo”. Acima disso, divida os dados em main + patch "
+                                "(até 2 GB cada) ou use Play Asset Delivery com o AAB."
                             ),
                             "limitBytes": jogo_mod.MAXIMO_BYTES,
                         },

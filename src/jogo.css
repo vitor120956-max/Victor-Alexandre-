@@ -92,3 +92,31 @@
   .jogo-metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .jogo-header { flex-direction: column; }
 }
+
+/* 0.91.45 — o OBB tem bloco próprio: ele não é APK (sem manifesto, sem
+   assinatura), mas é onde mora quase todo o peso do jogo. A linha de cima
+   separa os dois relatórios sem sugerir que são a mesma coisa. */
+.jogo-obb {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+.jogo-obb .jogo-titulo-achados {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jogo-selo.is-ok {
+  color: var(--ok, #48c78e);
+}
+
+.jogo-selo.is-erro {
+  color: var(--danger, #f14668);
+}
+
+.jogo-selo.is-neutro {
+  color: var(--muted, #9aa0a6);
+  font-size: 0.85rem;
+}

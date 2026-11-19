@@ -85,7 +85,10 @@ def main(argv: list[str] | None = None) -> int:
         for parte in lista["partes"]:
             marca = "analisado" if parte["analisado"] else "sem análise ainda"
             tamanho = f"{parte['bytes'] / 1e6:.1f} MB".replace(".", ",")
-            print(f"    {parte['nome']}/ — {parte['apks'][0]} — {tamanho} ({marca})")
+            # 0.91.45 — a pasta pode ter só OBB (o APK ainda não chegou):
+            # `apks[0]` estourava o índice e o .bat morria antes de listar.
+            dentro = ", ".join(parte["apks"] + [f"OBB: {nome}" for nome in parte.get("obbs", [])])
+            print(f"    {parte['nome']}/ — {dentro or '(vazia)'} — {tamanho} ({marca})")
         soltos = [item for item in lista["jogos"] if not item["parte"]]
         for item in soltos:
             tamanho = f"{item['bytes'] / 1e6:.1f} MB".replace(".", ",")

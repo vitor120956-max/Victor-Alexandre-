@@ -873,4 +873,7 @@ def test_a_recusa_por_tamanho_diz_o_teto_do_jogo(cliente):
     assert erro["limitBytes"] == jogo.MAXIMO_BYTES
     assert "2 GB" in erro["message"]
     assert "Meu jogo" in erro["message"]
-    assert "OBB" in erro["message"]
+    # 0.91.45 — a saída para um arquivo grande deixou de ser “sem o OBB” (o OBB
+    # agora é analisado): é dividir em main + patch ou usar Play Asset Delivery.
+    assert "main + patch" in erro["message"]
+    assert "Play Asset Delivery" in erro["message"]

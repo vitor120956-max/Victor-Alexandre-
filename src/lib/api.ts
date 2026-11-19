@@ -746,6 +746,35 @@ export type JogoAchado = {
   onde?: string;
 };
 
+/** O OBB do jogo — o arquivo onde mora quase todo o peso (0.91.45). */
+export type JogoObb = {
+  arquivo: string;
+  bytes: number;
+  /** `ZIP`, ou `opaco (não abre como ZIP)` quando está cifrado/empacotado. */
+  formato: string;
+  zip: boolean;
+  /** `main` ou `patch`, lidos do nome; vazio quando o nome está fora do padrão. */
+  tipo: string;
+  versaoCodigo: number | null;
+  pacote: string;
+  entradas: number;
+  tamanhoDescompactado: number;
+  comprimido: number;
+  areas: Record<string, number>;
+  maiores: Array<{ nome: string; mb: number }>;
+  entropia: number;
+  entradasCifradas: number;
+  achados: JogoAchado[];
+  limitacoes: string[];
+  /** O OBB conferido contra o APK da mesma pasta (pacote e versionCode). */
+  conferencia: {
+    pacote: 'igual' | 'diferente' | 'desconhecido';
+    versaoCodigo: 'igual' | 'diferente' | 'desconhecido';
+    pacoteDoApk: string;
+    versaoDoApk: number | null;
+  };
+};
+
 export type JogoRelatorio = {
   arquivo: string;
   parte?: string;
@@ -753,6 +782,7 @@ export type JogoRelatorio = {
   bytes: number;
   pacote: string;
   versao: string;
+  versaoCodigo?: number | null;
   minSdk: string;
   targetSdk: string;
   motor: string;
@@ -770,6 +800,10 @@ export type JogoRelatorio = {
   /** Os dez maiores arquivos, já com MB calculado pelo servidor. */
   maiores: Array<{ nome: string; mb: number }>;
   achados: JogoAchado[];
+  /** Os OBBs da pasta do APK, já conferidos contra ele (0.91.45). */
+  obbs?: JogoObb[];
+  /** `true` quando só o OBB existe na pasta — o APK ainda não foi enviado. */
+  somenteObb?: boolean;
   texto?: string;
 };
 
@@ -778,6 +812,8 @@ export type JogoParte = {
   pasta: string;
   bytes: number;
   apks: string[];
+  /** OBBs guardados com o APK (main e patch). */
+  obbs: string[];
   analisado: boolean;
 };
 

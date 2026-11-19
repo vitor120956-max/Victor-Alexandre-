@@ -20,7 +20,11 @@ Ele abre o APK como ZIP e lê **sem descompactar nada em disco**:
 - as arquiteturas (ABIs) que foram embaladas e quanto cada uma pesa;
 - onde o tamanho está: `assets/`, `lib/`, `res/`, `classes.dex`, e os dez
   maiores arquivos;
-- se a assinatura é v1, v2/v3 (bloco APK Sig) ou nenhuma.
+- se a assinatura é v1, v2/v3 (bloco APK Sig) ou nenhuma;
+- **o OBB do jogo**, quando ele está na mesma pasta (0.91.45): nome
+  (`main.<versionCode>.<pacote>.obb`), tamanho, conteúdo (quando abre como
+  ZIP) e a conferência de pacote e versão contra o APK — o OBB da versão 20
+  com APK da 14 é achado crítico, porque o jogo não acha os dados.
 
 Ele **não** descompila DEX, não recompila, não assina e não promete “deixar o
 jogo melhor” no sentido de diversão. O que ele entrega é: **o diagnóstico do
@@ -64,9 +68,17 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from . import obb as obb_mod
 from .workspace import safe_path
 
 EXTENSOES = {".apk", ".aab", ".apks", ".xapk"}
+
+# 0.91.45 — o OBB deixou de ser “arquivo que eu não leio”. Ele não é APK (sem
+# manifesto, sem DEX, sem assinatura), mas o nome, o tamanho, o conteúdo
+# interno (quando é ZIP) e a conferência com o APK dizem muito — e é o que o
+# dono pediu: *“pq o obb não é analisado? pode fazer o javis analisar pfv”*.
+EXTENSOES_OBB = {obb_mod.EXTENSAO}
+EXTENSOES_ACEITAS = EXTENSOES | EXTENSOES_OBB
 
 # 0.91.44 — o teto era 600 MB, e o dono perguntou o que acontece com 1 GB.
 # A resposta honesta era “não entra” — e não precisava ser: o envio já é feito
@@ -146,14 +158,17 @@ def partes(files_root: Path) -> list[dict[str, Any]]:
         if not caminho.is_dir() or caminho.is_symlink() or caminho.name.startswith("."):
             continue
         apks = _apks_em(caminho)
-        if not apks:
+        obbs = _obbs_em(caminho)
+        if not apks and not obbs:
             continue
         itens.append(
             {
                 "nome": caminho.name,
                 "pasta": str(caminho),
-                "bytes": sum(item.stat().st_size for item in apks),
+                "bytes": sum(item.stat().st_size for item in apks + obbs),
                 "apks": [item.name for item in apks],
+                # 0.91.45 — o OBB é parte do jogo, não um intruso na pasta.
+                "obbs": [item.name for item in obbs],
                 "analisado": (caminho / "analise.txt").is_file(),
             }
         )
@@ -172,12 +187,113 @@ def _apks_em(pasta: Path) -> list[Path]:
     ]
 
 
+def _obbs_em(pasta: Path) -> list[Path]:
+    """Os OBBs dentro de uma pasta de jogo (main e patch, quando houver)."""
+    try:
+        itens = sorted(pasta.iterdir())
+    except OSError:
+        return []
+    return [
+        item
+        for item in itens
+        if item.is_file() and not item.is_symlink() and item.suffix.lower() in EXTENSOES_OBB
+    ]
+
+
+def pacote_do_zip(arquivo: Any) -> str:
+    """O pacote de um ZIP/APK **aberto** (caminho ou arquivo do upload).
+
+    Só o manifesto, e para. Não é `analisar()`: aqui a pergunta é uma só, e um
+    OBB na pasta não pode custar a leitura de assinatura e entropia do APK.
+    """
+    try:
+        with zipfile.ZipFile(arquivo) as zip_aberto:
+            info = zip_aberto.getinfo("AndroidManifest.xml")
+            if info.file_size > MAX_MANIFESTO:
+                return ""
+            dados = zip_aberto.read("AndroidManifest.xml")
+    except (KeyError, OSError, zipfile.BadZipFile, ValueError):
+        return ""
+    try:
+        return str(fatos_do_manifest(ler_manifest(dados))["pacote"] or "")
+    except (struct.error, ValueError, IndexError):
+        return ""
+
+
+def pacote_do_apk(caminho: Path) -> str:
+    """Só o pacote do APK — o suficiente para achar a pasta do OBB dele."""
+    return pacote_do_zip(caminho)
+
+
+def parte_do_obb_orfao(files_root: Path, pacote: str) -> tuple[Path, str] | None:
+    """A pasta que só tem OBB deste pacote (o APK ainda não chegou).
+
+    Quando o OBB é enviado antes do APK, a pasta nasce com o nome do pacote.
+    Este é o caminho para o APK entrar **nela** em vez de criar uma pasta nova
+    e deixar o OBB sozinho do outro lado.
+    """
+    if not pacote:
+        return None
+    for parte in partes(files_root):
+        pasta = Path(parte["pasta"])
+        if _apks_em(pasta):
+            continue
+        for item in _obbs_em(pasta):
+            dados = obb_mod.do_nome(item.name)
+            if dados and dados.get("pacote") == pacote:
+                return pasta, parte["nome"]
+    return None
+
+
+def parte_do_obb(files_root: Path, nome: str) -> tuple[Path, str]:
+    """Onde guardar o OBB: na pasta do APK **do mesmo jogo**, quando ele existe.
+
+    Se o APK ainda não chegou, a pasta é criada com o nome do pacote — e quando
+    o APK chegar (mesmo depois), ele entra na pasta que já existe. Assim o OBB
+    nunca fica longe do APK que ele completa.
+    """
+    base = raiz(files_root)
+    dados = obb_mod.do_nome(nome) or {}
+    pacote = str(dados.get("pacote") or "")
+    if pacote:
+        for parte in partes(files_root):
+            pasta = Path(parte["pasta"])
+            for apk in _apks_em(pasta):
+                if pacote_do_apk(apk) == pacote:
+                    return pasta, parte["nome"]
+    semente = pacote or Path(nome).stem
+    candidato = _slug(semente)
+    contador = 1
+    while True:
+        pasta = base / candidato
+        if not pasta.exists():
+            return pasta, candidato
+        # Pasta existe: usa se estiver vazia de APK (só OBBs) ou se for do mesmo
+        # pacote; senão, procura um nome livre.
+        if not _apks_em(pasta) or (
+            pacote and any(pacote_do_apk(apk) == pacote for apk in _apks_em(pasta))
+        ):
+            return pasta, candidato
+        candidato = f"{_slug(semente)}-{contador}"
+        contador += 1
+
+
 def _unico_apk(pasta: Path, referencia: str) -> Path:
+    """O único arquivo analisável da pasta — APK ou, na falta dele, o OBB."""
     apks = _apks_em(pasta)
     if len(apks) == 1:
         return apks[0]
     if not apks:
-        raise JogoError(f"A pasta “{referencia}” não tem nenhum APK dentro.")
+        obbs = _obbs_em(pasta)
+        if len(obbs) == 1:
+            return obbs[0]
+        if obbs:
+            nomes = ", ".join(item.name for item in obbs)
+            raise JogoError(
+                f"A pasta “{referencia}” só tem OBBs ({nomes}). Diga qual: "
+                f"analisar jogo {referencia}/{obbs[0].name}"
+            )
+        raise JogoError(f"A pasta “{referencia}” não tem nenhum APK nem OBB dentro.")
     nomes = ", ".join(item.name for item in apks)
     raise JogoError(
         f"A pasta “{referencia}” tem {len(apks)} APKs ({nomes}). Diga qual: "
@@ -235,8 +351,8 @@ def arquivo(files_root: Path, nome: str) -> Path:
                     "do analisar-jogo.bat — ele copia para storage/user-files/jogos)."
                 )
 
-    if caminho.suffix.lower() not in EXTENSOES:
-        raise JogoError("A análise aceita APK, AAB, APKS ou XAPK do seu jogo.")
+    if caminho.suffix.lower() not in EXTENSOES_ACEITAS:
+        raise JogoError("A análise aceita APK, AAB, APKS, XAPK — e o OBB do jogo (.obb).")
     if not caminho.is_file() or caminho.is_symlink():
         raise JogoError(f"Não achei “{bruto}” na pasta de jogos.")
     tamanho = caminho.stat().st_size
@@ -245,7 +361,7 @@ def arquivo(files_root: Path, nome: str) -> Path:
     if tamanho > MAXIMO_BYTES:
         raise JogoError(
             f"O arquivo tem {rotulo_bytes(tamanho)}; o limite é {rotulo_bytes(MAXIMO_BYTES)}. "
-            "Acima disso, envie o APK sem o OBB (o OBB não é analisado) ou o AAB."
+            "Acima disso, divida os dados em main + patch (até 2 GB cada) ou use Play Asset Delivery."
         )
     return caminho
 
@@ -294,6 +410,37 @@ def _gravar_analise(pasta: Path, relatorio: dict[str, Any]) -> None:
     )
 
 
+def _guardar_obb(origem: Path, files_root: Path, tamanho: int | None = None) -> dict[str, Any]:
+    """Guarda o OBB ao lado do APK dele e devolve o relatório já conferido."""
+    tamanho = tamanho if tamanho is not None else origem.stat().st_size
+    pasta, candidato = parte_do_obb(files_root, origem.name)
+    livre = espaco_livre(pasta.parent)
+    if livre is not None and livre < tamanho + MARGEM_DISCO:
+        raise JogoError(
+            f"Não há espaço no disco para guardar este OBB: ele tem {rotulo_bytes(tamanho)} "
+            f"e o disco tem {rotulo_bytes(livre)} livres (preciso de mais "
+            f"{rotulo_bytes(MARGEM_DISCO)} de folga). Libere espaço e arraste de novo."
+        )
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = safe_path(pasta, origem.name)
+    novo = True
+    if destino.is_file() and not destino.is_symlink() and destino.stat().st_size == tamanho:
+        # Mesmo OBB de novo: não copia por cima, só analisa o que já está lá.
+        novo = False
+    else:
+        shutil.copy2(origem, destino)
+    relatorio = relatar_parte(pasta, parte=candidato)
+    _gravar_analise(pasta, relatorio)
+    return {
+        "parte": candidato,
+        "pasta": str(pasta),
+        "apk": origem.name,
+        "bytes": tamanho,
+        "novo": novo,
+        "relatorio": relatorio,
+    }
+
+
 def guardar(origem: Path, files_root: Path) -> dict[str, Any]:
     """Guarda o APK na pasta DELE e analisa ali dentro.
 
@@ -306,18 +453,23 @@ def guardar(origem: Path, files_root: Path) -> dict[str, Any]:
         raise JogoError(f"Não achei “{origem}”.")
     if origem.is_symlink() or not origem.is_file():
         raise JogoError("Arraste o arquivo do APK, não uma pasta nem um atalho.")
-    if origem.suffix.lower() not in EXTENSOES:
-        raise JogoError("A análise aceita APK, AAB, APKS ou XAPK do seu jogo.")
+    if origem.suffix.lower() not in EXTENSOES_ACEITAS:
+        raise JogoError("A análise aceita APK, AAB, APKS, XAPK — e o OBB do jogo (.obb).")
     tamanho = origem.stat().st_size
     if tamanho <= 0:
         raise JogoError("O arquivo está vazio.")
     if tamanho > MAXIMO_BYTES:
         raise JogoError(
             f"O arquivo tem {rotulo_bytes(tamanho)}; o limite é {rotulo_bytes(MAXIMO_BYTES)}. "
-            "Acima disso, envie o APK sem o OBB (o OBB não é analisado) ou o AAB."
+            "Acima disso, divida os dados em main + patch (até 2 GB cada) ou use Play Asset Delivery."
         )
 
     base = raiz(files_root)
+
+    # 0.91.45 — o OBB não escolhe pasta pelo próprio nome: ele vai para a pasta
+    # do APK do mesmo pacote, para o relatório poder conferir um contra o outro.
+    if origem.suffix.lower() in EXTENSOES_OBB:
+        return _guardar_obb(origem, files_root, tamanho=tamanho)
     # 0.91.44 — a cópia para `jogos/` precisa caber no disco. Sem esta
     # conferência, um APK grande enchia o disco e o erro que aparecia era
     # “No space left on device”, em inglês, no meio de uma pasta pela metade.
@@ -945,6 +1097,24 @@ def analisar(caminho: Path) -> dict[str, Any]:
             )
         )
 
+    obbs_internos = [item["nome"] for item in entradas if item["nome"].lower().endswith(".obb")]
+    if obbs_internos:
+        achados.append(
+            _achado(
+                "info",
+                "Este pacote traz OBB dentro dele",
+                f"O arquivo contém {len(obbs_internos)} OBB: "
+                + ", ".join(obbs_internos[:3])
+                + ("…" if len(obbs_internos) > 3 else "")
+                + ".",
+                "O OBB é onde costuma estar quase todo o peso do jogo — e, dentro do "
+                "pacote, ele aparece como mais uma entrada, sem a análise que merece.",
+                "Envie o .obb separado na mesma área (é só arrastar junto com o APK): aí eu "
+                "leio o nome, o tamanho, o conteúdo e confiro pacote e versão com o APK.",
+                "Pasta do jogo",
+            )
+        )
+
     if fatos["extrairNativas"] is True:
         achados.append(
             _achado(
@@ -1006,8 +1176,71 @@ def _dica_de_tamanho(motor: str) -> str:
 _SEVERIDADE = {"critico": "CRÍTICO", "atencao": "ATENÇÃO", "info": "INFO"}
 
 
+_CONFERENCIA_TEXTO = {
+    "igual": "igual",
+    "diferente": "DIFERENTE",
+    "desconhecido": "não deu para conferir",
+}
+
+
+def _linhas_do_obb(item: dict[str, Any]) -> list[str]:
+    """As linhas de um OBB — usadas no texto do APK e no texto só do OBB."""
+    linhas = [
+        f"OBB “{item['arquivo']}” — {_mb(item['bytes'])}:",
+        f"  formato: {item['formato']} · {item['entradas']} arquivos · "
+        f"{_mb(item['tamanhoDescompactado'])} descompactado · entropia {item['entropia']:.2f}",
+    ]
+    if item.get("pacote"):
+        linhas.append(f"  diz ser: {item['pacote']} · versão {item.get('versaoCodigo')}")
+    conferencia = item.get("conferencia") or {}
+    if conferencia.get("pacoteDoApk"):
+        linhas.append(
+            "  conferência com o APK: pacote "
+            f"{_CONFERENCIA_TEXTO.get(conferencia.get('pacote', ''), '?')} · versionCode "
+            f"{_CONFERENCIA_TEXTO.get(conferencia.get('versaoCodigo', ''), '?')}"
+        )
+    if item["achados"]:
+        linhas.append("")
+        for indice, achado in enumerate(item["achados"], start=1):
+            linhas.append(f"  {indice}. [{_SEVERIDADE[achado['severidade']]}] {achado['titulo']}")
+            linhas.append(f"     O que é: {achado['o_que_e']}")
+            linhas.append(f"     Por que importa: {achado['por_que_importa']}")
+            linhas.append(f"     Como melhorar: {achado['como_melhorar']}")
+            if achado["onde"]:
+                linhas.append(f"     Onde: {achado['onde']}")
+    if item["maiores"]:
+        linhas.append("  Maiores arquivos do OBB:")
+        for maior in item["maiores"][:5]:
+            linhas.append(f"    {maior['mb']:>7.1f} MB  {maior['nome']}")
+    return linhas
+
+
+def texto_obb(relatorio: dict[str, Any]) -> str:
+    """O texto de um relatório que só tem OBB (o APK ainda não foi enviado)."""
+    linhas = [f"Análise do OBB “{relatorio['arquivo']}”:"]
+    if relatorio.get("pacote"):
+        linhas.append(
+            f"{relatorio['pacote']} · versão {relatorio.get('versaoCodigo')} "
+            "(lido do nome do arquivo)"
+        )
+    linhas.append("")
+    for item in relatorio.get("obbs", []):
+        linhas.extend(_linhas_do_obb(item))
+        linhas.append("")
+    linhas.append(
+        "OBB não tem manifesto nem assinatura: o que dá para afirmar dele é o nome, o "
+        "tamanho, o conteúdo (quando abre como ZIP) e a conferência com o APK da mesma pasta."
+    )
+    linhas.append("(Análise feita no seu PC, sem enviar o OBB para lugar nenhum.)")
+    if relatorio.get("parte"):
+        linhas.append(f"(Guardado em jogos/{relatorio['parte']}/.)")
+    return "\n".join(linhas)
+
+
 def texto(relatorio: dict[str, Any]) -> str:
     """O relatório em português, com o que fazer em cada achado."""
+    if relatorio.get("somenteObb"):
+        return texto_obb(relatorio)
     linhas = [f"Análise do jogo “{relatorio['arquivo']}”:"]
     identidade = []
     if relatorio["pacote"]:
@@ -1050,6 +1283,13 @@ def texto(relatorio: dict[str, Any]) -> str:
             linhas.append(f"  {item['mb']:>6.1f} MB  {item['nome']}")
         linhas.append("")
 
+    if relatorio.get("obbs"):
+        linhas.append("")
+        linhas.append("O OBB do jogo (os dados que ficam fora do APK):")
+        for item in relatorio["obbs"]:
+            linhas.extend(_linhas_do_obb(item))
+            linhas.append("")
+
     linhas.append(
         "Isto é o que se vê do **pacote pronto**. Não descompilei o jogo nem recompilei: "
         "o que muda o jogo de verdade — equilíbrio, controles, ritmo — só você decide, "
@@ -1067,14 +1307,84 @@ def texto(relatorio: dict[str, Any]) -> str:
 
 
 def relatar(caminho: Path, parte: str = "", pasta: str = "") -> dict[str, Any]:
-    """O relatório completo, já com o texto — e com a pasta onde ele vive."""
+    """O relatório completo, já com o texto — e com a pasta onde ele vive.
+
+    0.91.45 — se há OBB ao lado do APK, ele entra no relatório **conferido
+    contra o APK**: pacote e versionCode. É a diferença que quebra o jogo em
+    silêncio (OBB da versão 20 com APK da 14), e ela não aparecia em lugar
+    nenhum porque o OBB não era lido.
+    """
+    caminho = Path(caminho)
+    if caminho.suffix.lower() in EXTENSOES_OBB:
+        return relatar_obb(caminho, parte=parte, pasta=pasta)
     relatorio = analisar(caminho)
+    if parte:
+        relatorio["parte"] = parte
+    if pasta:
+        relatorio["pasta"] = pasta
+    obbs = _obbs_em(caminho.parent)
+    if obbs:
+        relatorio["obbs"] = [obb_mod.analisar(item) for item in obbs[:2]]
+        for item in relatorio["obbs"]:
+            obb_mod.conferir(item, relatorio)
+    relatorio["texto"] = texto(relatorio)
+    return relatorio
+
+
+def relatar_obb(caminho: Path, parte: str = "", pasta: str = "") -> dict[str, Any]:
+    """Relatório de um OBB — sozinho, ou conferido com o APK da mesma pasta."""
+    caminho = Path(caminho)
+    item = obb_mod.analisar(caminho)
+    apk: dict[str, Any] | None = None
+    irmaos = _apks_em(caminho.parent)
+    if irmaos:
+        try:
+            apk = analisar(irmaos[0])
+        except (JogoError, OSError):
+            apk = None
+    obb_mod.conferir(item, apk)
+    relatorio: dict[str, Any] = {
+        "arquivo": caminho.name,
+        "bytes": item["bytes"],
+        "somenteObb": True,
+        "pacote": item.get("pacote") or (apk or {}).get("pacote", ""),
+        "versao": (apk or {}).get("versao", ""),
+        "versaoCodigo": item.get("versaoCodigo"),
+        "minSdk": (apk or {}).get("minSdk"),
+        "targetSdk": (apk or {}).get("targetSdk"),
+        "compileSdk": (apk or {}).get("compileSdk"),
+        "motor": (apk or {}).get("motor", ""),
+        "editor": (apk or {}).get("editor", ""),
+        "versaoDoMotor": (apk or {}).get("versaoDoMotor", ""),
+        "abis": (apk or {}).get("abis", []),
+        "dexes": (apk or {}).get("dexes", 0),
+        "permissoes": (apk or {}).get("permissoes", []),
+        "assinatura": (apk or {}).get("assinatura", {"v1": False, "v2v3": False, "manifestoMf": False}),
+        "entradas": 0,
+        "tamanhoDescompactado": 0,
+        "areas": {},
+        "maiores": [],
+        "achados": [],
+        "obbs": [item],
+    }
     if parte:
         relatorio["parte"] = parte
     if pasta:
         relatorio["pasta"] = pasta
     relatorio["texto"] = texto(relatorio)
     return relatorio
+
+
+def relatar_parte(pasta: Path, parte: str = "") -> dict[str, Any]:
+    """O relatório do que está na pasta: o APK (preferido) ou só o OBB."""
+    pasta = Path(pasta)
+    apks = _apks_em(pasta)
+    if apks:
+        return relatar(apks[0], parte=parte or pasta.name, pasta=str(pasta))
+    obbs = _obbs_em(pasta)
+    if obbs:
+        return relatar_obb(obbs[0], parte=parte or pasta.name, pasta=str(pasta))
+    raise JogoError("Essa pasta não tem APK nem OBB para analisar.")
 
 
 # ---------------------------------------------------------------------------

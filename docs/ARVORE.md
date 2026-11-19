@@ -174,6 +174,72 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.91.45 — “pq o obb não é analisado? pode fazer o javis analisar pfv”
+
+> pq o obb mao e analisado? pode fazer o javis analisar pfv
+
+“O OBB não é analisado” estava escrito em três lugares (a tela, a recusa de
+tamanho e `docs/ENGENHARIA-REVERSA.md`). Era verdade **pela metade** e servia
+mal: o OBB é onde mora quase todo o peso de um jogo — texturas, áudio, vídeo —,
+e quem acabou de gerar um build quer saber o que tem dentro dele.
+
+A metade falsa é que o OBB não é um APK: não tem `AndroidManifest.xml`, não tem
+DEX, não tem assinatura. As perguntas do APK não se respondem nele. Mas as
+perguntas do **OBB** sim, e elas são as que quebram o jogo em silêncio:
+
+1. **o nome** — o Android procura `main.<versionCode>.<pacote>.obb`. O OBB da
+   versão 20 com o APK da 14 existe, está do lado do APK, e **não é usado**: o
+   jogo procura `main.14.<pacote>.obb`, não acha, e abre sem os dados. Antes,
+   ninguém via isso;
+2. **o conteúdo**, quando ele abre como ZIP (o caso do OBB gerado pelo Unity):
+   quantos arquivos, quanto pesa cada pasta e os dez maiores;
+3. **o que não comprime à toa** — 30 MB de JSON/WAV guardados sem compressão
+   só engordam o download;
+4. **o que não dá para ler** — OBB cifrado com o `jobb` não expõe a lista sem a
+   chave, e a resposta é “não dá para listar, e por quê”, nunca uma lista
+   inventada.
+
+## Medido no JARVIS de verdade (porta 8151)
+
+| cenário | o que voltou |
+|---|---|
+| `main.14.com.exemplo.jogo.obb` com o APK v14 | ZIP, **8 arquivos**, **8,6 MB** descompactado, entropia 3,08, maiores arquivos listados, conferência `igual / igual` |
+| `main.20...obb` na mesma pasta do APK v14 | **CRÍTICO** “O número do OBB não bate com a versão do APK” — e a frase ensina: *renomeie para `main.14.com.exemplo.jogo.obb`* |
+| OBB enviado **antes** do APK | pasta `jogos/com-exemplo-jogo/`, e o APK que chega depois **entra nela** (uma pasta, o par junto) |
+| OBB sozinho (sem APK) | relatório `somenteObb: true`, com o bloco do OBB e a saída “envie o APK para eu conferir pacote e versão” |
+
+## O que mudou no código
+
+- `server/obb.py` (novo): `do_nome()` lê `main|patch.<versionCode>.<pacote>.obb`;
+  `analisar()` abre como ZIP (só o diretório central), calcula áreas, maiores,
+  entropia por amostra (2 MB) e produz achados com o formato do resto do
+  projeto; `conferir()` compara com o APK e transforma a divergência em achado.
+- `server/jogo.py`: `EXTENSOES_ACEITAS` (APK + `.obb`), `parte_do_obb()` (o OBB
+  entra na pasta do APK do mesmo pacote), `parte_do_obb_orfao()` (o APK entra na
+  pasta do OBB quando ele chegou primeiro), `relatar_parte()`, `relatar_obb()`,
+  `texto_obb()` e o bloco do OBB no texto do APK. Pacote que traz OBB dentro
+  (XAPK) ganha achado apontando o envio separado.
+- `server/app.py`: a rota de upload aceita `.obb` e decide a pasta pelo pacote;
+  antes de transmitir, lê o manifesto do próprio upload para saber se há uma
+  pasta de OBB esperando o APK.
+- `src/lib/api.ts` + `src/pages/JogoPage.tsx`: o OBB aparece na lista da pasta,
+  tem bloco próprio no painel (formato, arquivos, tamanho aberto, selo de
+  conferência, achados e maiores arquivos) e a área de arrastar aceita `.obb`.
+- `analisar-jogo.py`: listar uma pasta só com OBB estourava `apks[0]` — o `.bat`
+  morria antes de mostrar qualquer coisa.
+
+## O que continua verdade
+
+O OBB **cifrado** (por exemplo, gerado com `jobb -k`) não é decifrado: o
+relatório diz que não consegue listar e mostra o que consegue (nome, tamanho,
+entropia, conferência). Nada é extraído em disco: o ZIP é lido pelo diretório
+central, como no resto do projeto.
+
+E o limite do Play não muda por causa disso: são **100 MB de APK + OBB de até
+2 GB** (um `main` e um `patch`) no formato antigo, ou AAB com Play Asset
+Delivery, com 1,5 GB por asset pack. O JARVIS lê o pacote; publicar é outra
+conversa, e o texto diz qual é.
+
 ### 0.91.44 — “e se o meu app ou jogo tiver 1 GB ou 500 MB?”
 
 > ta mas e se o meu app ou jogo tiver 1gb ou 500 mb?
@@ -207,8 +273,9 @@ O que mudou:
   pela metade.
 - `rotulo_bytes()`: 2 GB, 600 MB, 1,1 GB — o número que a pessoa lê é o mesmo
   que o servidor cobra.
-- Acima de 2 GB, a recusa manda para o **AAB** (a aba aceita) e lembra que o
-  OBB não é analisado.
+- Acima de 2 GB, a recusa manda dividir em **main + patch** (até 2 GB cada) ou
+  usar **Play Asset Delivery** com o AAB. (Na 0.91.45 o OBB passou a ser
+  analisado, então “sem o OBB” deixou de ser conselho.)
 
 O que a medição **não** muda: o Android só instala APK até um certo tamanho e a
 Play trabalha com **APK de 100 MB + OBB de até 2 GB cada** (ou AAB com Play
