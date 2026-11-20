@@ -1182,3 +1182,72 @@ export async function uploadJogoWeb(file: File, nome = ''): Promise<{ nome: stri
   if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não guardou o export.', 200, 'JOGO_WEB_UPLOAD');
   return resposta.result;
 }
+
+/* ---------------------------------------------------------------- anatomia */
+
+export interface AnatomiaItem {
+  rotulo: string;
+  valor: string;
+}
+
+export interface AnatomiaSecao {
+  id: string;
+  titulo: string;
+  itens: AnatomiaItem[];
+}
+
+export interface AnatomiaResultado {
+  ok: boolean;
+  alvo: 'local' | 'android' | 'roku';
+  titulo: string;
+  lido_em: string;
+  secoes: AnatomiaSecao[];
+  limitacoes: string[];
+  nao_faz: string[];
+  fontes?: Record<string, string>;
+}
+
+export interface AnatomiaAparelho {
+  serial: string;
+  estado: string;
+  model?: string;
+  product?: string;
+}
+
+export interface AnatomiaAlvo {
+  id: 'local' | 'android' | 'roku';
+  titulo: string;
+  disponivel: boolean;
+  motivo: string;
+  aparelhos?: AnatomiaAparelho[];
+}
+
+export interface AnatomiaFontes {
+  ok: boolean;
+  alvos: AnatomiaAlvo[];
+  flags: Record<string, boolean>;
+  lido_em: string;
+}
+
+export async function getAnatomiaFontes(): Promise<AnatomiaFontes> {
+  const resposta = await apiFetch<{ ok: boolean; result: AnatomiaFontes }>('/api/anatomia/fontes');
+  return resposta.result;
+}
+
+/**
+ * Lê a anatomia de um aparelho — sem alterar nada nele.
+ *
+ * O `409` do servidor traz a frase que resolve o problema (cabo, variável,
+ * IP); ela vai inteira para a tela, porque é isso que o dono precisa ler.
+ */
+export async function lerAnatomia(
+  alvo: 'local' | 'android' | 'roku',
+  parametros: { ip?: string; serial?: string } = {},
+): Promise<AnatomiaResultado> {
+  const consulta = new URLSearchParams();
+  if (parametros.ip) consulta.set('ip', parametros.ip);
+  if (parametros.serial) consulta.set('serial', parametros.serial);
+  const sufixo = consulta.toString() ? `?${consulta}` : '';
+  const resposta = await apiFetch<{ ok: boolean; result: AnatomiaResultado }>(`/api/anatomia/${alvo}${sufixo}`);
+  return resposta.result;
+}

@@ -56,6 +56,7 @@ const navigation = [
   { to: '/engenharia', label: 'Engenharia', icon: Wrench },
   { to: '/planejamento', label: 'Planos', icon: ListChecks },
   { to: '/reversa', label: 'Reversa', icon: Fingerprint },
+  { to: '/anatomia', label: 'Anatomia', icon: Microscope },
   { to: '/jogo', label: 'Meu jogo', icon: Gamepad2 },
   { to: '/lean', label: 'Enxuto', icon: Leaf },
   { to: '/agencia', label: 'Agentes', icon: ShieldCheck },

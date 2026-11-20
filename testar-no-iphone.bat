@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - testar o jogo no iPhone
 setlocal enabledelayedexpansion
-REM Versao: 0.92.1
+REM Versao: 0.92.2
 REM
 REM O jeito mais facil: ARRASTE a pasta do export WebGL para cima deste arquivo.
 REM Ele guarda o jogo, sobe o servidor local e mostra o endereco que voce

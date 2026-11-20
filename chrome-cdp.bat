@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - criar a chave sem ler a tela
 echo.
 echo   JARVIS - criar a chave sem ler a tela
-echo   Versao: 0.92.1
+echo   Versao: 0.92.2
 echo   ----------------------------------------------------------------
 echo.
 echo   Este atalho usa um Chrome proprio do JARVIS e trabalha por dentro

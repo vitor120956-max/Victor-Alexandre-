@@ -49,6 +49,7 @@ from . import agenda as agenda_local
 from . import conversa as conversa_mod
 from . import tempo as tempo_mod
 from . import calendario as calendario_mod
+from . import anatomia as anatomia_mod
 from . import jogo as jogo_mod
 from . import jogo_web as jogo_web_mod
 from . import sistema as sistema_mod
@@ -809,6 +810,55 @@ def create_app(
     # melhore”. O que dá para fazer de verdade com o pacote pronto: ler o
     # manifesto binário, achar o motor, medir o que pesa e apontar o ajuste
     # certo em cada achado. Nada é descompactado, descompilado ou executado.
+
+    @application.get("/api/anatomia/fontes")
+    def anatomia_fontes() -> dict[str, Any]:
+        """O que dá para ler agora — e por que não dá, quando não dá.
+
+        A leitura é sempre de fora para dentro: nada aqui escreve no aparelho.
+        """
+        return {"ok": True, "result": anatomia_mod.fontes()}
+
+    @application.get("/api/anatomia/local")
+    def anatomia_local() -> Any:
+        """Anatomia da máquina que executa a API."""
+        return {"ok": True, "result": anatomia_mod.ler_local()}
+
+    @application.get("/api/anatomia/android")
+    def anatomia_android(serial: str = Query(default="", max_length=64)) -> Any:
+        """Anatomia de um Android na USB. Só `shell` de leitura, nunca `su`."""
+        try:
+            return {"ok": True, "result": anatomia_mod.ler_android(serial)}
+        except anatomia_mod.AnatomiaError as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "error": {"code": "ANATOMIA_ANDROID", "message": str(exc)}},
+            )
+
+    @application.get("/api/anatomia/roku")
+    def anatomia_roku(ip: str = Query(default="", max_length=64)) -> Any:
+        """Anatomia de uma TV Roku na rede local (ECP, porta 8060). Somente GET."""
+        try:
+            return {"ok": True, "result": anatomia_mod.ler_roku(ip)}
+        except anatomia_mod.AnatomiaError as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "error": {"code": "ANATOMIA_ROKU", "message": str(exc)}},
+            )
+
+    @application.get("/api/anatomia/{alvo}")
+    def anatomia_alvo(alvo: str) -> Any:
+        """Qualquer outro alvo é 404 — sem adivinhar o que o endereço quis dizer."""
+        return JSONResponse(
+            status_code=404,
+            content={
+                "ok": False,
+                "error": {
+                    "code": "ANATOMIA_ALVO",
+                    "message": f"“{alvo}” não é um alvo. Use local, android ou roku.",
+                },
+            },
+        )
 
     @application.get("/api/jogo/web")
     def jogo_web_lista() -> dict[str, Any]:

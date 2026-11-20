@@ -2668,3 +2668,48 @@ tem aberto). Um aplicativo malcomportado pode travar a chamada ou derrubar o
 processo inteiro. Derrubar uma sonda descartável é aceitável; derrubar o JARVIS
 no meio de uma conversa não é. É o mesmo princípio do `conferir-versao.bat`: o
 diagnóstico não pode ser perigoso.
+
+### 0.92.2 — “anatomia do aparelho”: ler sem mudar
+
+> tem como pedir para uma IA… fazer uma varredura ou uma engenharia reversa —
+> não para modificar, mas para entender todos os componentes do dispositivo e
+> arquivos, igual a anatomia humana
+
+> ou se eu quiser conectar por exemplo uma tv antiga q pega wifi tipo uma tcl
+
+> Roku TV
+
+O dono colou uma conversa inteira de outro assistente e, no fim, a pergunta que
+importava: **o JARVIS consegue?** A resposta virou módulo (`server/anatomia.py`),
+rota (`/api/anatomia/*`) e tela (menu **Anatomia**), com três alvos e uma regra
+só — **ler não é mexer**.
+
+- **`local`** — CPU, memória, discos, GPU e temperatura, cada número com a
+  **fonte** (`/proc`, registro do Windows, `nvidia-smi`, `psutil`,
+  `/sys/class/thermal`, WMI). Quando não há sensor, a resposta é “não exposta”
+  **com o motivo**, nunca um zero decorativo. No Windows comum, a temperatura
+  muitas vezes não existe: o módulo diz isso em vez de fingir.
+- **`android`** — `adb` já existia na aba Máquina; aqui ele recebe só `shell`
+  de leitura: `getprop`, `dumpsys battery`, `/proc/*`, `df`, `pm list packages`
+  e `/sys/class/thermal`. Nada de `install`, `push`, `pull`, `reboot` ou `su` —
+  e há teste que varre a lista de comandos para garantir isso.
+- **`roku`** — ECP na porta 8060: `/query/device-info`, `/query/apps`,
+  `/query/active-app`. **Só GET**: `POST /keypress` mudaria a TV, e o pedido
+  era entender, não apertar botão.
+
+Três correções ao que a conversa colada prometia:
+
+1. **“varredura automática ao plugar o cabo”** não existe: a Depuração USB e o
+   “Permitir” na tela são consentimento de uma pessoa, uma vez por computador.
+2. **temperatura sem root** depende do aparelho; muitos Androids escondem
+   `/sys/class/thermal`, e a resposta honesta é dizer que escondeu.
+3. **temperatura da TV pela rede** não existe no ECP; quem mostra é a tela de
+   engenharia no aparelho. E o firmware do Roku é assinado — binwalk não abre.
+
+Defeito achado no caminho: `dumpsys battery` publica temperatura em **décimos**
+de grau, e o primeiro código tratou como milésimos (312 virava 0,3 °C). O teste
+fixa 31,2 °C.
+
+Na tela, cada alvo desligado mostra **o que ligar** (a variável e o arquivo),
+o botão não fica mudo, e o resultado vem em seções de rótulo/valor com
+“o que a leitura não alcança” e “o que o JARVIS não faz” embaixo.
