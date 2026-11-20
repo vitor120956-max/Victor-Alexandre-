@@ -1666,11 +1666,13 @@ APPS_SEM_CAMINHO = (
         "e não existe ReVanced para iOS. O equivalente de lá é outro pacote, já pronto.",
         (
             "Sem mexer em nada e sem pagar: app oficial do YouTube (grátis, App Store) — com "
-            "anúncio. Para assistir sem anúncio pelo Safari, instale um bloqueador de conteúdo "
-            "grátis e ligue em Ajustes → Safari → Extensões; depois abra m.youtube.com.",
-            "O equivalente iOS do ReVanced é um **.ipa já modificado** (YTLite/uYou+) instalado "
-            "por sideload com AltStore ou Sideloadly e um Apple ID comum. É grátis e você não "
-            "compila nada — mas o app expira em 7 dias e precisa ser reinstalado pelo PC.",
+            "anúncio. Para assistir sem anúncio no navegador, use um navegador que já bloqueia "
+            "(Brave, grátis) ou ligue um bloqueador de conteúdo grátis em Ajustes → Safari → "
+            "Extensões; depois abra m.youtube.com.",
+            "O equivalente iOS do ReVanced é um **.ipa já modificado** (YTLite/YTLitePlus/uYou+) "
+            "instalado por sideload com AltStore, Sideloadly ou SideStore e um Apple ID comum. "
+            "É grátis e você não compila nada — mas com conta gratuita o app expira em 7 dias. "
+            "O SideStore renova pela própria rede, sem cabo; o AltStore/Sideloadly pedem o PC.",
             "Com conta Apple Developer (US$ 99/ano) a mesma instalação vale 1 ano, sem renovar "
             "toda semana.",
             "O JARVIS não instala nada no iPhone e não gera .ipa: assinar app de iOS exige a "

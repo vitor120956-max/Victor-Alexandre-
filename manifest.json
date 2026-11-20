@@ -1,6 +1,6 @@
 {
  "versao": "0.92.1",
- "gerado": "2026-11-20T02:19:56+00:00",
+ "gerado": "2026-11-20T02:20:40+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -1323,8 +1323,8 @@
    "bytes": 6746
   },
   "server/jogo.py": {
-   "sha256": "00268f5907ddc5e4e7296ffcf75a3c0c96469586e0e8a7e2893c8d8306d4032c",
-   "bytes": 79305
+   "sha256": "3a66d843505576101da874791ced1dc150c3d6d704435546001f5c5509a9f09e",
+   "bytes": 79470
   },
   "server/jogo_web.py": {
    "sha256": "6a77535891e1964ac04967d5c0f7ba5b59c201fa9520ffa9dad122632dee92a4",
