@@ -10,13 +10,17 @@ import {
   Package,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
+  Upload,
 } from 'lucide-react';
 import {
   requestJogoAnalisar,
+  requestJogosWeb,
   requestJogos,
   uploadJogo,
+  uploadJogoWeb,
 } from '../lib/api';
-import type { JogoLista, JogoRelatorio } from '../lib/api';
+import type { JogoIphone, JogoLista, JogoRelatorio, JogoWebLista } from '../lib/api';
 import '../jogo.css';
 
 // 0.91.45 — o OBB entrou na lista: é onde mora quase todo o peso do jogo, e o
@@ -66,6 +70,45 @@ function gravidade(item: { severidade: string }): keyof typeof SEVERIDADE {
   return item.severidade === 'critico' || item.severidade === 'atencao' ? item.severidade : 'info';
 }
 
+/**
+ * O veredito do iPhone para o pacote aberto (0.92.1).
+ *
+ * O dono arrastou dois APKs e pediu “passar para o iPhone de graça”. A resposta
+ * depende do pacote — jogo com projeto no motor tem export web; cliente
+ * alternativo do YouTube e microG não têm nada. O texto vem do servidor, não é
+ * escrito na tela: assim a tela e o relatório não divergem.
+ */
+function CartaoIphone({ iphone }: { iphone: JogoIphone }) {
+  const [aberto, setAberto] = useState(false);
+  const tom = iphone.possivel ? 'ok' : iphone.tipo === 'dados' || iphone.tipo === 'desconhecido' ? 'neutro' : 'nao';
+  return (
+    <section className={`jogo-iphone is-${tom}`}>
+      <header>
+        <Smartphone size={15} />
+        <div>
+          <span className="jogo-iphone-rotulo">NO IPHONE, DE GRAÇA</span>
+          <strong>{iphone.veredito}</strong>
+        </div>
+        <em>{iphone.possivel ? 'dá' : iphone.gratis ? 'pago' : 'não dá'}</em>
+      </header>
+      <p>{iphone.porque}</p>
+      <button type="button" className="jogo-iphone-toggle" onClick={() => setAberto((valor) => !valor)}>
+        {aberto ? 'Esconder o passo a passo' : `Ver o passo a passo (${iphone.passos.length})`}
+      </button>
+      {aberto && (
+        <>
+          <ol className="jogo-iphone-passos">
+            {iphone.passos.map((passo, indice) => <li key={indice}>{passo}</li>)}
+          </ol>
+          <p className="jogo-iphone-custo"><b>Custo:</b> {iphone.custo}</p>
+        </>
+      )}
+      <p className="jogo-iphone-limite"><b>Limite:</b> {iphone.limite}</p>
+      <p className="jogo-iphone-fonte">lido de: {iphone.fonte}</p>
+    </section>
+  );
+}
+
 export function JogoPage() {
   const [lista, setLista] = useState<JogoLista | null>(null);
   const [relatorio, setRelatorio] = useState<JogoRelatorio | null>(null);
@@ -75,7 +118,37 @@ export function JogoPage() {
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [arrastando, setArrastando] = useState(false);
+  const [web, setWeb] = useState<JogoWebLista | null>(null);
+  const [enviandoWeb, setEnviandoWeb] = useState(false);
+  const [avisoWeb, setAvisoWeb] = useState('');
+  const [erroWeb, setErroWeb] = useState('');
   const entrada = useRef<HTMLInputElement>(null);
+  const entradaWeb = useRef<HTMLInputElement>(null);
+
+  const carregarWeb = useCallback(async () => {
+    try {
+      setWeb(await requestJogosWeb());
+    } catch {
+      setWeb(null); // a área do iPhone é um extra: falhar aqui não derruba a análise
+    }
+  }, []);
+
+  useEffect(() => { void carregarWeb(); }, [carregarWeb]);
+
+  const enviarWeb = useCallback(async (arquivo: File) => {
+    setErroWeb('');
+    setAvisoWeb('');
+    setEnviandoWeb(true);
+    try {
+      const resultado = await uploadJogoWeb(arquivo);
+      setAvisoWeb(`${resultado.nome}: ${resultado.arquivos} arquivo(s), pronto para servir no iPhone.`);
+      await carregarWeb();
+    } catch (falha) {
+      setErroWeb(falha instanceof Error ? falha.message : 'Não consegui guardar o export.');
+    } finally {
+      setEnviandoWeb(false);
+    }
+  }, [carregarWeb]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -307,6 +380,8 @@ export function JogoPage() {
                 {relatorio.parte && <span className="jogo-parte">jogos/{relatorio.parte}/</span>}
               </header>
 
+              {relatorio.iphone && <CartaoIphone iphone={relatorio.iphone} />}
+
               {relatorio.somenteObb && (
                 <p className="jogo-hint">
                   Só o OBB chegou até agora. Envie o APK do mesmo jogo nesta área — ele entra nesta
@@ -442,6 +517,80 @@ export function JogoPage() {
           )}
         </section>
       </div>
+
+      <section className="jogo-web">
+        <header>
+          <Smartphone size={16} />
+          <div>
+            <h2>Testar no iPhone</h2>
+            <p>
+              O <code>.apk</code> não roda no iOS. O que roda é o <b>export web</b> do jogo
+              (a pasta com <code>index.html</code>) — aqui você manda o <code>.zip</code> dela.
+              O servidor do jogo é outro processo: abra o <code>testar-no-iphone.bat</code> e
+              deixe a janela aberta.
+            </p>
+          </div>
+        </header>
+
+        <div className="jogo-web-acoes">
+          <button
+            type="button"
+            className="jogo-web-enviar"
+            onClick={() => entradaWeb.current?.click()}
+            disabled={enviandoWeb}
+          >
+            {enviandoWeb ? <LoaderCircle className="jogo-spin" size={15} /> : <Upload size={15} />}
+            Enviar o .zip do export
+          </button>
+          <input
+            ref={entradaWeb}
+            type="file"
+            accept=".zip"
+            hidden
+            onChange={(evento) => {
+              const arquivo = evento.target.files?.[0];
+              if (arquivo) void enviarWeb(arquivo);
+              evento.target.value = '';
+            }}
+          />
+          {web && (
+            <span className="jogo-web-endereco">
+              No iPhone, no Safari: <code>{web.endereco}</code>
+            </span>
+          )}
+        </div>
+
+        {avisoWeb && <p className="jogo-status is-ok"><Check size={14} /> {avisoWeb}</p>}
+        {erroWeb && <p className="jogo-status is-error"><CircleAlert size={14} /> {erroWeb}</p>}
+
+        {web && web.jogos.length > 0 ? (
+          <ul className="jogo-web-lista">
+            {web.jogos.map((item) => (
+              <li key={item.nome}>
+                <Gamepad2 size={14} />
+                <span>
+                  <strong>{item.nome}</strong>
+                  <small>{item.arquivos} arquivo(s) · {mb(item.bytes)}</small>
+                </span>
+                <em className={item.temIndex ? 'is-ok' : 'is-error'}>
+                  {item.temIndex ? 'pronto' : 'sem index.html'}
+                </em>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="jogo-hint">
+            Nenhum export guardado ainda. No motor do jogo, gere o destino <b>WebGL</b> (Unity)
+            ou <b>Web</b> (Godot) e compacte a pasta que tem o <code>index.html</code>.
+          </p>
+        )}
+
+        <p className="jogo-hint">
+          Depois de abrir no Safari: <b>Compartilhar → Adicionar à Tela de Início</b>. Vira ícone
+          em tela cheia, sem App Store e sem conta paga. Não é app assinado — e o celular precisa
+          estar no mesmo Wi-Fi do PC.
+        </p>
+      </section>
     </main>
   );
 }

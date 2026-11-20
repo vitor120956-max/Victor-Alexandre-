@@ -877,3 +877,148 @@ def test_a_recusa_por_tamanho_diz_o_teto_do_jogo(cliente):
     # agora é analisado): é dividir em main + patch ou usar Play Asset Delivery.
     assert "main + patch" in erro["message"]
     assert "Play Asset Delivery" in erro["message"]
+
+
+# ---------------------------------------------------------------------------
+# “Passar esses dois apps/jogo para o iPhone de graça” (0.92.1)
+# ---------------------------------------------------------------------------
+# O dono arrastou dois APKs e pediu o iPhone de graça. A resposta honesta muda
+# com o pacote: um jogo Unity sai em WebGL; um ReVanced de YouTube não tem
+# caminho nenhum; microG nem faz sentido no iOS. Estes testes prendem os três
+# vereditos e impedem a promessa fácil (“é só exportar em WebGL”) para tudo.
+
+def _com_manifesto(
+    tmp_path: Path,
+    *,
+    pacote: str,
+    motor: str = "",
+    nome: str = "pacote.apk",
+) -> dict:
+    extras: dict[str, bytes] = {}
+    if motor == "flutter":
+        extras["lib/arm64-v8a/libflutter.so"] = b"\x00" * 2048
+    elif motor == "cordova":
+        extras["assets/www/index.html"] = b"<html></html>"
+        extras["assets/www/cordova.js"] = b"// cordova"
+    caminho = _apk(
+        tmp_path / nome,
+        manifest=manifesto(pacote=pacote),
+        motor="" if motor in {"flutter", "cordova"} else "unity",
+        abis=("arm64-v8a",),
+        extras=extras,
+    )
+    return jogo.relatar(caminho)
+
+
+def test_o_relatorio_traz_o_veredito_do_iphone(tmp_path: Path):
+    relatorio = _com_manifesto(tmp_path, pacote="com.exemplo.jogo")
+    iphone = relatorio["iphone"]
+    assert iphone["possivel"] is True and iphone["gratis"] is True
+    assert iphone["tipo"] == "jogo-android"
+    assert "iPhone" in relatorio["texto"]
+    # O texto do chat não pode esconder a resposta que ele pediu.
+    assert iphone["veredito"] in relatorio["texto"]
+
+
+def test_jogo_unity_tem_o_passo_a_passo_do_export_webgl(tmp_path: Path):
+    iphone = _com_manifesto(tmp_path, pacote="com.exemplo.jogo")["iphone"]
+    passos = " ".join(iphone["passos"])
+    assert "Build Settings" in passos and "WebGL" in passos
+    assert "index.html" in passos
+    # E o limite honesto: não é app assinado, depende do PC servir.
+    assert "App Store" in iphone["limite"]
+    assert "não é app" in iphone["limite"].lower() or "Não é app" in iphone["limite"]
+    # Jamais promete `.ipa` de graça.
+    assert ".ipa" not in " ".join(iphone["passos"])
+
+
+def test_jogo_godot_avisa_do_sharedarraybuffer(tmp_path: Path):
+    # `_apk(motor="unity")` escreve libunity; aqui o motor é Godot de verdade.
+    caminho = _apk(
+        tmp_path / "godot.apk",
+        manifest=manifesto(pacote="com.exemplo.godot"),
+        motor="godot",
+        abis=("arm64-v8a",),
+    )
+    iphone = jogo.relatar(caminho)["iphone"]
+    assert iphone["possivel"] is True
+    assert "SharedArrayBuffer" in " ".join(iphone["passos"])
+    assert "threads" in " ".join(iphone["passos"]).lower()
+
+
+def test_revanced_do_youtube_nao_tem_caminho_e_diz_por_que(tmp_path: Path):
+    iphone = _com_manifesto(tmp_path, pacote="com.google.android.youtube")["iphone"]
+    assert iphone["possivel"] is False
+    assert iphone["e_jogo"] is False
+    assert "YouTube" in iphone["veredito"]
+    # A resposta útil é o que existe no iPhone, não um “não” seco.
+    passos = " ".join(iphone["passos"])
+    assert "App Store" in passos
+    assert "Safari" in passos
+    # O equivalente mais próximo do ReVanced é o sideload de um .ipa pronto —
+    # o único caminho que não exige recompilar nada.
+    assert "sideload" in passos.lower()
+    assert "7 dias" in passos
+    # E o que ele **não** faz, dito sem rodeio.
+    assert "não gera .ipa" in passos
+    # E a razão dita: APK não roda no iOS.
+    assert "APK" in iphone["porque"] and "iOS" in iphone["porque"]
+
+
+def test_vanced_com_pacote_antigo_tambem_e_reconhecido(tmp_path: Path):
+    iphone = _com_manifesto(tmp_path, pacote="com.vanced.android.youtube")["iphone"]
+    assert iphone["possivel"] is False
+    assert "YouTube" in iphone["veredito"]
+
+
+def test_microg_nao_existe_no_iphone(tmp_path: Path):
+    iphone = _com_manifesto(tmp_path, pacote="app.revanced.android.gms")["iphone"]
+    assert iphone["possivel"] is False
+    assert "microG" in iphone["veredito"]
+    assert "iOS" in iphone["porque"] or "iPhone" in iphone["porque"]
+    # Não herda o custo do YouTube: aqui não há o que instalar.
+    assert "não há o que instalar" in iphone["custo"]
+
+
+def test_unreal_nao_promete_webgl_que_a_epic_removeu(tmp_path: Path):
+    caminho = _apk(
+        tmp_path / "ue.apk",
+        manifest=manifesto(pacote="com.exemplo.ue"),
+        motor="nenhum",
+        abis=("arm64-v8a",),
+        extras={"lib/arm64-v8a/libUE4.so": b"\x00" * 2048},
+    )
+    iphone = jogo.relatar(caminho)["iphone"]
+    assert iphone["possivel"] is False
+    assert "4.24" in iphone["porque"]
+    assert "US$ 99" in iphone["custo"]
+
+
+def test_app_flutter_nao_vira_site_sozinho(tmp_path: Path):
+    iphone = _com_manifesto(tmp_path, pacote="com.exemplo.app", motor="flutter")["iphone"]
+    assert iphone["possivel"] is False
+    assert "Flutter" in iphone["veredito"]
+    assert "projeto" in " ".join(iphone["passos"])
+
+
+def test_pacote_desconhecido_nao_vira_chute(tmp_path: Path):
+    caminho = _apk(
+        tmp_path / "solto.apk",
+        manifest=manifesto(pacote="com.exemplo.sem.motor"),
+        motor="nenhum",
+        abis=("arm64-v8a",),
+    )
+    iphone = jogo.relatar(caminho)["iphone"]
+    assert iphone["possivel"] is False
+    assert iphone["tipo"] == "desconhecido"
+    assert "chute" in iphone["porque"]
+
+
+def test_obb_sozinho_nao_e_o_jogo_e_diz_isso(tmp_path: Path):
+    obb = tmp_path / "main.7.com.exemplo.jogo.obb"
+    with zipfile.ZipFile(obb, "w") as pacote:
+        pacote.writestr("assets/dados.bin", b"\x00" * 100)
+    iphone = jogo.relatar(obb)["iphone"]
+    assert iphone["possivel"] is False
+    assert iphone["tipo"] == "dados"
+    assert "APK" in " ".join(iphone["passos"])

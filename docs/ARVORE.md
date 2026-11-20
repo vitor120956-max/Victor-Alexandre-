@@ -174,6 +174,51 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.92.1 — “passar esses dois apps/jogo para o iPhone de graça”
+
+> to testando e quero passar esses dois apps/jogo para o iphone de graca
+
+Na tela **Meu jogo** havia dois APKs e nenhuma resposta. O documento
+`docs/JOGO-NO-IPHONE.md` já explicava o caminho WebGL — mas explicava para
+“um jogo qualquer”, e os dois pacotes do dono **não são jogos**: um é ReVanced
+do YouTube (`com.google.android.youtube`) e o outro é microG
+(`app.revanced.android.gms`). Mandar os dois “exportarem em WebGL” seria a
+frase certa para o pacote errado.
+
+Então o veredito passou a ser **por pacote**, em `jogo.caminho_para_iphone`:
+
+- motor com export web (Unity, Godot, GameMaker, Construct, Cocos, Defold,
+  LibGDX) → **sim, de graça**, com o passo a passo do menu daquele motor —
+  e o aviso de que quem vai para o iPhone é o export, não o APK;
+- Unreal → não: a Epic removeu o HTML5 na 4.24;
+- Flutter/React Native → não a partir do APK: só o projeto gera build web;
+- Cordova → o conteúdo já é página (`www/`), mas o JARVIS não extrai de APK;
+- ReVanced/Vanced → **não existe no iOS**; a resposta entrega o que existe
+  (app oficial grátis, bloqueador no Safari, TestFlight instável);
+- microG → não há o que instalar no iPhone, e ele nem seria necessário;
+- motor desconhecido → não promete: diz que seria chute.
+
+O veredito sai em três lugares: `relatorio.iphone` (JSON), o texto do chat e um
+cartão no topo da análise, com **passo a passo**, **custo** e **limite** — e
+nunca promete `.ipa` grátis.
+
+Faltava também o caminho de volta: o `.bat` funcionava, mas o dono estava na
+tela. A área **Testar no iPhone** aceita o `.zip` da pasta do export, achata o
+zip do Unity, cobra o `index.html` e mostra o endereço real do servidor do jogo
+(`http://<ip>:8099/`, calculado pelo mesmo código do console).
+
+O dono voltou com a condição que importa: *“não quero que mude nada do app, só
+que dê para rodar no iPhone”*. Então o veredito do YouTube passou a trazer o
+caminho mais próximo disso — e ele não é exportar nada: é **sideload de um
+`.ipa` já pronto** (YTLite/uYou+) com AltStore/Sideloadly e Apple ID comum,
+grátis por **7 dias** e renovado pelo PC, ou 1 ano com conta de
+desenvolvedor. O relatório diz também o que o JARVIS **não** faz: instalar no
+iPhone, gerar `.ipa` e assinar app.
+
+**Defeito achado no caminho:** o texto do relatório de um app que não é jogo
+terminava com “o que muda o jogo de verdade — equilíbrio, controles, ritmo”. A
+frase é de outro relatório; agora o app tem a sua.
+
 ### 0.92.0 — o que era “não faz por decisão” passa a fazer
 
 > adicione essas coisas arrume oq tiver q ser arrumado e adicione filosofia,

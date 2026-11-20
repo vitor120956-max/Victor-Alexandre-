@@ -1290,11 +1290,31 @@ def texto(relatorio: dict[str, Any]) -> str:
             linhas.extend(_linhas_do_obb(item))
             linhas.append("")
 
-    linhas.append(
-        "Isto é o que se vê do **pacote pronto**. Não descompilei o jogo nem recompilei: "
-        "o que muda o jogo de verdade — equilíbrio, controles, ritmo — só você decide, "
-        "e o ajuste é feito no motor e no build de novo."
-    )
+    iphone = relatorio.get("iphone")
+    if iphone:
+        linhas.append("")
+        linhas.append("iPhone (de graça?):")
+        linhas.append(f"  {iphone['veredito']}")
+        linhas.append(f"  {iphone['porque']}")
+        for passo in iphone["passos"][:6]:
+            linhas.append(f"  - {passo}")
+        linhas.append(f"  Custo: {iphone['custo']}")
+        linhas.append(f"  Limite: {iphone['limite']}")
+        linhas.append("")
+
+    if (relatorio.get("iphone") or {}).get("e_jogo", True):
+        linhas.append(
+            "Isto é o que se vê do **pacote pronto**. Não descompilei o jogo nem recompilei: "
+            "o que muda o jogo de verdade — equilíbrio, controles, ritmo — só você decide, "
+            "e o ajuste é feito no motor e no build de novo."
+        )
+    else:
+        # App que não é jogo (ReVanced, microG): falar de “equilíbrio e controles”
+        # aqui seria a frase de outro relatório.
+        linhas.append(
+            "Isto é o que se vê do **pacote pronto**. Não descompilei, não executei e não "
+            "modifiquei o app: o que ele faz em execução não é medido daqui."
+        )
     linhas.append("(Análise feita no seu PC, sem enviar o APK para lugar nenhum.)")
     # 0.91.41 — cada APK mora na própria pasta; dizer qual é fecha o ciclo
     # (“guardei ali, e o relatório está do lado do APK”).
@@ -1327,6 +1347,10 @@ def relatar(caminho: Path, parte: str = "", pasta: str = "") -> dict[str, Any]:
         relatorio["obbs"] = [obb_mod.analisar(item) for item in obbs[:2]]
         for item in relatorio["obbs"]:
             obb_mod.conferir(item, relatorio)
+    # 0.92.1 — "quero passar esse app para o iPhone de graça" tem resposta
+    # diferente para jogo, para app alternativo e para microG. A resposta sai
+    # junto com a análise, em vez de ficar só na documentação.
+    relatorio["iphone"] = caminho_para_iphone(relatorio)
     relatorio["texto"] = texto(relatorio)
     return relatorio
 
@@ -1371,6 +1395,7 @@ def relatar_obb(caminho: Path, parte: str = "", pasta: str = "") -> dict[str, An
         relatorio["parte"] = parte
     if pasta:
         relatorio["pasta"] = pasta
+    relatorio["iphone"] = caminho_para_iphone(relatorio)
     relatorio["texto"] = texto(relatorio)
     return relatorio
 
@@ -1579,3 +1604,244 @@ def texto_comparacao(comparacao: dict[str, Any]) -> str:
     )
     linhas.append("(Comparação feita no seu PC, sem enviar os APKs para lugar nenhum.)")
     return "\n".join(linhas)
+
+
+# ---------------------------------------------------------------------------
+# “Dá para levar este pacote ao iPhone de graça?” (0.92.1)
+# ---------------------------------------------------------------------------
+# O dono arrastou dois APKs e pediu:
+#
+#     to testando e quero passar esses dois apps/jogo para o iphone de graca
+#
+# A resposta honesta depende do que **aquele** pacote é. Um jogo com projeto no
+# Unity sai em WebGL hoje, de graça. Um cliente alternativo do YouTube não tem
+# caminho nenhum — o iOS não executa APK, e não existe ReVanced para iOS. Um
+# microG é pior: nem faz sentido no iPhone. Dizer “exporte em WebGL” para os
+# três seria a mesma frase vazia que o projeto já se corrigiu por escrever.
+#
+# Por isso o veredito é **por pacote**, fechado, com o motivo e o passo a passo.
+
+# Motores cujo projeto exporta HTML5/WebGL (o APK não vira export: o projeto sai).
+MOTORES_COM_WEB = {
+    "Unity": (
+        "No Unity: `File → Build Settings…`, escolha **WebGL**, `Switch Platform`.",
+        "Em `Player Settings → Publishing Settings`, use **Compression Format: Gzip** e ligue "
+        "**Decompression Fallback** (sem ele o jogo abre preto em servidor simples).",
+        "Clique **Build** e escolha uma pasta — a boa é a que tem `index.html` dentro.",
+    ),
+    "Godot": (
+        "No Godot 4: `Projeto → Exportar…` e adicione um preset **Web**.",
+        "Se o jogo não usa threads, prefira a variante **sem threads**: o iPhone só liga "
+        "`SharedArrayBuffer` em HTTPS, e `http://192.168.x.x` não é contexto seguro.",
+        "**Exportar Projeto** para uma pasta com `index.html`.",
+    ),
+    "GameMaker": (
+        "No GameMaker: `File → Build → Target: HTML5`, e depois `Create Executable`.",
+        "A saída é uma pasta com `index.html`.",
+    ),
+    "Construct": (
+        "No Construct 3: `Menu → Project → Export → Web (HTML5)`.",
+        "Escolha a opção que gera a pasta com `index.html` (não o `.zip` de loja).",
+    ),
+    "Cocos2d-x": (
+        "No Cocos Creator: `Project → Build`, plataforma **Web Mobile**.",
+        "A saída é a pasta de build web, com `index.html`.",
+    ),
+    "Defold": (
+        "No Defold: `Project → Bundle → HTML5`.",
+        "Marque para gerar os arquivos descompactados, não só o `.zip`.",
+    ),
+    "LibGDX": (
+        "No projeto LibGDX: `gradlew html:dist` (módulo `html`).",
+        "A saída fica em `html/build/dist`, com `index.html`.",
+    ),
+}
+
+# Pacotes que são app de outra coisa — e o que existe de verdade no iPhone.
+APPS_SEM_CAMINHO = (
+    (
+        ("com.google.android.youtube", "com.vanced.android.youtube", "com.google.android.apps.youtube.music"),
+        "cliente alternativo do YouTube (ReVanced/Vanced)",
+        "É um app Android modificado do YouTube. O APK não roda no iPhone — nem com conta paga — "
+        "e não existe ReVanced para iOS. O equivalente de lá é outro pacote, já pronto.",
+        (
+            "Sem mexer em nada e sem pagar: app oficial do YouTube (grátis, App Store) — com "
+            "anúncio. Para assistir sem anúncio pelo Safari, instale um bloqueador de conteúdo "
+            "grátis e ligue em Ajustes → Safari → Extensões; depois abra m.youtube.com.",
+            "O equivalente iOS do ReVanced é um **.ipa já modificado** (YTLite/uYou+) instalado "
+            "por sideload com AltStore ou Sideloadly e um Apple ID comum. É grátis e você não "
+            "compila nada — mas o app expira em 7 dias e precisa ser reinstalado pelo PC.",
+            "Com conta Apple Developer (US$ 99/ano) a mesma instalação vale 1 ano, sem renovar "
+            "toda semana.",
+            "O JARVIS não instala nada no iPhone e não gera .ipa: assinar app de iOS exige a "
+            "Apple e um Mac (ou AltServer no PC com iTunes).",
+        ),
+        "grátis no oficial ou no sideload de 7 dias; US$ 99/ano para 1 ano",
+    ),
+    (
+        ("app.revanced.android.gms", "com.microg", "app.microg", "org.microg", "com.google.android.gms"),
+        "microG (os serviços do Google reimplementados)",
+        "microG é uma reimplementação dos serviços do Google para **Android**. No iOS não "
+        "existe equivalente, e ele nem seria necessário: o iPhone já tem as contas do sistema.",
+        (
+            "No iPhone não há o que instalar: este pacote só serve para dar login aos apps "
+            "modificados no Android.",
+            "No iPhone você entra direto com a conta Google do sistema — não precisa de "
+            "intermediário para o YouTube oficial.",
+            "Se o objetivo era o YouTube alternativo, o caminho é o da linha acima — e ele "
+            "existe no iOS como outro pacote, não como este.",
+        ),
+        "— (não há o que instalar no iPhone)",
+    ),
+)
+
+
+def caminho_para_iphone(relatorio: dict[str, Any]) -> dict[str, Any]:
+    """O veredito do iPhone para **este** pacote, com o porquê.
+
+    Nunca promete `.ipa` de graça: o único caminho gratuito é WebGL no Safari com
+    ícone na tela de início. Tudo o que foge disso é dito como não dá.
+    """
+    if relatorio.get("somenteObb"):
+        return {
+            "e_jogo": False,
+            "possivel": False,
+            "gratis": False,
+            "tipo": "dados",
+            "veredito": "Isto é o OBB — os dados do jogo, não o jogo.",
+            "porque": "OBB é conteúdo que o app Android lê; sozinho ele não abre em lugar nenhum.",
+            "passos": ["Envie o APK do mesmo jogo nesta área e eu digo o caminho do iPhone para ele."],
+            "custo": "—",
+            "limite": "OBB não tem manifesto, assinatura nem ponto de entrada.",
+            "fonte": "extensão do arquivo",
+        }
+
+    pacote = (relatorio.get("pacote") or "").lower()
+    motor = relatorio.get("motor") or ""
+    for prefixos, tipo, porque, passos, custo in APPS_SEM_CAMINHO:
+        if any(pacote.startswith(prefixo) for prefixo in prefixos):
+            return {
+                "e_jogo": False,
+                "possivel": False,
+                "gratis": False,
+                "tipo": "app-android",
+                "veredito": f"Não dá para levar este pacote ao iPhone: é {tipo}.",
+                "porque": porque,
+                "passos": list(passos),
+                "custo": custo,
+                "limite": (
+                    "APK não roda no iOS. Isto não é limitação do JARVIS: o iOS só executa "
+                    "aplicativo assinado pela Apple."
+                ),
+                "fonte": f"pacote “{relatorio.get('pacote')}”",
+            }
+
+    if motor in MOTORES_COM_WEB:
+        passos = [
+            "O APK em si **não** vai para o iPhone. Quem vai é o export web do projeto.",
+            *MOTORES_COM_WEB[motor],
+            "Arraste essa pasta (ou o `.zip` dela) na área “Testar no iPhone”, aqui embaixo.",
+            "No iPhone, na mesma rede Wi-Fi: abra o endereço no Safari → Compartilhar → "
+            "“Adicionar à Tela de Início”.",
+        ]
+        return {
+            "e_jogo": True,
+            "possivel": True,
+            "gratis": True,
+            "tipo": "jogo-android",
+            "veredito": f"Sim, de graça — pelo export WebGL do projeto ({motor}), não pelo APK.",
+            "porque": (
+                "O iOS não executa APK. O mesmo jogo, exportado em WebGL/HTML5, roda no Safari "
+                "do iPhone e vira ícone na tela de início, sem App Store e sem conta paga."
+            ),
+            "passos": passos,
+            "custo": "grátis",
+            "limite": (
+                "Não é app assinado: não passa pela App Store, não notifica e depende do PC "
+                "ligado servindo o arquivo enquanto você joga."
+            ),
+            "fonte": f"motor {motor}" + (f" {relatorio.get('versaoDoMotor')}" if relatorio.get("versaoDoMotor") else ""),
+        }
+
+    if motor in {"Unreal", "Unreal (UE5)"}:
+        return {
+            "e_jogo": True,
+            "possivel": False,
+            "gratis": False,
+            "tipo": "jogo-android",
+            "veredito": "Este jogo é Unreal — e a Epic descontinuou o export HTML5 na 4.24.",
+            "porque": (
+                "Não há caminho gratuito para o iPhone a partir deste APK: o iOS não executa "
+                "APK e o Unreal Engine removeu o export HTML5 na 4.24 — não há site para servir "
+                "no Safari."
+            ),
+            "passos": [
+                "As opções reais são build iOS assinado (conta Apple Developer, US$ 99/ano, "
+                "com Mac) ou publicar na App Store.",
+                "Não há atalho gratuito aqui — e eu prefiro dizer isso a inventar um.",
+            ],
+            "custo": "US$ 99/ano (conta Apple Developer) + Mac",
+            "limite": "Nada disto é “de graça”: o que é grátis é o ícone na tela de início de um export web.",
+            "fonte": f"motor {motor}",
+        }
+
+    if motor in {"Flutter", "React Native"}:
+        return {
+            "e_jogo": False,
+            "possivel": False,
+            "gratis": False,
+            "tipo": "app-android",
+            "veredito": f"Este pacote é um app feito em {motor}, não um jogo com export web.",
+            "porque": (
+                "O APK compilado não vira site. Só o **projeto** poderia gerar uma build web "
+                "(Flutter Web / React Native Web) — e isso é trabalho no código, não no JARVIS."
+            ),
+            "passos": [
+                "Se você tem o projeto, gere a build web nele e arraste a saída nesta área.",
+                "Sem o projeto, não há caminho gratuito: o iOS não executa APK.",
+            ],
+            "custo": "—",
+            "limite": "O JARVIS não recompila app: ele lê o pacote, não reconstrói o projeto.",
+            "fonte": f"motor {motor}",
+        }
+
+    if motor == "Cordova/PhoneGap":
+        return {
+            "e_jogo": False,
+            "possivel": True,
+            "gratis": True,
+            "tipo": "app-hibrido",
+            "veredito": "Este pacote é Cordova/PhoneGap: o conteúdo já é web.",
+            "porque": (
+                "O app é uma página dentro do APK (`assets/www`). Servir essa página no Safari "
+                "é o caminho — mas o JARVIS não extrai conteúdo de APK (decisão da Reversa), "
+                "então o export tem de vir da pasta do projeto."
+            ),
+            "passos": [
+                "No projeto Cordova, a pasta `www/` é a página do app.",
+                "Arraste essa pasta (ou o `.zip` dela) na área “Testar no iPhone”.",
+                "Abra o endereço no Safari do iPhone e adicione à Tela de Início.",
+            ],
+            "custo": "grátis",
+            "limite": "Recursos nativos do Cordova (câmera, arquivos) não funcionam fora do app.",
+            "fonte": f"motor {motor}",
+        }
+
+    return {
+        "e_jogo": False,
+        "possivel": False,
+        "gratis": False,
+        "tipo": "desconhecido",
+        "veredito": "Pelo pacote, não reconheci um motor com export web — então não prometo caminho.",
+        "porque": (
+            "O iOS não executa APK. Sem saber o motor, dizer “exporte em WebGL” seria chute: "
+            "cada motor tem um menu diferente, e alguns não têm export web."
+        ),
+        "passos": [
+            "Abra o projeto no motor e veja se existe export “Web”/“HTML5”.",
+            "Se existir, gere e arraste a pasta com `index.html` na área “Testar no iPhone”.",
+        ],
+        "custo": "—",
+        "limite": "Sem motor reconhecido, o único caminho garantido é build iOS assinado (pago).",
+        "fonte": "sem marca de motor no pacote",
+    }

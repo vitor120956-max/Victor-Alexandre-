@@ -559,3 +559,93 @@ def test_o_icone_nao_tem_linhas_atravessando_o_fundo():
     # só a borda suavizada do triângulo pode misturar; as linhas do defeito
     # somavam milhares de pixels espalhados
     assert misturados < 900, misturados
+
+
+# ---------------------------------------------------------------------------
+# Enviar o export pela tela (0.92.1)
+# ---------------------------------------------------------------------------
+# O `.bat` já funcionava, mas o dono estava na tela do jogo quando perguntou
+# “quero passar para o iPhone de graça”. A rota aceita o `.zip` do export — o
+# único formato que o navegador sabe mandar (pasta não sobe).
+
+def _zip_de_export(*, com_index: bool = True) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as pacote:
+        if com_index:
+            # Com uma pasta dentro: é o formato do zip do Unity.
+            pacote.writestr("Build/index.html", "<!doctype html><h1>jogo</h1>")
+            pacote.writestr("Build/jogo.wasm", b"\0asm\1\0\0\0")
+        else:
+            pacote.writestr("Build/jogo.wasm", b"\0asm\1\0\0\0")
+    return buffer.getvalue()
+
+
+def _cliente(tmp_path: Path) -> TestClient:
+    return TestClient(create_app(registry=build_registry(tmp_path / "files")))
+
+
+def test_o_zip_do_export_entra_pela_tela_e_fica_pronto_para_servir(tmp_path: Path):
+    cliente = _cliente(tmp_path)
+    resposta = cliente.post(
+        "/api/jogo/web",
+        files={"upload": ("MeuJogo.zip", _zip_de_export(), "application/zip")},
+        data={"confirmed": "true", "nome": "Meu-Jogo"},
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()["result"]
+    assert dados["nome"] == "Meu-Jogo"
+    assert dados["arquivos"] >= 2
+
+    lista = cliente.get("/api/jogo/web").json()["result"]
+    assert lista["quantidade"] == 1
+    assert lista["jogos"][0]["temIndex"] is True
+    # O endereço aparece na tela: é o que se digita no Safari do iPhone.
+    assert lista["porta"] == jogo_web.PORTA_PADRAO
+    assert lista["endereco"].endswith(f":{jogo_web.PORTA_PADRAO}/")
+    assert lista["endereco"].startswith("http://")
+
+
+def test_zip_sem_index_html_e_recusado_com_a_explicacao(tmp_path: Path):
+    cliente = _cliente(tmp_path)
+    resposta = cliente.post(
+        "/api/jogo/web",
+        files={"upload": ("solto.zip", _zip_de_export(com_index=False), "application/zip")},
+        data={"confirmed": "true"},
+    )
+    assert resposta.status_code == 400
+    mensagem = resposta.json()["error"]["message"]
+    assert "index.html" in mensagem
+    # E nada foi guardado pela metade.
+    assert cliente.get("/api/jogo/web").json()["result"]["quantidade"] == 0
+
+
+def test_a_rota_recusa_apk_e_exige_confirmacao(tmp_path: Path):
+    cliente = _cliente(tmp_path)
+    apk = cliente.post(
+        "/api/jogo/web",
+        files={"upload": ("jogo.apk", b"PK\x03\x04", "application/octet-stream")},
+        data={"confirmed": "true"},
+    )
+    assert apk.status_code == 400
+    assert apk.json()["error"]["code"] == "INVALID_FORMAT"
+
+    sem_confirmar = cliente.post(
+        "/api/jogo/web",
+        files={"upload": ("MeuJogo.zip", _zip_de_export(), "application/zip")},
+    )
+    assert sem_confirmar.status_code == 400
+    assert sem_confirmar.json()["error"]["code"] == "CONFIRMATION_REQUIRED"
+
+
+def test_nome_com_acento_vira_endereco_que_o_safari_aceita(tmp_path: Path):
+    cliente = _cliente(tmp_path)
+    resposta = cliente.post(
+        "/api/jogo/web",
+        files={"upload": ("Jogo.zip", _zip_de_export(), "application/zip")},
+        data={"confirmed": "true", "nome": "Meu Jogo Ação"},
+    )
+    assert resposta.status_code == 200
+    nome = resposta.json()["result"]["nome"]
+    assert " " not in nome and all(ord(letra) < 128 for letra in nome)

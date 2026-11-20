@@ -274,8 +274,13 @@ def pastas(files_root: Path) -> list[Path]:
     return itens
 
 
-def listar(files_root: Path) -> dict[str, Any]:
-    """Os exports já guardados, com o endereço que se abre no iPhone."""
+def listar(files_root: Path, porta: int = PORTA_PADRAO) -> dict[str, Any]:
+    """Os exports já guardados, com o endereço que se abre no iPhone.
+
+    0.92.1 — o endereço vai junto: antes a tela do jogo não sabia o IP da
+    máquina, e a instrução ficava só no `.bat`. É o mesmo cálculo do
+    `instrucoes()`, então o número na tela e o do console não divergem.
+    """
     base = raiz(files_root)
     jogos = []
     for caminho in pastas(files_root):
@@ -288,7 +293,14 @@ def listar(files_root: Path) -> dict[str, Any]:
                 **dados,
             }
         )
-    return {"pasta": str(base), "quantidade": len(jogos), "jogos": jogos}
+    endereco = endereco_local()
+    return {
+        "pasta": str(base),
+        "quantidade": len(jogos),
+        "jogos": jogos,
+        "porta": porta,
+        "endereco": f"http://{endereco}:{porta}/",
+    }
 
 
 # ---------------------------------------------------------------------------

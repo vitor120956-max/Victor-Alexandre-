@@ -819,6 +819,89 @@ def create_app(
         """
         return {"ok": True, "result": jogo_web_mod.listar(skill_registry.files_root)}
 
+    @application.post("/api/jogo/web")
+    async def jogo_web_enviar(
+        upload: UploadFile = File(...),
+        nome: str = Form(default=""),
+        confirmed: bool = Form(default=False),
+    ) -> Any:
+        """Recebe o `.zip` do export WebGL e guarda para servir no iPhone.
+
+        0.92.1 — o dono perguntou como levar o jogo ao iPhone pela própria tela.
+        O `.zip` é o formato que o navegador consegue mandar (pasta não sobe), e
+        o `jogo_web.importar` já achata o zip do Unity e procura o `index.html`.
+        """
+        if not confirmed:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONFIRMATION_REQUIRED", "message": "Confirme o envio do export."}},
+            )
+        filename = (upload.filename or "").strip().replace("\\", "/")
+        if not filename or filename != PurePosixPath(filename).name or filename.startswith("."):
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "INVALID_FILENAME", "message": "Use o nome do arquivo, sem pastas."}},
+            )
+        if Path(filename).suffix.lower() != ".zip":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "ok": False,
+                    "error": {
+                        "code": "INVALID_FORMAT",
+                        "message": "Envie o `.zip` da pasta do export (a que tem o index.html dentro).",
+                    },
+                },
+            )
+        temporario = ""
+        try:
+            base = jogo_web_mod.raiz(skill_registry.files_root)
+            base.mkdir(parents=True, exist_ok=True)
+            total = 0
+            with tempfile.NamedTemporaryFile(dir=base, suffix=".zip", delete=False) as arquivo:
+                temporario = arquivo.name
+                while chunk := await upload.read(1_000_000):
+                    total += len(chunk)
+                    if total > jogo_web_mod.MAXIMO_BYTES:
+                        raise ValueError("SIZE_LIMIT")
+                    arquivo.write(chunk)
+            if total == 0:
+                raise ValueError("O arquivo enviado está vazio.")
+            resultado = jogo_web_mod.importar(Path(temporario), skill_registry.files_root, nome=(nome.strip() or None))
+            return {"ok": True, "result": {**resultado, "bytesEnviados": total}}
+        except ValueError as exc:
+            if str(exc) == "SIZE_LIMIT":
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "SIZE_LIMIT",
+                            "message": (
+                                "O export passa de "
+                                f"{jogo_web_mod.MAXIMO_BYTES // 1_000_000} MB. "
+                                "Se o jogo for grande assim, use o `testar-no-iphone.bat` com a pasta no disco."
+                            ),
+                        },
+                    },
+                )
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "IMPORT_INVALIDO", "message": str(exc)}},
+            )
+        except jogo_web_mod.JogoWebError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "EXPORT_INVALIDO", "message": str(exc)}},
+            )
+        except OSError as exc:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": {"code": "EXPORT_NAO_GRAVADO", "message": f"não consegui gravar o export: {exc}"}},
+            )
+        finally:
+            Path(temporario).unlink(missing_ok=True)
+
     @application.get("/api/jogo/arquivos")
     def jogo_arquivos() -> dict[str, Any]:
         return {"ok": True, "result": jogo_mod.listar(skill_registry.files_root)}

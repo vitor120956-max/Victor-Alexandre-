@@ -120,3 +120,45 @@
   color: var(--muted, #9aa0a6);
   font-size: 0.85rem;
 }
+
+/* --- iPhone: veredito por pacote e área do export (0.92.1) ---------------- */
+.jogo-iphone { display: flex; flex-direction: column; gap: 7px; padding: 11px 12px; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .015); }
+.jogo-iphone.is-ok { border-color: rgba(126, 214, 165, .35); }
+.jogo-iphone.is-nao { border-color: rgba(224, 106, 106, .30); }
+.jogo-iphone header { display: flex; align-items: flex-start; gap: 9px; }
+.jogo-iphone header svg { flex: 0 0 auto; margin-top: 2px; color: var(--muted-2); }
+.jogo-iphone.is-ok header svg { color: var(--accent-soft, #7ed6a5); }
+.jogo-iphone header div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.jogo-iphone-rotulo { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .09em; }
+.jogo-iphone header strong { color: var(--text); font-size: 8.4px; line-height: 1.45; }
+.jogo-iphone header em { margin-left: auto; flex: 0 0 auto; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--muted-2); font-family: var(--mono); font-size: 5.8px; font-style: normal; letter-spacing: .06em; text-transform: uppercase; }
+.jogo-iphone.is-ok header em { border-color: rgba(126, 214, 165, .45); color: var(--accent-soft, #7ed6a5); }
+.jogo-iphone.is-nao header em { border-color: rgba(224, 106, 106, .45); color: #e89090; }
+.jogo-iphone p { color: var(--muted); font-size: 7.8px; line-height: 1.6; }
+.jogo-iphone p b { color: var(--text-soft); }
+.jogo-iphone-toggle { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--accent-soft, #7ed6a5); font: inherit; font-size: 7.6px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.jogo-iphone-passos { display: flex; flex-direction: column; gap: 4px; padding-left: 16px; }
+.jogo-iphone-passos li { color: var(--muted); font-size: 7.8px; line-height: 1.6; }
+.jogo-iphone-custo, .jogo-iphone-limite { color: var(--muted-2) !important; font-size: 7.4px !important; }
+.jogo-iphone-fonte { color: var(--muted-2) !important; font-family: var(--mono); font-size: 6.2px !important; letter-spacing: .04em; }
+
+.jogo-web { display: flex; flex-direction: column; gap: 10px; padding: 14px; margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.jogo-web > header { display: flex; align-items: flex-start; gap: 9px; }
+.jogo-web > header svg { flex: 0 0 auto; margin-top: 2px; color: var(--muted-2); }
+.jogo-web > header h2 { color: var(--text); font-size: 10.4px; letter-spacing: -.01em; }
+.jogo-web > header p { margin-top: 3px; color: var(--muted); font-size: 7.8px; line-height: 1.6; max-width: 74ch; }
+.jogo-web code { color: var(--text-soft); font-family: var(--mono); font-size: 6.8px; }
+.jogo-web-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.jogo-web-enviar { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: transparent; color: var(--text-soft); font: inherit; font-size: 7.8px; cursor: pointer; }
+.jogo-web-enviar:hover { border-color: var(--accent); color: var(--text); }
+.jogo-web-enviar:disabled { opacity: .6; cursor: progress; }
+.jogo-web-endereco { color: var(--muted); font-size: 7.6px; }
+.jogo-web-endereco code { color: var(--accent-soft, #7ed6a5); }
+.jogo-web-lista { display: flex; flex-direction: column; gap: 5px; }
+.jogo-web-lista li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.jogo-web-lista li > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.jogo-web-lista strong { color: var(--text-soft); font-size: 7.9px; }
+.jogo-web-lista small { color: var(--muted-2); font-family: var(--mono); font-size: 6.1px; }
+.jogo-web-lista em { margin-left: auto; font-family: var(--mono); font-size: 5.9px; font-style: normal; letter-spacing: .06em; text-transform: uppercase; }
+.jogo-web-lista em.is-ok { color: var(--accent-soft, #7ed6a5); }
+.jogo-web-lista em.is-error { color: #e89090; }

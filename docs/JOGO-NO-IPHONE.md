@@ -24,6 +24,54 @@ disco continua intacto), e o ícone é desenhado por ele — um PNG de 180×180 
 
 ---
 
+## Antes de tudo: o veredito para **este** pacote (0.92.1)
+
+Desde a 0.92.1 a análise do APK na aba **Meu jogo** responde sozinha a pergunta
+“dá para passar isso para o iPhone de graça?” — e a resposta muda com o pacote,
+porque “APK” não é um tipo só:
+
+| o que é o pacote | dá de graça? | por quê |
+|---|---|---|
+| jogo feito em Unity, Godot, GameMaker, Construct, Cocos, Defold, LibGDX | **sim**, pelo export WebGL do **projeto** | o APK não vira site; o projeto exporta |
+| jogo em Unreal | não | a Epic removeu o export HTML5 na 4.24 |
+| app em Flutter / React Native | não, a partir do APK | só o projeto gera build web |
+| app Cordova / PhoneGap | sim, se você tem o projeto | o conteúdo já é uma página (`www/`) |
+| ReVanced / Vanced do YouTube (`com.google.android.youtube`, `com.vanced.android.youtube`) | **não** | é app Android; não existe versão iOS, nem paga |
+| microG (`app.revanced.android.gms`, `com.microg`) | **não** | reimplementação dos serviços do Google **para Android**; no iOS não existe |
+| motor não reconhecido | não prometo | sem saber o motor, “exporte em WebGL” seria chute |
+
+O veredito sai no `relatorio.iphone` (JSON), no texto do chat e no cartão no topo
+da análise — com **passo a passo**, **custo** e **limite**. Ele nunca promete
+`.ipa` de graça: o único caminho gratuito é WebGL no Safari com ícone na tela de
+início.
+
+### “Não quero mudar nada no app — só quero que rode no iPhone”
+
+Essa é a pergunta certa, e a resposta tem três degraus. Nenhum deles recompila o
+APK: o JARVIS **não converte** APK em app de iPhone, e nenhum programa faz isso.
+
+| o que você aceita | o que instala | custo | dura |
+|---|---|---|---|
+| o YouTube normal | app oficial (App Store) | grátis | enquanto quiser |
+| YouTube sem anúncio **no navegador** | bloqueador de conteúdo grátis no Safari + `m.youtube.com` na Tela de Início | grátis | enquanto quiser |
+| o **mesmo tipo** de app modificado | `.ipa` já pronto (YTLite/uYou+) por **sideload** com AltStore/Sideloadly e seu Apple ID comum | grátis | **7 dias** (reinstalar pelo PC) |
+| idem, sem renovar toda semana | o mesmo `.ipa`, com conta Apple Developer | US$ 99/ano | 1 ano |
+
+O sideload é o mais perto de “não mudar nada”: você não compila, não altera o
+APK e não passa pela App Store — instala um pacote que alguém já modificou.
+O preço é o prazo de 7 dias do Apple ID gratuito, e a renovação precisa do PC
+com AltServer/iTunes na mesma rede.
+
+**microG:** não existe no iPhone e não faz falta. Lá você entra direto com a
+conta Google do sistema; o microG só existe para dar login aos apps
+modificados no **Android**.
+
+**O que o JARVIS não faz, e não é falta de vontade:** instalar qualquer coisa no
+iPhone, gerar `.ipa` ou assinar app. Assinatura de iOS é da Apple, e o
+ferramental exige macOS (ou AltServer no PC com iTunes). O que ele faz é ler o
+pacote, dizer qual caminho existe para **aquele** arquivo e servir o export web
+quando o pacote é um jogo com projeto.
+
 ## 1. Exportar o jogo para web
 
 O export é feito **no motor**, não no JARVIS — é o motor que transforma o
@@ -56,6 +104,20 @@ Todos têm destino HTML5/Web. O resultado é sempre **uma pasta com
 ---
 
 ## 2. Servir no JARVIS
+
+### Pela tela (0.92.1)
+
+Na aba **Meu jogo**, embaixo da análise, há a área **Testar no iPhone**: envie o
+**`.zip` da pasta do export** (a que tem `index.html` dentro). O servidor achata
+o zip do Unity sozinho e confirma que o `index.html` existe; zip sem ele é
+recusado com a explicação. Pasta não sobe pelo navegador — o `.zip` é o formato
+que dá.
+
+A tela mostra o endereço do servidor do jogo (`http://<ip-do-pc>:8099/`) e quais
+exports já estão guardados. Quem serve os arquivos continua sendo o
+`testar-no-iphone.bat`, em outra janela.
+
+### Pela pasta (CLI)
 
 **Arraste a pasta do export em cima do `testar-no-iphone.bat`.**
 

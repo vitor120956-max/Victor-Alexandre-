@@ -804,7 +804,27 @@ export type JogoRelatorio = {
   obbs?: JogoObb[];
   /** `true` quando só o OBB existe na pasta — o APK ainda não foi enviado. */
   somenteObb?: boolean;
+  /** O veredito do iPhone para **este** pacote (0.92.1). */
+  iphone?: JogoIphone;
   texto?: string;
+};
+
+/**
+ * “Dá para levar este pacote ao iPhone de graça?” — decidido pelo servidor a
+ * partir do pacote e do motor. Nunca promete `.ipa` grátis: o caminho gratuito
+ * é WebGL no Safari, com ícone na tela de início.
+ */
+export type JogoIphone = {
+  e_jogo: boolean;
+  possivel: boolean;
+  gratis: boolean;
+  tipo: 'jogo-android' | 'app-android' | 'app-hibrido' | 'dados' | 'desconhecido';
+  veredito: string;
+  porque: string;
+  passos: string[];
+  custo: string;
+  limite: string;
+  fonte: string;
 };
 
 export type JogoParte = {
@@ -874,6 +894,10 @@ export type JogoWebLista = {
   pasta: string;
   quantidade: number;
   jogos: JogoWebItem[];
+  /** A porta do servidor do jogo (0.92.1) — é outro processo, não a API. */
+  porta: number;
+  /** O endereço que se digita no Safari do iPhone, já com a porta. */
+  endereco: string;
 };
 
 /**
@@ -1136,5 +1160,25 @@ export async function guiaConversa(
     `/api/conversa/${rota}`,
     { method: 'POST', body: JSON.stringify(corpo), signal },
   );
+  return resposta.result;
+}
+
+
+/**
+ * Sobe o `.zip` da pasta do export (a que tem `index.html` dentro).
+ *
+ * Pasta não sobe pelo navegador; o `.zip` é o formato que dá. O servidor acha o
+ * `index.html` mesmo quando o zip do Unity vem com uma pasta dentro.
+ */
+export async function uploadJogoWeb(file: File, nome = ''): Promise<{ nome: string; arquivos: number; bytes: number }> {
+  const body = new FormData();
+  body.append('upload', file, file.name);
+  body.append('confirmed', 'true');
+  if (nome.trim()) body.append('nome', nome.trim());
+  const resposta = await apiFetch<{ ok: boolean; result: { nome: string; arquivos: number; bytes: number } }>(
+    '/api/jogo/web',
+    { method: 'POST', body },
+  );
+  if (!resposta.ok || !resposta.result) throw new ApiError('O servidor não guardou o export.', 200, 'JOGO_WEB_UPLOAD');
   return resposta.result;
 }
