@@ -715,14 +715,18 @@ def test_catalogo_e_as_constantes_batem() -> None:
 # ----------------------------------------------------------------- registro
 
 
-def test_registro_tem_as_sete_skills_de_submissao(tmp_path) -> None:
+def test_registro_tem_as_skills_de_submissao(tmp_path) -> None:
     registro = build_registry(tmp_path / "files")
     itens = registro.list()
     submissao = [item for item in itens if item["id"].startswith("submissao.")]
-    assert len(submissao) == 7
+    assert len(submissao) == 8
     assert {item["category"] for item in submissao} == {"Submissão"}
-    assert len(itens) == 325
-    assert all(item["sideEffects"] is False for item in submissao)
+    assert len(itens) == 352
+    # Seis fichas e gates são leitura. `submissao.publicar` (0.92.0) é a única
+    # com efeito — e por isso exige `JARVIS_ACOES=1` e confirmação.
+    assert all(item["sideEffects"] is False for item in submissao if item["id"] != "submissao.publicar")
+    publicar = next(item for item in submissao if item["id"] == "submissao.publicar")
+    assert publicar["sideEffects"] is True and publicar["requiresConfirmation"] is True
 
 
 def test_registro_recusa_parametro_extra_na_submissao() -> None:

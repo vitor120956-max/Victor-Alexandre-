@@ -44,7 +44,9 @@ from .ai import AIProvider, AIRequest, AIUnavailable, OpenAICompatibleProvider
 from .estacao_runtime import EstacaoRuntime, EstacaoRuntimeError
 from .pesquisa import responder as pesquisa_responder
 from .reverse import ARTIFACT_EXTENSIONS, MAX_ARTIFACT_BYTES, artifact_file, list_artifacts, reverse_root
+from . import acoes as acoes_mod
 from . import agenda as agenda_local
+from . import conversa as conversa_mod
 from . import tempo as tempo_mod
 from . import calendario as calendario_mod
 from . import jogo as jogo_mod
@@ -1460,6 +1462,181 @@ def create_app(
     @application.post("/api/estacao/recuperar")
     def estacao_recuperar() -> dict[str, Any]:
         return {"ok": True, "result": estacao_runtime.recuperar()}
+
+    # ------------------------------------------------ 0.92.0 — ações e conversa
+    # As ações também existem como skill (`acoes.*`). Estas rotas são a porta
+    # curta da interface: a mesma função, sem passar pelo registro.
+
+    def _erro_acao(exc: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": {"code": "ACAO_RECUSADA", "message": str(exc)}},
+        )
+
+    @application.get("/api/acoes/estado")
+    def acoes_estado() -> dict[str, Any]:
+        return {
+            "ok": True,
+            "result": {**acoes_mod.estado(), "conversoes": acoes_mod.conversoes_possiveis()},
+        }
+
+    @application.post("/api/acoes/email")
+    def acoes_email(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": acoes_mod.enviar_email(
+                    para=payload.get("para", ""),
+                    assunto=payload.get("assunto", ""),
+                    corpo=payload.get("corpo", ""),
+                    anexos=list(payload.get("anexos") or []),
+                    raiz=files_root,
+                    confirmado=bool(payload.get("confirmed")),
+                ),
+            }
+        except acoes_mod.AcoesError as exc:
+            return _erro_acao(exc)
+
+    @application.post("/api/acoes/abrir")
+    def acoes_abrir(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": acoes_mod.abrir_url(str(payload.get("url", "")), confirmado=bool(payload.get("confirmed"))),
+            }
+        except acoes_mod.AcoesError as exc:
+            return _erro_acao(exc)
+
+    @application.post("/api/acoes/converter")
+    def acoes_converter(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": acoes_mod.converter(
+                    origem=str(payload.get("origem", "")),
+                    formato=str(payload.get("formato", "")),
+                    raiz=files_root,
+                    saida=str(payload.get("saida", "")),
+                    confirmado=bool(payload.get("confirmed")),
+                ),
+            }
+        except acoes_mod.AcoesError as exc:
+            return _erro_acao(exc)
+
+    @application.post("/api/acoes/diagrama")
+    def acoes_diagrama(payload: dict[str, Any]) -> Any:
+        texto = str(payload.get("texto", ""))
+        try:
+            if str(payload.get("tipo", "mermaid")).lower() == "dot":
+                resultado = acoes_mod.dot_svg(
+                    texto, confirmado=bool(payload.get("confirmed")), raiz=files_root, nome=str(payload.get("nome", "diagrama.svg"))
+                )
+            else:
+                resultado = acoes_mod.mermaid_svg(
+                    texto, confirmado=bool(payload.get("confirmed")), raiz=files_root, nome=str(payload.get("nome", "diagrama.svg"))
+                )
+            return {"ok": True, "result": resultado}
+        except acoes_mod.AcoesError as exc:
+            return _erro_acao(exc)
+
+    @application.get("/api/conversa/catalogo")
+    def conversa_catalogo() -> dict[str, Any]:
+        return {"ok": True, "result": conversa_mod.catalogo()}
+
+    @application.post("/api/conversa/abrir")
+    def conversa_abrir(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": conversa_mod.abrir(
+                    contexto=str(payload.get("contexto", "app")),
+                    interesse=str(payload.get("interesse", "")),
+                ),
+            }
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
+
+    @application.post("/api/conversa/manter")
+    def conversa_manter(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": conversa_mod.manter(
+                    mensagem=str(payload.get("mensagem", "")),
+                    objetivo=str(payload.get("objetivo", "conhecer")),
+                ),
+            }
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
+
+    @application.post("/api/conversa/convidar")
+    def conversa_convidar(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": conversa_mod.convidar(
+                    plano=str(payload.get("plano", "")),
+                    tempo_conhecendo=str(payload.get("tempoConhecendo", "")),
+                ),
+            }
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
+
+    @application.post("/api/conversa/revisar")
+    def conversa_revisar(payload: dict[str, Any]) -> Any:
+        try:
+            return {"ok": True, "result": conversa_mod.revisar(mensagem=str(payload.get("mensagem", "")))}
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
+
+    @application.post("/api/conversa/ler")
+    def conversa_ler() -> dict[str, Any]:
+        return {"ok": True, "result": conversa_mod.ler()}
+
+    @application.post("/api/conversa/limites")
+    def conversa_limites() -> dict[str, Any]:
+        return {"ok": True, "result": conversa_mod.limites()}
+
+    @application.post("/api/conversa/filosofia")
+    def conversa_filosofia(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": conversa_mod.filosofia(
+                    pergunta=str(payload.get("pergunta", "")),
+                    escola=str(payload.get("escola", "")),
+                ),
+            }
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
+
+    @application.post("/api/conversa/psicologia")
+    def conversa_psicologia(payload: dict[str, Any]) -> Any:
+        try:
+            return {
+                "ok": True,
+                "result": conversa_mod.psicologia(conceito=str(payload.get("conceito", ""))),
+            }
+        except conversa_mod.ConversaError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": {"code": "CONVERSA_INVALIDA", "message": str(exc)}},
+            )
 
     @application.get("/{full_path:path}", include_in_schema=False)
     def serve_frontend(full_path: str):  # type: ignore[no-untyped-def]

@@ -157,3 +157,61 @@ def test_o_documento_nao_cita_numeros_que_o_codigo_desmente():
             f"o documento fala de {valor} {unidade}, acima do teto real "
             f"({jogo.rotulo_bytes(jogo.MAXIMO_BYTES)})"
         )
+
+
+# ---------------------------------------------------------------------------
+# 0.92.0 — as doze decisões que deixaram de ser “não faz”
+# ---------------------------------------------------------------------------
+
+# Quando uma linha sai da §2, este teste é o que impede a §2 de voltar atrás.
+_FECHADAS_NA_092 = (
+    "email.enviar",
+    "google.email",
+    "google.planilha",
+    "navegador.abrir",
+    "carreira.candidatar",
+    "arquivo.converter",
+    "estudio.tokens",
+    "estudio.previa",
+    "diagrama.mermaid",
+    "diagrama.dot",
+    "agencia.executar",
+    "memoria.embedding",
+    "reverse.descompilar",
+    "lean.testar",
+    "submissao.publicar",
+)
+
+
+def test_as_decisoes_fechadas_na_092_continuam_existindo(tmp_path: Path):
+    ids = _ids_de_skill(tmp_path)
+    faltando = [acao for acao in _FECHADAS_NA_092 if acao not in ids]
+    assert not faltando, f"a 0.92.0 fechou estas e elas sumiram: {faltando}"
+
+
+def test_o_documento_nao_volta_a_dizer_que_essas_coisas_nao_acontecem():
+    """A frase antiga não pode reaparecer — é assim que a lista envelhece."""
+    texto = _texto_doc()
+    antigas = (
+        "| Correio | não envia e-mail",
+        "| Navegador | não abre aba",
+        "| Portabilidade | não converte arquivo",
+        "| Diagramas | não renderiza Mermaid",
+        "| Submissão | não publica",
+        "| Engenharia enxuta | não roda teste",
+        "| Carreira | não lê LinkedIn, não envia candidatura",
+        "| Estúdio de design | não compila tokens",
+        "| Governo de agentes | não executa agente",
+        "| Memória | é lexical: sem embedding",
+        "| Reversa | não descompila",
+    )
+    for frase in antigas:
+        assert frase not in texto, (
+            f"a §2 voltou a dizer “{frase}” — a ação existe desde a 0.92.0 "
+            "(docs/ACOES.md)"
+        )
+    # E o documento aponta para o contrato novo.
+    assert "ACOES.md" in texto
+    readme = (RAIZ / "README.md").read_text(encoding="utf-8")
+    assert "docs/ACOES.md" in readme
+    assert "docs/CONVERSA.md" in readme

@@ -1261,3 +1261,209 @@ def design_reference() -> dict[str, Any]:
             "Nenhum daemon, plugin, CLI ou runtime do upstream é instalado.",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Compilar tokens e montar a prévia (0.92.0)
+# ---------------------------------------------------------------------------
+# O que era “não compila tokens, não renderiza HTML” agora tem um caminho
+# estreito e determinístico: o **esquema fechado** de 56 slots é o contrato, e o
+# que você declara vira `tokens.css` de verdade. Nenhum valor é inventado — o
+# slot que você não declarou aparece como faltando, não como um chute.
+#
+# “Renderizar” aqui é montar o arquivo único que o **navegador** desenha. Não há
+# rasterização: o JARVIS não tem navegador embutido, e fingir um PNG seria
+# mentir sobre o que aconteceu.
+
+_TOKEN_LINE = re.compile(r"^\s*(?:--)?([a-zA-Z][\w-]*)\s*[:=]\s*(.+?)\s*;?\s*$")
+_TOKEN_NAME = re.compile(r"^--[a-z0-9][\w-]*$")
+
+
+def _parse_token_table(texto: str) -> tuple[list[tuple[str, str, int]], list[dict[str, Any]]]:
+    """Lê `--nome: valor` (CSS) ou `nome = valor` (tabela). Nada de invenção."""
+    declarados: list[tuple[str, str, int]] = []
+    problemas: list[dict[str, Any]] = []
+    vistos: set[str] = set()
+    for numero, linha in enumerate(texto.splitlines(), start=1):
+        limpa = linha.strip()
+        if not limpa or limpa.startswith(("#", "//", "/*")):
+            continue
+        if limpa in ("{", "}", ":root", ":root {") or limpa.rstrip().endswith("{"):
+            continue
+        achado = _TOKEN_LINE.match(limpa)
+        if not achado:
+            problemas.append({"linha": numero, "motivo": "não parece `--nome: valor`", "texto": limpa[:80]})
+            continue
+        nome = achado.group(1) if achado.group(1).startswith("--") else f"--{achado.group(1)}"
+        valor = achado.group(2).strip().rstrip(";").strip()
+        if not _TOKEN_NAME.match(nome):
+            problemas.append({"linha": numero, "motivo": "nome de token inválido", "texto": nome[:80]})
+            continue
+        if nome not in SCHEMA_SET:
+            problemas.append({
+                "linha": numero,
+                "motivo": f"“{nome}” não está no contrato de {len(SCHEMA_TOKENS)} slots",
+                "texto": nome[:80],
+            })
+            continue
+        if nome in vistos:
+            problemas.append({"linha": numero, "motivo": "token repetido — vale o primeiro", "texto": nome[:80]})
+            continue
+        if len(valor) > 200 or not valor:
+            problemas.append({"linha": numero, "motivo": "valor vazio ou maior que 200 caracteres", "texto": nome[:80]})
+            continue
+        vistos.add(nome)
+        declarados.append((nome, valor, numero))
+    return declarados, problemas
+
+
+def compilar_tokens(texto: str) -> dict[str, Any]:
+    """Transforma a sua tabela de tokens no `tokens.css` do contrato fechado.
+
+    Não completa valor que você não deu. O que falta sai em `faltando`, agrupado
+    por grupo, para você decidir — não para o JARVIS decidir por você.
+    """
+    if len(texto) > MAX_TOKENS_CHARS:
+        raise StudioError(f"A tabela passa de {MAX_TOKENS_CHARS:,} caracteres.".replace(",", "."))
+    declarados, problemas = _parse_token_table(texto)
+    if not declarados:
+        raise StudioError("Nenhum token reconhecido. Escreva uma linha por token, como `--bg: #ffffff`.")
+    valores = {nome: valor for nome, valor, _linha in declarados}
+    faltando_obrigatorio = [nome for nome in THEME_MUST if nome not in valores]
+    if faltando_obrigatorio:
+        raise StudioError(
+            "Falta o essencial do tema: " + ", ".join(faltando_obrigatorio) + ". Sem isso não há contraste para medir."
+        )
+
+    blocos: list[str] = []
+    for chave, rotulo, tokens in TOKEN_GROUPS:
+        linhas = [(nome, valores[nome]) for nome, _camada, _desc in tokens if nome in valores]
+        if not linhas:
+            continue
+        largura = max(len(nome) for nome, _valor in linhas)
+        corpo = "\n".join(f"  {nome.ljust(largura)}: {valor};" for nome, valor in linhas)
+        blocos.append(f"/* {rotulo} */\n{corpo}")
+
+    faltando = {
+        chave: [nome for nome, _camada, _desc in tokens if nome not in valores]
+        for chave, _rotulo, tokens in TOKEN_GROUPS
+    }
+    faltando = {chave: nomes for chave, nomes in faltando.items() if nomes}
+    css = ":root {\n" + "\n\n".join(blocos) + "\n}\n"
+    return {
+        "css": css,
+        "declarados": len(valores),
+        "slots": len(SCHEMA_TOKENS),
+        "cobertura": round(100 * len(valores) / len(SCHEMA_TOKENS)),
+        "faltando": faltando,
+        "faltando_total": sum(len(nomes) for nomes in faltando.values()),
+        "problemas": problemas,
+        "nota": (
+            "Só o que você declarou entrou. Slot faltando não vira valor padrão: "
+            "um design system com valor inventado é pior que um incompleto."
+        ),
+    }
+
+
+def montar_previa(*, css: str, titulo: str = "Prévia do design system") -> dict[str, Any]:
+    """Monta o HTML de arquivo único com os tokens aplicados em amostras.
+
+    Quem desenha é o navegador. O JARVIS não rasteriza, não captura tela e não
+    publica — ele grava o arquivo que você abre.
+    """
+    if len(css) > MAX_TOKENS_CHARS:
+        raise StudioError(f"O CSS passa de {MAX_TOKENS_CHARS:,} caracteres.".replace(",", "."))
+    if ":root" not in css:
+        raise StudioError("O CSS precisa ter um bloco `:root` — é de onde os tokens vêm.")
+    nome = re.sub(r"\s+", " ", (titulo or "").strip())[:120] or "Prévia do design system"
+    html = f"""<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{nome}</title>
+<style>
+{css}
+*, *::before, *::after {{ box-sizing: border-box; }}
+body {{
+  margin: 0;
+  padding: var(--space-8, 32px);
+  background: var(--bg, #ffffff);
+  color: var(--fg, #111111);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: var(--leading-body, 1.5);
+}}
+main {{ max-width: var(--container-max, 72rem); margin: 0 auto; display: grid; gap: var(--space-8, 32px); }}
+h1 {{ font-size: var(--text-3xl, 2rem); line-height: var(--leading-tight, 1.15); margin: 0 0 var(--space-4, 16px); }}
+h2 {{ font-size: var(--text-xl, 1.25rem); margin: 0 0 var(--space-3, 12px); }}
+p {{ margin: 0 0 var(--space-3, 12px); max-width: 60ch; }}
+.amostra {{ border: 1px solid currentColor; border-radius: var(--radius-md, 8px); padding: var(--space-6, 24px); }}
+.linha {{ display: flex; flex-wrap: wrap; gap: var(--space-3, 12px); align-items: center; }}
+.botao {{
+  font: inherit; padding: var(--space-3, 12px) var(--space-5, 20px);
+  border-radius: var(--radius-sm, 6px); border: 1px solid currentColor;
+  background: var(--accent, currentColor); color: var(--on-accent, var(--bg, #ffffff));
+  cursor: pointer; transition: transform var(--motion-fast, 140ms) var(--ease-standard, ease-out);
+}}
+.botao:hover {{ transform: translateY(-1px); }}
+.botao:focus-visible {{ outline: 2px solid var(--focus-ring, currentColor); outline-offset: 2px; }}
+.campo {{
+  font: inherit; padding: var(--space-3, 12px); width: min(100%, 24rem);
+  border: 1px solid currentColor; border-radius: var(--radius-sm, 6px);
+  background: var(--surface, var(--bg, #ffffff)); color: inherit;
+}}
+.cartao {{
+  border-radius: var(--radius-md, 8px); padding: var(--space-5, 20px);
+  background: var(--surface, transparent); box-shadow: var(--elev-raised, none);
+  border: 1px solid currentColor;
+}}
+.pilha {{ display: grid; gap: var(--space-2, 8px); }}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>{nome}</h1>
+    <p>Esta página é o arquivo único que o seu navegador desenha. Os valores vêm todos
+    do `tokens.css` compilado — nenhum estilo desta prévia inventa cor, espaço ou raio.</p>
+  </header>
+
+  <section class="amostra">
+    <h2>Tipografia</h2>
+    <div class="pilha">
+      <span style="font-size: var(--text-4xl, 2.5rem); line-height: var(--leading-tight, 1.15);">Display</span>
+      <span style="font-size: var(--text-2xl, 1.5rem);">Título de seção</span>
+      <span style="font-size: var(--text-base, 1rem);">Corpo de texto. Leia esta linha duas vezes: é nela que se vê kerning, entrelinha e largura de medida.</span>
+      <span style="font-size: var(--text-sm, 0.875rem);">Legenda pequena</span>
+    </div>
+  </section>
+
+  <section class="amostra">
+    <h2>Controles</h2>
+    <div class="linha">
+      <button class="botao" type="button">Ação principal</button>
+      <button class="botao" type="button" disabled>Ação indisponível</button>
+      <input class="campo" type="text" placeholder="Um campo de texto" aria-label="Campo de exemplo">
+    </div>
+  </section>
+
+  <section class="amostra">
+    <h2>Superfície</h2>
+    <div class="cartao">
+      <p>Um cartão usa `--surface`, `--radius-md` e `--elev-raised`. Se algum desses
+      não estiver declarado no seu tokens.css, esta caixa mostra o padrão do navegador —
+      e essa diferença é justamente a informação que você veio buscar.</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>
+"""
+    return {
+        "html": html,
+        "caracteres": len(html),
+        "nota": (
+            "Arquivo único: CSS embutido, sem rede, sem fonte externa. Abra no navegador; "
+            "não há PNG porque o JARVIS não rasteriza."
+        ),
+    }

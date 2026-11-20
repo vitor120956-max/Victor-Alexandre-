@@ -292,9 +292,10 @@ def test_api_executes_reverse_features_without_side_effects(tmp_path: Path):
     with _app(tmp_path) as client:
         health = client.get("/api/health").json()
         assert health["version"] == VERSAO
-        assert health["skills"] == 325
+        assert health["skills"] == 352
         catalog = {skill["id"]: skill for skill in client.get("/api/skills").json()["skills"]}
-        assert len([skill for skill in catalog if skill.startswith("reverse.")]) == 6
+        # 6 estáticas + `reverse.descompilar` (0.92.0: efeito, com confirmação).
+        assert len([skill for skill in catalog if skill.startswith("reverse.")]) == 7
         assert catalog["reverse.javascript"]["requiresConfirmation"] is False
         inspected = client.post("/api/skills/reverse.inspect/execute", json={"parameters": {"path": "amostra.elf"}}).json()
         assert inspected["ok"] is True

@@ -812,7 +812,7 @@ def test_indice_nao_quebra_com_arquivo_corrompido(tmp_path):
     assert resposta_guardada("qualquer", tmp_path) is None
 
 
-# ------------------------------------- cobertura: as 325 skills, uma por uma
+# ------------------------------------- cobertura: as 352 skills, uma por uma
 
 def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if spec.get("enum"):
@@ -826,7 +826,15 @@ def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if tipo == "boolean":
         return True
     if tipo == "array":
+        itens = spec.get("items") or {}
+        if itens.get("type") == "array":
+            return [["exemplo"]]
+        if itens.get("type") == "object":
+            return [{"exemplo": "exemplo"}]
         return ["exemplo"]
+    if tipo == "object":
+        # O caminho do chat carrega texto: o exemplo vai como JSON válido.
+        return '{"exemplo": "exemplo"}'
     if "email" in chave:
         return "ana@exemplo.com"
     if "url" in chave or "link" in chave:
@@ -858,7 +866,7 @@ def _valores_para_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_todas_as_skills_podem_ser_preenchidas_pelo_caminho_explicito(tmp_path):
-    """A promessa de cobertura: qualquer uma das 325 skills tem como ser rodada.
+    """A promessa de cobertura: qualquer uma das 352 skills tem como ser rodada.
 
     Monta `campo=valor` para todo campo obrigatório de todo schema, relê com o
     mesmo parser que o chat usa e valida no modelo Pydantic da skill — sem

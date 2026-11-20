@@ -174,6 +174,50 @@ foi exatamente a pergunta do dono. O endereço já estava no catálogo
 - Provedor fora do catálogo não quebra: só não mostra endereço.
 
 
+### 0.92.0 — o que era “não faz por decisão” passa a fazer
+
+> adicione essas coisas arrume oq tiver q ser arrumado e adicione filosofia,
+> psicólogo, psicologia, como responder uma mulher por msg/presencialmente como
+> se comportar dicas e ideias como comecar uma conversa como ir levando a garota
+> para q ela queira ou de vontade de ela sair cmg ou q se apaixone por quem eu sou
+
+A 0.91.46 tinha listado doze módulos que liam, mediam ou planejavam e paravam
+ali. O dono leu e pediu o efeito. O efeito entrou em duas camadas separadas de
+propósito:
+
+**`server/acoes.py`** — a mão. `smtplib` com TLS, REST do Google com token
+OAuth, `webbrowser` para abrir aba, conversão por tabela fechada (pandoc,
+LibreOffice, ImageMagick, ffmpeg), renderizador **próprio** de Mermaid
+`flowchart`/`graph` (sem Puppeteer), Graphviz para DOT, `jadx`/`apktool` para
+descompilar, `pytest`/`npm test` preso à pasta, a API do GitHub para PR
+(blob → tree → commit → ref → PR, ou PATCH quando a branch já existe), vetores
+por provedor ou hash local **declarado**, e o maestro executando plano com teto
+de passos. Tudo com `JARVIS_ACOES=1` e confirmação em dois tempos: sem
+`confirmed`, a resposta é o **plano**, nunca o efeito.
+
+**`server/conversa.py`** — a parte humana. Oito escolas de filosofia com
+pergunta, prática e limite; sete conceitos de psicologia com a base declarada e
+o exagero popular ao lado; aberturas por contexto; princípios para a conversa
+não morrer; o convite com saída fácil e o “não” tratado como resposta; a revisão
+da mensagem (tamanho, perguntas, cobrança, pressão, elogio ao corpo antes da
+hora); e a lista de recusas com motivo — neg, insistir depois do não, chantagem,
+personagem falso, confundir, vigiar.
+
+A parte do pedido que **não** se entrega é “fazer ela se apaixonar”. Isso não é
+técnica honesta, é pressão com nome bonito — e está escrito em
+`docs/CONVERSA.md`, na lista `RECUSADOS` e nos testes. Crise e violência são
+interceptadas **antes** de qualquer conteúdo: 188 (CVV), 180 e 190.
+
+Os dois defeitos que os testes pegaram antes de virarem rotina: `revisar()`
+mandava texto vazio ao detector (violência no rascunho passava calada) e o
+parser do Mermaid apagava o rótulo de um nó repetido (`B[Pedido]` na primeira
+linha, `B` na segunda). Também caiu um `_NO_MM` que ninguém usava e uma chave
+`idea_key` vazia.
+
+No frontend, a aba **Guia de conversa** (`/guia`) junta as oito seções numa
+página só, com o catálogo vindo do servidor — as recusas na tela são as mesmas
+do código, não um texto de marketing.
+
 ### 0.91.46 — “e o que mais o JARVIS não faz?”
 
 > e oq mais o jarvis atualmente ele nao faz?

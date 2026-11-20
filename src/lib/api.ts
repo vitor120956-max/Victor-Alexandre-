@@ -1104,3 +1104,37 @@ export async function recuperarEstacao(): Promise<{ interrompidas: number; mensa
   );
   return resposta.result;
 }
+
+// ---------------------------------------------------------------- 0.92.0
+// Guia de conversa, filosofia e psicologia. Tudo leitura + texto: nada aqui
+// tem efeito no mundo, então não há confirmação nem trava de ambiente.
+
+export interface GuiaContexto { id: string; nome: string; aberturas: string[] }
+export interface GuiaEscola { id: string; ideia: string; pergunta: string }
+export interface GuiaConceito { id: string; o_que_e: string }
+export interface GuiaCatalogo {
+  contextos: GuiaContexto[];
+  escolas: GuiaEscola[];
+  conceitos: GuiaConceito[];
+  recusados: string[];
+  nao_e_terapia: string;
+  no_lugar?: string;
+  ajuda: string;
+}
+
+export async function getCatalogoGuia(): Promise<GuiaCatalogo> {
+  const resposta = await apiFetch<{ ok: boolean; result: GuiaCatalogo }>('/api/conversa/catalogo');
+  return resposta.result;
+}
+
+export async function guiaConversa(
+  rota: 'abrir' | 'manter' | 'convidar' | 'ler' | 'limites' | 'revisar' | 'filosofia' | 'psicologia',
+  corpo: Record<string, unknown> = {},
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const resposta = await apiFetch<{ ok: boolean; result: Record<string, unknown> }>(
+    `/api/conversa/${rota}`,
+    { method: 'POST', body: JSON.stringify(corpo), signal },
+  );
+  return resposta.result;
+}

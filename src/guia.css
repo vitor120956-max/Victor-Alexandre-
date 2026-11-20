@@ -1,0 +1,45 @@
+/* --- guia de conversa (0.92.0) ----------------------------------------- */
+.guia-page .guia-aviso { display: flex; gap: 11px; align-items: flex-start; padding: 12px 14px; margin-bottom: 16px; border-color: rgba(224, 173, 96, .28); }
+.guia-page .guia-aviso svg { flex: 0 0 auto; margin-top: 2px; color: var(--warn, #e0ad60); }
+.guia-page .guia-aviso strong { color: var(--text); font-size: 8.4px; letter-spacing: .01em; }
+.guia-page .guia-aviso p { margin-top: 3px; color: var(--muted); font-size: 7.8px; line-height: 1.6; }
+.guia-page .guia-aviso a { color: var(--accent-soft); text-decoration: underline; }
+
+.guia-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.guia-tabs button { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 7.8px; cursor: pointer; transition: border-color .14s ease, color .14s ease, background .14s ease; }
+.guia-tabs button:hover { color: var(--text); border-color: var(--line-strong); }
+.guia-tabs button.is-active { color: var(--text); border-color: var(--accent); background: rgba(126, 214, 165, .06); }
+.guia-tabs button span { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
+.guia-tabs button small { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .05em; text-transform: uppercase; }
+
+.guia-grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.guia-form { display: flex; flex-direction: column; gap: 12px; padding: 14px; position: sticky; top: 12px; }
+.guia-form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.guia-form-head h2 { margin-top: 3px; color: var(--text); font-size: 10.4px; letter-spacing: -.01em; }
+.guia-form-simples { display: flex; flex-direction: column; gap: 10px; }
+.guia-nota { color: var(--muted); font-size: 7.8px; line-height: 1.65; }
+
+.guia-resultado { padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+.guia-vazio { display: flex; gap: 10px; align-items: flex-start; color: var(--muted-2); font-size: 7.8px; line-height: 1.6; }
+.guia-vazio svg { flex: 0 0 auto; margin-top: 1px; }
+.guia-erro { display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px; border: 1px solid rgba(224, 106, 106, .35); border-radius: 7px; color: #e89090; font-size: 7.8px; line-height: 1.55; }
+.guia-erro svg { flex: 0 0 auto; margin-top: 1px; }
+
+.guia-secao { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.guia-secao:last-child { padding-bottom: 0; border-bottom: 0; }
+.guia-secao h4 { color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+.guia-campo { display: flex; flex-direction: column; gap: 3px; }
+.guia-rotulo { color: var(--muted-2); font-family: var(--mono); font-size: 5.9px; letter-spacing: .07em; text-transform: uppercase; }
+.guia-campo p { color: var(--muted); font-size: 7.9px; line-height: 1.65; }
+.guia-campo p strong { color: var(--text-soft); font-weight: 600; }
+.guia-lista { display: flex; flex-direction: column; gap: 5px; }
+.guia-lista li { position: relative; padding-left: 11px; color: var(--muted); font-size: 7.9px; line-height: 1.62; }
+.guia-lista li::before { content: ''; position: absolute; left: 0; top: .55em; width: 3px; height: 3px; border-radius: 50%; background: var(--accent); }
+.guia-cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.guia-cartao { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255, 255, 255, .012); }
+.guia-ajuda { margin-top: 4px; color: var(--muted-2); font-family: var(--mono); font-size: 6.2px; letter-spacing: .05em; }
+
+@media (max-width: 980px) {
+  .guia-grid { grid-template-columns: minmax(0, 1fr); }
+  .guia-form { position: static; }
+}

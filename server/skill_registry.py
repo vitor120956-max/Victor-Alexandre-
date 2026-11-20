@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .agency import (
     AgencyError,
@@ -26,7 +26,9 @@ from .agency import (
     default_permissions,
     verify_watchdog,
 )
+from . import acoes as acoes_mod
 from . import agenda as agenda_local
+from . import conversa as conversa_mod
 from . import maestro
 from . import estudo as estudo_local
 from . import portatil as portatil_local
@@ -285,7 +287,7 @@ from .taste import (
     judge_page,
 )
 from .taste_rules import audit_copy, audit_tells, lint_page
-from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout
+from .reverse import analyze_javascript, byte_entropy, compare_artifacts, extract_strings, inspect_artifact, inspect_layout, reverse_root
 from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_path as workspace_path
 from . import biblioteca as bib
 from . import dados as dados_locais
@@ -2564,6 +2566,247 @@ class GitDiffInput(BaseModel):
 class GitRemotoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     caminho: str = Field(default="", max_length=400, title="Repositório")
+
+
+# ---------------------------------------------------------------- 0.92.0
+# Ações com efeito real e as skills de conversa/filosofia/psicologia.
+
+class EmailEnviarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    para: str = Field(title="Para", min_length=3, max_length=200, description="Um e-mail; vários separados por vírgula.")
+    assunto: str = Field(title="Assunto", min_length=1, max_length=200)
+    corpo: str = Field(default="", title="Corpo", max_length=200_000, json_schema_extra={"format": "textarea"})
+    anexos: list[str] = Field(default_factory=list, max_length=5, title="Anexos da área do JARVIS")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar o envio")
+
+
+class GoogleEmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    para: str = Field(title="Para", min_length=3, max_length=200)
+    assunto: str = Field(title="Assunto", min_length=1, max_length=200)
+    corpo: str = Field(default="", max_length=200_000, json_schema_extra={"format": "textarea"})
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar o envio")
+
+
+class GoogleListarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pasta: str = Field(default="", max_length=120, title="Pasta do Drive (ou “gmail”)")
+    limite: int = Field(default=20, ge=1, le=100, title="Quantos itens")
+
+
+class GoogleEventoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    titulo: str = Field(title="Título", min_length=1, max_length=200)
+    inicio: str = Field(title="Início (ISO 8601)", max_length=40, description="2026-11-20T19:00:00-03:00")
+    fim: str = Field(title="Fim (ISO 8601)", max_length=40)
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar a criação")
+
+
+class GooglePlanilhaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    planilha: str = Field(title="ID da planilha", min_length=10, max_length=120)
+    aba: str = Field(default="A1", max_length=60, title="Aba")
+    valores: list[list[str]] = Field(min_length=1, max_length=500, title="Linhas")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar a escrita")
+
+    @field_validator("valores", mode="before")
+    @classmethod
+    def _uma_linha(cls, valor: Any) -> Any:
+        """Aceita lista, JSON ou texto: `a;b;c` é uma linha, `a\nb` são duas.
+
+        Pelo chat todo campo chega como texto — sem esta leitura, a planilha
+        seria impossível por frase.
+        """
+        if isinstance(valor, list):
+            if valor and all(isinstance(item, str) for item in valor):
+                return [list(valor)]
+            return valor
+        if isinstance(valor, str):
+            bruto = valor.strip()
+            if bruto.startswith("["):
+                # JSON de verdade **ou** a forma que o chat monta (`['a', 'b']`).
+                try:
+                    dados = json.loads(bruto)
+                except json.JSONDecodeError:
+                    try:
+                        dados = ast.literal_eval(bruto)
+                    except (ValueError, SyntaxError) as exc:
+                        raise ValueError("A lista de valores não abre: confira vírgulas e aspas.") from exc
+                if isinstance(dados, list):
+                    return dados
+            return [
+                [celula.strip() for celula in linha.split(";")]
+                for linha in bruto.splitlines()
+                if linha.strip()
+            ]
+        return valor
+
+
+class NavegadorAbrirInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(title="Endereço", min_length=8, max_length=2_000)
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar abrir a aba")
+
+
+class ArquivoConverterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    origem: str = Field(title="Arquivo de origem", min_length=1, max_length=200)
+    formato: str = Field(title="Formato de destino", min_length=2, max_length=10, description="pdf, docx, md, jpg, mp3…")
+    saida: str = Field(default="", max_length=120, title="Nome do arquivo de saída")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar a conversão")
+
+
+class DiagramaMermaidInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Mermaid", min_length=1, max_length=20_000, json_schema_extra={"format": "textarea"})
+    nome: str = Field(default="diagrama.svg", max_length=120, title="Nome do SVG")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar gravar o SVG")
+
+
+class DiagramaDotInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="DOT", min_length=5, max_length=60_000, json_schema_extra={"format": "textarea"})
+    nome: str = Field(default="diagrama.svg", max_length=120, title="Nome do SVG")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar gravar o SVG")
+
+
+class ReverseDescompilarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(title="APK", min_length=1, max_length=200)
+    destino: str = Field(default="", max_length=120, title="Pasta de saída")
+    ferramenta: Literal["jadx", "apktool"] = Field(default="jadx", title="Ferramenta")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar a descompilação")
+
+
+class LeanTestarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pasta: str = Field(title="Pasta do projeto", min_length=1, max_length=200)
+    comando: Literal["pytest", "pytest-full", "npm"] = Field(default="pytest", title="Comando")
+    timeout: int = Field(default=600, ge=30, le=3600, title="Tempo limite (s)")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar rodar a suíte")
+
+
+class SubmissaoPublicarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repositorio: str = Field(title="Repositório", min_length=3, max_length=140, description="dono/projeto")
+    branch: str = Field(title="Branch", min_length=1, max_length=120)
+    base: str = Field(default="main", max_length=120, title="Base")
+    titulo: str = Field(title="Título do PR", min_length=1, max_length=200)
+    corpo: str = Field(default="", max_length=50_000, json_schema_extra={"format": "textarea"})
+    arquivos: dict[str, str] = Field(min_length=1, title="Arquivos (caminho → texto)")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar publicar")
+
+    @field_validator("arquivos", mode="before")
+    @classmethod
+    def _arquivos_de_texto(cls, valor: Any) -> Any:
+        """Aceita JSON ou `caminho=conteúdo` por linha — o formato do chat.
+
+        O campo é um dicionário, mas o caminho explícito do chat só sabe passar
+        texto; sem esta leitura, `submissao.publicar` seria impossível por frase.
+        """
+        if not isinstance(valor, str):
+            return valor
+        bruto = valor.strip()
+        if bruto.startswith("{"):
+            try:
+                dados = json.loads(bruto)
+            except json.JSONDecodeError:
+                try:
+                    dados = ast.literal_eval(bruto)
+                except (ValueError, SyntaxError) as exc:
+                    raise ValueError("O JSON de arquivos não abre: confira vírgulas e aspas.") from exc
+            if not isinstance(dados, dict):
+                raise ValueError('O JSON precisa ser um objeto {"caminho": "texto"}.')
+            return {str(chave): str(conteudo) for chave, conteudo in dados.items()}
+        mapa: dict[str, str] = {}
+        for linha in bruto.splitlines():
+            if not linha.strip():
+                continue
+            if "=" not in linha:
+                raise ValueError("Cada linha precisa ser `caminho=conteúdo` (ou mande um JSON).")
+            caminho, _, conteudo = linha.partition("=")
+            mapa[caminho.strip()] = conteudo.strip()
+        return mapa
+
+
+class MemoriaEmbeddingInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    texto: str = Field(title="Texto", min_length=1, max_length=8_000, json_schema_extra={"format": "textarea"})
+
+
+class MemoriaSimilaridadeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    a: str = Field(title="Texto A", min_length=1, max_length=8_000)
+    b: str = Field(title="Texto B", min_length=1, max_length=8_000)
+
+
+class AgenciaExecutarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pedido: str = Field(title="O que o agente deve fazer", min_length=3, max_length=400)
+    autorizar: bool = Field(default=False, title="Autorizar os passos com efeito")
+    limite_passos: int = Field(default=6, ge=1, le=10, alias="limitePassos", title="Teto de passos")
+
+
+class EstudioTokensInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tokens: str = Field(title="Tabela de tokens", min_length=3, max_length=120_000, json_schema_extra={"format": "textarea"}, description="Uma linha por token: `--bg: #ffffff`.")
+    nome: str = Field(default="tokens.css", max_length=120, title="Nome do arquivo")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar gravar o CSS")
+
+
+class EstudioPreviaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tokens: str = Field(default="", max_length=120_000, title="Tabela de tokens", json_schema_extra={"format": "textarea"})
+    css: str = Field(default="", max_length=120_000, title="tokens.css pronto", json_schema_extra={"format": "textarea"})
+    titulo: str = Field(default="", max_length=120, title="Título da página")
+    nome: str = Field(default="previa.html", max_length=120, title="Nome do arquivo")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar gravar o HTML")
+
+
+class CarreiraCandidatarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    vaga: str = Field(title="Anúncio da vaga", min_length=20, json_schema_extra={"format": "textarea"})
+    curriculo: str = Field(title="Currículo", min_length=20, json_schema_extra={"format": "textarea"})
+    destino: str = Field(title="E-mail de destino", min_length=3, max_length=200)
+    cv: str = Field(default="", max_length=200, title="Arquivo do CV na área do JARVIS")
+    perfil: str = Field(default="", max_length=120_000, title="Perfil (YAML)", json_schema_extra={"format": "textarea"})
+    pesquisa: str = Field(default="", max_length=4_000, title="O que você descobriu da empresa")
+    assunto: str = Field(default="", max_length=200, title="Assunto do e-mail")
+    confirmado: bool = Field(default=False, alias="confirmed", title="Confirmar o envio")
+
+
+class ConversaAbrirInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contexto: Literal["app", "festa", "academia", "trabalho", "rua", "curso"] = Field(default="app", title="Onde")
+    interesse: str = Field(default="", max_length=300, title="O que vocês têm em comum")
+
+
+class ConversaManterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagem: str = Field(default="", max_length=4_000, title="A conversa ou a mensagem", json_schema_extra={"format": "textarea"})
+    objetivo: str = Field(default="conhecer", max_length=60, title="Objetivo")
+
+
+class ConversaConvidarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plano: str = Field(default="", max_length=300, title="O programa que você pensou")
+    tempo_conhecendo: str = Field(default="", alias="tempoConhecendo", max_length=60, title="Há quanto tempo conversam")
+
+
+class ConversaRevisarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mensagem: str = Field(title="Mensagem que você ia mandar", min_length=1, max_length=4_000, json_schema_extra={"format": "textarea"})
+
+
+class FilosofiaOlharInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pergunta: str = Field(default="", max_length=600, title="A sua pergunta")
+    escola: str = Field(default="", max_length=40, title="Escola (vazio = todas)")
+
+
+class PsicologiaExplicarInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conceito: str = Field(default="", max_length=40, title="Conceito (vazio = todos)")
 
 
 SkillHandler = Callable[[BaseModel, bool], dict[str, Any]]
@@ -5527,6 +5770,241 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         return escritorio_catalog()
 
 
+    # ---------------------------------------------------------------- 0.92.0
+    # Efeito real: e-mail, Google, navegador, conversão, diagrama, decompilação,
+    # teste, publicação, embedding e agente. A trava `JARVIS_ACOES=1` é cobrada
+    # dentro de `acoes`, não aqui — assim a mensagem de recusa é a mesma na skill
+    # e na rota, e diz o que ligar.
+
+    def _do_acoes(funcao, *args, **kwargs):
+        try:
+            return funcao(*args, **kwargs)
+        except acoes_mod.AcoesError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def email_enviar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EmailEnviarInput)
+        destinos = [item.strip() for item in re.split(r"[,;]", data.para) if item.strip()]
+        return _do_acoes(
+            acoes_mod.enviar_email,
+            para=destinos,
+            assunto=data.assunto,
+            corpo=data.corpo,
+            anexos=list(data.anexos),
+            raiz=files_root,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def google_email_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GoogleEmailInput)
+        return _do_acoes(
+            acoes_mod.google_email,
+            para=data.para,
+            assunto=data.assunto,
+            corpo=data.corpo,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def google_listar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GoogleListarInput)
+        return _do_acoes(acoes_mod.google_listar, pasta=data.pasta, limite=data.limite)
+
+    def google_evento_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GoogleEventoInput)
+        return _do_acoes(
+            acoes_mod.google_evento,
+            titulo=data.titulo,
+            inicio=data.inicio,
+            fim=data.fim,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def google_planilha_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, GooglePlanilhaInput)
+        return _do_acoes(
+            acoes_mod.google_planilha,
+            planilha=data.planilha,
+            aba=data.aba,
+            valores=[list(linha) for linha in data.valores],
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def navegador_abrir_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, NavegadorAbrirInput)
+        return _do_acoes(
+            acoes_mod.abrir_url,
+            data.url,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def arquivo_converter_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ArquivoConverterInput)
+        return _do_acoes(
+            acoes_mod.converter,
+            origem=data.origem,
+            formato=data.formato,
+            raiz=files_root,
+            saida=data.saida,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def diagrama_mermaid_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramaMermaidInput)
+        return _do_acoes(
+            acoes_mod.mermaid_svg,
+            data.texto,
+            confirmado=bool(data.confirmado) and not dry_run,
+            raiz=files_root,
+            nome=data.nome,
+        )
+
+    def diagrama_dot_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, DiagramaDotInput)
+        return _do_acoes(
+            acoes_mod.dot_svg,
+            data.texto,
+            confirmado=bool(data.confirmado) and not dry_run,
+            raiz=files_root,
+            nome=data.nome,
+        )
+
+    def reverse_descompilar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ReverseDescompilarInput)
+        return _do_acoes(
+            acoes_mod.descompilar,
+            arquivo=data.arquivo,
+            raiz=reverse_root(files_root),
+            destino=data.destino,
+            ferramenta=data.ferramenta,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def lean_testar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, LeanTestarInput)
+        return _do_acoes(
+            acoes_mod.rodar_testes,
+            pasta=data.pasta,
+            raiz=files_root,
+            comando=data.comando,
+            timeout=data.timeout,
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def submissao_publicar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SubmissaoPublicarInput)
+        return _do_acoes(
+            acoes_mod.publicar_pr,
+            repositorio=data.repositorio,
+            branch=data.branch,
+            base=data.base,
+            titulo=data.titulo,
+            corpo=data.corpo,
+            arquivos=dict(data.arquivos),
+            confirmado=bool(data.confirmado) and not dry_run,
+        )
+
+    def memoria_embedding_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaEmbeddingInput)
+        return _do_acoes(acoes_mod.embedding, data.texto)
+
+    def memoria_similaridade_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, MemoriaSimilaridadeInput)
+        return _do_acoes(acoes_mod.similaridade, data.a, data.b)
+
+    def agencia_executar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, AgenciaExecutarInput)
+        try:
+            return asyncio.run(
+                acoes_mod.executar_agente(
+                    pedido=data.pedido,
+                    registry=registry,
+                    autorizar=bool(data.autorizar) and not dry_run,
+                    limite_passos=data.limite_passos,
+                )
+            )
+        except acoes_mod.AcoesError as exc:
+            raise SkillError(str(exc)) from exc
+        except maestro.MaestroError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def acoes_estado_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return {**acoes_mod.estado(), "conversoes": acoes_mod.conversoes_possiveis()}
+
+    def conversa_handler(funcao):
+        def executar(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+            try:
+                return funcao(**{campo: getattr(data, campo) for campo in type(data).model_fields})
+            except conversa_mod.ConversaError as exc:
+                raise SkillError(str(exc)) from exc
+        return executar
+
+    def estudio_tokens_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudioTokensInput)
+        return _do_acoes(
+            acoes_mod.estudio_tokens,
+            data.tokens,
+            confirmado=bool(data.confirmado) and not dry_run,
+            raiz=files_root,
+            nome=data.nome,
+        )
+
+    def estudio_previa_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, EstudioPreviaInput)
+        return _do_acoes(
+            acoes_mod.estudio_previa,
+            tokens=data.tokens,
+            css=data.css,
+            titulo=data.titulo,
+            confirmado=bool(data.confirmado) and not dry_run,
+            raiz=files_root,
+            nome=data.nome,
+        )
+
+    def carreira_candidatar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CarreiraCandidatarInput)
+        return _do_acoes(
+            acoes_mod.carreira_candidatar,
+            vaga=data.vaga,
+            curriculo=data.curriculo,
+            destino=data.destino,
+            cv=data.cv,
+            perfil=data.perfil,
+            pesquisa=data.pesquisa,
+            assunto=data.assunto,
+            confirmado=bool(data.confirmado) and not dry_run,
+            raiz=files_root,
+        )
+
+    def conversa_abrir_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConversaAbrirInput)
+        return conversa_handler(conversa_mod.abrir)(data, _dry_run)
+
+    def conversa_manter_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConversaManterInput)
+        return conversa_handler(conversa_mod.manter)(data, _dry_run)
+
+    def conversa_convidar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConversaConvidarInput)
+        return conversa_handler(conversa_mod.convidar)(data, _dry_run)
+
+    def conversa_revisar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, ConversaRevisarInput)
+        return conversa_handler(conversa_mod.revisar)(data, _dry_run)
+
+    def conversa_ler_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return conversa_mod.ler()
+
+    def conversa_limites_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        return conversa_mod.limites()
+
+    def filosofia_olhar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, FilosofiaOlharInput)
+        return conversa_handler(conversa_mod.filosofia)(data, _dry_run)
+
+    def psicologia_explicar_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, PsicologiaExplicarInput)
+        return conversa_handler(conversa_mod.psicologia)(data, _dry_run)
+
     definitions = [
         SkillDefinition("text.analyze", "Analisar texto", "Conta palavras, caracteres, frases, tempo de leitura e termos frequentes.", "Texto", TextAnalyzeInput, analyze_text),
         SkillDefinition("text.transform", "Transformar texto", "Converte maiúsculas, minúsculas, formato de título ou slug para URLs.", "Texto", TextTransformInput, transform_text),
@@ -5882,6 +6360,35 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("maestro.catalogo", "Que objetivos eu sei encadear", "Lista os procedimentos declarados: objetivo, passos na ordem e o limite de cada um. **Nada de modelo**: pedido igual dá plano igual. Se o objetivo não estiver aqui, o JARVIS diz que não sabe em vez de improvisar.", "Maestro", MaestroCatalogoInput, maestro_catalogo_handler, timeout_seconds=5, keywords=("que objetivos", "procedimentos do maestro", "o que voce sabe encadear", "orquestracao")),
         SkillDefinition("maestro.planejar", "Planejar um objetivo", "Transforma um objetivo em português numa **fila ordenada de skills do catálogo**, cada passo com os campos preenchidos e a razão de estar ali. **Não executa nada** — nem leitura de rede. Diz também o que falta no pedido e onde um passo depende do outro.", "Maestro", MaestroPlanejarInput, maestro_planejar_handler, timeout_seconds=10, keywords=("planejar", "plano de passos", "monte o plano", "quais passos")),
         SkillDefinition("maestro.executar", "Executar um plano", "Roda o plano **na ordem** e para no primeiro passo que falha ou que precisa de autorização, dizendo onde parou e o que já tinha dado certo. Passo com efeito (abrir, baixar, gravar, digitar) só roda com `autorizar=true`; sem isso, os passos de leitura rodam e a fila para antes do efeito.", "Maestro", MaestroExecutarInput, maestro_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180, keywords=("executar o plano", "faz tudo", "roda os passos", "orquestrar")),
+        # ------------------------------------------------ 0.92.0 — efeito real
+        SkillDefinition("acoes.estado", "O que o JARVIS pode fazer agora", "Diz, sem tocar em nada, o que está ligado e configurado nesta máquina: a trava JARVIS_ACOES, SMTP, token do Google, token do GitHub, embeddings e cada ferramenta externa (pandoc, LibreOffice, ffmpeg, ImageMagick, Graphviz, jadx, apktool, Node). É o primeiro lugar a olhar quando uma ação responde “falta X”.", "Ações", EmptyInput, acoes_estado_handler, timeout_seconds=20, keywords=("o que voce pode fazer", "o que esta configurado", "acoes", "pode fazer agora")),
+        SkillDefinition("email.enviar", "Enviar e-mail de verdade", "Manda o e-mail pelo SMTP configurado no `.env` (Gmail: senha de app). Sem `confirmed`, devolve o plano com destinatários, assunto e anexos — e nada sai. Com confirmação e `JARVIS_ACOES=1`, envia com TLS e devolve o resultado. A senha nunca aparece na resposta nem no erro. Anexo só de dentro da área do JARVIS, até 25 MB cada.", "Ações", EmailEnviarInput, email_enviar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90, keywords=("enviar email", "manda email", "envie um email", "mandar por email")),
+        SkillDefinition("google.email", "Enviar pelo Gmail", "Usa a API do Gmail com o token OAuth de `JARVIS_GOOGLE_TOKEN` para mandar a mensagem. Sem o token, diz onde gerar e com quais escopos. Confirmação obrigatória; o ID da mensagem volta no resultado.", "Ações", GoogleEmailInput, google_email_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60, keywords=("gmail", "enviar pelo gmail", "mandar pelo google")),
+        SkillDefinition("google.listar", "Listar Drive ou Gmail", "Lista arquivos do Google Drive (ou mensagens do Gmail, com `pasta` igual a `gmail`) pelo token OAuth. Só leitura: nada é baixado, movido ou apagado.", "Ações", GoogleListarInput, google_listar_handler, timeout_seconds=60, keywords=("google drive", "meus arquivos do drive", "listar o drive", "mensagens do gmail")),
+        SkillDefinition("google.evento", "Criar evento no Google Agenda", "Cria o evento no calendário principal com título, início e fim em ISO 8601. Confirmação obrigatória e token OAuth. Devolve o link do evento.", "Ações", GoogleEventoInput, google_evento_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60, keywords=("google agenda", "criar evento", "marcar no calendario do google")),
+        SkillDefinition("google.planilha", "Escrever no Google Sheets", "Acrescenta linhas numa planilha (até 500 por vez) com o token OAuth. Confirmação obrigatória. Devolve quantas linhas foram atualizadas.", "Ações", GooglePlanilhaInput, google_planilha_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60, keywords=("google sheets", "planilha do google", "escrever na planilha")),
+        SkillDefinition("navegador.abrir", "Abrir uma aba de verdade", "Abre o endereço no navegador padrão do sistema. Só http/https, sem usuário e senha embutidos. Sem confirmação, devolve o plano; com confirmação e `JARVIS_ACOES=1`, abre a aba.", "Ações", NavegadorAbrirInput, navegador_abrir_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30, keywords=("abrir o site", "abre a pagina", "abrir no navegador", "abrir uma aba")),
+        SkillDefinition("arquivo.converter", "Converter arquivo de verdade", "Converte pela tabela fechada (md→pdf/docx/html, docx→pdf/md, html→pdf, png↔jpg, wav→mp3, mp4→mp3, mov→mp4) usando pandoc, LibreOffice, ImageMagick e ffmpeg. Sem a ferramenta, diz o que instalar. Nada de shell: argumentos montados aqui, saída dentro da área do JARVIS.", "Ações", ArquivoConverterInput, arquivo_converter_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=660, keywords=("converter arquivo", "transformar em pdf", "converter para mp3", "converter imagem")),
+        SkillDefinition("diagrama.mermaid", "Desenhar Mermaid em SVG", "Lê `flowchart`/`graph` do Mermaid (nós com rótulo e setas) e **desenha** o SVG com um renderizador próprio, sem navegador e sem `mmdc`. Recusa os outros tipos de diagrama com a lista do que entende, em vez de desenhar pela metade.", "Ações", DiagramaMermaidInput, diagrama_mermaid_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30, keywords=("desenhar mermaid", "renderizar mermaid", "mermaid em svg", "fluxograma")),
+        SkillDefinition("diagrama.dot", "Desenhar DOT em SVG", "Roda o Graphviz (`dot -Tsvg`) quando ele está instalado e grava o SVG. Sem o Graphviz, diz o que instalar.", "Ações", DiagramaDotInput, diagrama_dot_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90, keywords=("graphviz", "desenhar dot", "dot em svg")),
+        SkillDefinition("reverse.descompilar", "Descompilar APK de verdade", "Roda `jadx` (código Java) ou `apktool` (recursos e smali) sobre um artefato da área reversa e grava o resultado numa pasta dela. Nada é executado. Sem a ferramenta instalada, diz onde baixar em vez de falhar calado.", "Engenharia reversa", ReverseDescompilarInput, reverse_descompilar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=660, keywords=("descompilar", "abrir o apk", "ver o codigo do apk", "jadx", "apktool")),
+        SkillDefinition("lean.testar", "Rodar a suíte de verdade", "Roda `pytest` (rápido ou completo) ou `npm test` numa pasta dentro da área do JARVIS, com tempo limite e saída cortada. Devolve código de saída, se passou e as últimas linhas. Sem `confirmed`, só mostra o comando.", "Engenharia enxuta", LeanTestarInput, lean_testar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900, keywords=("rodar os testes", "rodar a suite", "pytest", "npm test")),
+        SkillDefinition("submissao.publicar", "Publicar pull request", "Cria a branch, comita os arquivos de texto e abre o PR no GitHub com o token de `JARVIS_GITHUB_TOKEN` (fine-grained, Contents + Pull requests). Confirmação obrigatória. Binário não passa por aqui: é com o `git`.", "Submissão", SubmissaoPublicarInput, submissao_publicar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180, keywords=("abrir pull request", "publicar pr", "abrir pr", "subir para o github")),
+        SkillDefinition("memoria.embedding", "Vetor do texto (embedding)", "Transforma o texto num vetor: usa o endpoint de embeddings do provedor quando há chave e, sem provedor, devolve o vetor local de 256 dimensões **dizendo que é local** e por quê. Serve para comparar textos por semelhança, não para “lembrar” sozinho.", "Memória IA", MemoriaEmbeddingInput, memoria_embedding_handler, timeout_seconds=60, keywords=("embedding", "vetor do texto", "semantica", "comparar significado")),
+        SkillDefinition("memoria.similaridade", "Quão parecidos dois textos são", "Cosseno entre os vetores de dois textos, pelo mesmo caminho do `memoria.embedding` — provedor quando há chave, hash local quando não há, com a fonte declarada. Não diz qual é “verdadeiro”: diz o quanto se parecem.", "Memória IA", MemoriaSimilaridadeInput, memoria_similaridade_handler, timeout_seconds=60, keywords=("parecido", "semelhanca", "similaridade", "quao parecidos")),
+        SkillDefinition("agencia.executar", "Executar o agente de verdade", "Planeja com o maestro e **executa** os passos na ordem, parando no primeiro que falha, que pede dado ou que tem efeito sem autorização. Teto de passos por execução. Passo com efeito exige `autorizar=true` e `JARVIS_ACOES=1`.", "Governança de agentes", AgenciaExecutarInput, agencia_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300, keywords=("executar agente", "roda o agente", "agente faz", "executar o procedimento")),
+        SkillDefinition("estudio.tokens", "Compilar tokens em CSS", "Transforma a sua tabela (`--bg: #ffffff`, uma por linha) no `tokens.css` do contrato fechado de 56 slots. Só entra o que você declarou: slot faltando aparece em `faltando`, nunca como valor inventado. Recusa token fora do esquema, repetido ou com valor vazio — com a linha exata.", "Estúdio", EstudioTokensInput, estudio_tokens_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30, keywords=("compilar tokens", "gerar tokens.css", "design tokens", "tokens do estudio")),
+        SkillDefinition("estudio.previa", "Montar a prévia do design system", "Gera uma página HTML de arquivo único com tipografia, controles e superfície usando **os seus** tokens — sem rede, sem fonte externa. Quem desenha é o navegador: não há PNG nem captura de tela, e o aviso vem na resposta.", "Estúdio", EstudioPreviaInput, estudio_previa_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30, keywords=("previa do design", "renderizar o estudio", "pagina de tokens", "ver o design system")),
+        SkillDefinition("carreira.candidatar", "Enviar a candidatura", "Monta a carta com `career.draft_letter` — e **só envia se a própria checagem disser que está pronta**, sem placeholder e com número de fonte. Vai por SMTP com o CV anexo, e o `falta` aparece antes de qualquer tentativa. Formulário web e ATS continuam manuais.", "Carreira", CarreiraCandidatarInput, carreira_candidatar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90, keywords=("enviar candidatura", "me candidatar", "mandar curriculo", "aplicar para a vaga")),
+        # ---------------------------------------- 0.92.0 — conversa e filosofia
+        SkillDefinition("conversa.abrir", "Como começar uma conversa", "Aberturas por contexto (app, festa, academia, trabalho, rua, curso) com o princípio de cada uma e o que evitar. Não é script de sedução: é sobre o mundo primeiro, e sobre aceitar que a conversa pode não ir adiante. Se você contar o interesse em comum, ele vira uma abertura específica.", "Conversa", ConversaAbrirInput, conversa_abrir_handler, timeout_seconds=10, keywords=("como comecar uma conversa", "abrir conversa", "puxar assunto", "chegar nela")),
+        SkillDefinition("conversa.manter", "Como a conversa não morre", "Seis princípios (pergunta aberta com a sua parte, escuta ativa, ritmo, assunto que rende, encerrar no alto, próximo passo), um exemplo de resposta ruim × boa e, se você colar a mensagem, o que nela pesa: tamanho, número de perguntas, cobrança. Não adivinha o que ela pensa.", "Conversa", ConversaManterInput, conversa_manter_handler, timeout_seconds=10, keywords=("manter a conversa", "conversa morreu", "o que responder", "como responder")),
+        SkillDefinition("conversa.convidar", "Como chamar para sair", "Estrutura do convite (o que é, quando, por que com ela, saída fácil), exemplos concretos, o que não fazer e como receber um não. Se você disser o programa que pensou, ele entra no convite.", "Conversa", ConversaConvidarInput, conversa_convidar_handler, timeout_seconds=10, keywords=("chamar para sair", "convidar para sair", "pedir em namoro", "marcar encontro")),
+        SkillDefinition("conversa.ler", "Sinais de interesse e de desconforto", "Lista os sinais dos dois lados, a regra que vale mais que todos (sinal é ambíguo, palavra não é), o que é consentimento e o que fazer se ela sumir. Não é detector de sentimento.", "Conversa", EmptyInput, conversa_ler_handler, timeout_seconds=5, keywords=("ela gosta de mim", "sinais", "esta afim", "ela quer sair comigo")),
+        SkillDefinition("conversa.revisar", "Revisar a mensagem antes de mandar", "Olha a sua mensagem: tamanho, quantas perguntas, cobrança, pressão, elogio ao corpo antes da hora, maiúsculas, emojis. Devolve problemas e sugestões — e o lembrete de que ele não sabe o que ela vai responder. Não reescreve por você.", "Conversa", ConversaRevisarInput, conversa_revisar_handler, timeout_seconds=10, keywords=("revisar mensagem", "essa mensagem esta boa", "o que mandar", "mensagem para ela")),
+        SkillDefinition("conversa.limites", "O que o JARVIS não escreve", "A lista explícita do que ele recusa (neg, insistir depois do não, chantagem emocional, personagem falso, técnicas de confundir, vigiar) com o motivo de cada um — e o que funciona no lugar.", "Conversa", EmptyInput, conversa_limites_handler, timeout_seconds=5, keywords=("o que voce nao escreve", "manipular", "tecnica de seducao", "negging")),
+        SkillDefinition("filosofia.olhar", "Uma pergunta por oito escolas", "Estoicismo, existencialismo, virtude, pragmatismo, fenomenologia, Camus, taoísmo e ética do cuidado: a ideia central, a pergunta que cada uma faz, uma prática concreta e o limite. Uma escola por vez ou o panorama — para escolher a pergunta mais incômoda, não a resposta mais confortável.", "Filosofia", FilosofiaOlharInput, filosofia_olhar_handler, timeout_seconds=10, keywords=("filosofia", "estoicismo", "existencialismo", "sentido da vida", "como viver")),
+        SkillDefinition("psicologia.explicar", "Psicologia com base", "Escuta ativa, comunicação não violenta, apego, rejeição, ansiedade social, reciprocidade e atração: o que é, o que a pesquisa sustenta, uma prática e o cuidado de cada um. Não é diagnóstico nem terapia — e diz isso em toda resposta.", "Psicologia", PsicologiaExplicarInput, psicologia_explicar_handler, timeout_seconds=10, keywords=("psicologia", "psicologo", "ansiedade social", "apego", "rejeicao")),
     ]
     registry = SkillRegistry(definitions, files_root)
     return registry

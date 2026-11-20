@@ -316,9 +316,13 @@ def test_audit_confines_paths_to_the_code_area(tmp_path) -> None:
 def test_api_lists_and_executes_lean_skills(client: TestClient) -> None:
     catalog = client.get("/api/skills").json()["skills"]
     lean_skills = {skill["id"]: skill for skill in catalog if skill["id"].startswith("lean.")}
-    assert set(lean_skills) == {"lean.ladder", "lean.review", "lean.audit", "lean.debt"}
+    assert set(lean_skills) == {"lean.ladder", "lean.review", "lean.audit", "lean.debt", "lean.testar"}
     assert all(skill["runtime"] == "python" for skill in lean_skills.values())
-    assert all(skill["sideEffects"] is False for skill in lean_skills.values())
+    # As quatro análises são leitura; `lean.testar` roda a suíte (0.92.0) e por
+    # isso é a única com efeito e confirmação.
+    assert all(skill["sideEffects"] is False for chave, skill in lean_skills.items() if chave != "lean.testar")
+    assert lean_skills["lean.testar"]["sideEffects"] is True
+    assert lean_skills["lean.testar"]["requiresConfirmation"] is True
 
     ladder = client.post(
         "/api/skills/lean.ladder/execute",

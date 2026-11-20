@@ -461,13 +461,16 @@ def test_catalogo_lista_todas_as_regras_de_roteamento() -> None:
 # ------------------------------------------------------------------ registro
 
 
-def test_registro_tem_as_sete_skills_de_memoria() -> None:
+def test_registro_tem_as_skills_de_memoria() -> None:
     registry = build_registry(__import__("pathlib").Path("/tmp/memoria-files"))  # noqa: F821
     itens = registry.list()
     memoria = [item for item in itens if item["id"].startswith("memoria.")]
-    assert len(memoria) == 7
-    assert len(itens) == 325
-    assert all(item["category"] == "Memória" for item in memoria)
+    # 7 de memória lexical + 2 de embedding (0.92.0, leitura: o vetor não grava nada).
+    assert len(memoria) == 9
+    assert len(itens) == 352
+    # As sete lexicais moram em “Memória”; as duas de embedding (0.92.0) em
+    # “Memória IA”. As duas continuam sendo leitura em qualquer caso.
+    assert all(item["category"] in {"Memória", "Memória IA"} for item in memoria)
     assert all(item["sideEffects"] is False for item in memoria)
 
 

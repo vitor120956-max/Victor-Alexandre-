@@ -30,30 +30,33 @@ limitações que ninguém cobra envelhece igual à frase do OCR.
 | Virar root sem uma linha no sudoers | root de verdade é o `/etc/sudoers`; `NOPASSWD` restrito a binários da tabela fechada | `sistema.elevar` + `sistema.elevar_executar` com token (`docs/ROOT.md`) |
 | Prometer FPS ou “o jogo ficou mais rápido” | isso se mede no aparelho, com o jogo rodando; o JARVIS não instrumenta build | o que ele mede é o **pacote** (tamanho, ABIs, compressão) — e diz que é isso |
 
-## 2. Não faz por decisão (lê, mede ou planeja — não executa)
+## 2. Não faz por decisão — o que continua de fora
 
-Esses módulos têm a mesma regra: **produzem texto e evidência, nunca efeito**.
-Onde há efeito, ele é skill separada, com `confirmed`, variável de ambiente e
-token de uso único.
+Na 0.91.46 esta seção listava doze módulos que “leem, medem ou planejam, nunca
+executam”. O dono pediu que virassem efeito, e na **0.92.0** viraram — com trava,
+confirmação e o contrato em [`ACOES.md`](ACOES.md). O que resta aqui é o recorte
+que continua sendo escolha, agora com o motivo escrito:
 
-| módulo | o que ele **não** faz | onde está escrito |
+| o que continua fora | por quê | onde |
 |---|---|---|
-| Escritório (`gws`) | não instala o CLI, não autentica, não lê credencial, não chama o Google | `docs/ESCRITORIO.md` |
-| Correio | não envia e-mail: monta o rascunho a partir do `.eml` | `server/correio.py` |
-| Navegador | não abre aba, não clica, não preenche, não paga, não baixa | `docs/NAVEGADOR.md` |
-| Carreira | não lê LinkedIn, não envia candidatura, não altera currículo | `docs/CARREIRA.md` |
-| Portabilidade | não converte arquivo: devolve o plano do `convert.sh` | `docs/PORTABILIDADE.md` |
-| Estúdio de design | não compila tokens, não renderiza HTML, não publica | `docs/ESTUDIO.md` |
-| Diagramas | não renderiza Mermaid/DOT — exporta como texto | `docs/DIAGRAMAS.md` |
-| Governo de agentes | não executa agente, não lê runtime, não altera permissão | `docs/AGENTES.md` |
-| Memória | é lexical: sem embedding, sem grafo, sem paráfrase | `README.md` § Limites |
-| Reversa | não descompila, não executa, não extrai contêiner | `docs/ENGENHARIA-REVERSA.md` |
-| Engenharia enxuta | não roda teste, não vê o histórico do Git | `docs/LEAN.md` |
-| Submissão | não publica: a revisão humana continua no rótulo | `docs/SUBMISSAO.md` |
-| Debloat | só planeja — exceto `maquina.arrumar`, que executa com ponto de restauração e diário | `README.md` § Limites |
-| Análise do jogo | não descompila DEX, não recompila, não assina | `server/jogo.py` (docstring) |
+| clicar, preencher e pagar em página | exige dirigir um navegador por seletor; a decisão de não ver a tela por pixels (0.91.x) continua de pé | `docs/NAVEGADOR.md` |
+| preencher formulário de vaga e ATS | cada site tem o seu; o caminho real é o e-mail de candidatura (`carreira.candidatar`) | `docs/CARREIRA.md` |
+| rasterizar página ou gerar PNG do desenho | não há navegador embutido; fingir um PNG seria mentir sobre o que aconteceu | `docs/ESTUDIO.md` |
+| compilar o pacote de design do upstream e publicá-lo | conta, hospedagem e revisão são do dono | `docs/ESTUDIO.md` |
+| sequência, classe, gantt e estado do Mermaid | o renderizador é próprio e cobre `flowchart`/`graph`; o resto é recusado com a lista do que existe | `docs/DIAGRAMAS.md` |
+| grafo de memória e reescrita automática do que foi lembrado | embedding existe (provedor ou vetor local declarado), grafo não | `README.md` § Limites |
+| executar o artefato descompilado, recompilar e assinar o APK | descompilar é leitura; rodar o binário é outra camada, com outro risco | `docs/ENGENHARIA-REVERSA.md` |
+| alterar o código para o teste passar | `lean.testar` roda a suíte e devolve o código de saída; corrigir é do `evoluir.*` | `docs/LEAN.md` |
+| merge, deploy e release do PR publicado | revisão humana continua no caminho | `docs/SUBMISSAO.md` |
+| instalar APK no celular por ADB | continua sem skill: é lacuna da §3, não decisão | `docs/JOGO-NO-IPHONE.md` |
+| debloat como efeito, fora do `maquina.arrumar` | a limpeza tem ponto de restauração e diário; os outros só leem | `README.md` § Limites |
+| descompilar DEX, recompilar e assinar o jogo | análise de pacote, não reengenharia de build | `server/jogo.py` (docstring) |
 
-O que **é** efeito real, e por isso tem trava: `sistema.baixar`,
+O que **é** efeito real hoje, e por isso tem trava: as doze de
+[`ACOES.md`](ACOES.md) (`email.enviar`, `google.*`, `navegador.abrir`,
+`carreira.candidatar`, `arquivo.converter`, `estudio.*`, `diagrama.*`,
+`agencia.executar`, `memoria.*`, `reverse.descompilar`, `lean.testar`,
+`submissao.publicar`), mais as que já existiam: `sistema.baixar`,
 `sistema.executar`, `sistema.elevar_executar`, `maquina.arrumar`,
 `maquina.desfazer`, `mesa.agir`, `mesa.ditar`, `mesa.mover`, `evoluir.promover`,
 `files.organize`, `document.create`, `pdf.merge`.
@@ -92,7 +95,14 @@ desatualizada:
 - **debloat com ponto de restauração e desfazer**;
 - **análise de APK até 2 GB, com OBB** (0.91.44/0.91.45);
 - **jogo no iPhone sem Mac**, por WebGL + ícone na tela de início;
-- **atualização com manifesto e rollback**.
+- **atualização com manifesto e rollback**;
+- **ação com efeito real fora do PC**: e-mail por SMTP, Google (Drive, Gmail,
+  Agenda, Sheets), abrir aba, converter arquivo, desenhar Mermaid/DOT,
+  descompilar com jadx/apktool, rodar a suíte, publicar PR, embedding,
+  candidatura por e-mail e prévia do design system — cada uma com
+  `JARVIS_ACOES=1`, confirmação e o que falta declarado (`docs/ACOES.md`);
+- **guia de conversa, filosofia e psicologia** com a linha moral em código
+  (`docs/CONVERSA.md`).
 
 ## 5. Como esta lista é cobrada
 
@@ -102,6 +112,9 @@ afirmações acima continuam verdadeiras:
 - o documento existe, tem as quatro seções e o README aponta para ele;
 - não há skill `jogo.*` nem `celular.instalar` (enquanto forem lacuna);
 - a rota `/api/jogo/comparar` **não** existe (enquanto for lacuna);
+- as ações da 0.92.0 existem e **não tocam em nada** sem `JARVIS_ACOES=1`
+  (`server/tests/test_acoes.py`), e o guia de conversa recusa as técnicas de
+  manipulação (`server/tests/test_conversa.py`);
 - o texto da IA é `str` e não há `StreamingResponse` na API;
 - o host padrão continua `127.0.0.1`;
 - o OCR de PDF **existe** — e o README não pode voltar a dizer que não.
