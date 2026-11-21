@@ -80,9 +80,14 @@ PROPS = (
     ("ro.product.cpu.abilist", "ABIs"),
     ("ro.bootloader", "Bootloader"),
     ("ro.build.type", "Tipo de build"),
-    ("ro.debuggable", "Depurável"),
     ("ro.secure", "Secure boot"),
     ("ro.build.fingerprint", "Fingerprint"),
+    # 0.92.7 — o estado do bootloader é o que separa "dá para pôr root" de
+    # "não dá sem apagar o aparelho". Sem estas três, o mapa de degraus chutava.
+    ("ro.boot.verifiedbootstate", "Verified boot"),
+    ("ro.boot.flash.locked", "Bootloader travado"),
+    ("ro.debuggable", "Depurável"),
+    ("service.adb.tcp.port", "ADB pela rede (porta)"),
 )
 
 ROTULOS_ELETRICO = {
@@ -718,6 +723,10 @@ def ler_android(
         "secoes": [s for s in secoes if s["itens"]],
         "limitacoes": limitacoes,
         "nao_faz": list(NAO_FAZ),
+        # 0.92.7 — o mesmo `getprop` que já foi lido, sem rótulo no meio. Quem
+        # decide degrau não pode depender de texto de tela (era assim que o
+        # `verified_boot` chegava vazio e o bootloader parecia sempre travado).
+        "propriedades": {chave: props.get(chave, "") for chave, _ in PROPS},
     }
 
 

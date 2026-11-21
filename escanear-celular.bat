@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - escanear o celular
-REM Versao: 0.92.6
+REM Versao: 0.92.7
 REM
 REM Passa um scanner no celular e diz o que esta errado, com o que fazer.
 REM SO LEITURA: nao desinstala, nao limpa cache, nao muda ajuste, nao reinicia.

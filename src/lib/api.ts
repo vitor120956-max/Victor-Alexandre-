@@ -1361,6 +1361,7 @@ export interface CelularControle {
   degrau_atual: number;
   degrau_maximo_jarvis: number;
   resumo: string;
+  /** O que o aparelho publica sobre o próprio bootloader e o `adbd`. */
   aparelho: {
     modelo: string;
     bootloader: string;
@@ -1368,6 +1369,23 @@ export interface CelularControle {
     build: string;
     destravado: boolean;
     root: boolean;
+    adbd_depuravel?: boolean;
+    root_temporario?: boolean;
+    porta_adb_rede?: string;
+  };
+  /**
+   * “Podemos usar root temporário?” — respondido pelo aparelho.
+   *
+   * `adb root` é o único temporário de verdade (dura até reiniciar, não apaga
+   * nada); ele só existe quando o `adbd` é depurável. Root que “não persiste”
+   * continua exigindo destravar o bootloader — e destravar apaga o aparelho.
+   */
+  root_temporario?: {
+    possivel: boolean;
+    qual: string;
+    resumo: string;
+    precisa_destravar: boolean;
+    apaga_o_aparelho: boolean;
   };
   degraus: CelularControleDegrau[];
   o_que_o_jarvis_faz_com_esse_acesso: string;

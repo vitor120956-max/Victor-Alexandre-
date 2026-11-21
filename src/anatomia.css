@@ -196,3 +196,23 @@
 .anatomia-controle-item dl > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
 .anatomia-controle-item dt { color: var(--muted-2, var(--muted)); font-family: var(--mono); font-size: 6.5px; letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
 .anatomia-controle-item dd { margin: 0; color: var(--text-soft); font-size: 8.5px; line-height: 1.6; }
+
+/* ---------------------------------------------------------------------------
+   Root temporário (0.92.7): a pergunta “podemos usar?” tem três respostas
+   diferentes, e a tela não pode achatar as três num “não”.
+   --------------------------------------------------------------------------- */
+.anatomia-root-temporario {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 15px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .012);
+}
+.anatomia-root-temporario.is-nao { border-color: rgba(224, 178, 92, .32); }
+.anatomia-root-temporario.is-sim { border-color: rgba(126, 214, 165, .32); }
+.anatomia-root-temporario h3 {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-soft);
+}
+.anatomia-root-temporario dl { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.anatomia-root-temporario dl > div { display: grid; grid-template-columns: minmax(150px, .5fr) 1fr; gap: 10px; }
+.anatomia-root-temporario dt { color: var(--text-soft); font-size: 9px; }
+.anatomia-root-temporario dd { margin: 0; font-size: 9.5px; }

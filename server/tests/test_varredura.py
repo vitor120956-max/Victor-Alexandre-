@@ -375,15 +375,22 @@ def test_aparelho_comum_fica_no_degrau_0_sem_autorizacao():
     assert "degrau 0" in relatorio["resumo"]
 
 
-def test_aparelho_autorizado_com_debuggable_chega_ao_degrau_2(monkeypatch):
+def test_aparelho_autorizado_com_porfia_adb_chega_ao_degrau_2(monkeypatch):
+    """0.92.7 — o degrau 2 é **ADB pela rede**, não build depurável.
+
+    Este teste antes cobrava `ro.debuggable=1` como degrau 2. Era a heurística
+    errada: `ro.debuggable` é build de fábrica/teste. O que abre o degrau 2 é a
+    porta do `adbd` (`adb tcpip 5555`), que é o que o dono ganha de verdade.
+    """
     monkeypatch.setattr("server.varredura.celular.ligado", lambda: True)
     monkeypatch.setattr(
         "server.varredura.celular.ferramentas", lambda: {"ligado": True, "adb": "/x/adb", "scrcpy": ""}
     )
     relatorio = vd.controle(aparelho={
         "ro.product.model": "SM-A346B",
-        "ro.debuggable": "1",
+        "ro.debuggable": "0",
         "ro.build.tags": "release-keys",
+        "service.adb.tcp.port": "5555",
     })
     assert relatorio["degrau_atual"] == 2
     assert relatorio["aparelho"]["root"] is False
@@ -516,3 +523,137 @@ def test_a_anatomia_e_lida_no_serial_certo(monkeypatch):
     monkeypatch.setattr(vd.diagnostico_celular, "analisar", lambda medido: {"secoes": [], "problemas": []})
     vd.montar({"serial": "RXCW400ZV3F", "saidas": saidas(), "falhas": []})
     assert vistos == ["RXCW400ZV3F"]
+
+
+# ---------------------------------------------------------------------------
+# 0.92.7 — “podemos usar root temporário?”
+#
+# A pergunta obrigou o mapa a olhar três coisas que ele não media: o estado do
+# bootloader (chegava vazio), o que realmente abre o degrau 2 (era
+# `ro.debuggable`, não `adb tcpip`), e o `adb root` — o único temporário de
+# verdade, que depende do `adbd` e não do bootloader.
+# ---------------------------------------------------------------------------
+
+def test_root_temporario_nunca_e_prometido_em_aparelho_de_fabrica():
+    """SM-A346MU do dono: build `user`, `ro.debuggable=0`."""
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "SM-A346MU",
+        "ro.build.tags": "user",
+        "ro.build.type": "user",
+        "ro.debuggable": "0",
+        "ro.bootloader": "A346MUBSGFZG4",
+    })
+    temporario = relatorio["root_temporario"]
+    assert temporario["possivel"] is False
+    assert temporario["precisa_destravar"] is True
+    assert temporario["apaga_o_aparelho"] is True
+    assert "cannot run as root" in temporario["resumo"]
+    assert "Não existe root temporário" in temporario["resumo"]
+
+
+def test_root_temporario_de_verdade_existe_em_build_depuravel():
+    """`adb root` é real: dura até reiniciar, não apaga nada. O mapa diz isso."""
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "Pixel",
+        "ro.build.tags": "dev-keys",
+        "ro.build.type": "userdebug",
+        "ro.debuggable": "1",
+    })
+    temporario = relatorio["root_temporario"]
+    assert temporario["possivel"] is True
+    assert "adb root" in temporario["qual"]
+    assert temporario["apaga_o_aparelho"] is False
+    assert "não roda esse comando" in temporario["resumo"]
+
+
+def test_root_que_nao_persiste_continua_exigindo_destravar():
+    """Magisk “sem persistência” não é temporário: destravar apaga o aparelho."""
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "SM-A346MU",
+        "ro.build.type": "user",
+        "ro.debuggable": "0",
+    })
+    assert relatorio["root_temporario"]["apaga_o_aparelho"] is True
+
+
+def test_o_degrau_2_vem_da_porta_adb_e_nao_de_build_depuravel(monkeypatch):
+    """`ro.debuggable=1` é build de fábrica/teste — não é “ADB pela rede”."""
+    monkeypatch.setattr(vd.celular, "ligado", lambda: True)
+    monkeypatch.setattr(
+        vd.celular, "ferramentas", lambda: {"ligado": True, "adb": "/x/adb", "scrcpy": ""}
+    )
+    base = {"ro.product.model": "SM-A346MU", "ro.debuggable": "0"}
+    sem_porta = vd.controle(aparelho={**base, "service.adb.tcp.port": "-1"})
+    assert sem_porta["degrau_atual"] != 2
+
+    com_porta = vd.controle(aparelho={**base, "service.adb.tcp.port": "5555"})
+    assert com_porta["degrau_atual"] == 2
+
+
+def test_build_depuravel_sem_tcpip_nao_sobe_para_o_degrau_2(monkeypatch):
+    monkeypatch.setattr(vd.celular, "ligado", lambda: True)
+    monkeypatch.setattr(
+        vd.celular, "ferramentas", lambda: {"ligado": True, "adb": "/x/adb", "scrcpy": ""}
+    )
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "Pixel",
+        "ro.debuggable": "1",
+        "ro.build.type": "userdebug",
+    })
+    assert relatorio["degrau_atual"] == 1, "build depurável não é ADB pela rede"
+
+
+def test_o_estado_do_bootloader_e_lido_e_nao_chutado():
+    """O cartão dizia “não destravado” em todo aparelho: `verifiedbootstate` nunca chegava."""
+    travado = vd.controle(aparelho={
+        "ro.product.model": "SM-A346MU",
+        "ro.boot.verifiedbootstate": "green",
+        "ro.boot.flash.locked": "1",
+    })
+    assert travado["aparelho"]["destravado"] is False
+
+    destravado = vd.controle(aparelho={
+        "ro.product.model": "Pixel",
+        "ro.boot.verifiedbootstate": "orange",
+        "ro.boot.flash.locked": "0",
+    })
+    assert destravado["aparelho"]["destravado"] is True
+
+
+def test_sem_verifiedbootstate_o_flash_locked_decide():
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "SM-A346MU",
+        "ro.boot.flash.locked": "0",
+    })
+    assert relatorio["aparelho"]["destravado"] is True
+
+
+def test_a_anatomia_entrega_as_propriedades_sem_rotulo(monkeypatch):
+    """A rota montava o dicionário pelos rótulos da tela e perdia o bootloader."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from server import anatomia
+
+    monkeypatch.setenv(anatomia.AMBIENTE_ANDROID, "1")
+    monkeypatch.setattr(
+        anatomia.celular, "ferramentas",
+        lambda: {"ligado": True, "adb": "/fake/adb", "scrcpy": ""},
+    )
+
+    def rodar(argumentos):
+        chave = " ".join(argumentos)
+        if "devices" in chave:
+            return 0, "List of devices attached\nABC123          device product:a34x\n", ""
+        if chave.endswith("shell getprop"):
+            return 0, (
+                "[ro.product.model]: [SM-A346MU]\n"
+                "[ro.boot.verifiedbootstate]: [green]\n"
+                "[ro.boot.flash.locked]: [1]\n"
+            ), ""
+        return 0, "", ""
+
+    dados = anatomia.ler_android(rodar=rodar)
+    assert dados["propriedades"]["ro.boot.verifiedbootstate"] == "green"
+    assert dados["propriedades"]["ro.boot.flash.locked"] == "1"
+    # e o mapa consegue decidir com isso, sem passar por rótulo
+    assert vd.controle(aparelho=dados["propriedades"])["aparelho"]["destravado"] is False

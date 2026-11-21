@@ -2873,3 +2873,41 @@ de aceitar um título cego.
 E a tela: a varredura só existia no console. A aba Anatomia ganhou o botão **“Ver
 tudo no aparelho”** e o cartão, com problemas, mapa, limites e o que não dá sem
 root. Um leitura que só existe em `.bat` não serve para quem não abre `.bat`.
+
+### 0.92.7 — “podemos usar root temporário?”: três coisas, um nome
+
+> podemos usar root temporario
+
+A pergunta parecia um “sim/não”. Não é: **três** coisas se chamam de root
+temporário e só uma é temporária pela porta da frente.
+
+**`adb root`** reinicia o `adbd` como root, dura até o próximo reinício, **não
+toca no bootloader e não apaga nada** — é o temporário de verdade. Ele depende de
+uma coisa só: o `adbd` aceitar. Num aparelho de fábrica (`ro.debuggable=0`, build
+`user`) ele responde `adbd cannot run as root in production builds`; é o aparelho
+recusando, não o projeto. **Magisk “sem persistência”** continua sendo root
+instalado: exige bootloader destravado, e destravar apaga o aparelho. **`su`
+emprestado por N minutos** é temporário para o app, não para o aparelho.
+
+O JARVIS não roda nenhum dos três — root é a linha do projeto. O que o mapa ganha
+é registrar **o passivo**: num `userdebug` seria reversível; num aparelho travado
+seria apagar tudo. A resposta do cartão é o que o `getprop` diz, não uma tabela
+fixa.
+
+**Três defeitos que a pergunta expôs:**
+
+1. **O degrau 2 estava errado desde a 0.92.5.** Ele subia com
+   `ro.debuggable == "1"`, que é build de fábrica — não ADB pela rede. O certo é
+   `service.adb.tcp.port` (o que `adb tcpip 5555` abre). Um teste antigo cobrava
+   a heurística errada; foi reescrito com o motivo no comentário.
+2. **O estado do bootloader chegava vazio.** A rota montava as propriedades pelos
+   **rótulos da tela** e nunca lia `ro.boot.verifiedbootstate`, então o cartão
+   dizia “não destravado” em todo aparelho. Agora a anatomia devolve
+   `propriedades` cru, `verifiedbootstate` e `flash.locked` entram em `PROPS`, e
+   o fallback existe para quando a propriedade não é publicada.
+3. **`NameError` à espera.** O handler de `celular.controle` usava `anatomia_mod`
+   sem importar. Nunca disparou porque o caminho não tinha sido exercitado com
+   aparelho conectado. Importado.
+
+E a tela ganhou o bloco **“Podemos usar root temporário?”** com as três perguntas
+que importam: qual é a situação, precisa destravar, apaga o aparelho.

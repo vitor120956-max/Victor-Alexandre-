@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - ver tudo no celular
-REM Versao: 0.92.6
+REM Versao: 0.92.7
 REM
 REM O caminho mais curto: com o celular ja conectado, este arquivo passa o
 REM JARVIS por todo o aparelho numa varredura so - anatomia, scanner de

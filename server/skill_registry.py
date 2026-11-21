@@ -292,6 +292,7 @@ from .workspace import TEXT_EXTENSIONS, VISIBLE_EXTENSIONS, download_url, safe_p
 from . import biblioteca as bib
 from . import dados as dados_locais
 from . import (
+    anatomia as anatomia_mod,
     catalogo,
     celular,
     diagnostico_celular,
@@ -4814,16 +4815,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         props: dict[str, Any] = {}
         if celular.ligado():
             try:
-                relatorio = anatomia_mod.ler_android()
-                for secao in relatorio.get("secoes", []):
-                    if secao.get("id") == "identidade":
-                        mapa = {i["rotulo"]: i["valor"] for i in secao["itens"]}
-                        props = {
-                            "ro.product.model": mapa.get("Modelo", ""),
-                            "ro.bootloader": mapa.get("Bootloader", ""),
-                            "ro.build.tags": mapa.get("Tipo de build", ""),
-                        }
-                        break
+                # `propriedades` vem cru do `getprop`: antes esta função remontava
+                # o dicionário pelos rótulos da tela e perdia o estado do
+                # bootloader (o cartão dizia “não destravado” em todo aparelho).
+                props = dict(anatomia_mod.ler_android().get("propriedades", {}))
             except Exception:  # noqa: BLE001 - sem aparelho o mapa ainda vale
                 props = {}
         return varredura_celular.controle(aparelho=props)

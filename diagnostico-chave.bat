@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - diagnostico da pagina da chave
 echo.
 echo   JARVIS - por que ele nao ve o painel da chave
-echo   Versao: 0.92.6
+echo   Versao: 0.92.7
 echo   ----------------------------------------------------------------
 echo   Isto NAO cria chave e NAO clica em nada.
 echo.

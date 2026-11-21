@@ -625,6 +625,95 @@ CONTROLE: tuple[dict[str, Any], ...] = (
 )
 
 
+def _root_temporario(
+    props: dict[str, Any],
+    adbd_depuravel: bool,
+    root_temporario: bool,
+    tem_root: bool,
+) -> dict[str, Any]:
+    """“Podemos usar root temporário?” — respondido pelo aparelho, não por opinião.
+
+    Existem **três coisas diferentes** chamadas de “root temporário”, e só uma
+    delas é sequer possível sem destravar o bootloader:
+
+    **1. `adb root`** — reinicia o `adbd` como root. Dura até reiniciar o
+    aparelho, **não apaga nada**, não mexe no bootloader. É o “temporário” de
+    verdade. Funciona só quando o `adbd` é depurável (`ro.debuggable=1`, build
+    `userdebug`/`eng`). Num aparelho de fábrica o comando responde
+    *“adbd cannot run as root in production builds”* — não é falta de vontade
+    do JARVIS, é o `adbd` que se recusa.
+
+    **2. Root que “não persiste”** — instalar Magisk sem o módulo de persistência.
+    Continua sendo root de verdade: exige bootloader destravado, e destravar
+    **apaga o aparelho**. Isso não é temporário pela porta da frente.
+
+    **3. Root só desta sessão do `su`** — um app pede `su` uma vez, o Magisk
+    empresta por N minutos. É temporário **para o app**, mas o root instalado no
+    aparelho é permanente, com os mesmos riscos do item 2.
+
+    O JARVIS não executa 1, 2 nem 3: o degrau 3 continua fora por escolha. O que
+    esta função faz é dizer **qual dos três o seu aparelho aceitaria** — para a
+    resposta não ser um “não” indiferente.
+    """
+    tags = str(props.get("ro.build.tags", "")).strip()
+    tipo = str(props.get("ro.build.type", "")).strip()
+    estado_boot = str(props.get("ro.boot.verifiedbootstate", "")).strip().lower()
+
+    if tem_root:
+        return {
+            "possivel": True,
+            "qual": "já tem root",
+            "resumo": (
+                "Este aparelho já está com root. O JARVIS continua não usando: a mesma porta "
+                "que lê a sua conversa lê a senha do seu banco."
+            ),
+            "precisa_destravar": False,
+            "apaga_o_aparelho": False,
+        }
+
+    if root_temporario:
+        return {
+            "possivel": True,
+            "qual": "adb root (temporário de verdade)",
+            "resumo": (
+                f"Este aparelho aceita `adb root`: é build `{tipo}` com `adbd` depurável. "
+                "Dura até reiniciar, não apaga nada e não mexe no bootloader — mas o JARVIS "
+                "não roda esse comando: root é a linha que o projeto não cruza, em nenhuma "
+                "forma. O que muda é o passivo: aqui ele seria reversível."
+            ),
+            "precisa_destravar": False,
+            "apaga_o_aparelho": False,
+        }
+
+    if adbd_depuravel:
+        return {
+            "possivel": False,
+            "qual": "nenhum sem destravar",
+            "resumo": (
+                "O `adbd` é depurável, mas o build não é `userdebug`/`eng`: o `adb root` "
+                "provavelmente responde “cannot run as root in production builds”. Só root "
+                "instalado (Magisk) resolveria — e isso exige destravar o bootloader."
+            ),
+            "precisa_destravar": True,
+            "apaga_o_aparelho": True,
+        }
+
+    return {
+        "possivel": False,
+        "qual": "nenhum sem destravar o bootloader",
+        "resumo": (
+            f"Este aparelho é build `{tags or 'user'}` com `adbd` não depurável "
+            "(`ro.debuggable=0`): `adb root` responde “adbd cannot run as root in production "
+            "builds”. O único root possível aqui é o instalado (Magisk), que exige destravar "
+            "o bootloader — e destravar **apaga o aparelho inteiro**, quebra OTA, banco e "
+            "carteira. Não existe root temporário por outro caminho neste aparelho."
+        ),
+        "precisa_destravar": True,
+        "apaga_o_aparelho": True,
+        "estado_bootloader": estado_boot or "não publicado",
+    }
+
+
 def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
     """Mede o degrau em que o aparelho está e diz o que falta para o próximo.
 
@@ -634,16 +723,41 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
     props = aparelho or {}
     adb_ligado = celular.ligado() and bool(celular.ferramentas().get("adb"))
     autorizado = bool(props.get("ro.product.model"))
-    tem_root = str(props.get("ro.build.tags", "")).strip() == "test-keys" or bool(
-        str(props.get("_root_binario", "")).strip()
-    )
+
+    # 0.92.7 — três correções que a pergunta “podemos usar root temporário”
+    # expôs no próprio mapa:
+    #
+    # 1. o degrau 2 era decidido por `ro.debuggable == "1"`, que é **build de
+    #    depuração** (aparelho de fábrica/teste), não ADB pela rede. O degrau
+    #    certo é a porta 5555 aberta depois de `adb tcpip 5555`;
+    # 2. `destravado` só olhava `verifiedbootstate` — uma propriedade que a
+    #    rota nunca lia e que, ausente, virava “não destravado” sempre;
+    # 3. root **temporário** (`adb root`) não era sequer considerado. Ele é
+    #    real, dura até reiniciar, e não apaga nada — mas o `adbd` do aparelho
+    #    do dono é `user`, então nem chega a valer. O mapa passa a dizer isso.
+    estado_boot = str(props.get("ro.boot.verifiedbootstate", "")).strip().lower()
+    # `orange` = destravado; `green` = travado e verificado; `yellow` = destravado
+    # com chave própria. Sem a propriedade, cai no `flash.locked` (1 = travado).
+    if estado_boot:
+        destravado = estado_boot in {"orange", "yellow"}
+    else:
+        destravado = str(props.get("ro.boot.flash.locked", "")).strip() == "0"
     bootloader = str(props.get("ro.bootloader", "")).strip()
-    destravavel = str(props.get("ro.boot.verifiedbootstate", "")).strip() in {"orange", "yellow"}
+
+    binario_root = bool(str(props.get("_root_binario", "")).strip())
+    tem_root = str(props.get("ro.build.tags", "")).strip() == "test-keys" or binario_root
+
+    # `adb root` só funciona quando o `adbd` é depurável. Não é o caso de um
+    # aparelho de fábrica (`ro.debuggable = 0`) — e nesse caso a resposta honesta
+    # é “não dá”, não “tente”.
+    adbd_depuravel = str(props.get("ro.debuggable", "")).strip() == "1"
+    root_temporario = adbd_depuravel and str(props.get("ro.build.type", "")).strip() in {"userdebug", "eng"}
+    porta_rede = str(props.get("service.adb.tcp.port", "")).strip()
 
     degrau = 0
     if adb_ligado and autorizado:
         degrau = 1
-    if adb_ligado and autorizado and props.get("ro.debuggable") == "1":
+    if adb_ligado and autorizado and porta_rede not in {"", "-1", "0"}:
         degrau = 2
 
     return {
@@ -663,9 +777,15 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
             "bootloader": bootloader,
             "verified_boot": props.get("ro.boot.verifiedbootstate", ""),
             "build": props.get("ro.build.tags", ""),
-            "destravado": destravavel,
+            "destravado": destravado,
             "root": tem_root,
+            "adbd_depuravel": adbd_depuravel,
+            "root_temporario": root_temporario,
+            "porta_adb_rede": porta_rede,
         },
+        # A resposta para “podemos usar root temporário?”, medida no aparelho:
+        # não é “sim” nem “não” genérico — é o que o `adbd` deste aparelho aceita.
+        "root_temporario": _root_temporario(props, adbd_depuravel, root_temporario, tem_root),
         "degraus": [
             {
                 **degrau_item,

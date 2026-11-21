@@ -112,6 +112,29 @@ function CartaoControle({ dados }: { dados: CelularControle }) {
         ))}
       </div>
 
+      {dados.root_temporario && (
+        <div className={`anatomia-root-temporario ${dados.root_temporario.possivel ? 'is-sim' : 'is-nao'}`}>
+          <h3>
+            <AlertTriangle size={13} /> “Podemos usar root temporário?”
+          </h3>
+          <p className="anatomia-veredito">{dados.root_temporario.resumo}</p>
+          <dl>
+            <div>
+              <dt>Situação neste aparelho</dt>
+              <dd>{dados.root_temporario.qual}</dd>
+            </div>
+            <div>
+              <dt>Precisa destravar o bootloader?</dt>
+              <dd>{dados.root_temporario.precisa_destravar ? 'sim' : 'não'}</dd>
+            </div>
+            <div>
+              <dt>Apaga o aparelho?</dt>
+              <dd>{dados.root_temporario.apaga_o_aparelho ? 'sim' : 'não'}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
       <div className="anatomia-nao-faz">
         <h3><ShieldCheck size={13} /> Por que o JARVIS para no degrau {dados.degrau_maximo_jarvis}</h3>
         <ul>{dados.o_que_nao_faz_e_por_que.map((frase) => <li key={frase}>{frase}</li>)}</ul>

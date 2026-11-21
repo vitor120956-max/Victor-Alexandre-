@@ -849,25 +849,19 @@ def create_app(
             )
 
     def _props_de_anatomia() -> dict[str, Any]:
-        """As propriedades do aparelho que `controle` precisa.
+        """As propriedades do aparelho que `controle` precisa — lidas, não deduzidas.
 
-        Sai da seção “Identidade” (é lá que `modelo`, `build` e `bootloader`
-        aparecem). Se a leitura falhar, o mapa de degraus ainda vale com o
-        “degrau atual” em 0 — nunca derruba a rota.
+        0.92.7 — antes esta função montava um dicionário a partir dos **rótulos
+        da tela** e deixava `verifiedbootstate` vazio para sempre: o cartão
+        dizia que o bootloader não estava destravado em qualquer aparelho,
+        inclusive num com root. Agora vem de `relatorio["propriedades"]`, e a
+        rota não reinterpreta texto.
+
+        Se a leitura falhar, o mapa de degraus ainda vale com o “degrau atual”
+        em 0 — nunca derruba a rota.
         """
         relatorio = anatomia_mod.ler_android()
-        valores: dict[str, Any] = {}
-        for secao in relatorio.get("secoes", []):
-            if secao.get("id") != "identidade":
-                continue
-            for item in secao.get("itens", []):
-                valores[item["rotulo"]] = item["valor"]
-        return {
-            "ro.product.model": valores.get("Modelo", ""),
-            "ro.boot.verifiedbootstate": "",
-            "ro.bootloader": valores.get("Bootloader", ""),
-            "ro.build.tags": valores.get("Tipo de build", ""),
-        }
+        return dict(relatorio.get("propriedades", {}))
 
     @application.get("/api/anatomia/android/controle")
     def anatomia_android_controle() -> Any:

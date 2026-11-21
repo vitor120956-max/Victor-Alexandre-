@@ -211,3 +211,33 @@ que fazer) e **O QUE DÁ PARA MELHORAR**. Antes ele imprimia o mapa e o rodapé,
 nada do diagnóstico.
 
 Total: **28 leituras** — 19 do scanner + 9 só da varredura.
+
+## 11. “Podemos usar root temporário?” (0.92.7)
+
+Três coisas diferentes usam esse nome, e só a primeira é temporária pela porta
+da frente:
+
+| # | o que é | dura | destrava bootloader? | apaga? |
+|---|---|---|---|---|
+| 1 | `adb root` (reiniciam o `adbd` como root) | até reiniciar | não | **não** |
+| 2 | Magisk sem módulo de persistência | até desinstalar | sim | sim |
+| 3 | `su` emprestado por N minutos | N minutos | sim | sim (antes) |
+
+**O `adb root` depende do `adbd`, não do bootloader.** Num aparelho de fábrica
+(`ro.debuggable=0`, build `user`) ele responde `adbd cannot run as root in
+production builds` — é o aparelho recusando, não o JARVIS. O mapa lê isso e
+devolve `root_temporario` com `possivel`, `qual`, `precisa_destravar` e
+`apaga_o_aparelho`.
+
+O JARVIS **não roda** `adb root`, nem quando ele é possível (build `userdebug`):
+root é a linha que o projeto não cruza em nenhuma forma. A diferença que o mapa
+registra é o **passivo** — num `userdebug` seria reversível; num aparelho travado
+seria apagar tudo.
+
+Três propriedades passaram a ser lidas por causa desta pergunta:
+
+- `ro.boot.verifiedbootstate` (`green` travado · `orange` destravado · `yellow`
+  destravado com chave própria);
+- `ro.boot.flash.locked` (`1` travado) — fallback quando a primeira não vem;
+- `service.adb.tcp.port` — é **ela** que marca o degrau 2, não `ro.debuggable`
+  (que é build de fábrica/teste, e estava errado desde a 0.92.5).

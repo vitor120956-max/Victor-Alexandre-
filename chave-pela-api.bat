@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - criar a chave sem navegador
 echo.
 echo   JARVIS - criar a chave sem navegador
-echo   Versao: 0.92.6
+echo   Versao: 0.92.7
 echo   ----------------------------------------------------------------
 echo.
 echo   Este atalho NAO abre Chrome nenhum. Ele pede a chave ao proprio
