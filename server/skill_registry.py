@@ -295,6 +295,7 @@ from . import (
     catalogo,
     celular,
     diagnostico_celular,
+    varredura as varredura_celular,
     correio,
     conectores,
     arvore,
@@ -2246,6 +2247,28 @@ class CelularPlanoInput(BaseModel):
 class CelularEventosInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     minutos: int = Field(default=30, ge=1, le=1440, title="Últimos quantos minutos", json_schema_extra={"description": "Janela do log do Windows a ler (1 a 1440). Padrão: 30."})
+
+
+class CelularAbrirAppInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pacote: str = Field(min_length=3, max_length=160, title="Pacote do app",
+                        json_schema_extra={"description": "Nome Android, ex.: com.whatsapp. Não é o nome de exibição."})
+    confirmado: bool = Field(default=False, title="Confirmar")
+
+
+class CelularFecharAppInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pacote: str = Field(min_length=3, max_length=160, title="Pacote do app",
+                        json_schema_extra={"description": "Nome Android, ex.: com.instagram.android."})
+    confirmado: bool = Field(default=False, title="Confirmar",
+                             json_schema_extra={"description": "Fechar descarta o que não estava salvo dentro do app."})
+
+
+class CelularInstalarApkInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arquivo: str = Field(min_length=3, max_length=400, title="APK",
+                         json_schema_extra={"description": "Caminho do .apk dentro da área do JARVIS (storage/)."})
+    confirmado: bool = Field(default=False, title="Confirmar")
 
 
 class CelularDiagnosticoInput(BaseModel):
@@ -4776,6 +4799,35 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except diagnostico_celular.DiagnosticoError as exc:
             raise SkillError(str(exc)) from exc
 
+    def celular_varredura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # A passagem completa, num comando: anatomia + scanner + mapa de pastas.
+        # Tudo de leitura; o que exige root é dito, não tentado.
+        assert isinstance(data, CelularDiagnosticoInput)
+        try:
+            return varredura_celular.varrer(data.serial)
+        except varredura_celular.VarreduraError as exc:
+            raise SkillError(str(exc)) from exc
+
+    def celular_controle_handler(_data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # “100% de acesso” em degraus: mede onde o aparelho está e diz até onde o
+        # JARVIS vai (2) e por que não faz root nem flash. Nada é executado.
+        props: dict[str, Any] = {}
+        if celular.ligado():
+            try:
+                relatorio = anatomia_mod.ler_android()
+                for secao in relatorio.get("secoes", []):
+                    if secao.get("id") == "identidade":
+                        mapa = {i["rotulo"]: i["valor"] for i in secao["itens"]}
+                        props = {
+                            "ro.product.model": mapa.get("Modelo", ""),
+                            "ro.bootloader": mapa.get("Bootloader", ""),
+                            "ro.build.tags": mapa.get("Tipo de build", ""),
+                        }
+                        break
+            except Exception:  # noqa: BLE001 - sem aparelho o mapa ainda vale
+                props = {}
+        return varredura_celular.controle(aparelho=props)
+
     def catalogo_topico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CatalogoTopicoInput)
         try:
@@ -5813,6 +5865,20 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except acoes_mod.AcoesError as exc:
             raise SkillError(str(exc)) from exc
 
+    def celular_abrir_app_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularAbrirAppInput)
+        return _do_acoes(acoes_mod.celular_abrir_app, data.pacote, confirmado=data.confirmado)
+
+    def celular_fechar_app_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularFecharAppInput)
+        return _do_acoes(acoes_mod.celular_fechar_app, data.pacote, confirmado=data.confirmado)
+
+    def celular_instalar_apk_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, CelularInstalarApkInput)
+        return _do_acoes(
+            acoes_mod.celular_instalar_apk, data.arquivo, files_root, confirmado=data.confirmado
+        )
+
     def email_enviar_handler(data: BaseModel, dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, EmailEnviarInput)
         destinos = [item.strip() for item in re.split(r"[,;]", data.para) if item.strip()]
@@ -6318,6 +6384,34 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("celular.espelhar", "Ver o celular na tela do PC", "Abre o `scrcpy`: a tela do celular vira uma janela do Windows, com mouse e teclado do PC — funciona mesmo com o painel quebrado, desde que a depuração já esteja autorizada. Exige `JARVIS_HOST_CELULAR=1` e confirmação.", "Celular", CelularEspelharInput, celular_espelhar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("celular.puxar", "Resgatar fotos e documentos do celular", "Copia por `adb pull` as pastas de mídia permitidas (DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram) para dentro da raiz de dados. Não lê `/data`, não copia chave de aplicativo e não apaga nada no aparelho.", "Celular", CelularPuxarInput, celular_puxar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
         SkillDefinition(
+            "celular.controle",
+            "“100% de acesso”: até onde o JARVIS chega",
+            "Responde o pedido de acesso total em cinco degraus, com o que cada um ganha, exige e custa: "
+            "1) cabo + Depuração USB (o que já funciona), 2) ADB pela rede, 3) root, 4) flash de sistema, "
+            "5) explorar falha de segurança. Mede o degrau atual do aparelho e diz: o JARVIS vai até o 2, "
+            "e não faz 3, 4 nem 5 — porque a mesma porta que lê a sua conversa lê a senha do seu banco. "
+            "Nada é executado.",
+            "Celular",
+            EmptyInput,
+            celular_controle_handler,
+            timeout_seconds=90,
+        ),
+        SkillDefinition(
+            "celular.varredura",
+            "Passar o JARVIS por todo o celular (um comando)",
+            "Junta numa passada só o que estava espalhado em três abas: o que o aparelho é (anatomia), "
+            "o que está errado (scanner, com a medida) e o mapa de pastas e partições que o Android "
+            "publica sem root. Diz também, de uma vez, o que **não** dá sem root — /data/data, "
+            "/data/system, partição de boot e memória de outro app — para ninguém prometer acesso total. "
+            "Só leitura: não copia arquivo (isso é celular.puxar, com confirmação), não instala, não "
+            "abre tela e não usa root. Falha parcial não derruba o relatório: a leitura que não respondeu "
+            "entra em 'leituras que não responderam' com o motivo.",
+            "Celular",
+            CelularDiagnosticoInput,
+            celular_varredura_handler,
+            timeout_seconds=300,
+        ),
+        SkillDefinition(
             "celular.diagnostico",
             "Scanner do celular: o que está errado e o que fazer",
             "Mede o aparelho por adb (só leitura) e transforma a leitura em achados: armazenamento cheio, "
@@ -6409,6 +6503,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("maestro.executar", "Executar um plano", "Roda o plano **na ordem** e para no primeiro passo que falha ou que precisa de autorização, dizendo onde parou e o que já tinha dado certo. Passo com efeito (abrir, baixar, gravar, digitar) só roda com `autorizar=true`; sem isso, os passos de leitura rodam e a fila para antes do efeito.", "Maestro", MaestroExecutarInput, maestro_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180, keywords=("executar o plano", "faz tudo", "roda os passos", "orquestrar")),
         # ------------------------------------------------ 0.92.0 — efeito real
         SkillDefinition("acoes.estado", "O que o JARVIS pode fazer agora", "Diz, sem tocar em nada, o que está ligado e configurado nesta máquina: a trava JARVIS_ACOES, SMTP, token do Google, token do GitHub, embeddings e cada ferramenta externa (pandoc, LibreOffice, ffmpeg, ImageMagick, Graphviz, jadx, apktool, Node). É o primeiro lugar a olhar quando uma ação responde “falta X”.", "Ações", EmptyInput, acoes_estado_handler, timeout_seconds=20, keywords=("o que voce pode fazer", "o que esta configurado", "acoes", "pode fazer agora")),
+        SkillDefinition("celular.abrir-app", "Abrir um app no celular", "Abre um app que **já está instalado** no aparelho, pela lista de pacotes do Android (`monkey -p`). Só inicia o app: não instala, não altera e não pede conta. Exige `JARVIS_ACOES=1`, `JARVIS_HOST_CELULAR=1` e confirmação; o nome do pacote passa por validação antes de virar comando.", "Ações", CelularAbrirAppInput, celular_abrir_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("celular.fechar-app", "Fechar um app no celular", "Força a parada de um app pelo nome do pacote (`am force-stop`). O aviso é dito antes: fechar descarta o que não estava salvo dentro do app. Exige `JARVIS_ACOES=1`, `JARVIS_HOST_CELULAR=1` e confirmação.", "Ações", CelularFecharAppInput, celular_fechar_app_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60),
+        SkillDefinition("celular.instalar-apk", "Instalar um APK no celular", "Instala por `adb install -r` um `.apk` que já está dentro da área do JARVIS. Só `.apk` (o `.ipa` de iPhone não roda no Android), com confirmação e `JARVIS_ACOES=1`. Se o Android recusar, a resposta diz a causa: “Instalar apps desconhecidos” desligado, arquitetura diferente ou assinatura incompatível.", "Ações", CelularInstalarApkInput, celular_instalar_apk_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=660),
         SkillDefinition("email.enviar", "Enviar e-mail de verdade", "Manda o e-mail pelo SMTP configurado no `.env` (Gmail: senha de app). Sem `confirmed`, devolve o plano com destinatários, assunto e anexos — e nada sai. Com confirmação e `JARVIS_ACOES=1`, envia com TLS e devolve o resultado. A senha nunca aparece na resposta nem no erro. Anexo só de dentro da área do JARVIS, até 25 MB cada.", "Ações", EmailEnviarInput, email_enviar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=90, keywords=("enviar email", "manda email", "envie um email", "mandar por email")),
         SkillDefinition("google.email", "Enviar pelo Gmail", "Usa a API do Gmail com o token OAuth de `JARVIS_GOOGLE_TOKEN` para mandar a mensagem. Sem o token, diz onde gerar e com quais escopos. Confirmação obrigatória; o ID da mensagem volta no resultado.", "Ações", GoogleEmailInput, google_email_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=60, keywords=("gmail", "enviar pelo gmail", "mandar pelo google")),
         SkillDefinition("google.listar", "Listar Drive ou Gmail", "Lista arquivos do Google Drive (ou mensagens do Gmail, com `pasta` igual a `gmail`) pelo token OAuth. Só leitura: nada é baixado, movido ou apagado.", "Ações", GoogleListarInput, google_listar_handler, timeout_seconds=60, keywords=("google drive", "meus arquivos do drive", "listar o drive", "mensagens do gmail")),

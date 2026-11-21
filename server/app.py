@@ -51,6 +51,7 @@ from . import tempo as tempo_mod
 from . import calendario as calendario_mod
 from . import anatomia as anatomia_mod
 from . import diagnostico_celular as diagnostico_celular_mod
+from . import varredura as varredura_mod
 from . import jogo as jogo_mod
 from . import jogo_web as jogo_web_mod
 from . import sistema as sistema_mod
@@ -845,6 +846,63 @@ def create_app(
             return JSONResponse(
                 status_code=409,
                 content={"ok": False, "error": {"code": "ANATOMIA_ROKU", "message": str(exc)}},
+            )
+
+    def _props_de_anatomia() -> dict[str, Any]:
+        """As propriedades do aparelho que `controle` precisa.
+
+        Sai da seção “Identidade” (é lá que `modelo`, `build` e `bootloader`
+        aparecem). Se a leitura falhar, o mapa de degraus ainda vale com o
+        “degrau atual” em 0 — nunca derruba a rota.
+        """
+        relatorio = anatomia_mod.ler_android()
+        valores: dict[str, Any] = {}
+        for secao in relatorio.get("secoes", []):
+            if secao.get("id") != "identidade":
+                continue
+            for item in secao.get("itens", []):
+                valores[item["rotulo"]] = item["valor"]
+        return {
+            "ro.product.model": valores.get("Modelo", ""),
+            "ro.boot.verifiedbootstate": "",
+            "ro.bootloader": valores.get("Bootloader", ""),
+            "ro.build.tags": valores.get("Tipo de build", ""),
+        }
+
+    @application.get("/api/anatomia/android/controle")
+    def anatomia_android_controle() -> Any:
+        """“100% de acesso”: o mapa em degraus, com o que falta e o que custa.
+
+        0.92.5 — o dono pediu acesso total. A resposta mede o degrau atual, diz
+        até onde o JARVIS vai (2: cabo + rede) e por que não faz root nem flash.
+        """
+        try:
+            props: dict[str, Any] = {}
+            if varredura_mod.celular.ligado():
+                try:
+                    props = anatomia_mod.ler_android().get("secoes", []) and _props_de_anatomia()
+                except Exception:  # noqa: BLE001 - sem aparelho, o mapa ainda vale
+                    props = {}
+            return {"ok": True, "result": varredura_mod.controle(aparelho=props)}
+        except varredura_mod.VarreduraError as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "error": {"code": "CONTROLE_CELULAR", "message": str(exc)}},
+            )
+
+    @application.get("/api/anatomia/android/varredura")
+    def anatomia_android_varredura(serial: str = Query(default="", max_length=64)) -> Any:
+        """“Passar o JARVIS por todo o celular”: um relatório, só leitura.
+
+        0.92.5 — o dono conectou o cabo e perguntou por onde começar. Esta rota
+        junta anatomia, scanner e mapa de pastas numa passada só.
+        """
+        try:
+            return {"ok": True, "result": varredura_mod.varrer(serial)}
+        except varredura_mod.VarreduraError as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "error": {"code": "VARREDURA_CELULAR", "message": str(exc)}},
             )
 
     @application.get("/api/anatomia/android/sintomas")

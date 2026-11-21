@@ -2784,3 +2784,44 @@ no aparelho`, para o relato não virar laudo.
 Defeito achado: o parser do `gfxinfo` exigia a linha inicial sem `**`, e o Android
 imprime `** com.app/1234`; o pacote nunca era lido e o achado de frame lento
 nunca aparecia. O teste com 28% de quadros travados fixa isso.
+
+### 0.92.5 — “100% de acesso ao celular”: os cinco degraus, ditos na cara
+
+> quero e preciso q o jarvis tenha 100 de acesso ao meu celular
+> ta ja conectei o cll no pc como faço o jarvis rodar por todo o meu celular
+
+Duas perguntas que parecem uma. A primeira pede um número que **não existe**; a
+segunda pede um botão que **existe e faltava**: passar por todo o celular, uma vez,
+sem perguntas.
+
+**Os degraus.** `varredura.CONTROLE` guarda os cinco como dado, não como promessa:
+1) cabo + Depuração USB (lê tudo o que o Android publica, espelha, manda toque e
+tecla, instala/remove, copia mídia); 2) `adb tcpip 5555` (o mesmo sem cabo);
+3) root via bootloader + Magisk; 4) flash de ROM/kernel; 5) explorar falha de
+segurança. `controle(aparelho=...)` mede em qual o aparelho está e devolve
+`degrau_atual`, `degrau_maximo_jarvis = 2`, e para 3/4/5 `jarvis_faz=False` com a
+`recusa` escrita. O texto do degrau 3 diz o preço: o desbloqueio **apaga o
+aparelho** e quebra OTA, banco e carteira.
+
+**Por que não se promete 100%.** Nem a fabricante entra no aparelho bloqueado:
+sandbox por app, memória embaralhada, bootloader que recusa imagem sem assinatura e
+verified boot que **detecta** a troca. É a mesma porta que lê a sua conversa que lê
+a senha do banco — e por isso a recusa é declarada onde o dono pode discordar dela.
+
+**As mãos do degrau 1.** `acoes.celular_abrir_app` / `celular_fechar_app` /
+`celular_instalar_apk`: `monkey`, `am force-stop`, `install -r`, sempre
+`adb -s <serial>` e `shell=False`, sempre atrás de `JARVIS_ACOES=1` **e**
+`confirmed: true`, pacote validado por regex (o teste manda
+`com.whatsapp; rm -rf /` e espera recusa) e só `.apk` de dentro da área do JARVIS.
+
+**A varredura inteira.** `varredura.py` faz 12 leituras em 6 seções (pastas,
+partições, memória, processos, sistema/apps, identidade), monta veredito
+“Passei por N de 12 leituras…” e escreve relatório em `storage/diagnosticos/`.
+`ver-tudo-no-celular.bat` é o duplo clique (`--completo --sem-perguntas`); a rota
+`GET /api/anatomia/android/varredura` é a mesma coisa pela tela; a skill
+`celular.varredura` é a mesma coisa pelo chat. É **só leitura** — o teste varre a
+lista de comandos e recusa `install`, `push`, `rm`, `reboot`, `su`.
+
+**A tela.** Anatomia ganhou o cartão “Até onde o JARVIS chega”, com badge
+“degrau N de 5”, o que ganha / o que falta / o que custa, e a lista do que o JARVIS
+**não** faz e por quê. Sem aparelho a rota responde **409** com o que ligar.

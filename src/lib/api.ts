@@ -1342,3 +1342,45 @@ export async function escanearCelular(serial = '', sintomas: string[] = []): Pro
   );
   return resposta.result;
 }
+
+/* ------------------------------------------ controle do celular em degraus (0.92.5) */
+
+export interface CelularControleDegrau {
+  degrau: number;
+  nome: string;
+  ganha: string;
+  falta: string;
+  custa: string;
+  jarvis_faz: boolean;
+  recusa: string;
+  alcancado: boolean;
+}
+
+export interface CelularControle {
+  ok: boolean;
+  degrau_atual: number;
+  degrau_maximo_jarvis: number;
+  resumo: string;
+  aparelho: {
+    modelo: string;
+    bootloader: string;
+    verified_boot: string;
+    build: string;
+    destravado: boolean;
+    root: boolean;
+  };
+  degraus: CelularControleDegrau[];
+  o_que_o_jarvis_faz_com_esse_acesso: string;
+  o_que_nao_faz_e_por_que: string[];
+}
+
+/**
+ * “100% de acesso”: até onde dá, em degraus, e por que o JARVIS para no 2.
+ *
+ * Sem aparelho conectado a rota ainda responde — o mapa é o mesmo; só o
+ * “degrau atual” fica em 0.
+ */
+export async function getControleCelular(): Promise<CelularControle> {
+  const resposta = await apiFetch<{ ok: boolean; result: CelularControle }>('/api/anatomia/android/controle');
+  return resposta.result;
+}

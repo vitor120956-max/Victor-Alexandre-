@@ -876,6 +876,123 @@ def rodar_testes(
 # 8. Submissão: publicar de verdade (branch + PR no GitHub)
 # ---------------------------------------------------------------------------
 
+_PACOTE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$")
+
+
+def _exigir_pacote(pacote: str) -> str:
+    """Nome de pacote Android — e só isso. É o que entra na linha de comando."""
+    limpo = (pacote or "").strip()
+    if not _PACOTE.match(limpo) or len(limpo) > 160:
+        raise AcoesError(
+            "Nome de pacote inválido. Use o nome do app como o Android conhece, "
+            "ex.: com.whatsapp — não o nome de exibição."
+        )
+    return limpo
+
+
+def _exigir_celular(acao: str) -> tuple[str, str]:
+    """Devolve (adb, serial) ou explica o que falta. Nunca inventa aparelho."""
+    from . import anatomia, celular
+
+    if not celular.ligado():
+        raise AcoesError(
+            "O controle do celular está desligado. Acrescente `set JARVIS_HOST_CELULAR=1` no "
+            "iniciar-jarvis.bat, feche e abra de novo."
+        )
+    try:
+        adb = anatomia._adb()  # noqa: SLF001
+    except Exception as exc:  # noqa: BLE001 - a frase do módulo já é a boa
+        raise AcoesError(str(exc)) from exc
+    conectados = [a for a in anatomia.aparelhos() if a.get("estado") == "device"]
+    if not conectados:
+        raise AcoesError(
+            f"“{acao}” precisa do aparelho conectado e autorizado. Confira o cabo (de dados), "
+            "a Depuração USB ligada e o toque em “Permitir” na tela."
+        )
+    return adb, conectados[0]["serial"]
+
+
+def _celular_rodar(adb: str, serial: str, argumentos: list[str], timeout: int = 120) -> dict[str, Any]:
+    from . import anatomia
+
+    codigo, saida, erro = anatomia._rodar([adb, "-s", serial, *argumentos], timeout=timeout)  # noqa: SLF001
+    texto = (saida or "").strip()
+    return {
+        "codigo": codigo,
+        "saida": texto[:4000],
+        "erro": (erro or "").strip()[:4000],
+        "ok": codigo == 0,
+    }
+
+
+def celular_abrir_app(pacote: str, *, confirmado: bool = False) -> dict[str, Any]:
+    """Abre um app **já instalado** no celular do dono.
+
+    `am start` só inicia uma atividade existente; não instala, não altera app e
+    não pede conta. O pacote passa por regex antes de virar argumento.
+    """
+    nome = _exigir_pacote(pacote)
+    exigir_ligado("abrir app no celular")
+    if not confirmado:
+        return {
+            "plano": f"abrir {nome}",
+            "comando": "am start -n <pacote>/<atividade>",
+            "nota": "Sem `confirmed: true` nada é aberto no aparelho.",
+        }
+    adb, serial = _exigir_celular("abrir app")
+    # `monkey` é o jeito padrão de abrir sem saber o nome da atividade; é leitura
+    # de pacote, não execução de código do app.
+    resultado = _celular_rodar(adb, serial, ["shell", "monkey", "-p", nome, "-c", "android.intent.category.LAUNCHER", "1"])
+    if not resultado["ok"]:
+        raise AcoesError(
+            f"O Android não abriu {nome}. Confira se o app está instalado "
+            f"(`pm list packages | grep {nome}`). Resposta: {resultado['erro'] or resultado['saida']}"
+        )
+    return {"aberto": nome, "aparelho": serial, "saida": resultado["saida"][:600]}
+
+
+def celular_fechar_app(pacote: str, *, confirmado: bool = False) -> dict[str, Any]:
+    """Fecha (força a parada) um app. O dono perde o que não estava salvo."""
+    nome = _exigir_pacote(pacote)
+    exigir_ligado("fechar app no celular")
+    if not confirmado:
+        return {
+            "plano": f"fechar {nome}",
+            "aviso": "Fechar descarta o que não estava salvo dentro do app. Nada mais é apagado.",
+            "nota": "Sem `confirmed: true` nada é fechado no aparelho.",
+        }
+    adb, serial = _exigir_celular("fechar app")
+    resultado = _celular_rodar(adb, serial, ["shell", "am", "force-stop", nome])
+    if not resultado["ok"]:
+        raise AcoesError(f"O Android não fechou {nome}: {resultado['erro'] or resultado['saida']}")
+    return {"fechado": nome, "aparelho": serial}
+
+
+def celular_instalar_apk(arquivo: str, raiz: Path, *, confirmado: bool = False) -> dict[str, Any]:
+    """Instala um APK que **já está** na área do JARVIS — por `adb install`."""
+    alvo = _arquivo_local(arquivo, raiz, campo="APK")
+    if alvo.suffix.lower() != ".apk":
+        raise AcoesError("A instalação aceita só `.apk`. App de iPhone (`.ipa`) não roda no Android.")
+    exigir_ligado("instalar app no celular")
+    if not confirmado:
+        return {
+            "plano": f"instalar {alvo.name} em {alvo.stat().st_size / 1e6:.1f} MB",
+            "nota": "Sem `confirmed: true` nada é instalado no aparelho. O Android ainda pode pedir "
+            "“Instalar apps desconhecidos” na tela.",
+        }
+    adb, serial = _exigir_celular("instalar app")
+    resultado = _celular_rodar(
+        adb, serial, ["install", "-r", str(alvo)], timeout=600
+    )
+    if not resultado["ok"] or "Success" not in resultado["saida"]:
+        raise AcoesError(
+            "O Android recusou a instalação. As causas comuns: “Instalar apps desconhecidos” "
+            f"desligado para o app que pediu, APK de outra arquitetura ou assinatura diferente. "
+            f"Resposta: {resultado['saida'] or resultado['erro']}"
+        )
+    return {"instalado": alvo.name, "aparelho": serial, "saida": resultado["saida"][:400]}
+
+
 def _github(metodo: str, caminho: str, corpo: dict[str, Any] | None = None) -> dict[str, Any]:
     token = (os.getenv("JARVIS_GITHUB_TOKEN") or "").strip()
     if not token:

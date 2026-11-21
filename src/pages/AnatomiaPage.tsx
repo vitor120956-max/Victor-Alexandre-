@@ -12,8 +12,15 @@ import {
   Tv,
   Wifi,
 } from 'lucide-react';
-import { escanearCelular, getAnatomiaFontes, getSintomasCelular, lerAnatomia } from '../lib/api';
-import type { AnatomiaFontes, AnatomiaResultado, CelularDiagnostico, CelularSintoma, CelularSintomas } from '../lib/api';
+import { escanearCelular, getAnatomiaFontes, getControleCelular, getSintomasCelular, lerAnatomia } from '../lib/api';
+import type {
+  AnatomiaFontes,
+  AnatomiaResultado,
+  CelularControle,
+  CelularDiagnostico,
+  CelularSintoma,
+  CelularSintomas,
+} from '../lib/api';
 import '../anatomia.css';
 
 /**
@@ -62,6 +69,56 @@ const GRAVIDADE: Record<string, { rotulo: string; classe: string }> = {
  * linha que a pessoa lê se não ler mais nada. O passo a passo fica em sanfona
  * porque são muitos; o número medido nunca fica escondido.
  */
+/**
+ * “100% de acesso”: a resposta em degraus.
+ *
+ * O dono pediu acesso total. O cartão mostra onde ele está hoje, até onde o
+ * JARVIS vai e — no mesmo lugar — o que cada degrau a mais custa. Não existe
+ * degrau 6: o 5 é uma falha de segurança, e o cartão diz que não é feito.
+ */
+function CartaoControle({ dados }: { dados: CelularControle }) {
+  return (
+    <section className="panel anatomia-controle">
+      <div className="anatomia-resultado-topo">
+        <div>
+          <span className="eyebrow">ACESSO AO APARELHO</span>
+          <h2>Até onde o JARVIS chega</h2>
+          <p className="anatomia-veredito">{dados.resumo}</p>
+        </div>
+        <span className="local-badge">degrau {dados.degrau_atual} de 5</span>
+      </div>
+
+      <div className="anatomia-controle-lista">
+        {dados.degraus.map((degrau) => (
+          <article
+            key={degrau.degrau}
+            className={`anatomia-controle-item ${degrau.alcancado ? 'is-ativo' : ''} ${degrau.jarvis_faz ? '' : 'is-fora'}`}
+          >
+            <div className="anatomia-controle-topo">
+              <span className="anatomia-controle-num">{degrau.degrau}</span>
+              <strong>{degrau.nome}</strong>
+              <span className={degrau.jarvis_faz ? 'anatomia-suspeita-sim' : 'anatomia-suspeita-nao'}>
+                {degrau.jarvis_faz ? 'o JARVIS faz' : 'o JARVIS não faz'}
+              </span>
+            </div>
+            <dl>
+              <div><dt>Ganha</dt><dd>{degrau.ganha}</dd></div>
+              <div><dt>Falta</dt><dd>{degrau.falta}</dd></div>
+              <div><dt>Custa</dt><dd>{degrau.custa}</dd></div>
+            </dl>
+            {degrau.recusa && <p className="anatomia-limite"><AlertTriangle size={12} /> {degrau.recusa}</p>}
+          </article>
+        ))}
+      </div>
+
+      <div className="anatomia-nao-faz">
+        <h3><ShieldCheck size={13} /> Por que o JARVIS para no degrau {dados.degrau_maximo_jarvis}</h3>
+        <ul>{dados.o_que_nao_faz_e_por_que.map((frase) => <li key={frase}>{frase}</li>)}</ul>
+      </div>
+    </section>
+  );
+}
+
 function CartaoDiagnostico({ dados }: { dados: CelularDiagnostico & { sintomas?: CelularSintomas } }) {
   const [aberto, setAberto] = useState<string>(dados.problemas[0]?.id ?? '');
   return (
@@ -193,6 +250,7 @@ export function AnatomiaPage() {
   const [escaneando, setEscaneando] = useState(false);
   const [perguntas, setPerguntas] = useState<CelularSintoma[]>([]);
   const [marcados, setMarcados] = useState<string[]>([]);
+  const [controle, setControle] = useState<CelularControle | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -216,6 +274,9 @@ export function AnatomiaPage() {
     void getSintomasCelular()
       .then(setPerguntas)
       .catch(() => setPerguntas([]));
+    void getControleCelular()
+      .then(setControle)
+      .catch(() => setControle(null));
   }, []);
 
   const ler = async (alvo: 'local' | 'android' | 'roku', parametros: { ip?: string; serial?: string } = {}) => {
@@ -358,6 +419,8 @@ export function AnatomiaPage() {
           </p>
         </section>
       )}
+
+      {controle && <CartaoControle dados={controle} />}
 
       {diagnostico && <CartaoDiagnostico dados={diagnostico} />}
 

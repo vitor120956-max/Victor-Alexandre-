@@ -97,12 +97,40 @@ def main(argv: list[str] | None = None) -> int:
         help="Ids separados por vírgula (tela-prende,frame-lento,se-mexe-sozinho,so-para-apagar-tela,esquenta).",
     )
     parser.add_argument("--sem-perguntas", action="store_true", help="Não pergunta nada; só mede.")
+    parser.add_argument(
+        "--completo",
+        action="store_true",
+        help="Em vez do scanner: a passagem completa (anatomia + scanner + pastas e partições).",
+    )
     argumentos = parser.parse_args(argv)
 
     _ambiente()
     sys.path.insert(0, str(RAIZ))
 
     from server import diagnostico_celular as dc
+
+    if argumentos.completo:
+        from server import varredura
+
+        try:
+            relatorio_completo = varredura.varrer(argumentos.serial)
+        except varredura.VarreduraError as exc:
+            print()
+            print("  A varredura não conseguiu ler o aparelho:")
+            print(f"    {exc}")
+            print()
+            return 1
+        if argumentos.json:
+            print(json.dumps(relatorio_completo, ensure_ascii=False, indent=2))
+        else:
+            print(varredura.em_texto(relatorio_completo))
+        if not argumentos.sem_arquivo:
+            try:
+                print(f"  Relatório salvo em: {_salvar(relatorio_completo)}")
+                print()
+            except OSError as exc:
+                print(f"  (Não consegui salvar o relatório: {exc})")
+        return 0
 
     marcados = [parte.strip() for parte in argumentos.sintomas.split(",") if parte.strip()]
     if not marcados and not argumentos.sem_perguntas and not argumentos.json:

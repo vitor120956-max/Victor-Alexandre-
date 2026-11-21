@@ -138,3 +138,51 @@ internet de otimização, e quase nunca é verdade medida.
   carregando,”), “lista abaixo” quando a lista estava acima, 11,8% arredondado
   para “12%” (disfarçava o limiar) e `**negrito**` de markdown vazando no
   console.
+
+## 8. “Rodar por todo o celular”: a varredura completa (0.92.5)
+
+O scanner da §2 mede o que costuma dar problema. A varredura da 0.92.5 **passa por
+tudo o que o Android deixa ler** — 12 leituras em 6 seções — e não julga: ela
+descreve, para você achar o que só faz sentido conhecendo o seu aparelho.
+
+| seção | o que entra |
+|---|---|
+| **pastas** | as pastas de dados do aparelho, com dono e permissão (e o que o `adb` não vê) |
+| **partições** | tabela de partições, tamanho e uso das que importam (`system`, `data`, `cache`) |
+| **memória** | RAM total/livre, `MemAvailable`, swap e o que está segurando memória |
+| **processos** | os que mais gastam CPU e os que estão em `D`/`Z` (presos) |
+| **sistema-apps** | versão do Android, patch, uptime, e os apps instalados por tamanho |
+| **identidade** | modelo, build, bootloader, `verified boot`, `test-keys` |
+
+Rodar: **`ver-tudo-no-celular.bat`** (duplo clique, uma pergunta só — o nome do
+relatório) ou `python escanear-celular.py --completo --sem-perguntas`. Pela tela:
+**Anatomia → Passar a varredura**. Pelo chat: `celular.varredura`.
+
+O contrato da resposta é o mesmo das outras rotas: `{ok, alvo, serial, titulo,
+lido_em, veredito, secoes[], problemas[], limitacoes[], sem_root[], nao_faz[]}`.
+O `veredito` é sempre “Passei por **N de 12** leituras…” — nunca “seu celular está
+bem”, porque o que ele não leu está listado logo abaixo.
+
+**Só leitura, e cobrado por teste.** O teste varre a lista `COMANDOS` e recusa
+`install`, `push`, `pull`, `rm`, `reboot`, `su`, `settings put` e `keyevent`; todo
+comando leva `-s <serial>` para não acertar o aparelho errado.
+
+## 9. “100% de acesso”: os cinco degraus (0.92.5)
+
+`GET /api/anatomia/android/controle`, o cartão **“Até onde o JARVIS chega”** na aba
+Anatomia, ou a skill `celular.controle`.
+
+| degrau | ganha | exige | custa | JARVIS |
+|---|---|---|---|---|
+| 1 | ler tudo o que o Android publica, espelhar, toque/tecla, instalar/remover, mídia | cabo + Depuração USB + Permitir | nada | **faz** |
+| 2 | o mesmo sem cabo | `adb tcpip 5555` | aparelho escutando na rede local | **faz** |
+| 3 | root: dados de qualquer app, arquivos de sistema | bootloader + Magisk | **apaga o aparelho**; quebra OTA/banco/carteira | não faz |
+| 4 | trocar o sistema (ROM, kernel) | bootloader destravado + imagem sua | risco de tijolo | não faz |
+| 5 | escapar da caixa por falha de segurança | falha não corrigida | é crime se não for o seu aparelho | não faz |
+
+Cada degrau recusado traz a `recusa` escrita — o motivo, não um “não”. O texto
+“100%” não aparece como promessa em lugar nenhum do código; aparece como o nome do
+**pedido** que o cartão responde.
+
+**Sem aparelho a rota não mente**: 409 `CONTROLE_CELULAR` com o que ligar, e
+`degrau_atual = 0`.

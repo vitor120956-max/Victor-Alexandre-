@@ -175,3 +175,23 @@
 .anatomia-suspeita-testes ul { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 15px; }
 .anatomia-suspeita-testes li { color: var(--text-soft); font-size: 8.5px; line-height: 1.55; }
 .anatomia-como-ler { margin: 0; color: var(--muted-2, var(--muted)); font-size: 7.5px; line-height: 1.55; }
+
+/* ---------------------------------------------------------------------------
+   “100% de acesso”: os cinco degraus, com o que cada um custa (0.92.5).
+   --------------------------------------------------------------------------- */
+.anatomia-controle { display: flex; flex-direction: column; gap: 14px; }
+.anatomia-controle-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.anatomia-controle-item { display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .012); }
+.anatomia-controle-item.is-ativo { border-color: rgba(var(--accent-rgb, 126, 214, 165), .42); background: rgba(var(--accent-rgb, 126, 214, 165), .05); }
+.anatomia-controle-item.is-fora { opacity: .78; }
+.anatomia-controle-topo { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.anatomia-controle-topo strong { flex: 1; min-width: 120px; color: var(--text); font-size: 9.5px; font-weight: 560; }
+.anatomia-controle-num {
+  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 7.5px;
+}
+.anatomia-controle-item.is-ativo .anatomia-controle-num { border-color: var(--accent); color: var(--accent); }
+.anatomia-controle-item dl { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.anatomia-controle-item dl > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
+.anatomia-controle-item dt { color: var(--muted-2, var(--muted)); font-family: var(--mono); font-size: 6.5px; letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+.anatomia-controle-item dd { margin: 0; color: var(--text-soft); font-size: 8.5px; line-height: 1.6; }
