@@ -12,11 +12,12 @@ import {
   Tv,
   Wifi,
 } from 'lucide-react';
-import { escanearCelular, getAnatomiaFontes, getControleCelular, getSintomasCelular, lerAnatomia } from '../lib/api';
+import { escanearCelular, getAnatomiaFontes, getControleCelular, getSintomasCelular, lerAnatomia, varrerCelular } from '../lib/api';
 import type {
   AnatomiaFontes,
   AnatomiaResultado,
   CelularControle,
+  CelularVarredura,
   CelularDiagnostico,
   CelularSintoma,
   CelularSintomas,
@@ -239,6 +240,87 @@ function CartaoDiagnostico({ dados }: { dados: CelularDiagnostico & { sintomas?:
   );
 }
 
+/**
+ * A varredura completa: o mesmo que o `ver-tudo-no-celular.bat` faz no console.
+ *
+ * Mostra **o mapa** (pastas, partições, memória, processos, apps, aparelho) e,
+ * logo no topo, o que o scanner achou. Na 0.92.5 esta tela não existia: a
+ * varredura só saía em texto, e um relatório com “nenhum problema” sem as
+ * leituras de saúde passava despercebido.
+ */
+function CartaoVarredura({ dados }: { dados: CelularVarredura }) {
+  return (
+    <section className="panel anatomia-varredura">
+      <div className="anatomia-resultado-topo">
+        <div>
+          <span className="eyebrow">VARREDURA COMPLETA · {quando(dados.lido_em)}</span>
+          <h2>{dados.titulo}</h2>
+          <p className="anatomia-veredito">{dados.veredito}</p>
+        </div>
+        <span className="local-badge"><ShieldCheck size={12} /> NADA FOI ALTERADO</span>
+      </div>
+
+      {dados.problemas.length > 0 && (
+        <div className="anatomia-suspeitas">
+          <h3><AlertTriangle size={13} /> O que o scanner achou</h3>
+          <ol>
+            {dados.problemas.slice(0, 5).map((problema) => {
+              const grau = GRAVIDADE[problema.gravidade] ?? GRAVIDADE.baixa;
+              return (
+                <li key={problema.id}>
+                  <div className="anatomia-suspeita-topo">
+                    <strong>{problema.titulo}</strong>
+                    <span className={grau.classe}>{problema.gravidade}</span>
+                  </div>
+                  <p>{problema.medido}</p>
+                  <div className="anatomia-suspeita-testes">
+                    <span>O que fazer</span>
+                    <ul>{problema.o_que_fazer.slice(0, 3).map((passo) => <li key={passo}>{passo}</li>)}</ul>
+                  </div>
+                  {problema.limite && <p className="anatomia-limite"><AlertTriangle size={12} /> {problema.limite}</p>}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+
+      <div className="anatomia-secoes">
+        {dados.secoes.map((secao) => (
+          <article className="anatomia-secao" key={secao.id}>
+            <h3>{secao.titulo}</h3>
+            <dl>
+              {secao.itens.map((item) => (
+                <div key={`${secao.id}-${item.rotulo}`}>
+                  <dt>{item.rotulo}</dt>
+                  <dd>{item.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </article>
+        ))}
+      </div>
+
+      {dados.limitacoes.length > 0 && (
+        <div className="anatomia-limites">
+          <h3><HardDrive size={13} /> Leituras que não responderam</h3>
+          <ul>{dados.limitacoes.map((limite) => <li key={limite}>{limite}</li>)}</ul>
+        </div>
+      )}
+
+      <div className="anatomia-limites">
+        <h3><ShieldCheck size={13} /> O que não dá sem root</h3>
+        <ul>{dados.sem_root.map((frase) => <li key={frase}>{frase}</li>)}</ul>
+      </div>
+
+      <div className="anatomia-nao-faz">
+        <h3><ShieldCheck size={13} /> O que esta varredura não faz</h3>
+        <ul>{dados.nao_faz.map((frase) => <li key={frase}>{frase}</li>)}</ul>
+      </div>
+    </section>
+  );
+}
+
 export function AnatomiaPage() {
   const [fontes, setFontes] = useState<AnatomiaFontes | null>(null);
   const [resultado, setResultado] = useState<AnatomiaResultado | null>(null);
@@ -251,6 +333,8 @@ export function AnatomiaPage() {
   const [perguntas, setPerguntas] = useState<CelularSintoma[]>([]);
   const [marcados, setMarcados] = useState<string[]>([]);
   const [controle, setControle] = useState<CelularControle | null>(null);
+  const [varredura, setVarredura] = useState<CelularVarredura | null>(null);
+  const [varrendo, setVarrendo] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -302,6 +386,19 @@ export function AnatomiaPage() {
       setErro(falha instanceof Error ? falha.message : 'O scanner não respondeu.');
     } finally {
       setEscaneando(false);
+    }
+  };
+
+  const varrer = async (serial = '') => {
+    setVarrendo(true);
+    setErro('');
+    try {
+      setVarredura(await varrerCelular(serial));
+    } catch (falha) {
+      setVarredura(null);
+      setErro(falha instanceof Error ? falha.message : 'A varredura não respondeu.');
+    } finally {
+      setVarrendo(false);
     }
   };
 
@@ -402,6 +499,17 @@ export function AnatomiaPage() {
                   {escaneando ? 'Passando o scanner...' : 'Passar o scanner'}
                 </button>
               )}
+              {id === 'android' && (
+                <button
+                  className="button button-secondary anatomia-escanear"
+                  onClick={() => void varrer()}
+                  disabled={varrendo || !disponivel}
+                  title="Passa por todo o aparelho numa leitura só: pastas, partições, memória, processos e apps."
+                >
+                  {varrendo ? <LoaderCircle className="anatomia-girar" size={15} /> : <Cpu size={15} />}
+                  {varrendo ? 'Varrendo o aparelho...' : 'Ver tudo no aparelho'}
+                </button>
+              )}
             </section>
           );
         })}
@@ -423,6 +531,8 @@ export function AnatomiaPage() {
       {controle && <CartaoControle dados={controle} />}
 
       {diagnostico && <CartaoDiagnostico dados={diagnostico} />}
+
+      {varredura && <CartaoVarredura dados={varredura} />}
 
       {resultado && (
         <section className="panel anatomia-resultado">

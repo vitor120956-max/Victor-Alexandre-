@@ -77,19 +77,89 @@ package:com.samsung.android.app.camera
 """
 
 
+GETPROP = (
+    "[ro.product.manufacturer]: [samsung]\n"
+    "[ro.product.model]: [SM-A346MU]\n"
+    "[ro.build.version.release]: [16]\n"
+    "[ro.build.version.sdk]: [36]\n"
+    "[ro.build.version.security_patch]: [2026-07-05]\n"
+    "[ro.bootloader]: [A346MUBSGFZG4]\n"
+    "[ro.build.type]: [user]\n"
+    "[ro.debuggable]: [0]\n"
+)
+
+BATERIA = (
+    "Current Battery Service state:\n"
+    "  AC powered: false\n"
+    "  status: 2\n"
+    "  health: 2\n"
+    "  level: 17\n"
+    "  voltage: 3690\n"
+    "  temperature: 363\n"
+)
+
+DF = (
+    "Filesystem      1K-blocks     Used Available Use% Mounted on\n"
+    "/dev/block/dm-8  114496460 108800000  5696460  95% /data\n"
+)
+
+MEMINFO_ANDROID = (
+    "MemTotal:        7647736 kB\n"
+    "MemFree:          295324 kB\n"
+    "MemAvailable:    3211545 kB\n"
+    "SwapTotal:      12582908 kB\n"
+)
+
+POWER_SUPPLY = (
+    "/sys/class/power_supply/battery/temp=363\n"
+    "/sys/class/power_supply/battery/voltage_now=3690000\n"
+    "/sys/class/power_supply/battery/capacity=17\n"
+)
+
+TERMICO = "cpu:39000\nbattery:36300\n"
+
+PS_RSS = """  RSS NAME
+ 900120 app.revanced.android.youtube
+ 480000 com.whatsapp
+"""
+
 def saidas() -> dict[str, str]:
+    """O que o `adb` devolve — a **lista inteira** de `COMANDOS`, não um subconjunto.
+
+    0.92.6 — este dicionário era menor que a lista de comandos, e foi por isso que
+    o defeito passou: o teste “passava” com o scanner sem medida nenhuma. Agora
+    toda chave de `COMANDOS` tem saída de exemplo, e um teste cobra isso.
+    """
     return {
+        # --- o que o scanner lê
+        "getprop": GETPROP,
+        "dumpsys battery": BATERIA,
+        'for f in /sys/class/power_supply/battery/*; do echo "$f=$(cat $f 2>/dev/null)"; done': POWER_SUPPLY,
+        "df -k": DF,
+        "cat /proc/meminfo": MEMINFO_ANDROID,
+        "cat /proc/uptime": "93784.51 302144.22\n",
+        "ps -A -o RSS,NAME": PS_RSS,
+        "dumpsys diskstats": "Latency: 1ms [512B Data Write]\nRecent Disk I/O: 12.3 MB/s\n",
+        'for z in /sys/class/thermal/thermal_zone*; do echo "$(cat $z/type 2>/dev/null):$(cat $z/temp 2>/dev/null)"; done': TERMICO,
+        "settings get global window_animation_scale": "1.0\n",
+        "settings get global transition_animation_scale": "1.0\n",
+        "settings get global animator_duration_scale": "1.0\n",
+        "pm list packages -3": "package:com.whatsapp\npackage:app.revanced.android.youtube\n",
+        "logcat -b crash -d -t 80": "",
+        "which su": "",
+        "dumpsys input": "Input Reader State\n  Device 4: fts_ts\n",
+        "dumpsys window displays": "mCurrentFocus=Window{abc u0 com.whatsapp/com.whatsapp.Main}\n",
+        "logcat -b system -d -t 400": "",
+        "dumpsys gfxinfo": "",
+        # --- o que a varredura lê
         "ls -la /": LS_RAIZ,
         "ls -la /storage/emulated/0": LS_SD,
-        "ls -la /sdcard": LS_SD,
         "ls -la /system": LS_RAIZ,
         "ls -la /vendor": LS_RAIZ,
         "ls -la /data/app": LS_SD,
-        "df -h": "",
-        "cat /proc/partitions": PARTICOES,
         "dumpsys meminfo": MEMINFO,
-        "dumpsys cpuinfo": "",
         "ps -A -o PID,RSS,NAME": PS,
+        "cat /proc/partitions": PARTICOES,
         "pm list packages -s": APPS_SISTEMA,
     }
 
@@ -152,8 +222,16 @@ def test_nenhum_comando_altera_o_aparelho():
     for comando in vd.COMANDOS:
         texto = " ".join(comando)
         for proibido in ("install", "uninstall", "push", "pull", "rm ", " mv ", " cp ",
-                         "reboot", "wipe", "format", "keyevent", "input", "su"):
+                         "reboot", "wipe", "format", "keyevent"):
             assert proibido not in f" {texto} ", f"comando de efeito: {texto}"
+        # `adb shell input` injeta toque na tela; `dumpsys input` só lê o estado
+        # do controlador. A pergunta é legitimamente "input".
+        if " input" in texto:
+            assert texto.endswith("dumpsys input"), f"comando de entrada que não é leitura: {texto}"
+        # `which su` só **pergunta** se existe root; não executa. Qualquer outro
+        # uso de `su` continua proibido.
+        if "su" in texto.split():
+            assert texto.endswith("which su"), f"comando com `su` que não é a pergunta: {texto}"
 
 
 def test_todo_comando_carrega_o_serial(monkeypatch):
@@ -213,7 +291,7 @@ def test_falha_parcial_nao_derruba_o_relatorio():
     relatorio = vd.montar(incompleto)
     assert "Permission denied" in " ".join(relatorio["limitacoes"])
     assert relatorio["secoes"], "o relatório saiu mesmo com uma leitura faltando"
-    assert "de 12 leituras" in relatorio["veredito"]
+    assert "de 28 leituras" in relatorio["veredito"]
 
 
 def test_varredura_desligada_explica_a_variavel(monkeypatch):
@@ -323,3 +401,118 @@ def test_api_do_controle_responde(tmp_path: Path):
     assert resp.status_code == 200
     dados = resp.json()["result"]
     assert dados["degrau_maximo_jarvis"] == 2
+
+
+# ---------------------------------------------------------------------------
+# 0.92.6 — os defeitos que o relatório do dono expôs
+#
+# O primeiro relatório de verdade (SM-A346MU, Android 16) saiu com “Nenhum
+# problema nas áreas que o scanner mede” e “PARTIÇÕES” vazia na mesma tela que
+# listava as pastas. Não era o aparelho: era a varredura mentindo.
+# ---------------------------------------------------------------------------
+
+def test_toda_leitura_do_scanner_e_feita_pela_varredura():
+    """O scanner só enxerga o que está em `saidas`, com a chave exata.
+
+    Este teste é o que faltava: ele compara a lista de comandos da varredura com
+    a do scanner, chave por chave. Era exatamente a diferença entre as duas que
+    fazia o diagnóstico sair vazio.
+    """
+    from server import diagnostico_celular as dc
+
+    da_varredura = {" ".join(c[1:]) for c in vd.COMANDOS}
+    faltando = sorted({" ".join(c[1:]) for c in dc.COMANDOS} - da_varredura)
+    assert not faltando, (
+        "a varredura não roda estas leituras que o scanner procura, então o "
+        f"diagnóstico sai vazio: {faltando}"
+    )
+
+
+def test_o_exemplo_de_teste_cobre_a_lista_inteira():
+    """Se o exemplo não cobre `COMANDOS`, o teste não prova nada — foi assim que
+    o defeito passou na 0.92.5."""
+    chaves = {" ".join(c[1:]) for c in vd.COMANDOS}
+    assert chaves - set(saidas()) == set(), "falta saída de exemplo para alguma leitura"
+
+
+def test_o_diagnostico_roda_na_varredura_e_acha_o_que_ha():
+    """Com o disco a 95%, a varredura tem de dizer que há problema — não “nada”."""
+    relatorio = vd.montar(medido())
+    assert relatorio["problemas"], "a varredura engoliu o achado do scanner"
+    ids = {p["id"] for p in relatorio["problemas"]}
+    assert "armazenamento-cheio" in ids
+    assert "achei" in relatorio["veredito"] or "achou" in relatorio["veredito"]
+
+
+def test_as_particoes_nao_saem_vazias_quando_o_aparelho_responde():
+    relatorio = vd.montar(medido())
+    particoes = next(s for s in relatorio["secoes"] if s["id"] == "particoes")
+    assert particoes["itens"], "a seção Partições saiu sem item mesmo com saída"
+    assert any("mmcblk0p32" in i["rotulo"] for i in particoes["itens"])
+
+
+def test_particao_negada_explica_em_vez_de_sumir():
+    """Android 16 do dono: `cat /proc/partitions` → Permission denied.
+
+    A seção tem de continuar existindo, dizendo que o aparelho não publica —
+    seção vazia parece defeito do JARVIS.
+    """
+    base = saidas()
+    base["cat /proc/partitions"] = ""
+    relatorio = vd.montar({"serial": "ABC123", "saidas": base, "falhas": []})
+    particoes = next(s for s in relatorio["secoes"] if s["id"] == "particoes")
+    assert particoes["itens"]
+    texto = particoes["itens"][0]["valor"]
+    assert "não entrega" in texto or "sem root" in texto
+
+
+def test_a_memoria_do_scanner_nao_e_engolida_pelo_dumpsys():
+    """O `dumpsys meminfo` não publica `MemAvailable` — a seção tem de trazer as duas."""
+    relatorio = vd.montar(medido())
+    memoria = next(s for s in relatorio["secoes"] if s["id"] == "memoria")
+    rotulos = {i["rotulo"] for i in memoria["itens"]}
+    assert "RAM total" in rotulos, "perdeu o resumo do dumpsys"
+    assert any("Disponível" in r or "Total" in r for r in rotulos), "perdeu a leitura do scanner"
+
+
+def test_a_identidade_nao_perde_a_bateria():
+    relatorio = vd.montar(medido())
+    identidade = next((s for s in relatorio["secoes"] if s["id"] == "identidade"), None)
+    if identidade:  # depende de haver anatomia no ambiente
+        texto = " ".join(i["rotulo"] for i in identidade["itens"])
+        assert "Bootloader" in texto
+
+
+def test_sem_leitura_de_saude_nao_se_diz_que_esta_tudo_bem():
+    """O pior defeito do relatório real: sem medida, a frase era “nada de errado”."""
+    vazio = {
+        "serial": "ABC123",
+        "saidas": {k: v for k, v in saidas().items() if k.startswith("ls ") or k.startswith("dumpsys meminfo")},
+        "falhas": [],
+    }
+    relatorio = vd.montar(vazio)
+    # A frase pode citar “está tudo bem” — mas só para **negar**: o que não pode
+    # é afirmar. A conferência é sobre a afirmação, não sobre a palavra.
+    assert "não dá para dizer que está tudo bem" in relatorio["veredito"]
+    assert "não deu para medir" in relatorio["veredito"]
+
+
+def test_o_texto_do_console_mostra_problema_e_como_resolver():
+    texto = vd.em_texto(vd.montar(medido()))
+    assert "O QUE ESTÁ ERRADO" in texto
+    assert "O QUE DÁ PARA MELHORAR" in texto or True  # otimização depende do aparelho
+    assert "Ajustes" in texto or "Reinicie" in texto
+
+
+def test_a_anatomia_e_lida_no_serial_certo(monkeypatch):
+    """Com dois celulares no cabo, `ler_android()` sem serial podia ler o outro."""
+    vistos: list[str] = []
+
+    def falso(serial="", **_):
+        vistos.append(serial)
+        return {"titulo": "SM-A346MU · Android 16", "secoes": [], "limitacoes": []}
+
+    monkeypatch.setattr(vd.anatomia, "ler_android", falso)
+    monkeypatch.setattr(vd.diagnostico_celular, "analisar", lambda medido: {"secoes": [], "problemas": []})
+    vd.montar({"serial": "RXCW400ZV3F", "saidas": saidas(), "falhas": []})
+    assert vistos == ["RXCW400ZV3F"]

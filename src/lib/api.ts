@@ -1384,3 +1384,36 @@ export async function getControleCelular(): Promise<CelularControle> {
   const resposta = await apiFetch<{ ok: boolean; result: CelularControle }>('/api/anatomia/android/controle');
   return resposta.result;
 }
+
+/* ------------------------------------------------- varredura completa do celular (0.92.6) */
+
+export interface CelularVarredura {
+  ok: boolean;
+  alvo: 'android';
+  serial: string;
+  titulo: string;
+  lido_em: string;
+  veredito: string;
+  secoes: AnatomiaSecao[];
+  problemas: CelularProblema[];
+  otimizacoes: CelularOtimizacao[];
+  limitacoes: string[];
+  sem_root: string[];
+  nao_faz: string[];
+}
+
+/**
+ * Passa o JARVIS por todo o celular numa leitura só — o mesmo que o
+ * `ver-tudo-no-celular.bat` faz no console.
+ *
+ * Devolve **problemas** (do que o scanner mediu) junto com o mapa do aparelho,
+ * porque um relatório sem veredito de saúde é o defeito que a 0.92.5 tinha.
+ * O `409` traz a frase que resolve (cabo, “Permitir”, variável).
+ */
+export async function varrerCelular(serial = ''): Promise<CelularVarredura> {
+  const sufixo = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+  const resposta = await apiFetch<{ ok: boolean; result: CelularVarredura }>(
+    `/api/anatomia/android/varredura${sufixo}`,
+  );
+  return resposta.result;
+}

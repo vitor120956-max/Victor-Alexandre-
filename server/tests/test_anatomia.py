@@ -471,3 +471,60 @@ def test_api_le_o_computador_sem_pedir_nada_alem(tmp_path: Path):
 def test_api_recusa_alvo_desconhecido(tmp_path: Path):
     resposta = _cliente(tmp_path).get("/api/anatomia/maquina-do-vizinho")
     assert resposta.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 0.92.6 — o título que saía sem o modelo
+#
+# No relatório real do dono (SM-A346MU, Android 16) o cabeçalho era só
+# “Android 16”: o `getprop` inteiro tem centenas de linhas e a do modelo caía
+# depois do corte de 60 KB. O `adb` já sabe pedir uma propriedade só.
+# ---------------------------------------------------------------------------
+
+def test_o_titulo_tem_o_modelo_mesmo_com_getprop_cortado(monkeypatch):
+    _ligar_android(monkeypatch)
+    grande = "\n".join(f"[ro.persist.prop.{i}]: [{'x' * 60}]" for i in range(1200))
+    pedidos: list[list[str]] = []
+
+    def rodar(argumentos: list[str]):
+        pedidos.append(list(argumentos))
+        chave = " ".join(argumentos)
+        if "devices" in chave:
+            return 0, _aparelho_autorizado(), ""
+        if chave.endswith("shell getprop"):
+            # O modelo fica no fim de um despejo maior que o corte — some.
+            return 0, grande + "\n[ro.product.model]: [SM-A346MU]\n", ""
+        if chave.endswith("shell getprop ro.product.model"):
+            return 0, "SM-A346MU\n", ""
+        if chave.endswith("shell getprop ro.build.version.release"):
+            return 0, "16\n", ""
+        return 0, "", ""
+
+    dados = anatomia.ler_android(rodar=rodar)
+    assert "SM-A346MU" in dados["titulo"], dados["titulo"]
+    assert "Android 16" in dados["titulo"]
+    assert any("getprop ro.product.model" in " ".join(p) for p in pedidos)
+
+
+def test_a_propriedade_nao_e_pedida_de_novo_quando_ja_vem_no_getprop(monkeypatch):
+    """Um comando a mais só quando falta — com o `getprop` completo, nada extra."""
+    _ligar_android(monkeypatch)
+    pedidos: list[list[str]] = []
+    rodar = _rodar_falso(
+        {
+            "devices": _aparelho_autorizado(),
+            "getprop ro.": "",  # qualquer `getprop <chave>` devolve vazio
+            "getprop": GETPROP,
+            "dumpsys battery": BATERIA,
+            "/proc/meminfo": MEMINFO_ANDROID,
+            "df -k": DF_ANDROID,
+            "pm list packages": APPS_TODOS,
+        },
+        pedidos,
+    )
+    dados = anatomia.ler_android(rodar=rodar)
+    assert "SM-A346B" in dados["titulo"]
+    # `adb shell getprop` (sem chave) é a leitura normal; o que não pode haver é
+    # a pergunta por chave específica quando o valor já estava na leitura.
+    extras = [p for p in pedidos if p[-2:] == ["getprop"] and len(p) > 4]
+    assert extras == [], f"pediu propriedade que já tinha: {extras}"

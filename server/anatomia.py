@@ -637,6 +637,16 @@ def ler_android(
         return _cortar(saida)
 
     props = _propriedades(ler("shell", "getprop"))
+    # 0.92.6 — o título vinha do `getprop` **cortado** em `MAX_SAIDA`. Num aparelho
+    # com muitas propriedades (o Android 16 do dono tem centenas), a linha do
+    # modelo cai depois do corte e o cabeçalho saía só "Android 16" — sem dizer
+    # qual aparelho era. Três propriedades custam um comando; a leitura inteira
+    # continua servindo à tabela de identidade.
+    for chave in ("ro.product.model", "ro.build.version.release", "ro.product.manufacturer"):
+        if not props.get(chave):
+            valor = ler("shell", "getprop", chave).strip()
+            if valor:
+                props[chave] = valor
     identidade = [_item(rotulo, props.get(chave, "")) for chave, rotulo in PROPS]
     titulo = " · ".join(
         p for p in (props.get("ro.product.model"), f"Android {props.get('ro.build.version.release', '')}".strip()) if p

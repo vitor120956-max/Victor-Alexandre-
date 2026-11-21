@@ -49,20 +49,31 @@ TIMEOUT = 30
 MAX_SAIDA = 120_000
 
 # Só leitura. O teste confere esta lista palavra por palavra.
-COMANDOS: tuple[tuple[str, ...], ...] = (
+#
+# 0.92.6 — a lista era **escrita à mão** e menor que a do scanner. O scanner só
+# enxerga o que está em `saidas`, com a chave exata; o que faltava, ele lia como
+# vazio. Um relatório real (SM-A346MU, Android 16) saiu com “Nenhum problema nas
+# áreas que o scanner mede” — porque o scanner recebeu zero medida e zero medida
+# é indistinguível de aparelho saudável. Agora a lista é **derivada** da do
+# scanner: acrescentar leitura lá passa a valer aqui sozinho, e a divergência
+# deixou de ser possível.
+LEITURAS_DO_SCANNER: tuple[tuple[str, ...], ...] = diagnostico_celular.COMANDOS
+
+# O que só a varredura olha: o mapa de pastas, o resumo do `dumpsys` e a lista
+# de apps de fábrica. Nada aqui é de efeito.
+LEITURAS_SO_DA_VARREDURA: tuple[tuple[str, ...], ...] = (
     ("shell", "ls", "-la", "/"),
     ("shell", "ls", "-la", "/storage/emulated/0"),
-    ("shell", "ls", "-la", "/sdcard"),
     ("shell", "ls", "-la", "/system"),
     ("shell", "ls", "-la", "/vendor"),
     ("shell", "ls", "-la", "/data/app"),
-    ("shell", "df", "-h"),
     ("shell", "cat", "/proc/partitions"),
     ("shell", "dumpsys", "meminfo"),
-    ("shell", "dumpsys", "cpuinfo"),
     ("shell", "ps", "-A", "-o", "PID,RSS,NAME"),
     ("shell", "pm", "list", "packages", "-s"),
 )
+
+COMANDOS: tuple[tuple[str, ...], ...] = LEITURAS_DO_SCANNER + LEITURAS_SO_DA_VARREDURA
 
 _PALAVRAS_PROIBIDAS = {
     "install", "uninstall", "push", "pull", "rm", "mv", "cp", "reboot",
@@ -70,11 +81,26 @@ _PALAVRAS_PROIBIDAS = {
 }
 
 
+# A única leitura que cita uma palavra proibida é `which su` — ela **pergunta se
+# existe**, não executa. O auditor sabe a diferença em vez de abrir exceção cega.
+_LEITURAS_QUE_CITAM = {("which", "su"), ("dumpsys", "input")}
+
+
+# O que sustenta um “nenhum problema”: sem estas leituras, o scanner não viu
+# nada e dizer “está tudo bem” seria mentira por omissão (defeito da 0.92.5, que
+# apareceu no primeiro relatório real).
+LEITURAS_DE_SAUDE = ("getprop", "dumpsys battery", "df -k", "cat /proc/meminfo", "ps -A -o RSS,NAME")
+
+
 def _auditar() -> None:
     for comando in COMANDOS:
-        corpo = " ".join(comando)
-        for palavra in corpo.split():
-            assert palavra not in _PALAVRAS_PROIBIDAS, f"comando de efeito na varredura: {corpo}"
+        palavras = " ".join(comando).split()
+        for i, palavra in enumerate(palavras):
+            if palavra in _PALAVRAS_PROIBIDAS:
+                anterior = palavras[i - 1] if i else ""
+                assert (anterior, palavra) in _LEITURAS_QUE_CITAM, (
+                    f"comando de efeito na varredura: {' '.join(comando)}"
+                )
 
 
 _auditar()
@@ -270,11 +296,50 @@ def _secao(identificador: str, titulo: str, itens: list[dict[str, str]], *, nota
     return {"id": identificador, "titulo": titulo, "itens": [i for i in itens if i.get("valor")], "nota": nota}
 
 
+def _limites_sem_repetir(frases: list[str]) -> list[str]:
+    """Uma linha por motivo — não três linhas do mesmo `Permission denied`.
+
+    No relatório real do dono a mesma negativa aparecia três vezes: uma do
+    `cat /proc/partitions` da varredura, uma do scanner e uma da anatomia. O
+    `dict.fromkeys` não resolvia porque cada módulo escreve a frase com um
+    prefixo diferente; a comparação aqui é pelo **miolo** (o erro em si).
+    """
+    vistos: list[str] = []
+    restos: set[str] = set()
+    for frase in frases:
+        limpa = (frase or "").strip()
+        if not limpa:
+            continue
+        miolo = limpa.split("”:", 1)[-1].strip().lower()
+        if len(miolo) < 8:
+            miolo = limpa.lower()
+        if miolo in restos:
+            continue
+        restos.add(miolo)
+        vistos.append(limpa)
+    return vistos[:16]
+
+
 def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
-    """Junta a varredura com a anatomia e o scanner — sem repetir leitura."""
+    """Junta a varredura com a anatomia e o scanner — sem repetir leitura.
+
+    0.92.6 — a junção estava **silenciosamente quebrada**: o scanner recebia um
+    dicionário montado nesta função (`{"serial", "saidas", "falhas"}`) com as
+    chaves de comando erradas, então `getprop`, `df -k` e `/proc/meminfo` não
+    existiam para ele e ele devolvia “nenhum problema” — o mesmo texto de um
+    aparelho saudável. Num relatório real isso apareceu como “PASTAS” cheia e
+    “PARTIÇÕES” vazia na mesma tela.
+
+    Agora há **um dicionário só**: as mesmas saídas alimentam o scanner, a
+    anatomia e as seções daqui. E a seção `memoria` que o scanner produz é
+    mantida (é a que traz `MemAvailable`, que o `dumpsys meminfo` não dá); o
+    `dumpsys meminfo` entra como complemento, não como substituto.
+    """
     saidas: dict[str, str] = medido.get("saidas", {})
     serial = medido.get("serial", "")
 
+    # A anatomia precisa saber **qual** aparelho, não o primeiro que aparecer:
+    # com dois celulares no cabo, `ler_android()` sem serial podia ler o outro.
     try:
         anatomia_relatorio = anatomia.ler_android(serial)
     except anatomia.AnatomiaError:
@@ -294,29 +359,47 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
             ],
             nota="Cada pasta vira uma linha com os primeiros itens. Conteúdo de arquivo não é lido.",
         ),
-        _secao(
-            "particoes",
-            "Partições",
-            [
-                {"rotulo": p["nome"], "valor": p["tamanho"]}
-                for p in ler_particoes(saidas.get("cat /proc/partitions", ""))
-            ],
-            nota="Nome e tamanho. Nenhuma partição é aberta.",
-        ),
     ]
 
-    memoria = ler_memoria_detalhada(saidas.get("dumpsys meminfo", ""))
-    if memoria:
-        secoes.append(_secao("memoria", "Memória do sistema", [{"rotulo": k, "valor": v} for k, v in memoria.items()]))
+    particoes = [
+        {"rotulo": p["nome"], "valor": p["tamanho"]}
+        for p in ler_particoes(saidas.get("cat /proc/partitions", ""))
+    ]
+    secoes.append(_secao(
+        "particoes",
+        "Partições",
+        particoes or [{
+            "rotulo": "Não publicada",
+            "valor": "este Android não entrega /proc/partitions sem root — não é falta de cabo",
+        }],
+        nota="Nome e tamanho. Nenhuma partição é aberta.",
+    ))
 
+    # Memória: a do scanner (MemAvailable, a que importa) + o resumo do dumpsys.
+    secao_scanner = next((s for s in saude.get("secoes", []) if s.get("id") == "memoria"), None)
+    memoria_dumpsys = ler_memoria_detalhada(saidas.get("dumpsys meminfo", ""))
+    itens_memoria = list(secao_scanner["itens"]) if secao_scanner else []
+    conjunto = {i["rotulo"] for i in itens_memoria}
+    itens_memoria += [
+        {"rotulo": k, "valor": v} for k, v in memoria_dumpsys.items() if k not in conjunto
+    ]
+    if itens_memoria:
+        secoes.append(_secao("memoria", "Memória do sistema", itens_memoria))
+
+    # Processos: uma tabela só, com a média dos dois `ps` (o do scanner traz
+    # RSS, o daqui traz PID — o nome é a chave para não duplicar linha).
     processos = ler_processos(saidas.get("ps -A -o PID,RSS,NAME", ""))
     if processos:
         secoes.append(_secao(
             "processos",
             "Rodando agora (maiores primeiro)",
-            [{"rotulo": f"{p['nome']}", "valor": f"{p['mb']} · pid {p['pid']}"} for p in processos],
+            [{"rotulo": p["nome"], "valor": f"{p['mb']} · pid {p['pid']}"} for p in processos],
             nota="É uma foto do instante da varredura — não um histórico.",
         ))
+    elif secao_scanner is None:
+        secao_ps = next((s for s in saude.get("secoes", []) if s.get("id") == "processos"), None)
+        if secao_ps:
+            secoes.append(secao_ps)
 
     sistema = ler_apps_de_sistema(saidas.get("pm list packages -s", ""))
     if sistema:
@@ -330,17 +413,19 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
             nota="Desinstalar app de sistema é o que mais quebra aparelho — e o JARVIS não faz isso.",
         ))
 
-    if anatomia_relatorio.get("secoes"):
-        secoes.append(_secao(
-            "identidade",
-            "O aparelho",
-            [
-                item
-                for secao in anatomia_relatorio["secoes"]
-                if secao["id"] in {"identidade", "bateria"}
-                for item in secao["itens"][:6]
-            ],
-        ))
+    # Identidade: a mesma seção da Anatomia, inteira. Antes eram 6 itens de
+    # duas seções — a carga e a temperatura ficavam de fora, e o “O APARELHO”
+    # saía sem a marca do modelo no título.
+    identidade = next(
+        (s for s in anatomia_relatorio.get("secoes", []) if s.get("id") == "identidade"), None
+    )
+    bateria = next(
+        (s for s in anatomia_relatorio.get("secoes", []) if s.get("id") == "bateria"), None
+    )
+    itens_aparelho = list(identidade["itens"]) if identidade else []
+    itens_aparelho += list(bateria["itens"]) if bateria else []
+    if itens_aparelho:
+        secoes.append(_secao("identidade", "O aparelho", itens_aparelho))
 
     cobertura = len(saidas)
     total = len(COMANDOS)
@@ -355,20 +440,41 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
             "cada uma diz o motivo, e nenhuma delas foi inventada."
         )
 
+    # “Nenhum problema” só pode ser dito se o scanner **conseguiu olhar**. Sem as
+    # leituras de saúde, a frase certa é “não deu para medir” — não “está tudo bem”.
     problemas = saude.get("problemas", [])
+    faltam_saude = [k for k in LEITURAS_DE_SAUDE if k not in saidas]
+    if problemas:
+        frase += (
+            f" O scanner achou {len(problemas)} problema(s); o principal é: "
+            f"{problemas[0]['titulo'].lower()}."
+        )
+    elif faltam_saude:
+        # Sem as leituras de saúde o scanner devolve “nenhum problema” — e essa
+        # frase, sozinha, é uma mentira por omissão. “Não deu para medir” é o
+        # que aconteceu.
+        frase += (
+            " Mas as leituras de saúde não vieram nesta passagem: não dá para dizer que está "
+            "tudo bem, só que não deu para medir."
+        )
+    elif saude.get("veredito"):
+        frase += " " + saude["veredito"]
+
     return {
         "ok": True,
         "alvo": "android",
         "serial": serial,
         "titulo": anatomia_relatorio.get("titulo") or serial,
         "lido_em": agora or _agora(),
-        "veredito": frase + (
-            f" O scanner achou {len(problemas)} problema(s); o principal é: {problemas[0]['titulo'].lower()}."
-            if problemas else " Nenhum problema nas áreas que o scanner mede."
-        ),
+        "veredito": frase,
         "secoes": secoes,
         "problemas": problemas,
-        "limitacoes": list(dict.fromkeys(list(medido.get("falhas", [])) + list(anatomia_relatorio.get("limitacoes", []))))[:12],
+        "otimizacoes": saude.get("otimizacoes", []),
+        "limitacoes": _limites_sem_repetir(
+            list(medido.get("falhas", []))
+            + list(saude.get("limitacoes", []))
+            + list(anatomia_relatorio.get("limitacoes", []))
+        ),
         "sem_root": list(SEM_ROOT),
         "nao_faz": list(diagnostico_celular.NAO_FAZ) + [
             "Não copia arquivo do aparelho: copiar é `celular.puxar`, com confirmação e só nas pastas de mídia.",
@@ -413,6 +519,16 @@ def em_texto(relatorio: dict[str, Any]) -> str:
         linhas.append("  O QUE ESTÁ ERRADO")
         for problema in relatorio["problemas"]:
             linhas.append(f"    [{problema['gravidade'].upper()}] {problema['titulo']} — {problema['medido']}")
+            for passo in problema.get("o_que_fazer", [])[:3]:
+                linhas.append(f"      - {passo}")
+            if problema.get("limite"):
+                linhas.append(f"      (limite: {problema['limite']})")
+        linhas.append("")
+    if relatorio.get("otimizacoes"):
+        linhas.append("  O QUE DÁ PARA MELHORAR")
+        for otimizacao in relatorio["otimizacoes"]:
+            marca = "" if otimizacao.get("medido") else "  (ganho de sensação, não medido)"
+            linhas.append(f"    - {otimizacao['titulo']}: {otimizacao['ganho']}{marca}")
         linhas.append("")
     if relatorio["sem_root"]:
         linhas.append("  O QUE NÃO DÁ SEM ROOT (e o JARVIS não usa root)")

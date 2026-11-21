@@ -2825,3 +2825,51 @@ lista de comandos e recusa `install`, `push`, `rm`, `reboot`, `su`.
 **A tela.** Anatomia ganhou o cartão “Até onde o JARVIS chega”, com badge
 “degrau N de 5”, o que ganha / o que falta / o que custa, e a lista do que o JARVIS
 **não** faz e por quê. Sem aparelho a rota responde **409** com o que ligar.
+
+### 0.92.6 — o primeiro relatório de verdade achou quatro defeitos
+
+> o relatório do `ver-tudo-no-celular.bat` no SM-A346MU (Android 16): “Passei por
+> 10 de 12 leituras… Nenhum problema nas áreas que o scanner mede”, com PARTIÇÕES
+> vazia na mesma tela que listava as pastas.
+
+A 0.92.5 juntou Anatomia, scanner e mapa de pastas numa passada. O desenho estava
+certo e a **junção** estava quebrada. O primeiro aparelho real mostrou o buraco:
+
+**A varredura não media o que o scanner lia.** A lista era escrita à mão, com 12
+comandos; o scanner de problemas procura por 19, chave por chave. Faltavam
+`getprop`, `dumpsys battery`, `df -k`, `/proc/meminfo`, `logcat`, `gfxinfo`,
+`dumpsys input` e mais. O scanner recebia um dicionário sem nada disso, não
+achava nada, e escrevia “nenhum problema” — **a mesma frase de um aparelho
+saudável**. Ausência de medida virou atestado de saúde, que é o pior defeito
+possível num relatório: o que tranquiliza sem ter olhado.
+
+A correção não foi acrescentar os 7 comandos que faltavam (isso voltaria a
+divergir na próxima skill): a lista da varredura agora **é derivada** da lista do
+scanner — `LEITURAS_DO_SCANNER = diagnostico_celular.COMANDOS` — e o que é só da
+varredura (mapa de pastas, `dumpsys meminfo`, apps de fábrica, partições) ficou
+num bloco separado e explícito. Um teste compara as duas listas para sempre.
+
+**O teste que deixou passar.** O dicionário de saídas de exemplo dos testes era
+menor que a lista de comandos. O teste rodava `montar()` com um `saidas` sem as
+chaves do scanner, e “passava” — porque o defeito era exatamente esse. Agora um
+teste cobra que **toda** leitura de `COMANDOS` tenha exemplo; se faltar, falha.
+
+**Partição negada virava seção vazia.** No Android 16 o `cat /proc/partitions`
+responde `Permission denied`. A seção sumia e parecia falha do JARVIS. Agora ela
+existe e diz o motivo, com o mesmo texto que o rodapé já usava para root.
+
+**Dois relatórios de memória, um jogado fora.** A seção `memoria` do scanner era
+substituída pela do `dumpsys meminfo`, que não publica `MemAvailable` — o número
+que decide se falta RAM. Agora as duas convivem, a do scanner primeiro.
+
+**A mesma negativa três vezes.** `Permission denied` aparecia três vezes, uma por
+módulo, cada uma com um prefixo. A dedup passou a ser pelo miolo do erro.
+
+**O título sem o modelo.** O cabeçalho abriu em “Android 16”: o `getprop` inteiro
+passa de 60 KB e a linha do modelo cai depois do corte. Agora, quando a chave não
+está na leitura, o `adb` é perguntado direto — `getprop ro.product.model` — em vez
+de aceitar um título cego.
+
+E a tela: a varredura só existia no console. A aba Anatomia ganhou o botão **“Ver
+tudo no aparelho”** e o cartão, com problemas, mapa, limites e o que não dá sem
+root. Um leitura que só existe em `.bat` não serve para quem não abre `.bat`.

@@ -93,7 +93,8 @@
    Scanner do celular (0.92.3): cada achado nasce com a medida que o sustenta.
    --------------------------------------------------------------------------- */
 .anatomia-escanear { align-self: flex-start; font-size: 8.5px; }
-.anatomia-scan { display: flex; flex-direction: column; gap: 14px; }
+.anatomia-scan,
+.anatomia-varredura { display: flex; flex-direction: column; gap: 14px; }
 .anatomia-veredito { margin: 6px 0 0; max-width: 68ch; color: var(--text-soft); font-size: 9.5px; line-height: 1.65; }
 .anatomia-scan-limpo {
   display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 13px;

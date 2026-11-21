@@ -186,3 +186,28 @@ Cada degrau recusado traz a `recusa` escrita — o motivo, não um “não”. O
 
 **Sem aparelho a rota não mente**: 409 `CONTROLE_CELULAR` com o que ligar, e
 `degrau_atual = 0`.
+
+## 10. A varredura agora mede o que jura medir (0.92.6)
+
+O primeiro relatório de verdade (SM-A346MU, Android 16) saiu com **“Nenhum
+problema nas áreas que o scanner mede”** — e estava errado. A varredura rodava
+12 leituras; o scanner procura 19, por nome exato. As 7 que faltavam eram
+`getprop`, `dumpsys battery`, `df -k`, `/proc/meminfo`, `logcat`, `gfxinfo` e
+`dumpsys input`. O scanner recebia um dicionário sem elas, não achava nada, e o
+“nada” virava “aparelho saudável”.
+
+Três regras ficaram no código para não voltar:
+
+1. **A lista é derivada.** `varredura.LEITURAS_DO_SCANNER = diagnostico_celular.COMANDOS`.
+   Uma leitura nova no scanner passa a valer na varredura sozinha.
+2. **Sem medida não há atestado.** Faltando `getprop`, bateria, `df -k`,
+   `/proc/meminfo` ou `ps`, o veredito é **“não deu para medir”** — nunca
+   “está tudo bem”.
+3. **Seção vazia é defeito.** Partição negada (`Permission denied` no Android 16)
+   vira uma linha que explica, em vez de uma seção em branco.
+
+O texto do console também passou a ter **O QUE ESTÁ ERRADO** (medida, causa e o
+que fazer) e **O QUE DÁ PARA MELHORAR**. Antes ele imprimia o mapa e o rodapé, e
+nada do diagnóstico.
+
+Total: **28 leituras** — 19 do scanner + 9 só da varredura.

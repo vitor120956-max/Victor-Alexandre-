@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - ver tudo no celular
-REM Versao: 0.92.5
+REM Versao: 0.92.6
 REM
 REM O caminho mais curto: com o celular ja conectado, este arquivo passa o
 REM JARVIS por todo o aparelho numa varredura so - anatomia, scanner de
@@ -26,7 +26,7 @@ echo     1. Depuracao USB ligada  (Ajustes -^> Opcoes do desenvolvedor)
 echo     2. Cabo de DADOS conectado (nao serve cabo so de carga)
 echo     3. "Permitir" tocado na tela do celular quando o aviso aparecer
 echo.
-echo   Sao cerca de 25 leituras, uma atras da outra: leva de 1 a 2 minutos.
+echo   Sao 28 leituras, uma atras da outra: leva de 1 a 2 minutos.
 echo   Nada e alterado no aparelho.
 echo.
 echo ------------------------------------------------------------
