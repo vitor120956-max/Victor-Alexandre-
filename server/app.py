@@ -847,16 +847,33 @@ def create_app(
                 content={"ok": False, "error": {"code": "ANATOMIA_ROKU", "message": str(exc)}},
             )
 
+    @application.get("/api/anatomia/android/sintomas")
+    def anatomia_android_sintomas() -> Any:
+        """As perguntas do relato — a tela mostra e o `scan` aceita os ids."""
+        return {"ok": True, "result": {"sintomas": diagnostico_celular_mod.sintomas()}}
+
     @application.get("/api/anatomia/android/scan")
-    def anatomia_android_scan(serial: str = Query(default="", max_length=64)) -> Any:
+    def anatomia_android_scan(
+        serial: str = Query(default="", max_length=64),
+        sintomas: str = Query(
+            default="",
+            max_length=200,
+            description="Ids separados por vírgula: tela-prende, frame-lento, se-mexe-sozinho, "
+            "so-para-apagar-tela, esquenta.",
+        ),
+    ) -> Any:
         """Scanner do celular: mede e diz o que está errado — sem alterar nada.
 
         0.92.3 — o dono pediu “passar um scanner” no aparelho para achar o que o
         deixa lento. A resposta é a mesma leitura de `anatomia`, só que julgada:
         cada achado traz a medida, a causa, o que fazer e o limite.
         """
+        marcados = [parte.strip() for parte in sintomas.split(",") if parte.strip()]
         try:
-            return {"ok": True, "result": diagnostico_celular_mod.diagnosticar(serial)}
+            return {
+                "ok": True,
+                "result": diagnostico_celular_mod.diagnosticar_por_sintoma(marcados, serial),
+            }
         except diagnostico_celular_mod.DiagnosticoError as exc:
             return JSONResponse(
                 status_code=409,

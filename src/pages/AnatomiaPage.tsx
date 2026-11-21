@@ -12,8 +12,8 @@ import {
   Tv,
   Wifi,
 } from 'lucide-react';
-import { escanearCelular, getAnatomiaFontes, lerAnatomia } from '../lib/api';
-import type { AnatomiaFontes, AnatomiaResultado, CelularDiagnostico } from '../lib/api';
+import { escanearCelular, getAnatomiaFontes, getSintomasCelular, lerAnatomia } from '../lib/api';
+import type { AnatomiaFontes, AnatomiaResultado, CelularDiagnostico, CelularSintoma, CelularSintomas } from '../lib/api';
 import '../anatomia.css';
 
 /**
@@ -62,7 +62,7 @@ const GRAVIDADE: Record<string, { rotulo: string; classe: string }> = {
  * linha que a pessoa lê se não ler mais nada. O passo a passo fica em sanfona
  * porque são muitos; o número medido nunca fica escondido.
  */
-function CartaoDiagnostico({ dados }: { dados: CelularDiagnostico }) {
+function CartaoDiagnostico({ dados }: { dados: CelularDiagnostico & { sintomas?: CelularSintomas } }) {
   const [aberto, setAberto] = useState<string>(dados.problemas[0]?.id ?? '');
   return (
     <section className="panel anatomia-scan">
@@ -74,6 +74,33 @@ function CartaoDiagnostico({ dados }: { dados: CelularDiagnostico }) {
         </div>
         <span className="local-badge"><ShieldCheck size={12} /> NADA FOI ALTERADO</span>
       </div>
+
+      {dados.sintomas && (
+        <div className="anatomia-suspeitas">
+          <h3><Stethoscope size={13} /> Pelo que você relatou, a ordem é esta</h3>
+          <p className="anatomia-veredito">{dados.sintomas.veredito}</p>
+          <ol>
+            {dados.sintomas.fila.slice(0, 4).map((suspeita, indice) => (
+              <li key={suspeita.id}>
+                <div className="anatomia-suspeita-topo">
+                  <span className="anatomia-suspeita-ordem">{indice + 1}</span>
+                  <strong>{suspeita.titulo}</strong>
+                  <span className={suspeita.medido_no_aparelho.length ? 'anatomia-suspeita-sim' : 'anatomia-suspeita-nao'}>
+                    {suspeita.medido_no_aparelho.length ? 'medido no aparelho' : 'sem medida no aparelho'}
+                  </span>
+                </div>
+                <p>{suspeita.porque}</p>
+                <div className="anatomia-suspeita-testes">
+                  <span>Teste mais barato</span>
+                  <ul>{suspeita.teste.map((passo) => <li key={passo}>{passo}</li>)}</ul>
+                </div>
+                <p className="anatomia-limite"><AlertTriangle size={12} /> se confirmar: {suspeita.o_que_confirma}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="anatomia-como-ler">{dados.sintomas.como_ler}</p>
+        </div>
+      )}
 
       {dados.problemas.length === 0 && (
         <p className="anatomia-scan-limpo">
@@ -162,8 +189,10 @@ export function AnatomiaPage() {
   const [erro, setErro] = useState('');
   const [ip, setIp] = useState('');
   const [carregando, setCarregando] = useState(false);
-  const [diagnostico, setDiagnostico] = useState<CelularDiagnostico | null>(null);
+  const [diagnostico, setDiagnostico] = useState<(CelularDiagnostico & { sintomas?: CelularSintomas }) | null>(null);
   const [escaneando, setEscaneando] = useState(false);
+  const [perguntas, setPerguntas] = useState<CelularSintoma[]>([]);
+  const [marcados, setMarcados] = useState<string[]>([]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -180,6 +209,14 @@ export function AnatomiaPage() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  // As perguntas vêm do servidor para existir uma versão só delas: se o módulo
+  // ganhar um sintoma novo, a tela ganha sem ninguém editar dois lugares.
+  useEffect(() => {
+    void getSintomasCelular()
+      .then(setPerguntas)
+      .catch(() => setPerguntas([]));
+  }, []);
 
   const ler = async (alvo: 'local' | 'android' | 'roku', parametros: { ip?: string; serial?: string } = {}) => {
     setLendo(alvo);
@@ -198,7 +235,7 @@ export function AnatomiaPage() {
     setEscaneando(true);
     setErro('');
     try {
-      setDiagnostico(await escanearCelular(serial));
+      setDiagnostico(await escanearCelular(serial, marcados));
     } catch (falha) {
       setDiagnostico(null);
       setErro(falha instanceof Error ? falha.message : 'O scanner não respondeu.');
@@ -206,6 +243,9 @@ export function AnatomiaPage() {
       setEscaneando(false);
     }
   };
+
+  const alternarSintoma = (id: string) =>
+    setMarcados((atuais) => (atuais.includes(id) ? atuais.filter((item) => item !== id) : [...atuais, id]));
 
   const alvoDe = (id: 'local' | 'android' | 'roku') => fontes?.alvos.find((alvo) => alvo.id === id);
 
@@ -261,6 +301,23 @@ export function AnatomiaPage() {
                     inputMode="decimal"
                   />
                 </label>
+              )}
+
+              {id === 'android' && perguntas.length > 0 && (
+                <div className="anatomia-sintomas">
+                  <span>O que você vê no aparelho?</span>
+                  {perguntas.map((pergunta) => (
+                    <label key={pergunta.id} className={marcados.includes(pergunta.id) ? 'is-marcado' : ''}>
+                      <input
+                        type="checkbox"
+                        checked={marcados.includes(pergunta.id)}
+                        onChange={() => alternarSintoma(pergunta.id)}
+                      />
+                      <span>{pergunta.pergunta}</span>
+                    </label>
+                  ))}
+                  <small>Marcar o que você vê muda a ordem das suspeitas — o scanner continua só lendo.</small>
+                </div>
               )}
 
               {!disponivel && alvo?.motivo && <p className="anatomia-motivo"><AlertTriangle size={13} /> {alvo.motivo}</p>}

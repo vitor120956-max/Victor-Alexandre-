@@ -460,3 +460,173 @@ def test_a_skill_do_scanner_existe_e_nao_tem_efeito_colateral():
     texto = skill.description.lower()
     assert "só leitura" in texto or "não altera" in texto
     assert "não desinstala" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.92.4 — “a tela trava, o frame fica lento, se mexe sozinho, e só para quando
+# apaga e liga a tela”
+# ---------------------------------------------------------------------------
+
+JANELA = (
+    "  Display: mDisplayId=0\n"
+    "  mCurrentFocus=Window{abc123 u0 com.instagram.android/com.instagram.android.MainActivity}\n"
+    "  mFocusedApp=AppWindowToken{def456 token=Token{abc123 ActivityRecord{1 u0 com.instagram.android/.MainActivity}}}\n"
+)
+
+INPUT = (
+    "  Device 2: touch\n"
+    "    Name: 'fts_ts'\n"
+    "  Device 5: gpio-keys\n"
+    "    Name: 'gpio_keys'\n"
+)
+
+ANR = (
+    "10-23 12:00:01.123  1234  1234 E ActivityManager: ANR in com.instagram.android\n"
+    "10-23 12:00:01.124  1234  1234 E ActivityManager: PID: 4321\n"
+    "10-23 12:00:01.125  1234  1234 E ActivityManager: Reason: Input dispatching timed out "
+    "(Waiting to send key event because the focused window has not finished rendering)\n"
+)
+
+GFXINFO = (
+    "Applications Graphics Acceleration Info:\n"
+    "** com.instagram.android/4321\n"
+    "  Total frames rendered: 1200\n"
+    "  Janky frames: 340 (28.33%)\n"
+    "** com.whatsapp/1111\n"
+    "  Total frames rendered: 800\n"
+    "  Janky frames: 8 (1.00%)\n"
+)
+
+
+def medido_com_tela(**trocas: str) -> dict:
+    base = {
+        "dumpsys window displays": JANELA,
+        "dumpsys input": INPUT,
+        "logcat -b system -d -t 400": ANR,
+        "dumpsys gfxinfo": GFXINFO,
+    }
+    base.update(trocas)
+    return medido(**base)
+
+
+def test_le_o_dispositivo_de_toque_e_a_janela_em_foco():
+    dados = medido_com_tela()
+    relatorio = dc.analisar(dados, agora=AGORA)
+    secao = next(s for s in relatorio["secoes"] if s["id"] == "toque")
+    valores = {i["rotulo"]: i["valor"] for i in secao["itens"]}
+    assert "fts_ts" in valores["Dispositivo de entrada"]
+    assert valores["Janela em foco"] == "com.instagram.android/com.instagram.android.MainActivity"
+
+
+def test_anr_vira_achado_com_o_app_e_o_motivo():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "app-nao-responde")
+    assert problema["gravidade"] == "alta"
+    assert "com.instagram.android" in problema["medido"]
+    assert "Input dispatching timed out" in problema["medido"]
+    assert any("Limpar cache" in passo for passo in problema["o_que_fazer"])
+
+
+def test_quadros_travados_viram_achado_grave_acima_de_25_por_cento():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "frame-lento")
+    assert problema["gravidade"] == "alta"
+    assert "28" in problema["medido"]
+    # O pacote medido é o pior, não o primeiro da lista.
+    assert "com.instagram.android" in problema["medido"]
+
+
+def test_frame_lento_medio_quando_esta_entre_10_e_25_por_cento():
+    meio = GFXINFO.replace("340 (28.33%)", "160 (13.33%)")
+    relatorio = dc.analisar(medido_com_tela(**{"dumpsys gfxinfo": meio}), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "frame-lento")
+    assert problema["gravidade"] == "media"
+
+
+def test_poucos_quadros_travados_nao_viram_achado():
+    bom = GFXINFO.replace("340 (28.33%)", "40 (3.33%)")
+    relatorio = dc.analisar(medido_com_tela(**{"dumpsys gfxinfo": bom}), agora=AGORA)
+    assert "frame-lento" not in _ids(relatorio)
+
+
+def test_tela_se_mexendo_vira_suspeita_de_toque_fantasma_com_os_testes():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "toque-fantasma")
+    assert problema["gravidade"] == "media"
+    # A frase tem de dizer que é suspeita medida pela consequência, não laudo.
+    assert "não um diagnóstico fechado" in problema["limite"]
+    # E os três testes que separam causa física de software estão lá.
+    texto = " ".join(problema["o_que_fazer"]).lower()
+    assert "capa" in texto and "película" in texto
+    assert "carregador" in texto
+    assert "mostrar toques" in texto
+
+
+def test_sem_medida_de_tela_nao_aparece_toque_fantasma():
+    relatorio = dc.analisar(medido(), agora=AGORA)  # aparelho saudável, sem ANR
+    assert "toque-fantasma" not in _ids(relatorio)
+
+
+def test_aparelho_quente_vira_sugestao_de_esfriar_antes_de_julgar():
+    relatorio = dc.analisar(
+        medido_com_tela(**{"for z in /sys/class/thermal/thermal_zone*": "cpu-0:82000\n"}), agora=AGORA
+    )
+    assert any(o["id"] == "esfriar-para-destravar" for o in relatorio["otimizacoes"])
+
+
+# ---------------------------------------------------------------------------
+# Cruzamento com o relato (0.92.4)
+# ---------------------------------------------------------------------------
+
+def test_os_sintomas_que_a_api_aceita_tem_pergunta():
+    lista = dc.sintomas()
+    assert {s["id"] for s in lista} >= {"tela-prende", "frame-lento", "se-mexe-sozinho", "so-para-apagar-tela"}
+    assert all(s["pergunta"].strip() for s in lista)
+
+
+def test_o_relato_do_dono_poe_toque_fantasma_em_primeiro():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    cruzado = dc.cruzar(relatorio, ["tela-prende", "frame-lento", "se-mexe-sozinho", "so-para-apagar-tela"])
+    assert cruzado["fila"][0]["id"] == "toque-fantasma"
+    assert "toque fantasma" in cruzado["veredito"].lower()
+    # E a fila é decrescente em pontos.
+    pontos = [c["pontos"] for c in cruzado["fila"]]
+    assert pontos == sorted(pontos, reverse=True)
+
+
+def test_so_relato_de_lentidao_nao_poe_toque_fantasma_em_primeiro():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    cruzado = dc.cruzar(relatorio, ["frame-lento"])
+    assert cruzado["fila"][0]["id"] != "toque-fantasma"
+
+
+def test_sem_sintoma_marcado_a_ordem_e_a_do_que_o_aparelho_mediu():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    cruzado = dc.cruzar(relatorio, [])
+    assert cruzado["sintomas_marcados"] == []
+    assert "Marque o que você vê" in cruzado["veredito"]
+    # A primeira da fila tem de ter medida no aparelho.
+    assert cruzado["fila"][0]["medido_no_aparelho"]
+
+
+def test_causa_sem_medida_no_aparelho_avisa_que_nao_confirmou():
+    saudavel = dc.analisar(medido(), agora=AGORA)
+    cruzado = dc.cruzar(saudavel, ["se-mexe-sozinho"])
+    primeira = cruzado["fila"][0]
+    assert primeira["id"] == "toque-fantasma"
+    assert "não mostrou medida" in cruzado["veredito"]
+
+
+def test_sintoma_desconhecido_e_ignorado_sem_quebrar():
+    relatorio = dc.analisar(medido(), agora=AGORA)
+    cruzado = dc.cruzar(relatorio, ["vibra-sozinho", "se-mexe-sozinho"])
+    assert cruzado["sintomas_marcados"] == ["se-mexe-sozinho"]
+
+
+def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
+    relatorio = dc.analisar(medido_com_tela(), agora=AGORA)
+    relatorio["sintomas"] = dc.cruzar(relatorio, ["se-mexe-sozinho", "so-para-apagar-tela", "frame-lento"])
+    texto = dc.em_texto(relatorio)
+    assert "O QUE VOCÊ RELATOU — SUSPEITAS EM ORDEM" in texto
+    assert "Toque fantasma" in texto
+    assert "teste:" in texto

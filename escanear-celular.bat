@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - escanear o celular
-REM Versao: 0.92.3
+REM Versao: 0.92.4
 REM
 REM Passa um scanner no celular e diz o que esta errado, com o que fazer.
 REM SO LEITURA: nao desinstala, nao limpa cache, nao muda ajuste, nao reinicia.
@@ -25,6 +25,11 @@ echo     2. Conecte o cabo (tem de ser cabo de dados, nao so de carga).
 echo     3. Toque em "Permitir" no aviso que aparece na tela do celular.
 echo.
 echo   O scanner so LE. Nada e alterado no aparelho.
+echo.
+echo   Ele vai perguntar o que voce ve no aparelho (tela que trava,
+echo   frame lento, tela que se mexe sozinha). Responda com os
+echo   numeros separados por espaco - sao essas respostas que
+echo   colocam a suspeita certa em primeiro lugar.
 echo.
 echo ------------------------------------------------------------
 echo.

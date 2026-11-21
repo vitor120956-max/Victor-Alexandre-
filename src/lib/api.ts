@@ -1295,10 +1295,50 @@ export interface CelularDiagnostico {
  * O `409` traz a frase que resolve (variável, cabo, “Permitir”); ela vai
  * inteira para a tela, porque é o que a pessoa precisa ler.
  */
-export async function escanearCelular(serial = ''): Promise<CelularDiagnostico> {
-  const consulta = serial ? `?serial=${encodeURIComponent(serial)}` : '';
-  const resposta = await apiFetch<{ ok: boolean; result: CelularDiagnostico }>(
-    `/api/anatomia/android/scan${consulta}`,
+export interface CelularSintoma {
+  id: string;
+  titulo: string;
+  pergunta: string;
+}
+
+export interface CelularSuspeita {
+  id: string;
+  titulo: string;
+  pontos: number;
+  porque: string;
+  teste: string[];
+  o_que_confirma: string;
+  medido_no_aparelho: string[];
+}
+
+export interface CelularSintomas {
+  sintomas_marcados: string[];
+  fila: CelularSuspeita[];
+  veredito: string;
+  como_ler: string;
+}
+
+/** As perguntas do relato — a mesma lista que o `scan` aceita em `sintomas`. */
+export async function getSintomasCelular(): Promise<CelularSintoma[]> {
+  const resposta = await apiFetch<{ ok: boolean; result: { sintomas: CelularSintoma[] } }>(
+    '/api/anatomia/android/sintomas',
+  );
+  return resposta.result.sintomas;
+}
+
+/**
+ * Passa o scanner no celular — só leitura.
+ *
+ * `sintomas` é o que a pessoa vê; sem eles a resposta é só a medida. Com eles,
+ * a fila de suspeitas sai em ordem e cada uma traz o teste mais barato.
+ */
+export async function escanearCelular(serial = '', sintomas: string[] = []): Promise<CelularDiagnostico & { sintomas?: CelularSintomas }> {
+  const consulta = new URLSearchParams();
+  if (serial) consulta.set('serial', serial);
+  if (sintomas.length) consulta.set('sintomas', sintomas.join(','));
+  const sufixo = consulta.toString() ? `?${consulta}` : '';
+  const resposta = await apiFetch<{ ok: boolean; result: CelularDiagnostico & { sintomas?: CelularSintomas } }>(
+    `/api/anatomia/android/scan${sufixo}`,
   );
   return resposta.result;
 }

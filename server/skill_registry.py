@@ -2256,6 +2256,15 @@ class CelularDiagnosticoInput(BaseModel):
         title="Aparelho",
         json_schema_extra={"description": "Serial do `adb devices`. Vazio usa o primeiro aparelho autorizado."},
     )
+    sintomas: str = Field(
+        default="",
+        max_length=200,
+        title="O que você vê",
+        json_schema_extra={
+            "description": "Ids separados por vírgula: tela-prende, frame-lento, se-mexe-sozinho, "
+            "so-para-apagar-tela, esquenta. Com eles, as suspeitas saem em ordem."
+        },
+    )
 
 
 class CelularPuxarInput(BaseModel):
@@ -4761,8 +4770,9 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         # com a medida que sustenta cada achado. Só leitura — nem dry-run muda
         # nada, porque a leitura não muda nada.
         assert isinstance(data, CelularDiagnosticoInput)
+        marcados = [parte.strip() for parte in (data.sintomas or "").split(",") if parte.strip()]
         try:
-            return diagnostico_celular.diagnosticar(data.serial)
+            return diagnostico_celular.diagnosticar_por_sintoma(marcados, data.serial)
         except diagnostico_celular.DiagnosticoError as exc:
             raise SkillError(str(exc)) from exc
 
@@ -6314,8 +6324,10 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
             "pouca memória livre, bateria gasta (capacidade de fábrica pelo `charge_full`/`charge_full_design`), "
             "aquecimento com throttling, patch de segurança antigo, app travando no logcat, build de teste e root. "
             "Cada achado traz a medida, a causa provável, o passo a passo que a pessoa executa e o limite — "
-            "e as otimizações dizem quando o ganho não foi medido. Não desinstala, não limpa cache, não muda "
-            "ajuste e não reinicia: quem mexe é você, na tela do aparelho.",
+            "e as otimizações dizem quando o ganho não foi medido. Com o relato do dono (tela que trava, "
+            "frame lento, tela que se mexe sozinha, só parar ao apagar a tela), cruza o relato com a medida "
+            "e devolve as suspeitas em ordem, cada uma com o teste mais barato. Não desinstala, não limpa "
+            "cache, não muda ajuste e não reinicia: quem mexe é você, na tela do aparelho.",
             "Celular",
             CelularDiagnosticoInput,
             celular_diagnostico_handler,

@@ -139,3 +139,39 @@
   background: rgba(255, 255, 255, .06); color: var(--muted-2, var(--muted));
   font-family: var(--mono); font-size: 6.5px; letter-spacing: .05em; text-transform: uppercase;
 }
+
+/* ---------------------------------------------------------------------------
+   Relato do dono (0.92.4): “a tela trava, o frame fica lento, se mexe sozinho
+   e só para quando apaga e liga a tela”. A pergunta vem antes do botão porque
+   é ela que muda a resposta.
+   --------------------------------------------------------------------------- */
+.anatomia-sintomas { display: flex; flex-direction: column; gap: 5px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .012); }
+.anatomia-sintomas > span { color: var(--accent); font-family: var(--mono); font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
+.anatomia-sintomas label { display: flex; align-items: flex-start; gap: 7px; padding: 3px 0; color: var(--muted); font-size: 8.5px; line-height: 1.5; cursor: pointer; }
+.anatomia-sintomas label.is-marcado { color: var(--text); }
+.anatomia-sintomas input { margin-top: 1px; accent-color: var(--accent); }
+.anatomia-sintomas small { color: var(--muted-2, var(--muted)); font-size: 7.5px; line-height: 1.5; }
+
+.anatomia-suspeitas { display: flex; flex-direction: column; gap: 10px; padding: 13px; border: 1px solid rgba(var(--accent-rgb, 126, 214, 165), .26); border-radius: 9px; background: rgba(var(--accent-rgb, 126, 214, 165), .035); }
+.anatomia-suspeitas > h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--accent); font-family: var(--mono); font-size: 7.5px; letter-spacing: .09em; text-transform: uppercase; }
+.anatomia-suspeitas > ol { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.anatomia-suspeitas > ol > li { display: flex; flex-direction: column; gap: 6px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0, 0, 0, .12); }
+.anatomia-suspeita-topo { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.anatomia-suspeita-topo strong { color: var(--text); font-size: 9.5px; font-weight: 560; }
+.anatomia-suspeita-ordem {
+  display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%;
+  background: rgba(var(--accent-rgb, 126, 214, 165), .16); color: var(--accent);
+  font-family: var(--mono); font-size: 7.5px;
+}
+.anatomia-suspeita-sim, .anatomia-suspeita-nao {
+  padding: 2px 6px; border-radius: 4px; font-family: var(--mono);
+  font-size: 6.5px; letter-spacing: .05em; text-transform: uppercase;
+}
+.anatomia-suspeita-sim { background: rgba(var(--accent-rgb, 126, 214, 165), .14); color: var(--accent); }
+.anatomia-suspeita-nao { background: rgba(255, 255, 255, .05); color: var(--muted-2, var(--muted)); }
+.anatomia-suspeitas li > p { margin: 0; color: var(--muted); font-size: 8.5px; line-height: 1.6; }
+.anatomia-suspeita-testes { display: flex; flex-direction: column; gap: 3px; }
+.anatomia-suspeita-testes > span { color: var(--muted-2, var(--muted)); font-family: var(--mono); font-size: 6.5px; letter-spacing: .07em; text-transform: uppercase; }
+.anatomia-suspeita-testes ul { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 15px; }
+.anatomia-suspeita-testes li { color: var(--text-soft); font-size: 8.5px; line-height: 1.55; }
+.anatomia-como-ler { margin: 0; color: var(--muted-2, var(--muted)); font-size: 7.5px; line-height: 1.55; }

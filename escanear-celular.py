@@ -55,11 +55,48 @@ def _salvar(relatorio: dict) -> Path:
     return destino
 
 
+def _perguntar_sintomas() -> list[str]:
+    """Pergunta o que a pessoa vê, uma por uma, com número para teclar.
+
+    É a parte que muda a resposta: “a tela trava” e “a tela se mexe sozinha” são
+    causas diferentes, e só quem está com o aparelho na mão sabe qual é. Sem
+    teclado (ou com `--sem-perguntas`), o scanner segue só com o que mediu.
+    """
+    from server import diagnostico_celular as dc
+
+    if not sys.stdin.isatty():
+        return []
+    marcar = ["tela-prende", "frame-lento", "se-mexe-sozinho", "so-para-apagar-tela", "esquenta"]
+    print("  Antes de medir, o que você vê no aparelho?")
+    print()
+    for indice, chave in enumerate(marcar, start=1):
+        print(f"    {indice}. {dc.SINTOMAS[chave]['pergunta']}")
+    print()
+    print("  Digite os números separados por espaço (Enter vazio = não responder).")
+    try:
+        resposta = input("  > ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return []
+    escolhidos: list[str] = []
+    for pedaco in resposta.replace(",", " ").split():
+        if pedaco.isdigit() and 1 <= int(pedaco) <= len(marcar):
+            chave = marcar[int(pedaco) - 1]
+            if chave not in escolhidos:
+                escolhidos.append(chave)
+    return escolhidos
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Scanner do celular: mede e diz o que está errado.")
     parser.add_argument("serial", nargs="?", default="", help="Serial do `adb devices`; vazio usa o primeiro autorizado.")
     parser.add_argument("--json", action="store_true", help="Imprime o JSON em vez do texto.")
     parser.add_argument("--sem-arquivo", action="store_true", help="Não salva o relatório em storage/diagnosticos.")
+    parser.add_argument(
+        "--sintomas",
+        default="",
+        help="Ids separados por vírgula (tela-prende,frame-lento,se-mexe-sozinho,so-para-apagar-tela,esquenta).",
+    )
+    parser.add_argument("--sem-perguntas", action="store_true", help="Não pergunta nada; só mede.")
     argumentos = parser.parse_args(argv)
 
     _ambiente()
@@ -67,8 +104,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from server import diagnostico_celular as dc
 
+    marcados = [parte.strip() for parte in argumentos.sintomas.split(",") if parte.strip()]
+    if not marcados and not argumentos.sem_perguntas and not argumentos.json:
+        marcados = _perguntar_sintomas()
+
     try:
-        relatorio = dc.diagnosticar(argumentos.serial)
+        relatorio = dc.diagnosticar_por_sintoma(marcados, argumentos.serial)
     except dc.DiagnosticoError as exc:
         print()
         print("  O scanner não conseguiu ler o aparelho:")
@@ -77,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         print("  Nada foi alterado no celular. Resolva o aviso acima e rode de novo.")
         print()
         return 1
+
+    if not marcados:
+        relatorio.pop("sintomas", None)
 
     if argumentos.json:
         print(json.dumps(relatorio, ensure_ascii=False, indent=2))

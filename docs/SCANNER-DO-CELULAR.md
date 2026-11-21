@@ -32,12 +32,54 @@ resposta manda para **Máquina → Preparar celular**.
 | temperatura | `/sys/class/thermal/thermal_zone*` | qualquer zona acima de 70 °C |
 | segurança | `ro.build.version.security_patch` | último patch há 240 dias ou mais |
 | travamentos | `logcat -b crash -d` | aparece `Process:` de um app |
+| não responde | `logcat -b system -d` | aparece `ANR in <pacote>` |
+| quadros | `dumpsys gfxinfo` | 10% ou mais de quadros travados |
+| toque | `dumpsys input`, `dumpsys window displays` | dispositivo de entrada e janela em foco |
 | origem | `ro.build.tags`, `which su` | `test-keys` ou binário de root |
 | ajustes | `settings get global …` | animação em 1.0 (vira sugestão, não problema) |
 
 **Nenhum comando altera nada.** Não existe `pm uninstall`, `settings put`,
 `reboot`, `push`, `rm` nem `su` na lista — e há teste que varre essa lista
 palavra por palavra.
+
+## 2.1 O relato do dono vira pergunta (0.92.4)
+
+> *“as vezes minha tela trava ou ta lenta o frame meio q fica lento do nada ou
+> ele comeca a se mexer sozinho so para quando desliga a tela e ligo de volta”*
+
+Esse relato é uma **assinatura**, não um sintoma solto. A cadeia é:
+
+1. o controlador de toque entrega evento que ninguém pediu (*toque fantasma*);
+2. o Android espera o app responder (vira **ANR**);
+3. a fila de desenho atrasa (**quadro travado**);
+4. o app reage a toques fora de hora — e a tela “se mexe”.
+
+**Apagar a tela desliga o controlador de toque e esvazia a fila.** É a única
+causa em que esse gesto resolve na hora. Diagnóstico de toque fantasma não
+técnico, mas é a leitura que fecha com o sintoma.
+
+Por isso o scanner passou a perguntar **o que você vê** (cinco perguntas, com
+número para teclar) e a ordenar as suspeitas cruzando relato + medida:
+
+| pergunta | o que ela separa |
+|---|---|
+| A tela congela e volta? | app travado (ANR) × controlador |
+| O rolar fica lento? | quadro travado × memória × calor |
+| Se mexe sozinha? | **controlador de toque** (a única que gera toque sem dedo) |
+| Só para ao apagar e ligar a tela? | **controlador** (desliga o hardware de toque) |
+| Esquenta antes? | throttling |
+
+Cada suspeita vem com **o teste mais barato** — tirar capa e película, testar
+sem carregador, ligar “Mostrar toques” — e com **o que confirma**. A tela marca
+`medido no aparelho` ou `sem medida no aparelho`: o relato ordena, mas não vira
+laudo.
+
+### O que o scanner **não** consegue ver
+
+O Android não publica “toque sem dedo”. O scanner mede a **consequência** (ANR,
+quadro travado, janela em foco) e diz, na cara, que a conclusão de hardware é
+suspeita — não diagnóstico fechado. Quem fecha é o teste de toque do próprio
+aparelho, com capa e película fora.
 
 ## 3. O formato de um achado
 

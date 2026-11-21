@@ -105,6 +105,14 @@ COMANDOS: tuple[tuple[str, ...], ...] = (
     ("shell", "pm", "list", "packages", "-3"),
     ("shell", "logcat", "-b", "crash", "-d", "-t", "80"),
     ("shell", "which", "su"),
+    # 0.92.4 — o sintoma do dono: “a tela trava, o frame fica lento, começa a se
+    # mexer sozinho e só para quando desliga e liga a tela”. Três leituras
+    # respondem isso: o que tocou por último, o que o sistema registrou de ANR,
+    # e quem está desenhando os quadros.
+    ("shell", "dumpsys", "input"),
+    ("shell", "dumpsys", "window", "displays"),
+    ("shell", "logcat", "-b", "system", "-d", "-t", "400"),
+    ("shell", "dumpsys", "gfxinfo"),
 )
 
 _PALAVRAS_PROIBIDAS = {
@@ -123,6 +131,11 @@ def _auditar_comandos() -> None:
             continue
         if comando[:2] == ("shell", "pm"):
             assert comando[2:] == ("list", "packages", "-3"), corpo
+            continue
+        if comando[:2] in {("shell", "dumpsys"), ("shell", "logcat")}:
+            # `dumpsys` sem argumento de escrita só imprime estado; `logcat -d`
+            # lê o buffer e encerra. Nenhum dos dois altera o aparelho.
+            assert "clear" not in comando and "set" not in comando, corpo
             continue
         if comando[:3] == ("shell", "which", "su"):
             # `which su` só pergunta se existe binário de superusuário. Não
@@ -341,6 +354,103 @@ def ler_apps(texto: str) -> list[str]:
     )
 
 
+_RE_JANELA = re.compile(r"m(?:CurrentFocus|FocusedApp|FocusedWindow)=(.+)")
+
+
+def ler_janela_em_foco(texto: str) -> str:
+    """Qual janela está em foco — é ela que recebe o toque.
+
+    O `dumpsys window displays` publica a linha inteira (`mCurrentFocus=Window{abc
+    u0 com.app/com.app.MainActivity}`); o formato muda entre fabricantes, então o
+    que vale é achar `pacote/atividade` em qualquer posição da linha.
+    """
+    for linha in (texto or "").splitlines():
+        achado = _RE_JANELA.search(linha)
+        if not achado:
+            continue
+        valor = achado.group(1).strip().rstrip("}")
+        if not valor or valor.startswith("null"):
+            continue
+        # Primeiro tenta `u0 pacote/atividade` (o formato do Android moderno).
+        dentro = re.search(r"\bu0\s+([A-Za-z0-9_.]+/[A-Za-z0-9_.$]+)", valor)
+        if dentro:
+            return dentro.group(1)
+        # Senão, qualquer `pacote/atividade` solto na linha.
+        solto = re.search(r"([A-Za-z0-9_.]+/[A-Za-z0-9_.$]+)", valor)
+        if solto:
+            return solto.group(1)
+    return ""
+
+
+def ler_input_dumpsys(texto: str) -> dict[str, Any]:
+    """O que o `dumpsys input` diz sobre o toque: dispositivo e último evento.
+
+    Interessa o **dispositivo de entrada** (nome do controlador de toque) e há
+    quanto tempo foi o último toque. Sem esses dois, não dá para separar “a tela
+    se mexeu sozinha” de “o app reagiu a um toque que chegou atrasado”.
+    """
+    nomes: list[str] = []
+    for linha in (texto or "").splitlines():
+        achado = re.search(r"Name:\s*['\"]?([^'\"\n]+)", linha)
+        if achado:
+            nome = achado.group(1).strip()
+            if nome and nome not in nomes:
+                nomes.append(nome)
+    return {"dispositivos": nomes[:8]}
+
+
+def ler_anr(texto: str) -> list[dict[str, str]]:
+    """`ANR in <pacote>` e `Reason:` — o app que parou de responder.
+
+    ANR é o “não está respondendo” do Android: a tela trava, o toque some ou é
+    entregue tarde. O motivo separa “app travado” de “sistema sobrecarregado”.
+    """
+    achados: list[dict[str, str]] = []
+    linhas = (texto or "").splitlines()
+    for indice, linha in enumerate(linhas):
+        achado = re.search(r"ANR in ([A-Za-z0-9_.]+)", linha)
+        if not achado:
+            continue
+        pacote = achado.group(1)
+        motivo = ""
+        for seguinte in linhas[indice + 1:indice + 4]:
+            if "Reason:" in seguinte:
+                motivo = seguinte.split("Reason:", 1)[1].strip()
+                break
+        if not any(item["pacote"] == pacote for item in achados):
+            achados.append({"pacote": pacote, "motivo": motivo})
+    return achados[:6]
+
+
+def ler_gfxinfo(texto: str) -> dict[str, Any]:
+    """Tempo de desenho por app. É o número por trás de “o frame fica lento”.
+
+    O `dumpsys gfxinfo` publica `Total frames rendered`, `Janky frames` e o
+    percentual de quadros lentos por pacote. Só é lido o pacote com mais quadros
+    travados — o resto seria lista para rolar.
+    """
+    atual = ""
+    pacotes: list[dict[str, Any]] = []
+    for linha in (texto or "").splitlines():
+        achado = re.search(r"(?<!\S)([A-Za-z][A-Za-z0-9_.]*)\s*/\s*\d+", linha)
+        if achado:
+            atual = achado.group(1)
+            continue
+        total = re.search(r"Total frames rendered:\s*(\d+)", linha)
+        janky = re.search(r"Janky frames:\s*(\d+)\s*\(([\d.]+)%\)", linha)
+        if total and atual:
+            pacotes.append({"pacote": atual, "quadros": int(total.group(1))})
+        elif janky and pacotes:
+            pacotes[-1].update(
+                {"travados": int(janky.group(1)), "pct_travados": float(janky.group(2))}
+            )
+    validos = [p for p in pacotes if p.get("quadros")]
+    if not validos:
+        return {}
+    pior = max(validos, key=lambda p: (p.get("pct_travados", 0), p.get("travados", 0)))
+    return pior
+
+
 def _dias_desde(data_iso: str, agora: datetime) -> int | None:
     texto = (data_iso or "").strip()
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", texto):
@@ -425,6 +535,14 @@ def analisar(
     animacao = ler_escala(saidas.get("settings get global window_animation_scale", ""))
     apps = ler_apps(saidas.get("pm list packages -3", ""))
     crashes = ler_crash(saidas.get("logcat -b crash -d -t 80", ""))
+    # 0.92.4 — sintoma de tela: trava, frame lento, “se mexe sozinho”, e o
+    # desligar/ligar da tela resolve. Três medidas separam as causas: ANR (app que
+    # não responde), quadro travado (o desenho atrasou) e toque fantasma (entrada
+    # chegando sem dedo na tela).
+    anrs = ler_anr(saidas.get("logcat -b system -d -t 400", ""))
+    gfx = ler_gfxinfo(saidas.get("dumpsys gfxinfo", ""))
+    janela = ler_janela_em_foco(saidas.get("dumpsys window displays", ""))
+    entrada = ler_input_dumpsys(saidas.get("dumpsys input", ""))
     root = (saidas.get("which su", "") or "").strip()
 
     problemas: list[dict[str, Any]] = []
@@ -743,6 +861,116 @@ def analisar(
             "O JARVIS nunca usa root: nem para ler, nem para “otimizar”.",
         ))
 
+    # ---- tela: trava, frame lento, “se mexe sozinho” (0.92.4)
+    #
+    # O relato do dono, palavra por palavra: “as vezes minha tela trava ou ta
+    # lenta o frame meio q fica lento do nada ou ele comeca a se mexer sozinho
+    # so para quando desliga a tela e ligo de volta”.
+    #
+    # A sequência é a assinatura de uma causa só: o controlador de toque entrega
+    # evento que ninguém pediu (fantasma), o Android espera o app responder
+    # (ANR), a fila de desenho atrasa (frame lento) e o app reage a toques que
+    # chegaram fora de hora (a tela “se mexe”). Desligar a tela desliga o
+    # controlador de toque e esvazia a fila — e é por isso que só isso resolve.
+    #
+    # Aqui ficam TRÊS achados possíveis, e cada um exige medida própria. Se o
+    # aparelho não publicou, a resposta não inventa: diz que não viu.
+    tela = janela or ""
+    if anrs:
+        pior = anrs[0]
+        motivos = "; ".join(sorted({a["motivo"] for a in anrs if a["motivo"]}))
+        problemas.append(_problema(
+            "app-nao-responde",
+            "alta",
+            "Um app parou de responder e travou a tela",
+            f"ANR registrado em: {', '.join(a['pacote'] for a in anrs[:3])}"
+            + (f" — motivo: {motivos}" if motivos else " (o sistema não escreveu o motivo)."),
+            "ANR é o “não está respondendo” do Android. Enquanto a janela daquele app está presa, "
+            "o toque é engolido ou entregue minutos depois — o que aparece como tela travada e, em "
+            "seguida, como toque em lugar nenhum.",
+            [
+                f"Se o app do ANR é {pior['pacote']}: atualize na loja e, se repetir, "
+                "Ajustes → Apps → [app] → Armazenamento → Limpar cache.",
+                "Se o ANR repete em apps diferentes, o problema não é o app — é o sistema "
+                "sobrecarregado: veja memória e armazenamento nos outros achados.",
+                "Se o motivo citar “Input dispatching timed out”, o toque chegou e o app não "
+                "terminou de desenhar: é a mesma cadeia do frame lento, abaixo.",
+            ],
+            "O ANR diz qual app travou e o motivo registrado; o motivo interno do travamento "
+            "exigiria o relatório completo e root.",
+        ))
+    if gfx and gfx.get("quadros", 0) >= 300 and gfx.get("pct_travados", 0) >= 10:
+        problemas.append(_problema(
+            "frame-lento",
+            "alta" if gfx["pct_travados"] >= 25 else "media",
+            "Os quadros estão travando",
+            f"{gfx['pacote']}: {gfx.get('travados', 0):,} de {gfx['quadros']:,} quadros travados "
+            f"({gfx['pct_travados']:.0f}%).".replace(",", "."),
+            "Quadro “travado” (janky) é o quadro que passou do tempo de 16 ms. Acima de ~10% o "
+            "olho percebe como lentidão no rolar e no toque; acima de 25% a tela parece parar.",
+            [
+                f"No {gfx['pacote']}: Ajustes → Apps → Armazenamento → Limpar cache; se continuar, "
+                "reinstale o app.",
+                "Feche os apps que ficam em segundo plano — o frame também atrasa quando falta memória.",
+                "Se a proporção é alta em QUALQUER app aberto, inclusive Ajustes, o problema é o "
+                "sistema ou o hardware, não um app específico: os outros achados dizem qual.",
+            ],
+            "O número é do período que o Android guardou desde o último reinício; não mede "
+            "o que aconteceu antes disso.",
+        ))
+    if sensores and max(s["c"] for s in sensores) >= 70:
+        # Já existe o achado “aquecendo”; aqui a ligação com o sintoma, porque é
+        # ela que explica “do nada”. Só entra quando o aparelho está quente.
+        otimizacoes.append(_otimizacao(
+            "esfriar-para-destravar",
+            "Deixar o aparelho esfriar antes de julgar a lentidão",
+            "o travamento por calor (throttling) some quando a temperatura cai",
+            [
+                "Tire a capa, feche o app pesado e deixe o aparelho longe do sol por 10 minutos.",
+                "Use Ajustes → Bateria para ver qual app está gastando enquanto a tela está apagada.",
+            ],
+            "Não resfrie na geladeira nem com ventilador úmido: condensação estraga o aparelho.",
+            True,
+        ))
+    if entrada.get("dispositivos"):
+        secoes.append({
+            "id": "toque",
+            "titulo": "Entrada e toque",
+            "itens": [
+                {"rotulo": "Dispositivo de entrada", "valor": ", ".join(entrada["dispositivos"][:4])},
+                {"rotulo": "Janela em foco", "valor": tela or "não publicada"},
+            ],
+        })
+        # Toque fantasma: o sintoma clássico de controlador de toque com defeito ou
+        # de carga/capa atrapalhando. O Android não publica “toque sem dedo”, então
+        # o achado é de **pendência**, não de leitura: ele só aparece quando o
+        # relato bate com a assinatura (frame lento OU ANR + janela em foco).
+        if (anrs or (gfx and gfx.get("pct_travados", 0) >= 10)) and janela:
+            problemas.append(_problema(
+                "toque-fantasma",
+                "media",
+                "Padrão compatível com toque fantasma (a tela se mexendo sozinha)",
+                f"Com {janela} em foco, o sistema registrou "
+                + ("ANR de entrada" if anrs else f"{gfx.get('pct_travados', 0):.0f}% de quadros travados")
+                + ". O toque não aparece como “sem dedo” em lugar nenhum — o Android não publica isso.",
+                "Controlador de toque (o vidro, o flat e o conector) com mau contato, capa apertando a "
+                "borda, película mal colada ou carregador sem aterramento injetam toque que ninguém fez. "
+                "O app recebe, reage, e a tela parece ter vida própria — até a tela apagar e o "
+                "controlador reiniciar.",
+                [
+                    "Tire a capa e a película e teste um dia inteiro: é a causa mais comum e a mais barata de eliminar.",
+                    "Teste sem carregador e com outro carregador (de preferência o original, em tomada aterrada).",
+                    "No próprio aparelho, abra o teste de toque: Ajustes → Suporte/Diagnóstico → Toque "
+                    "(o nome muda por fabricante) — ou ligue as “Opções do desenvolvedor → Mostrar toques” "
+                    "e veja se aparece bolinha sem você encostar.",
+                    "Se aparecer toque sozinho no teste, com capa e película fora: é o vidro/controlador, "
+                    "e o conserto é de assistência (troca do conjunto tela, não de software).",
+                ],
+                "O JARVIS mede a consequência (travamento, toque atrasado), não o dedo fantasma: o "
+                "Android não expõe esse evento. Este achado é a leitura mais provável do conjunto — "
+                "não um diagnóstico fechado de hardware.",
+            ))
+
     # ---- ordenação: gravidade primeiro
     ordem = {"alta": 0, "media": 1, "baixa": 2}
     problemas.sort(key=lambda p: ordem.get(p["gravidade"], 3))
@@ -797,6 +1025,211 @@ def diagnosticar(
     return analisar(coletar(alvo, rodar=rodar), agora=agora)
 
 
+# ---------------------------------------------------------------------------
+# O relato do dono vira pergunta, e a pergunta vira ordem de suspeita (0.92.4)
+# ---------------------------------------------------------------------------
+
+SINTOMAS: dict[str, dict[str, str]] = {
+    "tela-prende": {
+        "titulo": "A tela prende e depois volta",
+        "pergunta": "A tela congela por alguns segundos e depois volta a responder?",
+    },
+    "frame-lento": {
+        "titulo": "O frame fica lento",
+        "pergunta": "O rolar e o toque ficam lentos, como se o desenho estivesse atrasado?",
+    },
+    "se-mexe-sozinho": {
+        "titulo": "A tela se mexe sozinha",
+        "pergunta": "O aparelho toca, rola ou abre coisas sem você encostar?",
+    },
+    "so-para-apagar-tela": {
+        "titulo": "Só para quando apaga e liga a tela",
+        "pergunta": "Desligar a tela e ligar de volta é o que faz o problema passar?",
+    },
+    "esquenta": {
+        "titulo": "Esquenta antes de ficar lento",
+        "pergunta": "O aparelho esquenta logo antes de travar ou ficar lento?",
+    },
+}
+
+# A matriz. Cada causa lista as evidências que a sustentam: se o relato tem a
+# evidência, a causa sobe; se não tem, continua possível mas desce.
+#
+# A ordem não é opinião: o sintoma que o dono descreveu — frame lento, mexer
+# sozinho e **só parar quando a tela apaga** — é a assinatura do controlador de
+# toque, porque apagar a tela é exatamente o que desliga esse controlador e
+# esvazia a fila de toque/desenho. Nenhuma outra causa tem esse “desliga e liga”.
+CAUSAS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "toque-fantasma",
+        "titulo": "Toque fantasma no vidro (controlador de toque)",
+        "forca": 4,
+        "evidencias": {"se-mexe-sozinho": 3, "so-para-apagar-tela": 3, "frame-lento": 1, "tela-prende": 1},
+        "porque": (
+            "Apagar a tela desliga o controlador de toque e esvazia a fila de eventos. É a única "
+            "causa em que esse gesto resolve na hora — e é a que combina com “se mexe sozinho”."
+        ),
+        "teste": [
+            "Tire capa e película e use um dia inteiro.",
+            "Teste sem carregador, e depois com outro carregador em tomada aterrada.",
+            "Ligue “Opções do desenvolvedor → Mostrar toques” e veja se aparece bolinha sem você encostar.",
+        ],
+        "vira": "troca do conjunto tela em assistência, se o toque aparecer no teste com capa e película fora.",
+    },
+    {
+        "id": "app-travado",
+        "titulo": "Um app específico travando (ANR)",
+        "forca": 3,
+        "evidencias": {"tela-prende": 3, "frame-lento": 2},
+        "porque": (
+            "App que não responde prende a janela em foco: o toque é engolido e a tela parece "
+            "travada. Mas o problema fica no app: trocar de app melhora, e apagar a tela não faz diferença."
+        ),
+        "teste": [
+            "Anote em quais apps acontece. Se é sempre o mesmo, é ele.",
+            "Atualize o app e limpe o cache (não os dados).",
+        ],
+        "vira": "desinstalar e reinstalar o app, ou abandonar o app.",
+    },
+    {
+        "id": "calor",
+        "titulo": "Calor reduzindo o processador (throttling)",
+        "forca": 2,
+        "evidencias": {"esquenta": 3, "frame-lento": 2, "tela-prende": 1},
+        "porque": (
+            "Acima de ~70 °C o Android baixa a frequência para não queimar. A lentidão vem "
+            "depois de esquentar, e não faz a tela se mexer sozinha."
+        ),
+        "teste": [
+            "Deixe esfriar 10 minutos e compare.",
+            "Veja Ajustes → Bateria → uso por app enquanto a tela está apagada.",
+        ],
+        "vira": "ajuste de uso (capa, sol, carga) ou assistência se esquenta parado.",
+    },
+    {
+        "id": "memoria",
+        "titulo": "Memória cheia (apps fechando e reabrindo)",
+        "forca": 2,
+        "evidencias": {"tela-prende": 1, "frame-lento": 2},
+        "porque": (
+            "Com pouca RAM, o Android fecha app em segundo plano e reabre do zero. A tela "
+            "“pula” entre apps, mas não se mexe sozinha dentro de um app."
+        ),
+        "teste": [
+            "Reinicie o aparelho e compare nas primeiras horas.",
+            "Force a parada dos dois apps que mais ocupam memória no relatório.",
+        ],
+        "vira": "desinstalar o que não usa.",
+    },
+    {
+        "id": "armazenamento",
+        "titulo": "Armazenamento quase cheio",
+        "forca": 1,
+        "evidencias": {"frame-lento": 1, "tela-prende": 1},
+        "porque": (
+            "Sem espaço livre o sistema gasta mais para gravar cache — deixa tudo lento, "
+            "mas não cria toque que ninguém fez."
+        ),
+        "teste": ["Libere uns 10 GB e compare.", "Ajustes → Armazenamento mostra por categoria."],
+        "vira": "apagar vídeos/downloads e mover fotos para o PC.",
+    },
+)
+
+# O que sustenta cada causa **no aparelho** (não no relato). Sem isso, a causa é
+# só hipótese — e a resposta diz isso.
+EVIDENCIA_MEDIDA = {
+    "toque-fantasma": ("app-nao-responde", "frame-lento"),
+    "app-travado": ("app-nao-responde",),
+    "calor": ("aquecendo",),
+    "memoria": ("memoria-baixa",),
+    "armazenamento": ("armazenamento-cheio", "armazenamento-apertado"),
+}
+
+
+def sintomas() -> list[dict[str, str]]:
+    """A lista que a tela e o console mostram — e que a API aceita."""
+    return [
+        {"id": chave, "titulo": valor["titulo"], "pergunta": valor["pergunta"]}
+        for chave, valor in SINTOMAS.items()
+    ]
+
+
+def cruzar(relatorio: dict[str, Any], marcados: list[str]) -> dict[str, Any]:
+    """Ordena as causas pelo que o dono relatou **e** pelo que o aparelho mediu.
+
+    Uma causa sobe por evidência de relato (a matriz `CAUSAS`) e desce quando o
+    aparelho não mostra nada que a sustente. O resultado é uma fila de suspeitas
+    com o teste de cada uma — não um diagnóstico fechado, porque toque fantasma
+    não sai em `dumpsys` nenhum.
+    """
+    escolhidos = [s for s in dict.fromkeys(marcados) if s in SINTOMAS]
+    ids_medidos = {p["id"] for p in relatorio.get("problemas", [])}
+    fila: list[dict[str, Any]] = []
+    for causa in CAUSAS:
+        pontos = causa["forca"] if not escolhidos else 1
+        for sintoma in escolhidos:
+            pontos += causa["evidencias"].get(sintoma, 0)
+        sustenta = [i for i in EVIDENCIA_MEDIDA.get(causa["id"], ()) if i in ids_medidos]
+        if sustenta:
+            pontos += 2
+            # O relato é o que não pode ser medido; quando ele aponta a mesma
+            # direção da medida, a causa é a primeira da fila.
+            if "se-mexe-sozinho" in escolhidos and "so-para-apagar-tela" in escolhidos:
+                pontos += 1 if causa["id"] == "toque-fantasma" else 0
+        else:
+            pontos -= 2
+        fila.append({
+            "id": causa["id"],
+            "titulo": causa["titulo"],
+            "pontos": pontos,
+            "porque": causa["porque"],
+            "teste": list(causa["teste"]),
+            "o_que_confirma": causa["vira"],
+            "medido_no_aparelho": sustenta,
+        })
+    fila.sort(key=lambda item: item["pontos"], reverse=True)
+    primeira = fila[0] if fila else None
+    if not escolhidos:
+        veredito = (
+            "Sem sintoma marcado, a ordem é a do que o aparelho mediu. Marque o que você vê para "
+            "a ordem mudar."
+        )
+    elif primeira and primeira["pontos"] >= 5:
+        veredito = (
+            f"Pelo que você relatou e pelo que o aparelho mediu, a suspeita número um é: "
+            f"{primeira['titulo'].lower()}."
+        )
+    elif primeira:
+        veredito = (
+            f"A suspeita número um é {primeira['titulo'].lower()}, mas o aparelho não mostrou "
+            "medida que confirme — comece pelo teste mais barato."
+        )
+    else:
+        veredito = "Nenhuma causa conhecida para os sintomas marcados."
+    return {
+        "sintomas_marcados": escolhidos,
+        "fila": fila,
+        "veredito": veredito,
+        "como_ler": (
+            "“Pontos” é só a ordem: relato soma, medida no aparelho soma mais, ausência de medida "
+            "subtrai. Não é probabilidade e não substitui o teste."
+        ),
+    }
+
+
+def diagnosticar_por_sintoma(
+    sintomas_marcados: list[str],
+    alvo: str = "",
+    *,
+    rodar: Callable[[list[str]], tuple[int, str, str]] | None = None,
+    agora: datetime | None = None,
+) -> dict[str, Any]:
+    """Mede o aparelho e cruza com o relato do dono."""
+    relatorio = diagnosticar(alvo, rodar=rodar, agora=agora)
+    relatorio["sintomas"] = cruzar(relatorio, sintomas_marcados)
+    return relatorio
+
+
 def em_texto(relatorio: dict[str, Any]) -> str:
     """A versão para o console (`escanear-celular.bat`)."""
     linhas = [
@@ -805,6 +1238,19 @@ def em_texto(relatorio: dict[str, Any]) -> str:
         f"  {relatorio['veredito']}",
         "",
     ]
+    sintoma = relatorio.get("sintomas")
+    if sintoma:
+        linhas.append("  O QUE VOCÊ RELATOU — SUSPEITAS EM ORDEM")
+        linhas.append(f"    {sintoma['veredito']}")
+        for posicao, causa in enumerate(sintoma["fila"][:4], start=1):
+            medida = ", ".join(causa["medido_no_aparelho"]) or "nada medido no aparelho"
+            linhas.append(f"    {posicao}. {causa['titulo']}  (medido: {medida})")
+            linhas.append(f"       por quê: {causa['porque']}")
+            for passo in causa["teste"]:
+                linhas.append(f"       teste: {passo}")
+            linhas.append(f"       se confirmar: {causa['o_que_confirma']}")
+        linhas.append(f"    {sintoma['como_ler']}")
+        linhas.append("")
     for secao in relatorio["secoes"]:
         linhas.append(f"  {secao['titulo'].upper()}")
         for item in secao["itens"]:

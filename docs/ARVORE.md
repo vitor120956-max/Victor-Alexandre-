@@ -2751,3 +2751,36 @@ vazava para o console do Windows.
 O limite é declarado no rodapé, sempre: o scanner **não** desinstala, **não**
 limpa cache, **não** muda ajuste e **não** reinicia. Quem mexe no aparelho é o
 dono, na tela dele — o JARVIS mede e explica.
+
+### 0.92.4 — “a tela trava e se mexe sozinha”: o sintoma vira ordem de suspeita
+
+> as vezes minha tela trava ou ta lenta o frame meio q fica lento do nada ou ele
+> comeca a se mexer sozinho so para quando desliga a tela e ligo de volta
+
+O scanner da 0.92.3 media o aparelho. Faltava medir **o que o dono vê** — e esse
+relato tem uma assinatura que nenhuma medida isolada entrega.
+
+A cadeia: o controlador de toque entrega evento sem dedo → o Android espera o app
+responder (ANR) → a fila de desenho atrasa (quadro travado) → o app reage a
+toques fora de hora. **Apagar a tela desliga o controlador e esvazia a fila** —
+por isso só o desligar/ligar resolve. Nenhuma outra causa tem esse gesto.
+
+Três leituras novas, todas de leitura:
+
+- `logcat -b system -d` → `ANR in <pacote>` + `Reason:` (o app que não respondeu);
+- `dumpsys gfxinfo` → quadros travados por app (o número por trás de “frame lento”);
+- `dumpsys input` e `dumpsys window displays` → dispositivo de toque e janela em foco.
+
+E o cruzamento: cinco perguntas (`tela-prende`, `frame-lento`, `se-mexe-sozinho`,
+`so-para-apagar-tela`, `esquenta`) somam pontos na matriz `CAUSAS`, e o que o
+aparelho mediu soma mais. O resultado é uma **fila de suspeitas** com o teste mais
+barato de cada uma.
+
+Duas honestidades no desenho: o Android **não publica** “toque sem dedo” — o
+achado de toque fantasma é a leitura da consequência, e o próprio limite diz
+“não é diagnóstico fechado”. E a tela marca `medido no aparelho` × `sem medida
+no aparelho`, para o relato não virar laudo.
+
+Defeito achado: o parser do `gfxinfo` exigia a linha inicial sem `**`, e o Android
+imprime `** com.app/1234`; o pacote nunca era lido e o achado de frame lento
+nunca aparecia. O teste com 28% de quadros travados fixa isso.
