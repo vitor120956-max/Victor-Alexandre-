@@ -294,6 +294,7 @@ from . import dados as dados_locais
 from . import (
     catalogo,
     celular,
+    diagnostico_celular,
     correio,
     conectores,
     arvore,
@@ -2245,6 +2246,16 @@ class CelularPlanoInput(BaseModel):
 class CelularEventosInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     minutos: int = Field(default=30, ge=1, le=1440, title="Últimos quantos minutos", json_schema_extra={"description": "Janela do log do Windows a ler (1 a 1440). Padrão: 30."})
+
+
+class CelularDiagnosticoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    serial: str = Field(
+        default="",
+        max_length=64,
+        title="Aparelho",
+        json_schema_extra={"description": "Serial do `adb devices`. Vazio usa o primeiro aparelho autorizado."},
+    )
 
 
 class CelularPuxarInput(BaseModel):
@@ -4745,6 +4756,16 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except (celular.CelularError, Exception) as exc:  # rede/extracao: mensagem do módulo
             raise SkillError(str(exc)) from exc
 
+    def celular_diagnostico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        # O scanner que o dono pediu: mede o aparelho e diz o que está errado,
+        # com a medida que sustenta cada achado. Só leitura — nem dry-run muda
+        # nada, porque a leitura não muda nada.
+        assert isinstance(data, CelularDiagnosticoInput)
+        try:
+            return diagnostico_celular.diagnosticar(data.serial)
+        except diagnostico_celular.DiagnosticoError as exc:
+            raise SkillError(str(exc)) from exc
+
     def catalogo_topico_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, CatalogoTopicoInput)
         try:
@@ -6286,6 +6307,20 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("celular.plano", "Plano para destravar o celular sem tela", "Mede o aparelho com `adb devices` e monta o caminho exato para o estado encontrado — inclusive quando a Depuração USB nunca foi ligada. Traz os comandos, a sequência de teclas do `scrcpy --otg`, o TalkBack, a tela de teste e o limite do flash sem Desbloqueio OEM.", "Celular", CelularPlanoInput, celular_plano_handler, timeout_seconds=40),
         SkillDefinition("celular.espelhar", "Ver o celular na tela do PC", "Abre o `scrcpy`: a tela do celular vira uma janela do Windows, com mouse e teclado do PC — funciona mesmo com o painel quebrado, desde que a depuração já esteja autorizada. Exige `JARVIS_HOST_CELULAR=1` e confirmação.", "Celular", CelularEspelharInput, celular_espelhar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),
         SkillDefinition("celular.puxar", "Resgatar fotos e documentos do celular", "Copia por `adb pull` as pastas de mídia permitidas (DCIM, Pictures, Download, Documents, Movies, Music, WhatsApp, Telegram) para dentro da raiz de dados. Não lê `/data`, não copia chave de aplicativo e não apaga nada no aparelho.", "Celular", CelularPuxarInput, celular_puxar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
+        SkillDefinition(
+            "celular.diagnostico",
+            "Scanner do celular: o que está errado e o que fazer",
+            "Mede o aparelho por adb (só leitura) e transforma a leitura em achados: armazenamento cheio, "
+            "pouca memória livre, bateria gasta (capacidade de fábrica pelo `charge_full`/`charge_full_design`), "
+            "aquecimento com throttling, patch de segurança antigo, app travando no logcat, build de teste e root. "
+            "Cada achado traz a medida, a causa provável, o passo a passo que a pessoa executa e o limite — "
+            "e as otimizações dizem quando o ganho não foi medido. Não desinstala, não limpa cache, não muda "
+            "ajuste e não reinicia: quem mexe é você, na tela do aparelho.",
+            "Celular",
+            CelularDiagnosticoInput,
+            celular_diagnostico_handler,
+            timeout_seconds=180,
+        ),
         SkillDefinition("celular.preparar", "Baixar adb e scrcpy", "Baixa o platform-tools do Google e o scrcpy do GitHub para `ferramentas/`, confere o SHA-256 de cada arquivo e extrai recusando caminho que escape da pasta. Não executa nada depois de extrair.", "Celular", CelularPrepararInput, celular_preparar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=900),
         SkillDefinition("catalogo.topico", "Catálogo de um tópico do GitHub", "Lê os repositórios de um tópico do GitHub (ex.: `agent-skills`), encontra os `SKILL.md` de cada um e soma tudo ao catálogo local. Uma leva de 12 repositórios gasta 13 dos 60 pedidos por hora do GitHub público.", "Catálogo", CatalogoTopicoInput, catalogo_topico_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=180),
         SkillDefinition("habilidades.adaptar", "Adaptar habilidade para uso próprio", "Transforma o guia importado em skill local de procedimento (`local.proc-…`), com passos numerados, que passa a responder no chat pelo nome. Continua sendo uma lista de passos, não código executando sozinho.", "Habilidades", HabilidadeAdaptarInput, habilidades_adaptar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=30),

@@ -88,3 +88,54 @@
   .anatomia-secoes { grid-template-columns: 1fr; }
   .anatomia-alvos { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------------------
+   Scanner do celular (0.92.3): cada achado nasce com a medida que o sustenta.
+   --------------------------------------------------------------------------- */
+.anatomia-escanear { align-self: flex-start; font-size: 8.5px; }
+.anatomia-scan { display: flex; flex-direction: column; gap: 14px; }
+.anatomia-veredito { margin: 6px 0 0; max-width: 68ch; color: var(--text-soft); font-size: 9.5px; line-height: 1.65; }
+.anatomia-scan-limpo {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 13px;
+  border: 1px solid rgba(var(--accent-rgb, 126, 214, 165), .28); border-radius: 9px;
+  background: rgba(var(--accent-rgb, 126, 214, 165), .05); color: var(--accent); font-size: 9px;
+}
+
+.anatomia-achado { border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .012); overflow: hidden; }
+.anatomia-achado.is-alta { border-color: rgba(239, 122, 122, .34); }
+.anatomia-achado.is-media { border-color: rgba(224, 178, 92, .3); }
+.anatomia-achado-topo {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 4px 10px;
+  width: 100%; padding: 11px 13px; border: 0; background: none; text-align: left; cursor: pointer;
+}
+.anatomia-achado-topo strong { color: var(--text); font-size: 10px; font-weight: 580; }
+.anatomia-achado-topo small { grid-column: 2; color: var(--muted); font-size: 8.5px; line-height: 1.55; }
+.anatomia-achado-topo:hover strong { color: var(--accent); }
+
+.anatomia-grau {
+  padding: 2px 6px; border-radius: 4px; font-family: var(--mono);
+  font-size: 6.5px; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
+}
+.anatomia-grau.is-alta { background: rgba(239, 122, 122, .14); color: #ef7a7a; }
+.anatomia-grau.is-media { background: rgba(224, 178, 92, .14); color: #e0b25c; }
+.anatomia-grau.is-baixa { background: rgba(255, 255, 255, .06); color: var(--muted); }
+
+.anatomia-achado-corpo { display: flex; flex-direction: column; gap: 9px; padding: 0 13px 13px; border-top: 1px solid var(--line); padding-top: 11px; }
+.anatomia-achado-corpo p { margin: 0; color: var(--muted); font-size: 8.5px; line-height: 1.65; }
+.anatomia-achado-corpo b { color: var(--text-soft); font-weight: 560; }
+.anatomia-achado-corpo ol, .anatomia-otimizacoes ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
+.anatomia-achado-corpo li, .anatomia-otimizacoes li { color: var(--text-soft); font-size: 8.5px; line-height: 1.6; }
+.anatomia-limite, .anatomia-risco { display: flex; align-items: flex-start; gap: 6px; color: var(--muted-2, var(--muted)) !important; }
+.anatomia-limite svg, .anatomia-risco svg { flex: 0 0 auto; margin-top: 2px; color: var(--warn, #e0b25c); }
+
+.anatomia-otimizacoes { display: flex; flex-direction: column; gap: 10px; padding: 13px; border: 1px solid rgba(var(--accent-rgb, 126, 214, 165), .22); border-radius: 9px; background: rgba(var(--accent-rgb, 126, 214, 165), .03); }
+.anatomia-otimizacoes > h3 { margin: 0; color: var(--accent); font-family: var(--mono); font-size: 7.5px; letter-spacing: .09em; text-transform: uppercase; }
+.anatomia-otimizacoes > article { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255, 255, 255, .012); }
+.anatomia-otimizacoes > article > div { display: flex; flex-direction: column; gap: 3px; }
+.anatomia-otimizacoes strong { color: var(--text); font-size: 9.5px; font-weight: 560; }
+.anatomia-otimizacoes small { color: var(--muted); font-size: 8.5px; line-height: 1.55; }
+.anatomia-nao-medido {
+  align-self: flex-start; padding: 2px 6px; border-radius: 4px;
+  background: rgba(255, 255, 255, .06); color: var(--muted-2, var(--muted));
+  font-family: var(--mono); font-size: 6.5px; letter-spacing: .05em; text-transform: uppercase;
+}

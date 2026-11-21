@@ -1,0 +1,462 @@
+"""Testes do scanner do celular (0.92.3).
+
+O pedido: *“vou testar com o meu cll, quero ver se consigo melhorar e otimizar e
+ver uns problemas que ele está apresentando — talvez passando um scanner nele a
+gente consegue resolver”*.
+
+O que estes testes travam:
+
+- **só leitura** — a lista de comandos é conferida palavra por palavra; nenhum
+  `install`, `push`, `rm`, `pm uninstall`, `settings put`, `reboot` ou `su`;
+- **cada achado tem a medida que o sustenta** — não existe problema sem número e
+  origem;
+- **armazenamento cheio, bateria gasta, aquecimento, patch antigo, app travando**
+  → cada um no seu limiar, com o teste nos dois lados (logo abaixo não é achado);
+- **aparelho saudável não inventa problema** — a resposta é “nenhum problema”;
+- **o aparelho desligado/autorizado errado explica o que fazer**;
+- **o texto do console** cabe numa tela e termina dizendo o que não faz.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from server import diagnostico_celular as dc
+from server.app import create_app
+from server.skill_registry import build_registry
+
+AGORA = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# Saídas de exemplo — no formato do Android de verdade
+# ---------------------------------------------------------------------------
+
+GETPROP = (
+    "[ro.product.manufacturer]: [samsung]\n"
+    "[ro.product.model]: [SM-A346B]\n"
+    "[ro.build.version.release]: [14]\n"
+    "[ro.build.version.sdk]: [34]\n"
+    "[ro.build.version.security_patch]: [2026-10-01]\n"
+    "[ro.build.tags]: [release-keys]\n"
+)
+
+BATERIA = (
+    "Current Battery Service state:\n"
+    "  AC powered: false\n"
+    "  USB powered: true\n"
+    "  status: 3\n"
+    "  health: 2\n"
+    "  level: 87\n"
+    "  voltage: 4321\n"
+    "  temperature: 312\n"
+)
+
+POWER_SUPPLY = (
+    "/sys/class/power_supply/battery/charge_full=4200000\n"
+    "/sys/class/power_supply/battery/charge_full_design=5000000\n"
+    "/sys/class/power_supply/battery/cycle_count=512\n"
+)
+
+DF = (
+    "Filesystem      1K-blocks     Used Available Use% Mounted on\n"
+    "/dev/block/dm-8  114496460 44231220  70265240  39% /data\n"
+    "tmpfs             3811560      388   3811172   1% /dev\n"
+)
+
+DF_CHEIO = (
+    "Filesystem      1K-blocks     Used Available Use% Mounted on\n"
+    "/dev/block/dm-8  114496460 108000000   6496460  94% /data\n"
+)
+
+MEMINFO = (
+    "MemTotal:        7643124 kB\n"
+    "MemFree:          612004 kB\n"
+    "MemAvailable:    2903340 kB\n"
+    "SwapTotal:       2097148 kB\n"
+)
+
+MEMINFO_BAIXA = (
+    "MemTotal:        4000000 kB\n"
+    "MemAvailable:     200000 kB\n"
+    "SwapTotal:       1000000 kB\n"
+)
+
+UPTIME = "1728000.42 12345.00\n"  # 20 dias
+
+PS = (
+    "  RSS NAME\n"
+    " 812345 com.whatsapp\n"
+    " 900000 com.facebook.katana\n"
+    " 120000 com.android.systemui\n"
+)
+
+TERMICA = "cpu-0:45000\ncpu-1:52000\nbattery:32000\n"
+
+TERMICA_QUENTE = "cpu-0:82000\ncpu-1:91000\n"
+
+ANIMACAO = "1.0\n"
+
+APPS = "package:com.whatsapp\npackage:com.instagram.android\n"
+
+CRASH = (
+    "Build fingerprint: 'samsung/a34x/a34x:14'\n"
+    "FATAL EXCEPTION: main\n"
+    "Process: com.instagram.android, PID: 1234\n"
+    "java.lang.NullPointerException\n"
+)
+
+
+def saidas(**trocas: str) -> dict[str, str]:
+    base = {
+        "getprop": GETPROP,
+        "dumpsys battery": BATERIA,
+        "for f in /sys/class/power_supply/battery/*": POWER_SUPPLY,
+        "df -k": DF,
+        "cat /proc/meminfo": MEMINFO,
+        "cat /proc/uptime": UPTIME,
+        "ps -A -o RSS,NAME": PS,
+        "for z in /sys/class/thermal/thermal_zone*": TERMICA,
+        "settings get global window_animation_scale": ANIMACAO,
+        "pm list packages -3": APPS,
+        "logcat -b crash -d -t 80": "",
+        "which su": "",
+        "dumpsys diskstats": "",
+    }
+    base.update(trocas)
+    return base
+
+
+def medido(**trocas: str) -> dict:
+    return {"serial": "ABC123", "saidas": saidas(**trocas), "falhas": [], "comandos": []}
+
+
+def _ids(relatorio: dict) -> set[str]:
+    return {p["id"] for p in relatorio["problemas"]}
+
+
+# ---------------------------------------------------------------------------
+# Leitura das saídas
+# ---------------------------------------------------------------------------
+
+def test_le_o_uso_real_do_disco_e_nao_o_use_porcento_arredondado():
+    pontos = dc.ler_df(DF_CHEIO)
+    assert pontos["/data"]["pct"] == pytest.approx(94.3, abs=0.2)
+    assert pontos["/data"]["livre"] == pytest.approx(6496460 * 1024)
+
+
+def test_le_a_capacidade_da_bateria_pelo_power_supply():
+    energia = dc.ler_power_supply(POWER_SUPPLY)
+    assert energia["charge_full"] == "4200000"
+    assert energia["charge_full_design"] == "5000000"
+    assert energia["cycle_count"] == "512"
+
+
+def test_le_os_processos_que_mais_ocupam_memoria():
+    processos = dc.ler_top_processos(PS)
+    assert processos[0]["nome"] == "com.facebook.katana"
+    assert processos[0]["kb"] == 900000
+
+
+def test_le_o_sensor_mais_quente_primeiro():
+    sensores = dc.ler_termica(TERMICA_QUENTE)
+    assert sensores[0]["nome"] == "cpu-1"
+    assert sensores[0]["c"] == 91.0
+
+
+def test_le_o_app_que_travou():
+    assert dc.ler_crash(CRASH) == ["com.instagram.android"]
+
+
+def test_o_crash_sem_fatal_nao_vira_achado():
+    assert dc.ler_crash("I/ActivityManager: nada\n") == []
+
+
+# ---------------------------------------------------------------------------
+# A lista de comandos é de leitura
+# ---------------------------------------------------------------------------
+
+def test_a_lista_de_comandos_nao_tem_nada_que_altera():
+    permitidos_settings = {
+        "window_animation_scale",
+        "transition_animation_scale",
+        "animator_duration_scale",
+    }
+    for comando in dc.COMANDOS:
+        texto = " ".join(comando)
+        assert "uninstall" not in texto
+        assert " install" not in texto
+        assert " push" not in texto and " pull" not in texto
+        assert " rm " not in texto and " reboot" not in texto
+        assert "settings put" not in texto and "settings delete" not in texto
+        assert " su" not in texto or comando[-1] == "su" and comando[-2] == "which"
+        if comando[:2] == ("shell", "settings"):
+            assert comando[2] == "get"
+            assert comando[3] == "global"
+            assert comando[4] in permitidos_settings
+        if "pm" in comando:
+            assert comando[2:] == ("list", "packages", "-3")
+
+
+def test_todo_comando_passa_pelo_serial():
+    """Nenhum comando pode ser global: com dois aparelhos na USB, isso é o
+    que evita medir o aparelho errado."""
+    registro: list[list[str]] = []
+
+    def rodar(argumentos: list[str]):
+        registro.append(list(argumentos))
+        chave = " ".join(argumentos[3:])
+        for trecho, saida in saidas().items():
+            if chave.startswith(trecho):
+                return 0, saida, ""
+        if argumentos[1:3] == ["devices", "-l"]:
+            return 0, "List of devices attached\nABC123          device product:test model:SM_A346B\n", ""
+        return 0, "", ""
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr("server.celular.ferramentas", lambda: {"ligado": True, "adb": "/fake/adb", "scrcpy": ""})
+    try:
+        dados = dc.coletar(rodar=rodar)
+    finally:
+        monkeypatch.undo()
+    assert dados["serial"] == "ABC123"
+    comandos_de_leitura = [c for c in registro if "shell" in c]
+    assert comandos_de_leitura, "nenhum comando rodou"
+    for comando in comandos_de_leitura:
+        assert comando[:3] == ["/fake/adb", "-s", "ABC123"], comando
+
+
+# ---------------------------------------------------------------------------
+# Julgamento
+# ---------------------------------------------------------------------------
+
+def test_aparelho_saudavel_nao_inventa_problema():
+    relatorio = dc.analisar(medido(), agora=AGORA)
+    assert relatorio["problemas"] == []
+    assert "Nenhum problema" in relatorio["veredito"]
+    assert relatorio["titulo"] == "SM-A346B · Android 14"
+
+
+def test_disco_quase_cheio_vira_achado_alto_com_a_medida():
+    relatorio = dc.analisar(medido(**{"df -k": DF_CHEIO}), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "armazenamento-cheio")
+    assert problema["gravidade"] == "alta"
+    assert "94%" in problema["medido"]
+    assert any("Ajustes → Armazenamento" in passo for passo in problema["o_que_fazer"])
+    # E o limite não promete que limpar cache resolve tudo.
+    assert "cache" in problema["limite"]
+
+
+def test_disco_no_limiar_medio_nao_e_o_mesmo_achado():
+    # 104.730.000 kB usados de 114.496.460 → ~91,5%... não: 104,73/114,50 = 91,5%.
+    # Use 96.000.000 usados de 114.496.460 → 83,8%, dentro da faixa “apertado”.
+    apertado = DF.replace("44231220  70265240  39%", "96000000  18496460  84%")
+    relatorio = dc.analisar(medido(**{"df -k": apertado}), agora=AGORA)
+    assert "armazenamento-cheio" not in _ids(relatorio)
+    assert "armazenamento-apertado" in _ids(relatorio)
+
+
+def test_pouca_memoria_livre_vira_achado():
+    relatorio = dc.analisar(medido(**{"cat /proc/meminfo": MEMINFO_BAIXA}), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "memoria-baixa")
+    assert problema["gravidade"] == "alta"
+    # 0,2 GB de 4,0 GB = 5,0% — com uma casa decimal, para o número explicar o achado.
+    assert "5,0%" in problema["medido"]
+    assert any("Reinicie" in passo for passo in problema["o_que_fazer"])
+
+
+def test_bateria_gasta_diz_o_porcento_da_capacidade_de_fabrica():
+    # 3.600 mAh de 5.000 de fábrica = 72% — abaixo do limiar de 80%.
+    gasta = POWER_SUPPLY.replace("charge_full=4200000", "charge_full=3600000")
+    relatorio = dc.analisar(
+        medido(**{"for f in /sys/class/power_supply/battery/*": gasta}), agora=AGORA
+    )
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "bateria-gasta")
+    assert "72%" in problema["medido"]
+    assert "3600 mAh" in problema["medido"] and "5000 mAh" in problema["medido"]
+    assert any("assistência" in passo for passo in problema["o_que_fazer"])
+    assert "não devolve" in problema["limite"]
+
+
+def test_bateria_boa_nao_entra_como_gasta():
+    nova = POWER_SUPPLY.replace("charge_full=4200000", "charge_full=4900000")
+    # 4.900/5.000 = 98%: bateria saudável não é achado.
+    relatorio = dc.analisar(medido(**{"for f in /sys/class/power_supply/battery/*": nova}), agora=AGORA)
+    assert "bateria-gasta" not in _ids(relatorio)
+
+
+def test_bateria_quente_carregando_e_achado_e_fria_nao():
+    quente = BATERIA.replace("status: 3", "status: 2").replace("temperature: 312", "temperature: 425")
+    relatorio = dc.analisar(medido(**{"dumpsys battery": quente}), agora=AGORA)
+    assert "bateria-quente-carregando" in _ids(relatorio)
+    fria = BATERIA.replace("status: 3", "status: 2").replace("temperature: 312", "temperature: 300")
+    assert "bateria-quente-carregando" not in _ids(dc.analisar(medido(**{"dumpsys battery": fria}), agora=AGORA))
+
+
+def test_sensor_acima_de_70_graus_explica_o_throttling():
+    relatorio = dc.analisar(
+        medido(**{"for z in /sys/class/thermal/thermal_zone*": TERMICA_QUENTE}), agora=AGORA
+    )
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "aquecendo")
+    assert problema["gravidade"] == "alta"
+    assert "91" in problema["medido"]
+    assert "throttling" in problema["causa"]
+
+
+def test_patch_velho_conta_os_dias_a_partir_do_patch():
+    antigo = GETPROP.replace("2026-10-01", "2025-01-05")
+    relatorio = dc.analisar(medido(getprop=antigo), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "patch-antigo")
+    assert "2025-01-05" in problema["medido"]
+    assert any("Atualização de software" in passo for passo in problema["o_que_fazer"])
+
+
+def test_app_travando_e_achado_medio_e_diz_qual_app():
+    relatorio = dc.analisar(medido(**{"logcat -b crash -d -t 80": CRASH}), agora=AGORA)
+    problema = next(p for p in relatorio["problemas"] if p["id"] == "app-travando")
+    assert problema["gravidade"] == "media"
+    assert "com.instagram.android" in problema["medido"]
+    # E não manda “limpar dados” sem avisar o que se perde.
+    assert any("não “Limpar dados”" in passo for passo in problema["o_que_fazer"])
+
+
+def test_root_e_build_de_teste_aparecem_como_informacao():
+    relatorio = dc.analisar(
+        medido(**{
+            "which su": "/system/xbin/su\n",
+            "getprop": GETPROP.replace("release-keys", "test-keys"),
+        }),
+        agora=AGORA,
+    )
+    ids = _ids(relatorio)
+    assert {"root", "build-de-teste"} <= ids
+    root = next(p for p in relatorio["problemas"] if p["id"] == "root")
+    assert root["gravidade"] == "baixa"
+    assert "nunca usa root" in root["limite"]
+
+
+def test_otimizacoes_dizem_quando_o_ganho_nao_foi_medido():
+    relatorio = dc.analisar(medido(), agora=AGORA)
+    animacao = next(o for o in relatorio["otimizacoes"] if o["id"] == "animacao")
+    assert animacao["medido"] is False
+    assert "não muda desempenho medido" in animacao["ganho"]
+    reiniciar = next(o for o in relatorio["otimizacoes"] if o["id"] == "reiniciar")
+    assert reiniciar["medido"] is True
+
+
+def test_processo_pesado_vira_otimizacao_com_o_numero():
+    relatorio = dc.analisar(medido(), agora=AGORA)
+    fechar = next(o for o in relatorio["otimizacoes"] if o["id"].startswith("fechar-"))
+    assert "com.facebook.katana" in fechar["id"]
+    assert "com.facebook.katana" in fechar["titulo"]
+    assert "MB" in fechar["ganho"]
+
+
+def test_gravidade_ordena_o_resultado():
+    relatorio = dc.analisar(
+        medido(**{
+            "df -k": DF_CHEIO,
+            "getprop": GETPROP.replace("2026-10-01", "2024-01-01"),
+            "which su": "/system/xbin/su\n",
+        }),
+        agora=AGORA,
+    )
+    gravidades = [p["gravidade"] for p in relatorio["problemas"]]
+    assert gravidades == sorted(gravidades, key=lambda g: {"alta": 0, "media": 1, "baixa": 2}[g])
+    assert "principal" in relatorio["veredito"]
+
+
+def test_o_relatorio_termina_dizendo_o_que_nao_faz():
+    relatorio = dc.analisar(medido(), agora=AGORA)
+    assert any("Não desinstala" in frase for frase in relatorio["nao_faz"])
+    assert any("não devolve" not in f for f in relatorio["nao_faz"])
+
+
+# ---------------------------------------------------------------------------
+# Texto do console
+# ---------------------------------------------------------------------------
+
+def test_o_texto_do_console_mostra_medida_causa_passo_e_limite():
+    relatorio = dc.analisar(medido(**{"df -k": DF_CHEIO}), agora=AGORA)
+    texto = dc.em_texto(relatorio)
+    assert "SM-A346B · Android 14" in texto
+    assert "[ALTA]" in texto
+    assert "medido:" in texto and "causa:" in texto and "limite:" in texto
+    assert "O QUE ESTE SCANNER NÃO FAZ" in texto
+    assert "Ajustes → Armazenamento" in texto
+
+
+# ---------------------------------------------------------------------------
+# Erros de acesso
+# ---------------------------------------------------------------------------
+
+def test_scanner_desligado_explica_a_variavel(monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_CELULAR", raising=False)
+    monkeypatch.setattr("server.celular.ligado", lambda: False)
+    with pytest.raises(dc.DiagnosticoError) as erro:
+        dc.diagnosticar()
+    assert "JARVIS_HOST_CELULAR=1" in str(erro.value)
+
+
+def test_sem_aparelho_diz_que_o_cabo_pode_ser_de_carga(monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr("server.celular.ferramentas", lambda: {"ligado": True, "adb": "/fake/adb", "scrcpy": ""})
+    monkeypatch.setattr("server.anatomia.aparelhos", lambda rodar=None: [])
+    with pytest.raises(dc.DiagnosticoError) as erro:
+        dc.diagnosticar(rodar=lambda argumentos: (0, "", ""))
+    assert "carga" in str(erro.value)
+
+
+def test_aparelho_nao_autorizado_pede_o_permitir_na_tela(monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr("server.celular.ferramentas", lambda: {"ligado": True, "adb": "/fake/adb", "scrcpy": ""})
+    monkeypatch.setattr(
+        "server.anatomia.aparelhos",
+        lambda rodar=None: [{"serial": "ABC", "estado": "unauthorized"}],
+    )
+    with pytest.raises(dc.DiagnosticoError) as erro:
+        dc.diagnosticar(rodar=lambda argumentos: (0, "", ""))
+    assert "Permitir" in str(erro.value)
+
+
+# ---------------------------------------------------------------------------
+# API e skill
+# ---------------------------------------------------------------------------
+
+def _cliente(tmp_path: Path) -> TestClient:
+    return TestClient(create_app(registry=build_registry(tmp_path / "files")))
+
+
+def test_api_escaneia_sem_aparelho_e_explica(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("JARVIS_HOST_CELULAR", raising=False)
+    monkeypatch.setattr("server.celular.ligado", lambda: False)
+    resposta = _cliente(tmp_path).get("/api/anatomia/android/scan")
+    assert resposta.status_code == 409, resposta.text
+    assert "JARVIS_HOST_CELULAR" in resposta.json()["error"]["message"]
+
+
+def test_api_devolve_o_diagnostico_com_aparelho_falso(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("JARVIS_HOST_CELULAR", "1")
+    monkeypatch.setattr("server.celular.ligado", lambda: True)
+    saida = medido(**{"df -k": DF_CHEIO})
+    monkeypatch.setattr(
+        dc, "coletar", lambda alvo="", rodar=None: dict(saida, comandos=[])
+    )
+    resposta = _cliente(tmp_path).get("/api/anatomia/android/scan")
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()["result"]
+    assert dados["problemas"][0]["id"] == "armazenamento-cheio"
+
+
+def test_a_skill_do_scanner_existe_e_nao_tem_efeito_colateral():
+    registro = build_registry(Path("/tmp/reg-scan"))
+    skill = registro.get("celular.diagnostico")
+    assert skill is not None
+    assert skill.side_effects is False
+    texto = skill.description.lower()
+    assert "só leitura" in texto or "não altera" in texto
+    assert "não desinstala" in texto

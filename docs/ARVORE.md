@@ -2713,3 +2713,41 @@ fixa 31,2 °C.
 Na tela, cada alvo desligado mostra **o que ligar** (a variável e o arquivo),
 o botão não fica mudo, e o resultado vem em seções de rótulo/valor com
 “o que a leitura não alcança” e “o que o JARVIS não faz” embaixo.
+
+### 0.92.3 — scanner do celular: medir, achar e dizer o que fazer
+
+> vou testar com o meu cll quero ver se consigo melhorar e otimizar e ver uns
+> problemas q ele ta apresentando talvez passsando um escaner nele talvez
+> consegimos resolver
+
+A 0.92.2 deu olhos: `anatomia.py` descreve o aparelho. Faltava o **juízo** — e
+é isso que o dono pediu: “ver uns problemas” e “otimizar”. Então o
+`diagnostico_celular.py` pega a mesma leitura de somente-leitura e a transforma
+em **achados**.
+
+- **`analisar()`** é função pura: entra a saída crua do `adb`, sai
+  `problemas[]` + `otimizacoes[]` + `secoes[]`. Isso permite testar os limiares
+  com um SM-A346B sintético, sem aparelho na mesa.
+- **Cada achado tem quatro campos e não tem menos:** `medido` (o número e de
+  onde veio), `causa`, `o_que_fazer` (o passo que a pessoa executa na tela) e
+  `limite` (o que aquilo não resolve).
+- **Cada otimização diz se o ganho foi medido.** “Fechar o Instagram libera
+  928 MB” é medido; “diminuir a animação deixa mais rápido” é **sensação**, e
+  vem marcado assim — porque essa é a frase que a internet de otimização
+  vende, e quase nunca é verdade medida.
+- **A lista de comandos é auditada na importação** e no teste: nada de
+  `install`, `push`, `rm`, `settings put`, `reboot` ou `su`.
+
+Três portas para o mesmo motor: `escanear-celular.bat` (duplo clique, texto no
+console e JSON em `storage/diagnosticos/`), o botão **“Passar o scanner”** no
+cartão do Android da aba Anatomia, e a skill `celular.diagnostico` no chat.
+
+Defeitos achados na primeira leitura *de verdade* (com um `adb` de teste
+servindo um aparelho sintético): vírgula sobrando em “42,8 °C carregando,”; o
+texto mandava ver “a lista abaixo” quando a lista estava acima; 11,8% de RAM
+aparecia como “12%” e o achado parecia contradição; e `**qual**` de markdown
+vazava para o console do Windows.
+
+O limite é declarado no rodapé, sempre: o scanner **não** desinstala, **não**
+limpa cache, **não** muda ajuste e **não** reinicia. Quem mexe no aparelho é o
+dono, na tela dele — o JARVIS mede e explica.

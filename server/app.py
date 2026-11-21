@@ -50,6 +50,7 @@ from . import conversa as conversa_mod
 from . import tempo as tempo_mod
 from . import calendario as calendario_mod
 from . import anatomia as anatomia_mod
+from . import diagnostico_celular as diagnostico_celular_mod
 from . import jogo as jogo_mod
 from . import jogo_web as jogo_web_mod
 from . import sistema as sistema_mod
@@ -844,6 +845,22 @@ def create_app(
             return JSONResponse(
                 status_code=409,
                 content={"ok": False, "error": {"code": "ANATOMIA_ROKU", "message": str(exc)}},
+            )
+
+    @application.get("/api/anatomia/android/scan")
+    def anatomia_android_scan(serial: str = Query(default="", max_length=64)) -> Any:
+        """Scanner do celular: mede e diz o que está errado — sem alterar nada.
+
+        0.92.3 — o dono pediu “passar um scanner” no aparelho para achar o que o
+        deixa lento. A resposta é a mesma leitura de `anatomia`, só que julgada:
+        cada achado traz a medida, a causa, o que fazer e o limite.
+        """
+        try:
+            return {"ok": True, "result": diagnostico_celular_mod.diagnosticar(serial)}
+        except diagnostico_celular_mod.DiagnosticoError as exc:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "error": {"code": "SCANNER_CELULAR", "message": str(exc)}},
             )
 
     @application.get("/api/anatomia/{alvo}")

@@ -1251,3 +1251,54 @@ export async function lerAnatomia(
   const resposta = await apiFetch<{ ok: boolean; result: AnatomiaResultado }>(`/api/anatomia/${alvo}${sufixo}`);
   return resposta.result;
 }
+
+/* ------------------------------------------------- scanner do celular (0.92.3) */
+
+export interface CelularProblema {
+  id: string;
+  gravidade: 'alta' | 'media' | 'baixa';
+  titulo: string;
+  medido: string;
+  causa: string;
+  o_que_fazer: string[];
+  limite: string;
+}
+
+export interface CelularOtimizacao {
+  id: string;
+  titulo: string;
+  ganho: string;
+  como: string[];
+  risco: string;
+  /** `false` quando o ganho é sensação, não número medido. */
+  medido: boolean;
+}
+
+export interface CelularDiagnostico {
+  ok: boolean;
+  alvo: 'android';
+  serial: string;
+  titulo: string;
+  lido_em: string;
+  veredito: string;
+  problemas: CelularProblema[];
+  otimizacoes: CelularOtimizacao[];
+  secoes: AnatomiaSecao[];
+  limitacoes: string[];
+  nao_faz: string[];
+  comandos: string[];
+}
+
+/**
+ * Passa o scanner no celular — só leitura.
+ *
+ * O `409` traz a frase que resolve (variável, cabo, “Permitir”); ela vai
+ * inteira para a tela, porque é o que a pessoa precisa ler.
+ */
+export async function escanearCelular(serial = ''): Promise<CelularDiagnostico> {
+  const consulta = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+  const resposta = await apiFetch<{ ok: boolean; result: CelularDiagnostico }>(
+    `/api/anatomia/android/scan${consulta}`,
+  );
+  return resposta.result;
+}
