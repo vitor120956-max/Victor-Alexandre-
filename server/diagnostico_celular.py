@@ -544,6 +544,17 @@ def analisar(
     janela = ler_janela_em_foco(saidas.get("dumpsys window displays", ""))
     entrada = ler_input_dumpsys(saidas.get("dumpsys input", ""))
     root = (saidas.get("which su", "") or "").strip()
+    # 0.93.0 — “sem resposta” é o que um `which` **bem-sucedido** devolve quando o
+    # binário não existe (código 1, saída vazia). O `coletar` só guarda a chave
+    # quando `codigo != 0 and not saida` for falso; como o `which` não achou nada,
+    # a chave ficava de fora e a varredura anunciava “«which su»: sem resposta” —
+    # um alarme onde o correto é **informação** (“não tem su”, que é bom).
+    su_conferido = "which su" in saidas
+    root_texto = (
+        "Não há binário de `su` no PATH — não é alarme, é o normal num aparelho sem root."
+        if su_conferido and not root
+        else (f"`which su` respondeu: {root}." if root else "")
+    )
 
     problemas: list[dict[str, Any]] = []
     otimizacoes: list[dict[str, Any]] = []
@@ -852,7 +863,7 @@ def analisar(
             "root",
             "baixa",
             "O aparelho tem root",
-            f"`which su` respondeu: {root}.",
+            root_texto,
             "Acesso de superusuário instalado (Magisk ou similar).",
             [
                 "Se você não instalou, é bom saber: root permite que qualquer app peça acesso total.",
@@ -1137,10 +1148,20 @@ CAUSAS: tuple[dict[str, Any], ...] = (
 
 # O que sustenta cada causa **no aparelho** (não no relato). Sem isso, a causa é
 # só hipótese — e a resposta diz isso.
+# 0.93.0 — esta tabela estava **morta em três das cinco linhas**, e o efeito era
+# o oposto do desenhado: toda suspeita saía “sem medida no aparelho”, mesmo num
+# relatório com 25 leituras boas. Os ids de problema que o `analisar()` cria são
+# `app-nao-responde`, `frame-lento`, `aquecendo`, `memoria-baixa` e
+# `armazenamento-*`; a tabela pedia `app-travado`, que **nunca existe**. E
+# `app-travando` (o travamento de um app no log) não estava ligado a nada.
+#
+# O conserto não é só trocar os nomes: um app que travou (`app-travando`) é
+# evidência de app problemático, não de toque fantasma, e vai na linha do
+# `app-travado`. E a lista é conferida por teste contra os ids reais.
 EVIDENCIA_MEDIDA = {
     "toque-fantasma": ("app-nao-responde", "frame-lento"),
-    "app-travado": ("app-nao-responde",),
-    "calor": ("aquecendo",),
+    "app-travado": ("app-nao-responde", "app-travando"),
+    "calor": ("aquecendo", "bateria-quente-carregando"),
     "memoria": ("memoria-baixa",),
     "armazenamento": ("armazenamento-cheio", "armazenamento-apertado"),
 }

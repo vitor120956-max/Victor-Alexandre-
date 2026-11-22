@@ -71,6 +71,7 @@ LEITURAS_SO_DA_VARREDURA: tuple[tuple[str, ...], ...] = (
     ("shell", "dumpsys", "meminfo"),
     ("shell", "ps", "-A", "-o", "PID,RSS,NAME"),
     ("shell", "pm", "list", "packages", "-s"),
+    ("shell", "pm", "list", "packages"),
 )
 
 COMANDOS: tuple[tuple[str, ...], ...] = LEITURAS_DO_SCANNER + LEITURAS_SO_DA_VARREDURA
@@ -284,6 +285,14 @@ def coletar(
         except anatomia.AnatomiaError as exc:
             falhas.append(f"“{chave}”: {exc}")
             continue
+        if codigo != 0 and not erro.strip():
+            # Saída vazia e código != 0 **sem mensagem de erro** não é falha de
+            # leitura: é a resposta. `which su` num aparelho sem root devolve
+            # exatamente isso (código 1, nada nas duas saídas), e listar isso em
+            # “leituras que não responderam” fazia um aparelho **saudável**
+            # parecer problemático. Guardar a chave vazia é o registro correto.
+            saidas[chave] = ""
+            continue
         if codigo != 0 and not saida:
             motivo = (erro or "sem resposta").strip().splitlines()
             falhas.append(f"“{chave}”: {motivo[0][:160] if motivo else 'sem resposta'}")
@@ -299,25 +308,33 @@ def _secao(identificador: str, titulo: str, itens: list[dict[str, str]], *, nota
 def _limites_sem_repetir(frases: list[str]) -> list[str]:
     """Uma linha por motivo — não três linhas do mesmo `Permission denied`.
 
-    No relatório real do dono a mesma negativa aparecia três vezes: uma do
-    `cat /proc/partitions` da varredura, uma do scanner e uma da anatomia. O
-    `dict.fromkeys` não resolvia porque cada módulo escreve a frase com um
-    prefixo diferente; a comparação aqui é pelo **miolo** (o erro em si).
+    No relatório real de 22/11 o dono viu a mesma negativa duas vezes: a
+    varredura escreve `“cat /proc/partitions”: cat: /proc/partitions: Permission
+    denied` e a anatomia escreve só `cat: /proc/partitions: Permission denied`.
+    A dedup da 0.92.6 comparava o texto inteiro e não pegava esse par.
+
+    A comparação agora é pelo **miolo do erro**: o que vem depois do último
+    “: ” da frase, sem o nome do arquivo. Duas frases que terminam no mesmo
+    erro para o mesmo alvo são a mesma leitura — e ficar com a mais explícita
+    (a que tem comando) é melhor que ficar com a primeira.
     """
-    vistos: list[str] = []
-    restos: set[str] = set()
+    def miolo(frase: str) -> str:
+        texto = frase.strip()
+        # ““cmd”: erro” e “erro” viram o mesmo; o alvo aparece no erro.
+        _, _, resto = texto.rpartition("”: ")
+        return (resto or texto).strip().lower()
+
+    escolhidas: dict[str, str] = {}
     for frase in frases:
         limpa = (frase or "").strip()
         if not limpa:
             continue
-        miolo = limpa.split("”:", 1)[-1].strip().lower()
-        if len(miolo) < 8:
-            miolo = limpa.lower()
-        if miolo in restos:
-            continue
-        restos.add(miolo)
-        vistos.append(limpa)
-    return vistos[:16]
+        chave = miolo(limpa)
+        atual = escolhidas.get(chave)
+        # Fica com a que diz **qual comando**: é a que ajuda a resolver.
+        if atual is None or (("“" not in atual) and ("“" in limpa)):
+            escolhidas[chave] = limpa
+    return list(escolhidas.values())[:16]
 
 
 def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
@@ -407,7 +424,18 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
             "sistema-apps",
             "Apps do sistema",
             [
-                {"rotulo": "Total instalado de fábrica", "valor": str(len(sistema))},
+                # `pm list packages -s` lista **quais** são de sistema; o total
+                # de apps no aparelho é outro número (`pm list packages`). Antes
+                # o rótulo dizia “Total instalado de fábrica” com o primeiro
+                # número — e o dono via 440 aqui e 55 em “fora da loja”.
+                {
+                    "rotulo": "Pacotes de sistema (o Android em si)",
+                    "valor": str(len(sistema)),
+                },
+                {
+                    "rotulo": "Apps instalados no aparelho",
+                    "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages", ""))) or "não lido"),
+                },
                 {"rotulo": "Amostra", "valor": ", ".join(sistema[:10])},
             ],
             nota="Desinstalar app de sistema é o que mais quebra aparelho — e o JARVIS não faz isso.",

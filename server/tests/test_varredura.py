@@ -161,6 +161,7 @@ def saidas() -> dict[str, str]:
         "ps -A -o PID,RSS,NAME": PS,
         "cat /proc/partitions": PARTICOES,
         "pm list packages -s": APPS_SISTEMA,
+        "pm list packages": APPS_SISTEMA + "package:com.whatsapp\n",
     }
 
 
@@ -291,7 +292,7 @@ def test_falha_parcial_nao_derruba_o_relatorio():
     relatorio = vd.montar(incompleto)
     assert "Permission denied" in " ".join(relatorio["limitacoes"])
     assert relatorio["secoes"], "o relatório saiu mesmo com uma leitura faltando"
-    assert "de 28 leituras" in relatorio["veredito"]
+    assert "de 29 leituras" in relatorio["veredito"]
 
 
 def test_varredura_desligada_explica_a_variavel(monkeypatch):
@@ -843,3 +844,128 @@ def test_secao_sem_item_nao_sai_como_titulo_vazio():
     for secao in relatorio["secoes"]:
         assert secao["itens"], f"seção “{secao['titulo']}” saiu sem item"
     assert not any(s["id"] == "pastas" for s in relatorio["secoes"])
+
+
+# ---------------------------------------------------------------------------
+# 0.93.0 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
+#
+# O relatório rodou de ponta a ponta: 25 de 28 leituras, fila de suspeitas
+# montada. E mesmo assim mentiu em quatro pontos. Todos só apareceram com
+# aparelho de verdade — o adb de teste respondia “bonito demais”.
+# ---------------------------------------------------------------------------
+
+def test_which_su_vazio_nao_e_falha_de_leitura(monkeypatch):
+    """`which su` num aparelho sem root devolve código 1 e saída vazia.
+
+    A varredura anunciava “«which su»: sem resposta” em “LEITURAS QUE NÃO
+    RESPONDERAM” — um alarme por o aparelho **não** ter root, que é o esperado.
+    """
+    monkeypatch.setenv(vd.AMBIENTE, "1")
+    monkeypatch.setattr(vd.celular, "ferramentas", lambda: {"ligado": True, "adb": "/fake/adb", "scrcpy": ""})
+
+    def rodar(argumentos):
+        corpo = " ".join(argumentos[3:])
+        if "devices" in argumentos:
+            return 0, "List of devices attached\nABC123          device product:a34x\n", ""
+        if corpo == "which su":
+            return 1, "", ""  # é exatamente o que o adb devolve sem root
+        return 0, "", ""
+
+    dados = vd.coletar(rodar=rodar)
+    assert not any("which su" in f for f in dados["falhas"]), dados["falhas"]
+    assert "which su" in dados["saidas"], "a chave tem de existir, vazia"
+
+
+def test_o_scanner_diz_que_a_ausencia_de_su_e_normal():
+    from server import diagnostico_celular as dc
+
+    relatorio = dc.analisar({"serial": "X", "saidas": {"which su": "", "getprop": ""}, "falhas": []})
+    assert not any(p["id"] == "root" for p in relatorio["problemas"])
+    assert "which su" not in " ".join(relatorio["limitacoes"])
+
+
+def test_a_tabela_de_evidencia_aponta_para_ids_que_existem():
+    """`EVIDENCIA_MEDIDA` pedia `app-travado`, que o `analisar()` nunca cria.
+
+    Resultado: toda suspeita saía “sem medida no aparelho”, mesmo com 25
+    leituras boas. Este teste compara a tabela com os ids realmente emitidos.
+    """
+    from server import diagnostico_celular as dc
+
+    ids_reais = {
+        "app-nao-responde", "app-travando", "frame-lento", "aquecendo",
+        "memoria-baixa", "armazenamento-cheio", "armazenamento-apertado",
+        "bateria-quente-carregando",
+    }
+    for causa, evidencias in dc.EVIDENCIA_MEDIDA.items():
+        for evidencia in evidencias:
+            assert evidencia in ids_reais, f"{causa} aponta para id inexistente: {evidencia}"
+
+
+def test_com_medida_a_suspeita_sai_como_medida_no_aparelho():
+    """O oposto: com ANR medido, “app travado” não pode sair “sem medida”."""
+    from server import diagnostico_celular as dc
+
+    relatorio = {
+        "problemas": [{"id": "app-nao-responde"}],
+        "secoes": [],
+    }
+    fila = dc.cruzar(relatorio, ["tela-prende", "frame-lento"])
+    app = next(c for c in fila["fila"] if c["id"] == "app-travado")
+    assert app["medido_no_aparelho"] == ["app-nao-responde"]
+
+
+def test_app_que_travou_no_log_sustenta_a_suspeita_de_app():
+    from server import diagnostico_celular as dc
+
+    relatorio = {"problemas": [{"id": "app-travando"}], "secoes": []}
+    fila = dc.cruzar(relatorio, ["tela-prende"])
+    app = next(c for c in fila["fila"] if c["id"] == "app-travado")
+    assert "app-travando" in app["medido_no_aparelho"]
+
+
+def test_modelo_truncado_nao_vira_nome_do_aparelho():
+    """O relatório real abriu com “SM-A346M” — o modelo é “SM-A346M”+ algo.
+
+    Se o corte de 60 KB cair **dentro** do valor, o parser antigo devolvia o
+    pedaço como se fosse o valor inteiro. Truncado não é resposta.
+    """
+    from server import anatomia
+
+    props = anatomia._propriedades("[ro.product.model]: [SM-A346")
+    assert "ro.product.model" not in props, "aceitou um valor cortado como inteiro"
+    # e o valor completo continua funcionando
+    assert anatomia._propriedades("[ro.product.model]: [SM-A346M]")["ro.product.model"] == "SM-A346M"
+
+
+def test_o_total_de_apps_nao_e_o_total_de_pacotes_de_sistema(tmp_path=None):
+    """“440 instalado de fábrica” e “55 fora da loja” na mesma tela confundiam:
+    são coisas diferentes, e o rótulo agora diz qual é qual."""
+    base = saidas()
+    base["pm list packages"] = APPS_SISTEMA + "package:com.whatsapp\npackage:com.instagram.android\n"
+    relatorio = vd.montar({"serial": "ABC123", "saidas": base, "falhas": []})
+    secao = next(s for s in relatorio["secoes"] if s["id"] == "sistema-apps")
+    rotulos = {i["rotulo"] for i in secao["itens"]}
+    assert "Pacotes de sistema (o Android em si)" in rotulos
+    assert "Apps instalados no aparelho" in rotulos
+    valores = {i["rotulo"]: i["valor"] for i in secao["itens"]}
+    assert valores["Pacotes de sistema (o Android em si)"] == "3"
+    assert valores["Apps instalados no aparelho"] == "5"
+
+
+def test_a_mesma_negativa_nao_aparece_duas_vezes():
+    """Varredura escreve “«cmd»: erro”, anatomia escreve só “erro”. Mesma linha."""
+    base = saidas()
+    base["cat /proc/partitions"] = ""
+    relatorio = vd.montar({
+        "serial": "X",
+        "saidas": base,
+        "falhas": [
+            "“cat /proc/partitions”: cat: /proc/partitions: Permission denied",
+            "cat: /proc/partitions: Permission denied",
+        ],
+    })
+    repetidas = [l for l in relatorio["limitacoes"] if "Permission denied" in l]
+    assert len(repetidas) == 1, repetidas
+    # fica a que diz qual comando — é a que ajuda a resolver
+    assert repetidas[0].startswith("“cat /proc/partitions”")

@@ -508,6 +508,14 @@ def _propriedades(saida: str) -> dict[str, str]:
     for linha in (saida or "").splitlines():
         if not linha.startswith("["):
             continue
+        if not linha.endswith("]"):
+            # 0.93.0 — linha cortada no meio (o `_cortar` de 60 KB pode cair
+            # dentro do valor). `rsplit` não acha o `]` final e devolve o resto
+            # **truncado como se fosse o valor inteiro**: o relatório do dono
+            # saiu com “SM-A346M” quando o modelo é “SM-A346M…” — e teria saído
+            # “SM-A346” se o corte caísse dois caracteres antes. Truncado não é
+            # resposta: a chave fica de fora e o fallback por comando resolve.
+            continue
         try:
             chave, resto = linha[1:].split("]: [", 1)
             valor = resto.rsplit("]", 1)[0]
@@ -647,6 +655,8 @@ def ler_android(
     # modelo cai depois do corte e o cabeçalho saía só "Android 16" — sem dizer
     # qual aparelho era. Três propriedades custam um comando; a leitura inteira
     # continua servindo à tabela de identidade.
+    # `ro.product.model` entra sempre: é o único cujo truncamento muda o nome do
+    # aparelho na tela. Os outros dois só quando faltam.
     for chave in ("ro.product.model", "ro.build.version.release", "ro.product.manufacturer"):
         if not props.get(chave):
             valor = ler("shell", "getprop", chave).strip()

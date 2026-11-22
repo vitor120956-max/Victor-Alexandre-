@@ -292,3 +292,22 @@ Dois defeitos achados ao unir:
    declarava;
 2. seção sem item saía como título solto (o caso de “PASTAS” quando nenhum `ls`
    responde). Agora a seção sai da lista e o motivo fica nas limitações.
+
+## 14. O que o primeiro relatório real ensinou (0.93.0)
+
+O dono rodou o `ver-tudo-no-celular.bat` no SM-A346M (Android 16): 25 de 28
+leituras, fila de suspeitas montada, achado real (`com.dti.telefonica` travando).
+Funcionou — e mentiu em quatro pontos.
+
+| sintoma no relatório | causa | correção |
+|---|---|---|
+| “«which su»: sem resposta” em leituras que não responderam | `which` sem root devolve **código 1 e saída vazia**; a varredura tratava como falha | sem mensagem de erro = resposta; a chave é guardada vazia e o texto diz “não é alarme” |
+| **toda** suspeita “sem medida no aparelho” | `EVIDENCIA_MEDIDA` pedia `app-travado`, id que o scanner **nunca emite**; `app-travando` não estava ligado a nada | tabela corrigida + teste que a compara com os ids reais |
+| modelo podia sair truncado | parser aceitava `[ro.product.model]: [SM-A346` como valor inteiro | linha sem `]` final é descartada; fallback por comando |
+| “440 de fábrica” e “55 instalados” | `pm list packages -s` lista **quais** são de sistema, não o total do aparelho | dois rótulos: “Pacotes de sistema” e “Apps instalados no aparelho” |
+
+Mais uma: a mesma negativa aparecia duas vezes porque cada módulo formata o erro
+de um jeito (`“cmd”: erro` vs `erro`). A dedup passou a comparar o **miolo** e a
+ficar com a versão que diz qual comando falhou.
+
+O total de leituras foi para **29** (`pm list packages` entrou).

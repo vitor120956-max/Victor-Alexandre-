@@ -2973,3 +2973,42 @@ Dois defeitos apareceram ao ligar as pontas:
 - **seção vazia virava título solto.** “PASTAS QUE O ANDROID PUBLICA” saía
   seguido só da nota, sem item nenhum — parecia leitura perdida. Seção sem item
   sai da lista, e o motivo já está nas limitações.
+
+### 0.93.0 — o relatório de verdade achou quatro mentiras
+
+> o primeiro `ver-tudo-no-celular.bat` rodado num aparelho real (SM-A346M,
+> Android 16): 25 de 28 leituras, fila montada, um app travando — e quatro
+> informações erradas na mesma tela.
+
+O adb de teste respondia bonito demais. O aparelho de verdade ensinou:
+
+**“«which su»: sem resposta”** aparecia em “leituras que não responderam”. Um
+`which` **bem-sucedido em não achar** devolve código 1 e saída vazia — é a
+resposta, não a falha. Agora, sem mensagem de erro, a leitura é guardada vazia e o
+texto diz “não é alarme, é o normal num aparelho sem root”. Um aparelho saudável
+deixou de parecer problemático.
+
+**A tabela de evidências estava morta em três das cinco linhas.**
+`EVIDENCIA_MEDIDA` pedia `app-travado`, um id que o `analisar()` **nunca cria**
+(quem existe é `app-nao-responde` e `app-travando`). Efeito: toda suspeita saía
+“sem medida no aparelho”, mesmo num relatório com 25 leituras boas — o oposto do
+que a função existe para fazer. O conserto não é só trocar nomes: um app que
+travou no log (`app-travando`) é evidência de **app problemático**, não de toque
+fantasma, e vai na linha certa. Um teste compara a tabela com os ids reais.
+
+**O título podia sair truncado.** O `getprop` inteiro passa de 60 KB; se o corte
+cai dentro de `[ro.product.model]: [SM-A346`, o parser antigo devolvia `SM-A346`
+como se fosse o valor. Linha sem `]` final é descartada e a chave é pedida
+sozinha ao `adb`.
+
+**Dois totais de app com rótulos que pareciam o mesmo.** `pm list packages -s`
+lista **quais** pacotes são de sistema (440); o total de apps instalados é outro
+(55 fora da loja). A seção passou a dizer as duas coisas com nome próprio.
+
+E a mesma negativa aparecia duas vezes porque cada módulo formata o erro de um
+jeito — a dedup passou a comparar o miolo e ficar com a que diz qual comando
+falhou.
+
+O que o relatório **acertou** também fica registrado: a fila trouxe toque
+fantasma em primeiro com o relato certo, o ANR do `com.dti.telefonica` foi achado
+no `logcat`, e os estados de bootloader e bateria estavam corretos.
