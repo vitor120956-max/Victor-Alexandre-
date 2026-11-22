@@ -331,7 +331,9 @@ def test_android_sem_termica_explica_que_e_o_sistema(monkeypatch):
     )
     dados = anatomia.ler_android(rodar=rodar)
     assert not any(s["id"] == "termico" for s in dados["secoes"])
-    assert any("desenho do sistema" in lim for lim in dados["limitacoes"])
+    # 0.94.0 — o texto da limitação térmica passou a ser o mesmo do
+    # `diagnostico_celular`, para a dedup conseguir juntar as duas.
+    assert any("/sys/class/thermal" in lim for lim in dados["limitacoes"])
 
 
 # ---------------------------------------------------------------------------

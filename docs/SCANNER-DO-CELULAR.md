@@ -311,3 +311,22 @@ de um jeito (`“cmd”: erro` vs `erro`). A dedup passou a comparar o **miolo**
 ficar com a versão que diz qual comando falhou.
 
 O total de leituras foi para **29** (`pm list packages` entrou).
+
+## 15. O que o segundo relatório real ensinou (0.94.0)
+
+`RXCW400ZV3F-20261122-195132.json` — mesmo aparelho, 27 de 29 leituras, sintomas
+`1 2 3 4`. Três defeitos, todos de **apresentação de um dado que já estava certo**.
+
+| sintoma no relatório | causa | correção |
+|---|---|---|
+| fila inteira “sem medida no aparelho”, com ANR medido duas telas acima | `_cruzar_sintomas` passava as **saídas cruas** a `cruzar()`, que lê `relatorio["problemas"]`; sem `problemas`, toda evidência vira “não achei” | `montar()` guarda `_saude`; o cruzamento usa a saúde já calculada e `_saude` sai antes de imprimir |
+| “495 instalados” no total e “55 instalados” na otimização | o total é `pm list packages` (495); `-3` é só o que o dono instalou (55) | `Apps instalados (sistema + seus) 495` e `Fora da loja do fabricante 55`; a otimização diz “são 55 apps que você mesmo instalou” |
+| limitação térmica em duas linhas seguidas | `diagnostico_celular` e `anatomia` escreviam a mesma coisa com miolos diferentes | um texto idêntico nos dois módulos — a dedup pega, e a lista mostra uma linha |
+
+A lição da 0.93.0 se repetiu de lado: lá eu consertei a **tabela** de evidências;
+aqui, o que chegava na tabela. Nos dois casos o teste que faltava era o que usa o
+**caminho real** (`montar()` → `_cruzar_sintomas()`), não a função isolada.
+
+O que o relatório **não** acusou e agora está escrito: RAM com 35% disponível e
+bateria a 30,7 °C tiram memória e calor da frente das suspeitas — mesmo sem
+leitura térmica de CPU, que este Android esconde.

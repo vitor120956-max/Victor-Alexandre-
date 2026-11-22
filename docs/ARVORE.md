@@ -3012,3 +3012,37 @@ falhou.
 O que o relatório **acertou** também fica registrado: a fila trouxe toque
 fantasma em primeiro com o relato certo, o ANR do `com.dti.telefonica` foi achado
 no `logcat`, e os estados de bootloader e bateria estavam corretos.
+
+### 0.94.0 — o segundo relatório: medido no log, “sem medida” na fila
+
+> `RXCW400ZV3F-20261122-195132.json`, SM-A346M, Android 16, API 36, 27 de 29
+> leituras, 440 pacotes de sistema, bateria 63% carregando, sintomas `1 2 3 4`.
+> O `[MEDIA]` do `com.dti.telefonica` saiu no relatório — e a fila disse que nada
+> tinha sido medido.
+
+A 0.93.0 tinha consertado a **tabela** de evidências. O relatório seguinte mostrou
+que a tabela estava certa e o que chegava nela não: `_cruzar_sintomas` passava
+`{"serial", "saidas", "falhas"}` a `cruzar()`, que lê `relatorio["problemas"]`.
+Sem `problemas`, toda evidência vira “não achei” — e “não achei” é impresso como
+**“sem medida no aparelho”**. Eram dois erros empilhados: um contrato errado e uma
+frase que confunde *não medido* com *medido e normal*.
+
+`montar()` guarda a saúde que já calculou (`_saude`) e o cruzamento usa ela: o
+scanner roda uma vez, e não há como os dois números divergirem. `_saude` sai do
+dicionário antes de imprimir.
+
+O segundo achado é de contagem: **495** é o total de apps do aparelho,
+**440** são pacotes de sistema e **55** são os que o dono instalou. Os três
+números apareciam com a palavra “instalados”, e a otimização `menos-apps` usava o
+de 55 com o rótulo do total. Agora cada um tem nome próprio e a otimização diz
+“são 55 apps que você mesmo instalou”.
+
+O terceiro é de repetição: `diagnostico_celular` e `anatomia` escreviam a mesma
+limitação térmica com palavras diferentes, e a dedup por miolo — feita na 0.93.0
+para o `Permission denied` — não alcançava. Ficou um texto só nos dois módulos,
+e a frase “não lê memória por app”, que também era duplicada, ficou só na
+anatomia.
+
+`test_varredura.py` vai a **68** casos. O que importa não é a contagem: é que o
+teste novo usa o **caminho real** (`montar()` → `_cruzar_sintomas()`), e voltar o
+defeito derruba o teste — conferido à mão, não por leitura de código.

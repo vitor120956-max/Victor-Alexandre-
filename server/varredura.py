@@ -433,8 +433,15 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
                     "valor": str(len(sistema)),
                 },
                 {
-                    "rotulo": "Apps instalados no aparelho",
+                    # `pm list packages -3` é o que o scanner conta como “fora da
+                    # loja”. Aqui o total (sistema + instalados) e essa diferença
+                    # é o que fazia “495” e “55” parecerem contradição na tela.
+                    "rotulo": "Apps instalados (sistema + seus)",
                     "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages", ""))) or "não lido"),
+                },
+                {
+                    "rotulo": "Fora da loja do fabricante",
+                    "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages -3", ""))) or "0"),
                 },
                 {"rotulo": "Amostra", "valor": ", ".join(sistema[:10])},
             ],
@@ -507,6 +514,10 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
             + list(anatomia_relatorio.get("limitacoes", []))
         ),
         "sem_root": list(SEM_ROOT),
+        # Reaproveitado por `varrer()` para cruzar os sintomas: o scanner já
+        # rodou aqui, e rodar de novo seria uma segunda leitura do mesmo dado
+        # (e uma segunda chance de divergir). Sai do relatório antes de imprimir.
+        "_saude": saude,
         "nao_faz": list(diagnostico_celular.NAO_FAZ) + [
             "Não copia arquivo do aparelho: copiar é `celular.puxar`, com confirmação e só nas pastas de mídia.",
             "Não abre a tela do celular: isso é `scrcpy`, outro comando.",
@@ -546,24 +557,32 @@ def varrer(
     medido = coletar(alvo, rodar=rodar)
     relatorio = montar(medido, agora=agora)
     if sintomas:
-        relatorio["sintomas"] = _cruzar_sintomas(medido, sintomas)
+        relatorio["sintomas"] = _cruzar_sintomas(
+            medido, sintomas, relatorio.get("_saude")
+        )
+        relatorio.pop("_saude", None)
     return relatorio
 
 
-def _cruzar_sintomas(medido: dict[str, Any], sintomas: list[str]) -> dict[str, Any]:
+def _cruzar_sintomas(
+    medido: dict[str, Any],
+    sintomas: list[str],
+    saude: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Cruza o relato do dono com o que a varredura mediu.
 
-    Reusa `diagnostico_celular.cruzar` de propósito: uma segunda implementação
-    de pesos e “teste mais barato” divergiria da primeira na primeira mudança.
-    A varredura já leu **todas** as saídas que o scanner pede (a lista é
-    derivada), então o cruzamento roda sobre a mesma medida, sem reabrir o
-    aparelho.
+    `cruzar()` espera o **relatório** do scanner (com `problemas`), não as saídas
+    cruas — é por `p["id"]` que ele descobre o que o aparelho sustenta. Na 0.92.9
+    eu passei `{"serial", "saidas", "falhas"}`, que não tem `problemas`, e o
+    resultado foi **toda suspeita sair “sem medida no aparelho”** mesmo com o
+    `logcat` cheio de travamento. Passar o relatório já montado evita rodar
+    `analisar()` duas vezes e evita o erro de contrato de novo.
     """
+    base = saude if saude is not None else diagnostico_celular.analisar(
+        {"serial": medido.get("serial", ""), "saidas": medido.get("saidas", {}), "falhas": []}
+    )
     try:
-        return diagnostico_celular.cruzar(
-            {"serial": medido.get("serial", ""), "saidas": medido.get("saidas", {}), "falhas": []},
-            sintomas,
-        )
+        return diagnostico_celular.cruzar(base, sintomas)
     except Exception:  # noqa: BLE001 - sintoma não pode derrubar a varredura
         return {
             "sintomas_marcados": list(sintomas),

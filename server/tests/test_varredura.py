@@ -847,7 +847,7 @@ def test_secao_sem_item_nao_sai_como_titulo_vazio():
 
 
 # ---------------------------------------------------------------------------
-# 0.93.0 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
+# 0.94.0 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
 #
 # O relatório rodou de ponta a ponta: 25 de 28 leituras, fila de suspeitas
 # montada. E mesmo assim mentiu em quatro pontos. Todos só apareceram com
@@ -945,12 +945,84 @@ def test_o_total_de_apps_nao_e_o_total_de_pacotes_de_sistema(tmp_path=None):
     base["pm list packages"] = APPS_SISTEMA + "package:com.whatsapp\npackage:com.instagram.android\n"
     relatorio = vd.montar({"serial": "ABC123", "saidas": base, "falhas": []})
     secao = next(s for s in relatorio["secoes"] if s["id"] == "sistema-apps")
-    rotulos = {i["rotulo"] for i in secao["itens"]}
-    assert "Pacotes de sistema (o Android em si)" in rotulos
-    assert "Apps instalados no aparelho" in rotulos
     valores = {i["rotulo"]: i["valor"] for i in secao["itens"]}
     assert valores["Pacotes de sistema (o Android em si)"] == "3"
-    assert valores["Apps instalados no aparelho"] == "5"
+    assert valores["Apps instalados (sistema + seus)"] == "5"
+
+
+def test_485_nao_e_440_mais_55_sem_explicar():
+    """O relatório real mostrava “440 de sistema”, “495 instalados” e, na
+    otimização, “55 instalados”. Eram três contas diferentes com a mesma
+    palavra. Agora o total diz que é total e o recorte de terceiros é
+    “Fora da loja do fabricante” — e a otimização não repete o número do total.
+    """
+    # os números do aparelho real: 440 pacotes do sistema + 55 apps do dono
+    sistema = "".join(f"package:com.samsung.sys{i}\n" for i in range(440))
+    terceiros = "".join(f"package:com.instalado{i}\n" for i in range(55))
+    base = saidas()
+    base["pm list packages"] = sistema + terceiros
+    base["pm list packages -s"] = sistema
+    base["pm list packages -3"] = terceiros
+    relatorio = vd.montar({"serial": "ABC123", "saidas": base, "falhas": []})
+    secao = next(s for s in relatorio["secoes"] if s["id"] == "sistema-apps")
+    valores = {i["rotulo"]: i["valor"] for i in secao["itens"]}
+    assert valores["Pacotes de sistema (o Android em si)"] == "440"
+    assert valores["Apps instalados (sistema + seus)"] == "495"
+    assert valores["Fora da loja do fabricante"] == "55"
+
+    texto_otimizacoes = " ".join(
+        o["ganho"] for o in relatorio.get("otimizacoes", [])
+    )
+    # o número da otimização é o de terceiros, e a frase diz de onde ele vem
+    assert "55 apps que você mesmo instalou" in texto_otimizacoes
+    # “495 instalados” na otimização era o defeito: ali não é o total
+    assert "495" not in texto_otimizacoes
+
+
+def test_cruzar_usa_o_relatorio_e_nao_desiste_da_medida():
+    """0.92.9 passou as saídas cruas a `cruzar()`, que lê `problemas` — e toda
+    suspeita saía “sem medida”. O relatório real tinha ANR de `com.dti.telefonica`
+    e a tela dizia que nada tinha sido medido. Este teste usa o caminho real:
+    `montar()` → `_cruzar_sintomas()`.
+    """
+    base = saidas()
+    base["logcat -b crash -d -t 80"] = (
+        "--------- beginning of crash\n"
+        "FATAL EXCEPTION: main\n"
+        "Process: com.dti.telefonica, PID: 1234\n"
+    )
+    relatorio = vd.montar({"serial": "RXCW400ZV3F", "saidas": base, "falhas": []})
+    fila = vd._cruzar_sintomas(
+        {"serial": "RXCW400ZV3F", "saidas": base, "falhas": []},
+        ["tela-prende"],
+        relatorio.get("_saude"),
+    )
+    app = next(c for c in fila["fila"] if c["id"] == "app-travado")
+    assert app["medido_no_aparelho"], "o ANR medido não chegou à fila de suspeitas"
+
+
+def test_a_saude_nao_vaza_para_o_relatorio_impresso():
+    """`_saude` é andaime interno: quem imprime não pode ver o dicionário."""
+    relatorio = vd.montar({"serial": "ABC123", "saidas": saidas(), "falhas": []})
+    assert "_saude" in relatorio  # existe para o cruzamento…
+    vd.varrer = vd.varrer  # (não chamamos varrer: usa adb de verdade)
+    texto = vd.em_texto(relatorio)
+    assert "_saude" not in texto
+    assert "_saude" not in str(relatorio.get("limitacoes", []))
+
+
+def test_temperatura_ausente_aparece_uma_vez_so():
+    """`diagnostico_celular` e `anatomia` escreviam a mesma limitação térmica
+    com palavras diferentes; a dedup por miolo não pegava. Agora há um texto só.
+    """
+    base = saidas()
+    base["for z in /sys/class/thermal/thermal_zone*; do echo \"$(cat $z/type 2>/dev/null):$(cat $z/temp 2>/dev/null)\"; done"] = ""
+    relatorio = vd.montar({"serial": "ABC123", "saidas": base, "falhas": []})
+    termicas = [
+        linha for linha in relatorio["limitacoes"]
+        if "temperatura" in linha.lower() or "thermal" in linha.lower()
+    ]
+    assert len(termicas) == 1, termicas
 
 
 def test_a_mesma_negativa_nao_aparece_duas_vezes():
