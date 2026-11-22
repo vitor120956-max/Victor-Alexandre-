@@ -271,7 +271,7 @@ def test_android_le_identidade_bateria_memoria_e_apps(monkeypatch):
     assert valores[("termico", "gpu")] == "-127,0 °C"  # o valor vem do aparelho, sem maquiagem
     assert valores[("discos", "/data")].startswith("67,0 GB livres")
     assert valores[("apps", "Fora da loja (terceiros)")] == "3"
-    # 0.95.1 — a seção de apps deixou de listar nome de pacote: esse texto ia
+    # 0.95.2 — a seção de apps deixou de listar nome de pacote: esse texto ia
     # para a tela **e** para o arquivo que o dono manda a outra pessoa.
     assert "com.google.android.youtube" not in str(valores)
     assert "Ajustes → Apps" in valores[("apps", "Onde ver quais")]
@@ -334,7 +334,7 @@ def test_android_sem_termica_explica_que_e_o_sistema(monkeypatch):
     )
     dados = anatomia.ler_android(rodar=rodar)
     assert not any(s["id"] == "termico" for s in dados["secoes"])
-    # 0.95.1 — o texto da limitação térmica passou a ser o mesmo do
+    # 0.95.2 — o texto da limitação térmica passou a ser o mesmo do
     # `diagnostico_celular`, para a dedup conseguir juntar as duas.
     assert any("/sys/class/thermal" in lim for lim in dados["limitacoes"])
 

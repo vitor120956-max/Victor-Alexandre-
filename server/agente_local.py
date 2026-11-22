@@ -271,7 +271,7 @@ _CAMPOS_ID = {"planId", "planid", "id", "chamada", "chamadaid", "artifactid", "r
 # Campos cujo valor é o nome de um app no Android.
 _CAMPOS_PACOTE = {"pacote", "package", "nomedopacote", "app", "aplicativo"}
 
-# 0.95.1 — nome de pacote Android (`com.dti.telefonica`, `app.revanced.android.youtube`).
+# 0.95.2 — nome de pacote Android (`com.dti.telefonica`, `app.revanced.android.youtube`).
 # Sem isto, o campo "pacote" caía no ramo de "campo de texto comum" e recebia a
 # **frase inteira**: o chat mandava `pacote=fecha o com.dti.telefonica no celular`
 # e a skill recusava — com razão, mas o defeito era de quem preencheu.

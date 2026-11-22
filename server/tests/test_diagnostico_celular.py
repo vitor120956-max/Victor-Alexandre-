@@ -633,7 +633,7 @@ def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.1 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
+# 0.95.2 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
 # ---------------------------------------------------------------------------
 
 
@@ -722,7 +722,7 @@ def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.1 — “vai chover amanhã?” não é pedido para fechar app
+# 0.95.2 — “vai chover amanhã?” não é pedido para fechar app
 # ---------------------------------------------------------------------------
 
 
@@ -764,3 +764,84 @@ def test_nome_de_exibicao_sem_pontos_continua_recusado_com_a_dica_antiga():
     with pytest.raises(Exception) as erro:
         modelo(pacote="whatsapp")
     assert "com.whatsapp" in str(erro.value)
+
+
+# ---------------------------------------------------------------------------
+# 0.95.2 — o JARVIS instala o driver em vez de mandar o dono baixar
+# ---------------------------------------------------------------------------
+
+
+def test_driver_sem_confirmar_devolve_plano_e_nao_baixa(monkeypatch):
+    """Sem `confirmado=True` nada é baixado — o dono vê URL e tamanho antes."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+
+    def nao_pode_baixar(*a, **k):
+        raise AssertionError("baixou sem confirmação")
+
+    monkeypatch.setattr(sistema, "baixar", nao_pode_baixar)
+    plano = sistema.driver_do_celular(fabricante="samsung")
+    assert plano["url"].startswith("https://developer.samsung.com/")
+    assert plano["tamanho_aprox_mb"] > 0
+    assert "confirmado=True" in plano["confirmação"]
+    # e a mensagem tem de deixar claro que o celular não recebe nada
+    assert "nenhum app" in plano["no_celular"].lower()
+
+
+def test_driver_confirmado_baixa_e_instala_pela_quarentena(monkeypatch):
+    """O caminho real: baixa, confere o hash e chama o instalador."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    chamadas: list[str] = []
+
+    def baixar(**kwargs):
+        chamadas.append(f"baixar:{kwargs['url']}")
+        return {"arquivo": "/tmp/quarentena/driver.exe", "bytes": 34_000_000, "sha256": "a" * 64, "tipo": "application/x-msdownload"}
+
+    def instalar(**kwargs):
+        chamadas.append(f"instalar:{kwargs['arquivo']}")
+        return {"plano": "driver.exe", "confirmação": "abc123"}
+
+    monkeypatch.setattr(sistema, "baixar", baixar)
+    monkeypatch.setattr(sistema, "instalar", instalar)
+    feito = sistema.driver_do_celular(fabricante="samsung", confirmado=True)
+    assert chamadas == ["baixar:https://developer.samsung.com/sdp/file/de97d0ea-da03-46a4-b35d-346d37a878e0",
+                        "instalar:/tmp/quarentena/driver.exe"]
+    assert feito["baixado"]["sha256"] == "a" * 64
+    # o próximo passo é dito, não deixado para o dono adivinhar
+    assert "reconecte o cabo" in feito["depois"]
+
+
+def test_driver_recusa_fabricante_desconhecido_sem_inventar_url(monkeypatch):
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.driver_do_celular(fabricante="xiaomi")
+    assert "samsung" in str(erro.value).lower()
+
+
+def test_driver_nao_existe_fora_do_windows(monkeypatch):
+    """No Linux/macOS o driver é do kernel: instalar `.exe` seria enganar."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Linux")
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.driver_do_celular(fabricante="samsung")
+    assert "Windows" in str(erro.value)
+
+
+def test_a_skill_do_driver_esta_no_registro_e_diz_o_que_faz():
+    from pathlib import Path
+
+    from server import skill_registry as sr
+
+    registro = sr.build_registry(Path.cwd())
+    definicao = registro.get("sistema.driver-celular")
+    assert definicao.requires_confirmation is True
+    assert definicao.side_effects is True
+    # a descrição precisa dizer que instala no PC — é a dúvida número um do dono
+    texto = definicao.description.lower()
+    assert "no pc" in texto and "não no celular" in texto

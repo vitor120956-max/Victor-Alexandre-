@@ -3148,3 +3148,31 @@ Três consertos:
 O primeiro teste que escrevi para o validador exigia **dois** pontos no nome e
 reprovou `com.whatsapp` — defeito introduzido por mim, pego pelo teste antes do
 commit. Um ponto basta.
+
+### 0.95.2 — o driver deixa de ser tarefa do dono, e o updater mede a rota
+
+> *“pq vc nao faz javris instalar para mim”* — e *“quero fazer nada manual”*.
+
+A 0.95.1 tinha dado a mensagem certa: *falta o driver da Samsung, instale*. Certa
+e inútil. O JARVIS agora baixa e instala, com três travas:
+
+| trava | o que impede |
+|---|---|
+| sem `confirmado=True` | só devolve o plano — URL oficial, ~33 MB, e “nada instala no celular” |
+| fora do Windows | `SistemaError`: no Linux/macOS o driver é do kernel, `.exe` ali seria teatro |
+| fabricante desconhecido | diz que só conhece `samsung`; não inventa URL para Xiaomi |
+
+O caminho confirmado é o mesmo de qualquer instalação do JARVIS: baixa para a
+**quarentena** (`storage/host-downloads`), grava o SHA-256, e só então chama
+`instalar()`, que confere a assinatura antes de rodar o instalador.
+
+A segunda metade é o updater. Medi na caixa onde trabalho: `raw.githubusercontent.com`
+devolve **000** enquanto `github.com` e `codeload` devolvem 200. Se isso acontecer
+no PC do dono, “tem versão nova?” morria num `ConnectionError` mudo. A sonda
+`rota_funciona()` nunca lança e responde `raw` / `codeload` / `nenhuma` — e
+`codeload` respondendo HTML de erro **não** conta como rota boa.
+
+Correção de uma frase minha exagerada: o `atualizar-baixar.ps1` já caía para o
+`codeload` desde antes. O que faltava era a mensagem dizer isso — e a sonda medir
+em vez de supor.
+

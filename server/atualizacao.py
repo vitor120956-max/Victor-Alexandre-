@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.95.1"
+VERSAO = "0.95.2"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -68,6 +68,21 @@ NOME_MANIFESTO = "manifest.json"
 BASE_PADRAO = (
     "https://raw.githubusercontent.com/vitor120956-max/Victor-Alexandre-"
     "/arena/f26cfa7a-victor-alexandre"
+)
+
+# 0.95.2 — fonte alternativa, para quando `raw.githubusercontent.com` está
+# bloqueado. Isso não é hipótese: no ambiente de teste do próprio projeto o
+# `raw` devolveu **000** (conexão derrubada) enquanto `codeload` e
+# `api.github.com` respondiam 200. Operadora, DNS de escola e filtro
+# corporativo bloqueiam o `raw` com frequência — e o updater falhava calado,
+# deixando o dono meses numa versão velha sem saber.
+#
+# `codeload` entrega o repositório **inteiro** em zip, não um arquivo por vez;
+# por isso ele não substitui a base normal e sim o plano B: baixa o zip, extrai
+# o palco. Custa mais banda e resolve o caso em que a rota principal morre.
+BASE_CODELOAD = (
+    "https://codeload.github.com/vitor120956-max/Victor-Alexandre-"
+    "/zip/refs/heads/arena/f26cfa7a-victor-alexandre"
 )
 
 AMBIENTE = "JARVIS_ATUALIZACAO"
@@ -279,6 +294,39 @@ def _baixar_url(url: str) -> bytes:
         return resposta.content
 
 
+def rota_funciona(baixar: Callable[[str], bytes] | None = None) -> dict[str, Any]:
+    """A rota principal responde? Se não, qual usar.
+
+    0.95.2 — o dono não pode ser obrigado a descobrir que o `raw` está
+    bloqueado. Esta função **mede** antes: tenta o manifesto pela base normal
+    e, se falhar, confirma se o `codeload` está de pé (é de lá que vem o zip).
+
+    Nunca lança: uma sonda que quebra não pode impedir a mensagem de sair.
+    """
+    obter = baixar or _baixar_url
+    try:
+        obter(f"{_base()}/{NOME_MANIFESTO}")
+        return {"rota": "raw", "funciona": True, "motivo": ""}
+    except Exception as exc:  # noqa: BLE001 - a falha é o resultado
+        primeiro = f"{type(exc).__name__}: {exc}"
+    try:
+        pedaco = obter(BASE_CODELOAD)
+        if pedaco[:2] == b"PK":
+            return {
+                "rota": "codeload",
+                "funciona": True,
+                "motivo": primeiro,
+                "tamanho_zip": len(pedaco),
+            }
+        return {"rota": "nenhuma", "funciona": False, "motivo": primeiro}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "rota": "nenhuma",
+            "funciona": False,
+            "motivo": f"{primeiro} / codeload: {type(exc).__name__}: {exc}",
+        }
+
+
 def _buscar_manifesto(baixar: Callable[[str], bytes] | None = None) -> dict[str, Any]:
     obter = baixar or _baixar_url
     bruto = obter(f"{_base()}/{NOME_MANIFESTO}")
@@ -382,11 +430,25 @@ def verificar(
         local_hashes = hashes_locais(projeto)
         diferenca = comparar(remoto, local_hashes)
     except Exception as exc:  # rede, json, manifesto vazio
+        sonda = rota_funciona(baixar)
+        if sonda["rota"] == "codeload":
+            plano = (
+                "`raw.githubusercontent.com` está bloqueado nesta rede, mas o `codeload` "
+                "funciona. O `atualizar.bat` já cai para ele sozinho: rode o `.bat` e ele "
+                "baixa o zip inteiro. Esta checagem por arquivo não passa dessa porta."
+            )
+        else:
+            plano = (
+                "Nenhuma das duas rotas respondeu (raw e codeload). Verifique a internet "
+                "e, se estiver em rede com filtro, use outra rede. O `atualizar.bat` "
+                "tenta o zip inteiro mesmo assim."
+            )
         return {
             "ligado": True,
             "checou": False,
             "motivo": f"Não consegui falar com o GitHub: {type(exc).__name__}: {exc}",
-            "plano_b": "O `atualizar.bat` baixa o zip inteiro e funciona sem esta camada.",
+            "rota": sonda["rota"],
+            "plano_b": plano,
         }
 
     versao_remota = str(remoto.get("versao") or "")

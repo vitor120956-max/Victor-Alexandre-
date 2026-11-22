@@ -2907,3 +2907,109 @@ def catalogo() -> dict[str, Any]:
             "Não alcança endereço privado, laço local ou link-local pela rede.",
         ],
     }
+
+# ---------------------------------------------------------------------------
+# 0.95.2 — instalar o driver do celular sem o dono baixar nada à mão
+# ---------------------------------------------------------------------------
+
+# Fontes oficiais, com o que cada uma resolve. `verificar_em` existe porque
+# link de fabricante envelhece: quando a Samsung trocar o arquivo, o plano diz
+# que a URL mudou em vez de baixar um HTML de erro e instalar “nada”.
+DRIVERS_CONHECIDOS: dict[str, dict[str, Any]] = {
+    "samsung": {
+        "nome": "Samsung USB Driver for Mobile Phones",
+        "url": "https://developer.samsung.com/mobile/android-usb-driver.html",
+        # link direto publicado pela Samsung (o mesmo do winget)
+        "url_arquivo": "https://developer.samsung.com/sdp/file/de97d0ea-da03-46a4-b35d-346d37a878e0",
+        "verificar_em": "https://developer.samsung.com/mobile/android-usb-driver.html",
+        "resolve": (
+            "Faz o `adb` enxergar o aparelho quando o Windows só monta o MTP "
+            "(a pasta do celular aparece no Explorer e o `adb devices` fica vazio)."
+        ),
+        "onde": "no PC (Windows), com o celular desconectado",
+        "no_celular": "nada — nenhum app é instalado no aparelho",
+        "tamanho_mb": 33,
+        "reinicia": False,
+        "assinado": "Samsung Electronics (o instalador é assinado; o JARVIS confere)",
+    },
+}
+
+
+def driver_do_celular(
+    *,
+    fabricante: str = "samsung",
+    confirmado: bool = False,
+    modo: str = "full",
+    autorizacao: str = "",
+) -> dict[str, Any]:
+    """Baixa e instala o driver USB do fabricante — o passo que destrava o `adb`.
+
+    Por que isto existe: o dono via a pasta “A34” no Explorer e o JARVIS dizendo
+    que nenhum Android apareceu. As duas coisas eram verdade — o Windows fala
+    MTP e o `adb` precisa da interface de depuração, que só existe com o driver
+    do fabricante instalado. Mandar a pessoa baixar um `.exe` num site é
+    trabalho manual que o JARVIS pode fazer.
+
+    Três travas, as mesmas do resto do módulo:
+
+    1. sem `confirmado`, devolve o plano (URL, tamanho, o que muda) e não baixa;
+    2. o arquivo vai para a **quarentena** e passa por verificação de assinatura
+       antes do instalador rodar;
+    3. nada é instalado no celular — o driver é do PC.
+    """
+    modo = _modo(modo)
+    chave = (fabricante or "").strip().lower()
+    info = DRIVERS_CONHECIDOS.get(chave)
+    if not info:
+        disponiveis = ", ".join(sorted(DRIVERS_CONHECIDOS))
+        raise SistemaError(
+            f"Não tenho o driver de “{fabricante}”. Conheço: {disponiveis}. "
+            "Para outro fabricante, o caminho é o site oficial dele."
+        )
+    if platform.system() != "Windows":
+        raise SistemaError(
+            "O driver só existe no Windows. No Linux o kernel já traz o driver do "
+            "Android; no macOS o `adb` funciona sem instalar nada."
+        )
+
+    plano = {
+        "driver": info["nome"],
+        "o_que_resolve": info["resolve"],
+        "instala": info["onde"],
+        "no_celular": info["no_celular"],
+        "url": info["url"],
+        "tamanho_aprox_mb": info["tamanho_mb"],
+        "reinicia": info["reinicia"],
+        "assinatura": info["assinado"],
+        "confirmação": "chame de novo com `confirmado=True`",
+    }
+    if not confirmado:
+        plano["aviso"] = (
+            "Sem `confirmado=True` eu não baixo nem instalo nada. Confira a URL "
+            "oficial acima antes."
+        )
+        return plano
+
+    baixado = baixar(url=info["url_arquivo"], modo=modo, autorizacao=autorizacao)
+    arquivo = str(baixado["arquivo"])
+    instalacao = instalar(
+        arquivo=arquivo,
+        silencioso=True,
+        modo=modo,
+        autorizacao=autorizacao,
+    )
+    return {
+        **plano,
+        "baixado": {
+            "bytes": baixado["bytes"],
+            "sha256": baixado["sha256"],
+            "tipo": baixado.get("tipo", ""),
+        },
+        "instalacao": instalacao,
+        "depois": (
+            "Desconecte e reconecte o cabo com o celular desbloqueado. O aviso "
+            "“Permitir depuração USB?” deve aparecer; aceite e marque “Sempre "
+            "permitir deste computador”."
+        ),
+        "conferir": "Rode `adb devices` (ou a varredura) de novo: o aparelho tem de aparecer.",
+    }

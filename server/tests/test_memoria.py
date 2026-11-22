@@ -467,7 +467,7 @@ def test_registro_tem_as_skills_de_memoria() -> None:
     memoria = [item for item in itens if item["id"].startswith("memoria.")]
     # 7 de memória lexical + 2 de embedding (0.92.0, leitura: o vetor não grava nada).
     assert len(memoria) == 9
-    assert len(itens) == 358
+    assert len(itens) == 359
     # As sete lexicais moram em “Memória”; as duas de embedding (0.92.0) em
     # “Memória IA”. As duas continuam sendo leitura em qualquer caso.
     assert all(item["category"] in {"Memória", "Memória IA"} for item in memoria)

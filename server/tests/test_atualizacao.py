@@ -594,3 +594,74 @@ def test_verificar_devolve_a_data_e_a_frase_com_a_data(tmp_path):
     assert dados["checou"] is True, dados.get("motivo")
     assert dados["publicado"] == "2026-11-17T09:12:44+00:00"
     assert "publicada em 17/11 09:12 UTC" in dados["resumo"]
+
+
+# ---------------------------------------------------------------------------
+# 0.95.2 — quando o `raw.githubusercontent.com` está bloqueado
+# ---------------------------------------------------------------------------
+# O dono já provou que isso acontece: `curl` no `raw` devolve 000 enquanto
+# `github.com` e `codeload` respondem 200. A pergunta que ele faz ("tem versão
+# nova?") não pode morrer num `ConnectionError` sem dizer o que fazer.
+
+
+def test_rota_funciona_quando_o_raw_responde(monkeypatch):
+    r = atualizacao.rota_funciona(lambda _url: b'{"versao": "1.0.0"}')
+    assert r == {"rota": "raw", "funciona": True, "motivo": ""}
+
+
+def test_rota_funciona_cai_para_o_codeload_quando_o_raw_esta_bloqueado():
+    """A mensagem tem de apontar o plano B — é o `.bat`, que baixa o zip."""
+
+    def rede(url: str) -> bytes:
+        if "raw.githubusercontent.com" in url:
+            raise ConnectionError("TLS handshake eof")
+        assert "codeload" in url
+        return b"PK\x03\x04" + b"\x00" * 100
+
+    r = atualizacao.rota_funciona(rede)
+    assert r["rota"] == "codeload"
+    assert r["funciona"] is True
+    assert "TLS handshake eof" in r["motivo"]
+    assert r["tamanho_zip"] == 104
+
+
+def test_rota_funciona_diz_nenhuma_quando_as_duas_rotas_caem():
+    """Sem rede nenhuma, a resposta é honesta — não um falso 'está tudo bem'."""
+
+    def rede(_url: str) -> bytes:
+        raise ConnectionError("sem rede")
+
+    r = atualizacao.rota_funciona(rede)
+    assert r["rota"] == "nenhuma"
+    assert r["funciona"] is False
+    assert "sem rede" in r["motivo"]
+
+
+def test_rota_funciona_nao_confunde_html_de_erro_com_zip():
+    """`codeload` respondendo 200 com página de erro não é rota boa."""
+
+    def rede(url: str) -> bytes:
+        if "raw.githubusercontent.com" in url:
+            raise ConnectionError("bloqueado")
+        return b"<!DOCTYPE html><html>404</html>"
+
+    r = atualizacao.rota_funciona(rede)
+    assert r["rota"] == "nenhuma"
+    assert r["funciona"] is False
+
+
+def test_verificar_com_raw_bloqueado_explica_o_plano_b(tmp_path):
+    """O `except` de `verificar` precisa dizer *o que fazer*, não só que falhou."""
+    projeto = tmp_path / "jarvis"
+    projeto.mkdir()
+    (projeto / "package.json").write_text('{"version": "0.1.0"}', encoding="utf-8")
+
+    def rede(url: str) -> bytes:
+        raise ConnectionError("TLS handshake eof")
+
+    dados = atualizacao.verificar(forcar=True, baixar=rede, projeto=projeto, raiz=tmp_path / "estado")
+    assert dados["checou"] is False
+    texto = json.dumps(dados, ensure_ascii=False).lower()
+    assert "rota" in texto
+    # e a saída tem de mandar o dono para o `.bat`, que é quem funciona
+    assert ".bat" in texto or "atualizar" in texto
