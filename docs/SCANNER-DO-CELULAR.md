@@ -368,3 +368,28 @@ saía.
 O zip **não** leva a chave `comandos` do `coletar`: cada item dela é
 `adb -s RXCW400ZV3F shell …`, ou seja, o serial do aparelho em texto. Quem refaz
 remonta a lista vazia.
+
+## 17. Do diagnóstico para a ação (0.95.0)
+
+O relatório passou a trazer `plano`, e o console imprime duas seções novas:
+
+```
+O QUE O JARVIS FAZ NISSO (com a sua confirmação)
+  - Fechar com.dti.telefonica agora
+O QUE SÓ VOCÊ PODE FAZER (com o caminho pronto)
+  - Limpar o cache do app  →  Ajustes → Apps → [app] → Armazenamento → Limpar cache
+```
+
+A separação é o ponto: **o que o JARVIS executa**, **o que exige você** e **o
+que ninguém faz** são três listas, não uma frase só. Cada ação carrega
+`evidencia` (o id do problema que a sustenta), `reversivel`, `limite` e, quando
+existe, `risco`.
+
+Só três ações são `jarvis_faz=True`, porque só três têm executor em `acoes.py`:
+`fechar-app`, `abrir-app`, `instalar-apk`. Marcar mais que isso na tabela não
+executa nada — só mente na tela, e `test_o_jarvis_so_promete_executar_o_que_ele_sabe_executar`
+cobra a correspondência.
+
+`test_todo_id_de_problema_citado_existe_no_scanner` é o teste que impede a
+tabela de apodrecer: ele extrai os ids do próprio `diagnostico_celular` e
+recusa qualquer id que o plano cite e o scanner não emita.

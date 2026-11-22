@@ -3088,3 +3088,31 @@ scanner empacota. O teste novo reprovou duas vezes: a primeira porque o zip
 levava a chave `comandos`, e cada item dela é `adb -s RXCW400ZV3F shell …` — o
 serial do aparelho viajava como texto. Agora `refazer_de_pacote` remonta
 `comandos` vazio, e o teste olha só o que sai de fato no arquivo.
+
+### 0.95.0 — do diagnóstico para o que fazer
+
+> *“tipo você assumir o controle do PC para entrar no celular ou entrar por algum
+> código e resolver os problemas”*
+
+O scanner achava a causa e parava. O dono ficava com a frase e o trabalho. Este
+módulo (`plano_acao.py`) faz a ponte, e a faz separando **três** listas que
+estavam misturadas:
+
+| lista | o que é |
+|---|---|
+| `jarvis_executa` | o que o JARVIS tem skill para fazer: fechar o app travado, abrir, instalar um APK |
+| `voce_faz` | o que exige a sua conta ou a sua escolha, com o menu exato |
+| `sem_como` | o que ninguém faz, com o `porque` e o `em_vez_disso` |
+
+A regra: **ação sem medida é chute**. Relatório sem problema devolve plano
+vazio e a frase “falta medida” — não uma lista de sugestões genéricas.
+
+O teste central não confere texto, confere **identificador**: ele lê o código do
+`diagnostico_celular` e cobra que todo id citado no plano exista lá. Foi assim
+que dois erros meus apareceram na hora: eu tinha escrito `bateria-caindo` (o
+scanner emite `bateria-gasta`) e lia o campo `detalhe` (o real é `medido`) — e
+por isso a ação de fechar o `com.dti.telefonica` não aparecia, mesmo com o nome
+do app no relatório.
+
+Nada aqui executa nada. O executor continua sendo `acoes.py`, atrás de
+`JARVIS_ACOES=1` **e** `confirmado: true`.

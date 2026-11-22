@@ -43,7 +43,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from . import anatomia, celular, diagnostico_celular
+from . import anatomia, celular, diagnostico_celular, plano_acao
 
 AMBIENTE = anatomia.AMBIENTE_ANDROID
 TIMEOUT = 30
@@ -444,7 +444,7 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
                     "rotulo": "Fora da loja do fabricante",
                     "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages -3", ""))) or "0"),
                 },
-                # 0.94.2 — a amostra saía com o nome dos pacotes do sistema e
+                # 0.95.0 — a amostra saía com o nome dos pacotes do sistema e
                 # aparecia **no arquivo** que o dono manda para outra pessoa.
                 {"rotulo": "Onde ver quais", "valor": "Ajustes → Apps (ordene por tamanho)"},
             ],
@@ -511,6 +511,9 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
         "secoes": [s for s in secoes if s["itens"]],
         "problemas": problemas,
         "otimizacoes": saude.get("otimizacoes", []),
+        # 0.95.0 — o que fazer com o que foi medido. Fica no relatório montado
+        # para a tela mostrar sem recalcular (e para o console imprimir).
+        "plano": plano_acao.planejar({"problemas": problemas, "secoes": secoes}),
         "limitacoes": _limites_sem_repetir(
             list(medido.get("falhas", []))
             + list(saude.get("limitacoes", []))
@@ -521,7 +524,7 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
         # rodou aqui, e rodar de novo seria uma segunda leitura do mesmo dado
         # (e uma segunda chance de divergir). Sai do relatório antes de imprimir.
         "_saude": saude,
-        # 0.94.2 — o que a anatomia não conseguiu ler também é leitura: sem
+        # 0.95.0 — o que a anatomia não conseguiu ler também é leitura: sem
         # isso o pacote reproduz 4 de 5 limitações e o defeito “parece” outro.
         "_limites_anatomia": list(anatomia_relatorio.get("limitacoes", [])),
         "nao_faz": list(diagnostico_celular.NAO_FAZ) + [
@@ -567,7 +570,10 @@ def varrer(
             medido, sintomas, relatorio.get("_saude")
         )
         relatorio.pop("_saude", None)
-    # 0.94.2 — as saídas cruas ficam no dicionário até alguém pedir o pacote
+        # o plano é refeito agora que existe a fila: é ela que diz quais
+        # suspeitas ficaram sem medida, e ação sem medida é chute.
+        relatorio["plano"] = plano_acao.planejar(relatorio)
+    # 0.95.0 — as saídas cruas ficam no dicionário até alguém pedir o pacote
     # (`empacotar_leituras`). `em_texto()` e `json.dumps` não as veem porque o
     # prefixo "_" as marca como interna, e quem imprime chama `so_publico()`.
     relatorio["_saidas"] = dict(medido.get("saidas", {}))
@@ -642,6 +648,24 @@ def em_texto(relatorio: dict[str, Any]) -> str:
         for otimizacao in relatorio["otimizacoes"]:
             marca = "" if otimizacao.get("medido") else "  (ganho de sensação, não medido)"
             linhas.append(f"    - {otimizacao['titulo']}: {otimizacao['ganho']}{marca}")
+        linhas.append("")
+    plano = relatorio.get("plano") or {}
+    if plano.get("jarvis_executa"):
+        linhas.append("  O QUE O JARVIS FAZ NISSO (com a sua confirmação)")
+        for acao in plano["jarvis_executa"]:
+            linhas.append(f"    - {acao['titulo']}")
+            linhas.append(f"      {acao['faz']}")
+            if acao.get("limite"):
+                linhas.append(f"      limite: {acao['limite']}")
+            if acao.get("risco"):
+                linhas.append(f"      se doer: {acao['risco']}")
+        linhas.append(f"    ({plano.get('como_autorizar', '')})")
+        linhas.append("")
+    if plano.get("voce_faz"):
+        linhas.append("  O QUE SÓ VOCÊ PODE FAZER (com o caminho pronto)")
+        for acao in plano["voce_faz"]:
+            onde = f"  →  {acao['onde_no_aparelho']}" if acao.get("onde_no_aparelho") else ""
+            linhas.append(f"    - {acao['titulo']}{onde}")
         linhas.append("")
     if relatorio["sem_root"]:
         linhas.append("  O QUE NÃO DÁ SEM ROOT (e o JARVIS não usa root)")
@@ -1072,7 +1096,7 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 # ---------------------------------------------------------------------------
-# 0.94.2 — o pacote das leituras cruas (“--pacote”)
+# 0.95.0 — o pacote das leituras cruas (“--pacote”)
 # ---------------------------------------------------------------------------
 
 # Só o que ajuda a reproduzir o defeito. Nome de app instalado, número de
@@ -1262,7 +1286,7 @@ def empacotar_leituras(relatorio: dict[str, Any], destino: Path) -> Path:
 def refazer_de_pacote(caminho: str | Path) -> dict[str, Any]:
     """Refaz o relatório a partir do `.zip` do `--pacote`, **sem** o celular.
 
-    0.94.2 — é o que resolve o pedido “entra no meu celular e testa”: numa
+    0.95.0 — é o que resolve o pedido “entra no meu celular e testa”: numa
     sessão de outra máquina não há como alcançar o `adb` do PC do dono, mas o
     pacote traz exatamente o que o `adb` respondeu. Com ele o mesmo parser e os
     mesmos limiares rodam aqui — então o defeito é reproduzido, consertado e
