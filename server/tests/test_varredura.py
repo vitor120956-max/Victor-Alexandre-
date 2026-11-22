@@ -856,7 +856,7 @@ def test_secao_sem_item_nao_sai_como_titulo_vazio():
 
 
 # ---------------------------------------------------------------------------
-# 0.94.1 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
+# 0.94.2 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
 #
 # O relatório rodou de ponta a ponta: 25 de 28 leituras, fila de suspeitas
 # montada. E mesmo assim mentiu em quatro pontos. Todos só apareceram com
@@ -1053,7 +1053,7 @@ def test_a_mesma_negativa_nao_aparece_duas_vezes():
 
 
 # ---------------------------------------------------------------------------
-# 0.94.1 — o pacote das leituras cruas (`--pacote` / `--refazer`)
+# 0.94.2 — o pacote das leituras cruas (`--pacote` / `--refazer`)
 # ---------------------------------------------------------------------------
 
 
@@ -1180,9 +1180,47 @@ def test_o_bat_do_celular_e_ascii_crlf_e_repete_a_opcao_do_pacote():
         bruto = (raiz / nome).read_bytes()
         assert [b for b in bruto if b > 127] == [], f"{nome} tem byte não-ASCII"
         assert bruto.count(b"\n") == bruto.count(b"\r\n"), f"{nome} não é CRLF puro"
-        assert b"0.94.1" in bruto, f"{nome} ficou numa versão antiga"
+        assert b"0.94.2" in bruto, f"{nome} ficou numa versão antiga"
 
     texto = (raiz / "ver-tudo-no-celular.bat").read_text(encoding="ascii")
     assert "--pacote" in texto
     # o `%*` é o que faz o duplo clique repassar a opção ao Python
     assert "%*" in (raiz / "escanear-celular.bat").read_text(encoding="ascii")
+
+
+def test_o_scanner_sozinho_tambem_empacota(monkeypatch):
+    """`--pacote` tem de valer no caminho do `escanear-celular.bat` também.
+
+    0.94.2 — antes só a varredura completa guardava as leituras, e o dono que
+    usa o scanner sozinho (o do duplo clique mais antigo) ficava sem pacote.
+    """
+    import zipfile
+
+    from server import diagnostico_celular as dc
+
+    monkeypatch.setenv(dc.AMBIENTE, "1")
+    base = saidas()
+
+    def rodar(comando):
+        chave = " ".join(comando[comando.index("shell") + 1:]) if "shell" in comando else " ".join(comando)
+        if "devices" in comando:
+            return 0, "List of devices attached\nRXCW400ZV3F          device\n", ""
+        return (0, base[chave], "") if chave in base else (0, "", "")
+
+    relatorio = dc.diagnosticar(rodar=rodar)
+    assert "_saidas" in relatorio, "o scanner não guardou as leituras cruas"
+    assert "_falhas" in relatorio
+
+    destino = tmp_path() / "scanner.zip"
+    vd.empacotar_leituras(relatorio, destino)
+    with zipfile.ZipFile(destino) as z:
+        assert {"leituras.json", "falhas.json", "limites.json", "relatorio.json"} <= set(z.namelist())
+        tudo = "".join(
+            z.read(n).decode("utf-8")
+            for n in ("leituras.json", "falhas.json", "limites.json")
+        )
+    assert "RXCW400ZV3F" not in tudo, "serial do aparelho vazou no pacote"
+    assert "app.revanced.android.youtube" not in tudo, "nome de app vazou no pacote"
+
+    refeito = vd.refazer_de_pacote(destino)
+    assert [p["id"] for p in refeito["problemas"]] == [p["id"] for p in relatorio["problemas"]]

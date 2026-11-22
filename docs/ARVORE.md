@@ -3071,3 +3071,20 @@ com menos limitação que o original).
 Junto foi embora um vazamento que já existia: a seção de apps listava os 12
 primeiros pacotes **na tela e no arquivo** que o dono manda para outra pessoa.
 Nome de app não é diagnóstico.
+
+### 0.94.2 — o pacote vale nos dois caminhos
+
+> *“como assim te mandar zip, zip do quê?”*
+
+A pergunta expôs duas coisas. A primeira é que eu tinha escrito “me manda o zip”
+sem explicar **o que** é: um arquivo `.zip` de ~7 KB ao lado do relatório, na
+pasta `storage\diagnosticos\`, com a resposta crua de cada comando de leitura.
+A segunda é um defeito: esse zip só era gerado pela varredura completa
+(`ver-tudo-no-celular.bat --pacote`). Quem usa o scanner sozinho
+(`escanear-celular.bat --pacote`) via a opção ser aceita e **nada acontecer**.
+
+`diagnosticar()` passou a guardar `_saidas` e `_falhas`, e o `--pacote` do
+scanner empacota. O teste novo reprovou duas vezes: a primeira porque o zip
+levava a chave `comandos`, e cada item dela é `adb -s RXCW400ZV3F shell …` — o
+serial do aparelho viajava como texto. Agora `refazer_de_pacote` remonta
+`comandos` vazio, e o teste olha só o que sai de fato no arquivo.

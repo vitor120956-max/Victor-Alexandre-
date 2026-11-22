@@ -359,3 +359,12 @@ podem** aparecer, e o que reproduz o defeito **tem de** aparecer. E
 refeito com o original — foi ele que achou que o pacote omitia
 `pm list packages`, que o `ps` de duas colunas ficava ilegível e que faltavam
 `thermal` e as falhas da anatomia.
+
+`--pacote` funciona nos **dois** caminhos: `ver-tudo-no-celular.bat --pacote`
+(varredura completa) e `escanear-celular.bat --pacote` (scanner sozinho). O
+segundo ficou de fora na 0.94.1 por descuido — a opção era aceita e o zip não
+saía.
+
+O zip **não** leva a chave `comandos` do `coletar`: cada item dela é
+`adb -s RXCW400ZV3F shell …`, ou seja, o serial do aparelho em texto. Quem refaz
+remonta a lista vazia.

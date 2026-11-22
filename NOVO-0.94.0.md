@@ -145,3 +145,41 @@ esperar o próximo print.
 
 O teste compara o refeito com o original campo a campo. Ele reprovou três vezes
 até o pacote ficar fiel — que é exatamente o trabalho.
+
+---
+
+# 0.94.2 — “zip do quê?”: o pacote nos dois caminhos
+
+Duas coisas apareceram na pergunta.
+
+**A primeira é minha culpa:** eu escrevi “me manda o zip” sem dizer o que é. O
+zip é um arquivo de ~7 KB que fica **ao lado do relatório**, na mesma pasta
+`storage\diagnosticos\`, com o mesmo nome. Ele contém a resposta crua de cada
+comando de leitura e o `relatorio.json` que a tela mostrou.
+
+**A segunda é um defeito de verdade:** o `--pacote` só funcionava na varredura
+completa. Quem usava o scanner sozinho —
+
+```
+escanear-celular.bat --pacote
+```
+
+— tinha a opção aceita e **nenhum zip gerado**. O `diagnosticar()` não guardava
+as leituras cruas; só o `varrer()` guardava. Corrigido: agora o scanner também
+guarda e também empacota.
+
+O teste novo reprovou duas vezes, e a segunda foi feia: o zip do scanner levava
+a chave `comandos`, e **cada item dela é `adb -s RXCW400ZV3F shell …`** — o
+serial do aparelho viajava como texto, no único lugar em que ele não estava
+sendo limpo. Agora a lista não vai, e o teste confere só o que sai de fato no
+arquivo.
+
+## Como usar, em uma linha
+
+```
+ver-tudo-no-celular.bat --pacote     (a varredura completa)
+escanear-celular.bat --pacote        (só o scanner)
+```
+
+Rodou, apareceu `Pacote para mandar: ...zip` — é esse arquivo. Se não aparecer
+essa linha, o zip não foi gerado.

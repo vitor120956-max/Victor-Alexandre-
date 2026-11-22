@@ -444,7 +444,7 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
                     "rotulo": "Fora da loja do fabricante",
                     "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages -3", ""))) or "0"),
                 },
-                # 0.94.1 — a amostra saía com o nome dos pacotes do sistema e
+                # 0.94.2 — a amostra saía com o nome dos pacotes do sistema e
                 # aparecia **no arquivo** que o dono manda para outra pessoa.
                 {"rotulo": "Onde ver quais", "valor": "Ajustes → Apps (ordene por tamanho)"},
             ],
@@ -521,7 +521,7 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
         # rodou aqui, e rodar de novo seria uma segunda leitura do mesmo dado
         # (e uma segunda chance de divergir). Sai do relatório antes de imprimir.
         "_saude": saude,
-        # 0.94.1 — o que a anatomia não conseguiu ler também é leitura: sem
+        # 0.94.2 — o que a anatomia não conseguiu ler também é leitura: sem
         # isso o pacote reproduz 4 de 5 limitações e o defeito “parece” outro.
         "_limites_anatomia": list(anatomia_relatorio.get("limitacoes", [])),
         "nao_faz": list(diagnostico_celular.NAO_FAZ) + [
@@ -567,7 +567,7 @@ def varrer(
             medido, sintomas, relatorio.get("_saude")
         )
         relatorio.pop("_saude", None)
-    # 0.94.1 — as saídas cruas ficam no dicionário até alguém pedir o pacote
+    # 0.94.2 — as saídas cruas ficam no dicionário até alguém pedir o pacote
     # (`empacotar_leituras`). `em_texto()` e `json.dumps` não as veem porque o
     # prefixo "_" as marca como interna, e quem imprime chama `so_publico()`.
     relatorio["_saidas"] = dict(medido.get("saidas", {}))
@@ -1072,7 +1072,7 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 # ---------------------------------------------------------------------------
-# 0.94.1 — o pacote das leituras cruas (“--pacote”)
+# 0.94.2 — o pacote das leituras cruas (“--pacote”)
 # ---------------------------------------------------------------------------
 
 # Só o que ajuda a reproduzir o defeito. Nome de app instalado, número de
@@ -1239,6 +1239,7 @@ def empacotar_leituras(relatorio: dict[str, Any], destino: Path) -> Path:
             _json.dumps(limpas, ensure_ascii=False, indent=2),
         )
         z.writestr("falhas.json", _json.dumps(falhas, ensure_ascii=False, indent=2))
+        # no scanner sozinho não há anatomia: `_limites_anatomia` não existe.
         limites = [
             _re_limpar_falha(x) for x in (relatorio.get("_limites_anatomia") or [])
         ]
@@ -1261,7 +1262,7 @@ def empacotar_leituras(relatorio: dict[str, Any], destino: Path) -> Path:
 def refazer_de_pacote(caminho: str | Path) -> dict[str, Any]:
     """Refaz o relatório a partir do `.zip` do `--pacote`, **sem** o celular.
 
-    0.94.1 — é o que resolve o pedido “entra no meu celular e testa”: numa
+    0.94.2 — é o que resolve o pedido “entra no meu celular e testa”: numa
     sessão de outra máquina não há como alcançar o `adb` do PC do dono, mas o
     pacote traz exatamente o que o `adb` respondeu. Com ele o mesmo parser e os
     mesmos limiares rodam aqui — então o defeito é reproduzido, consertado e
@@ -1291,6 +1292,9 @@ def refazer_de_pacote(caminho: str | Path) -> dict[str, Any]:
         "serial": "pacote",
         "saidas": leituras,
         "falhas": list(falhas) + list(limites),
+        # o pacote não guarda a lista de comandos: cada item dela carrega
+        # `-s <serial>`, que é identificador do dono
+        "comandos": [],
     }
     relatorio = montar(medido)
     # o pacote não guarda qual sintoma o dono marcou; quem refaz decide se quer
