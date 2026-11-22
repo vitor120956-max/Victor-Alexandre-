@@ -3046,3 +3046,28 @@ anatomia.
 `test_varredura.py` vai a **68** casos. O que importa não é a contagem: é que o
 teste novo usa o **caminho real** (`montar()` → `_cruzar_sintomas()`), e voltar o
 defeito derruba o teste — conferido à mão, não por leitura de código.
+
+### 0.94.1 — o celular entra aqui: `--pacote` e `--refazer`
+
+> *“vamos fazer melhor, vamos fazer você entrar no celular e fazer os testes?”*
+
+Não dá para alcançar o `adb` de outra máquina — o cabo está no PC do dono. Mas o
+pedido tinha uma resposta melhor que “não”: **faltava o arquivo**. O relatório
+salvo guardava a conclusão (seções, problemas, limitações) e descartava as
+respostas cruas do `adb`; por isso cada versão dependia de mais um print.
+
+`--pacote` grava um `.zip` com as leituras cruas **limpas**: serial, IMEI,
+operadora, e-mail, telefone e nome de pacote instalado saem; contagem de
+pacotes, memória, bateria, `getprop` do modelo e o `FATAL EXCEPTION` ficam. O
+`--refazer` roda o mesmo parser sobre o zip e devolve o mesmo relatório sem
+aparelho nenhum.
+
+O teste novo compara o refeito com o original campo a campo, e reprovou três
+vezes até o pacote ficar fiel: faltava `pm list packages` (440/495/55 viravam
+vazio), o `ps` de duas colunas ficava ilegível com os nomes trocados (“fechar
+app” desaparecia) e faltavam `thermal` e as falhas da anatomia (o refeito vinha
+com menos limitação que o original).
+
+Junto foi embora um vazamento que já existia: a seção de apps listava os 12
+primeiros pacotes **na tela e no arquivo** que o dono manda para outra pessoa.
+Nome de app não é diagnóstico.

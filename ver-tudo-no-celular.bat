@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - ver tudo no celular
-REM Versao: 0.94.0
+REM Versao: 0.94.1
 REM
 REM O caminho mais curto: com o celular ja conectado, este arquivo passa o
 REM JARVIS por todo o aparelho numa varredura so - anatomia, scanner de
@@ -38,6 +38,10 @@ echo ------------------------------------------------------------
 echo.
 echo   Copie esta tela e me mande o que aparecer.
 echo   O relatorio tambem fica salvo em storage\diagnosticos.
+echo.
+echo   Para mandar o pacote (o .zip ao lado do relatorio), rode:
+echo     ver-tudo-no-celular.bat --pacote
+echo   Ele NAO tem nome, conta nem arquivo seu: so as respostas do adb.
 echo.
 echo   Quer a tela do celular numa janela do PC? Peca no chat
 echo   "espelha o celular aqui" (a skill celular.espelhar cuida do scrcpy).

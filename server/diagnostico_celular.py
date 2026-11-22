@@ -544,7 +544,7 @@ def analisar(
     janela = ler_janela_em_foco(saidas.get("dumpsys window displays", ""))
     entrada = ler_input_dumpsys(saidas.get("dumpsys input", ""))
     root = (saidas.get("which su", "") or "").strip()
-    # 0.94.0 — “sem resposta” é o que um `which` **bem-sucedido** devolve quando o
+    # 0.94.1 — “sem resposta” é o que um `which` **bem-sucedido** devolve quando o
     # binário não existe (código 1, saída vazia). O `coletar` só guarda a chave
     # quando `codigo != 0 and not saida` for falso; como o `which` não achou nada,
     # a chave ficava de fora e a varredura anunciava “«which su»: sem resposta” —
@@ -811,7 +811,11 @@ def analisar(
             "titulo": "Aplicativos fora da loja do fabricante",
             "itens": [
                 {"rotulo": "Total instalado", "valor": str(len(apps))},
-                {"rotulo": "Amostra", "valor": ", ".join(apps[:12])},
+                # 0.94.1 — aqui saía a lista dos 12 primeiros pacotes, e ela
+                # aparecia na tela **e no arquivo** que o dono manda para outra
+                # pessoa. O nome do que ele instalou é vida privada; o número
+                # não é. Quem precisa do detalhe vê em Ajustes → Apps.
+                {"rotulo": "Onde ver quais", "valor": "Ajustes → Apps (ordene por tamanho)"},
             ],
         })
         if len(apps) >= RECOMENDACAO_APPS:
@@ -1005,14 +1009,14 @@ def analisar(
     if not processos:
         limitacoes.append("A lista de processos não veio no formato esperado nesta versão do Android.")
     if not sensores:
-        # 0.94.0 — a anatomia dizia a mesma coisa com outras palavras e as duas
+        # 0.94.1 — a anatomia dizia a mesma coisa com outras palavras e as duas
         # apareciam juntas no relatório. Uma linha só, e `_limites_sem_repetir`
         # descarta a equivalente no fim.
         limitacoes.append(
             "Sem temperatura de CPU: este Android esconde `/sys/class/thermal` de quem não é root — "
             "o aquecimento fica sem número (a da bateria continua aparecendo)."
         )
-    # 0.94.0 — “memória por app não vem” já é dito pela anatomia; repetir aqui
+    # 0.94.1 — “memória por app não vem” já é dito pela anatomia; repetir aqui
     # só enchia a lista de leituras que não responderam com a mesma ideia.
 
     return {
@@ -1153,7 +1157,7 @@ CAUSAS: tuple[dict[str, Any], ...] = (
 
 # O que sustenta cada causa **no aparelho** (não no relato). Sem isso, a causa é
 # só hipótese — e a resposta diz isso.
-# 0.94.0 — esta tabela estava **morta em três das cinco linhas**, e o efeito era
+# 0.94.1 — esta tabela estava **morta em três das cinco linhas**, e o efeito era
 # o oposto do desenhado: toda suspeita saía “sem medida no aparelho”, mesmo num
 # relatório com 25 leituras boas. Os ids de problema que o `analisar()` cria são
 # `app-nao-responde`, `frame-lento`, `aquecendo`, `memoria-baixa` e

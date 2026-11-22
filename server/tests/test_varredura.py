@@ -123,6 +123,15 @@ PS_RSS = """  RSS NAME
  480000 com.whatsapp
 """
 
+def tmp_path():
+    """Diretório temporário — o módulo não usa a fixture do pytest."""
+    import tempfile
+    from pathlib import Path
+
+    pasta = Path(tempfile.mkdtemp(prefix="jarvis-teste-"))
+    return pasta
+
+
 def saidas() -> dict[str, str]:
     """O que o `adb` devolve — a **lista inteira** de `COMANDOS`, não um subconjunto.
 
@@ -847,7 +856,7 @@ def test_secao_sem_item_nao_sai_como_titulo_vazio():
 
 
 # ---------------------------------------------------------------------------
-# 0.94.0 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
+# 0.94.1 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
 #
 # O relatório rodou de ponta a ponta: 25 de 28 leituras, fila de suspeitas
 # montada. E mesmo assim mentiu em quatro pontos. Todos só apareceram com
@@ -1041,3 +1050,139 @@ def test_a_mesma_negativa_nao_aparece_duas_vezes():
     assert len(repetidas) == 1, repetidas
     # fica a que diz qual comando — é a que ajuda a resolver
     assert repetidas[0].startswith("“cat /proc/partitions”")
+
+
+# ---------------------------------------------------------------------------
+# 0.94.1 — o pacote das leituras cruas (`--pacote` / `--refazer`)
+# ---------------------------------------------------------------------------
+
+
+def test_o_pacote_nao_leva_nome_conta_nem_arquivo_do_dono():
+    """O zip sai do PC do dono para o de outra pessoa: não pode identificar.
+
+    Este teste é o contrato do `limpar_saidas_para_pacote`. Se alguém incluir
+    uma leitura nova sem pensar, ele acusa.
+    """
+    import json
+    import zipfile
+
+    saidas_sujas = {
+        "getprop": (
+            "[ro.product.model]: [SM-A346M]\n"
+            "[ro.serialno]: [RXCW400ZV3F]\n"
+            "[gsm.sim.operator.alpha]: [Vivo]\n"
+            "[ro.build.version.release]: [16]\n"
+        ),
+        "ps -A -o RSS,NAME": "  1234  567890 com.whatsapp\n  2234  34567 com.instagram.android\n",
+        "dumpsys window displays": "mCurrentFocus=Window{abc u0 com.whatsapp/com.whatsapp.Main}\n",
+        "logcat -b crash -d -t 80": (
+            "FATAL EXCEPTION: main\nProcess: com.dti.telefonica, PID: 1234\n"
+            "contato joao.silva@gmail.com tel +55 48 998765432\n"
+        ),
+        "ls -la /storage/emulated/0": (
+            "total 8\n"
+            "drwxrwx--x 30 root sdcard_rw 4096 2026-10-23 10:00 Fotos-da-praia\n"
+            "-rwxrwx--x 30 root sdcard_rw 4096 2026-10-23 10:00 boleto-banco.pdf\n"
+        ),
+        "pm list packages": "package:com.whatsapp\npackage:com.instagram.android\n",
+        "cat /proc/meminfo": "MemTotal: 7647736 kB\nMemAvailable: 2676000 kB\n",
+    }
+    destino = tmp_path() / "pacote.zip"
+    vd.empacotar_leituras({"serial": "RXCW400ZV3F", "_saidas": saidas_sujas}, destino)
+
+    with zipfile.ZipFile(destino) as z:
+        tudo = "".join(z.read(n).decode("utf-8") for n in z.namelist())
+
+    for proibido in (
+        "RXCW400ZV3F", "joao.silva", "Vivo", "whatsapp", "instagram",
+        "dti.telefonica", "Fotos-da-praia", "boleto-banco", "998765432",
+    ):
+        assert proibido not in tudo, f"o pacote vazou {proibido!r}"
+
+    # e o que reproduz o defeito tem de ficar
+    assert "SM-A346M" in tudo
+    assert "MemTotal: 7647736" in tudo
+    assert "FATAL EXCEPTION" in tudo
+    # a contagem de pacotes sobrevive à troca dos nomes
+    leituras = json.loads(zipfile.ZipFile(destino).read("leituras.json").decode("utf-8"))
+    assert len(leituras["pm list packages"].splitlines()) == 2
+
+
+def test_o_pacote_refaz_o_mesmo_relatorio_sem_o_celular(monkeypatch):
+    """`--refazer` só vale se o relatório sair **igual** ao que a tela mostrou.
+
+    Se o pacote perder uma leitura (foi o caso de `thermal` e das falhas da
+    anatomia), o relatório refeito tem menos limitação e o defeito “muda de
+    cara” — foi assim que o primeiro teste deste recurso reprovou.
+    """
+    import zipfile
+
+    from server import anatomia
+
+    monkeypatch.setenv(vd.AMBIENTE, "1")
+    monkeypatch.setenv(anatomia.AMBIENTE_ANDROID, "1")
+    saidas_ok = saidas()
+    # o caminho real: `varrer()` junta anatomia + scanner + seções, e é ele que
+    # guarda `_saidas` para o pacote. Um `adb` falso devolve o dicionário.
+    def rodar(comando):
+        chave = " ".join(comando[comando.index("shell") + 1:]) if "shell" in comando else " ".join(comando)
+        if "devices" in comando:
+            return 0, "List of devices attached\nRXCW400ZV3F          device\n", ""
+        if chave in saidas_ok:
+            return 0, saidas_ok[chave], ""
+        if chave in ("ls -la /data/app", "cat /proc/partitions"):
+            return 1, "", "Permission denied"
+        return 0, "", ""
+
+    original = vd.varrer(rodar=rodar)
+
+    destino = tmp_path() / "roda.zip"
+    vd.empacotar_leituras(original, destino)
+    refeito = vd.refazer_de_pacote(destino)
+
+    assert refeito["titulo"] == original["titulo"]
+    assert refeito["refeito_de"] == destino.name
+    assert sorted(refeito["limitacoes"]) == sorted(original["limitacoes"])
+    assert [p["id"] for p in refeito["problemas"]] == [p["id"] for p in original["problemas"]]
+    # O título de “fechar app” nomeia o pacote por desenho — e o pacote troca
+    # os nomes de app, de propósito. O que tem de bater é a **decisão**: quantas
+    # otimizações o diagnóstico propôs e por quê. Foi essa comparação que
+    # pegou o `ps` ilegível: ele derrubava “fechar app” para uma otimização a
+    # menos, e o resto do relatório ia junto.
+    assert len(refeito["otimizacoes"]) == len(original["otimizacoes"]), (
+        f"o pacote perdeu otimização: {refeito['otimizacoes']} vs {original['otimizacoes']}"
+    )
+    # o zip não carrega o serial do aparelho — nem no nome, nem dentro
+    assert "RXCW400ZV3F" not in "".join(
+        zipfile.ZipFile(destino).read(n).decode("utf-8") for n in zipfile.ZipFile(destino).namelist()
+    )
+
+
+def test_o_relatorio_publico_nao_mostra_os_campos_internos():
+    """`_saidas` e `_falhas` existem para o pacote; a tela não os mostra."""
+    relatorio = vd.varrer.__wrapped__ if hasattr(vd.varrer, "__wrapped__") else None
+    base = vd.montar({"serial": "ABC123", "saidas": saidas(), "falhas": []})
+    base["_saidas"] = {"getprop": "x"}
+    base["_falhas"] = ["qualquer"]
+    publico = vd.so_publico(base)
+    assert not any(k.startswith("_") for k in publico)
+    assert "_saidas" not in vd.em_texto(publico)
+    assert relatorio is None or True
+
+
+def test_o_bat_do_celular_e_ascii_crlf_e_repete_a_opcao_do_pacote():
+    """.bat com LF ou acento quebra no cmd do Windows — e o `--pacote` só
+    existe se o atalho disser como usar. O arquivo é o caminho do duplo clique."""
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parents[2]
+    for nome in ("ver-tudo-no-celular.bat", "escanear-celular.bat"):
+        bruto = (raiz / nome).read_bytes()
+        assert [b for b in bruto if b > 127] == [], f"{nome} tem byte não-ASCII"
+        assert bruto.count(b"\n") == bruto.count(b"\r\n"), f"{nome} não é CRLF puro"
+        assert b"0.94.1" in bruto, f"{nome} ficou numa versão antiga"
+
+    texto = (raiz / "ver-tudo-no-celular.bat").read_text(encoding="ascii")
+    assert "--pacote" in texto
+    # o `%*` é o que faz o duplo clique repassar a opção ao Python
+    assert "%*" in (raiz / "escanear-celular.bat").read_text(encoding="ascii")

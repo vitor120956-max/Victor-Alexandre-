@@ -330,3 +330,32 @@ aqui, o que chegava na tabela. Nos dois casos o teste que faltava era o que usa 
 O que o relatório **não** acusou e agora está escrito: RAM com 35% disponível e
 bateria a 30,7 °C tiram memória e calor da frente das suspeitas — mesmo sem
 leitura térmica de CPU, que este Android esconde.
+
+## 16. O celular entra no PC de quem conserta (0.94.1)
+
+O relatório salvo sempre guardou o **resultado** e nunca as **respostas do
+`adb`**. Isso obrigava a depurar por print: quem recebia via a conclusão, não a
+medida. Dois comandos fecham o ciclo.
+
+```
+ver-tudo-no-celular.bat --pacote          # grava tambem o .zip das leituras
+escanear-celular.py --refazer ARQUIVO.zip # refaz o relatorio sem celular
+```
+
+O zip tem `leituras.json`, `falhas.json`, `limites.json`, `relatorio.json` e um
+`LEIA-ME.txt`. Antes de sair, passa por `limpar_saidas_para_pacote`:
+
+| o que identifica | vira |
+|---|---|
+| `ro.serialno`, IMEI, operadora | `<removido>` |
+| `package:com.whatsapp` | `package:app-N` — a **contagem** sobrevive |
+| nome de arquivo em `ls -la` | `item` |
+| e-mail, telefone | `<email>`, `<telefone>` |
+| `Process: com.x` / `mCurrentFocus` | `com.<app>` / `<app>/<tela>` |
+
+`test_varredura.py` cobra os dois lados: os 9 marcadores de vida privada **não
+podem** aparecer, e o que reproduz o defeito **tem de** aparecer. E
+`test_o_pacote_refaz_o_mesmo_relatorio_sem_o_celular` compara o relatório
+refeito com o original — foi ele que achou que o pacote omitia
+`pm list packages`, que o `ps` de duas colunas ficava ilegível e que faltavam
+`thermal` e as falhas da anatomia.

@@ -75,3 +75,73 @@ vezes (scanner e anatomia). Ficou uma.
 - “Sem medida” nunca virou “está tudo bem”: quando não há número, a frase diz
   **por que** não há.
 - Nada é executado no aparelho: 29 leituras, todas de leitura.
+
+---
+
+# 0.94.1 — o celular entra aqui, em vez de eu tentar sair
+
+Você perguntou se eu não podia entrar no celular e testar. **Não posso** — e não
+é falta de vontade. O `adb` conversa por USB com a máquina em que o JARVIS roda;
+do meu lado existe um repositório, não um cabo. Nenhum comando daqui atravessa a
+internet e chega no seu aparelho.
+
+Mas havia um jeito melhor de atender o pedido, e ele existia porque **o arquivo
+do relatório não guardava o que o `adb` respondeu** — só o que a tela decidiu
+mostrar. Era por isso que, a cada versão, eu dependia de você colar um print:
+o print é a conclusão, não a medida.
+
+## `--pacote`: o celular vem para cá
+
+```
+ver-tudo-no-celular.bat --pacote
+```
+
+Ao lado do `relatorio.json` sai um `.zip` de ~7 KB com:
+
+| arquivo | o que é |
+|---|---|
+| `leituras.json` | a resposta de cada um dos comandos de leitura (getprop, df, meminfo, ps, pm list, logcat…) |
+| `falhas.json` | as negativas do Android (`Permission denied`), que explicam 27 de 29 |
+| `limites.json` | o que a anatomia não conseguiu ler |
+| `relatorio.json` | o que a tela mostrou, para comparar |
+| `LEIA-ME.txt` | o que tem e o que não tem, em linguagem de gente |
+
+## O que **não** vai no pacote
+
+O zip sai do seu PC para o meu. Então ele passa por uma limpeza antes:
+
+| campo | vira |
+|---|---|
+| serial, IMEI, operadora | `<removido>` |
+| nome de app instalado | `app-N` (a contagem continua exata: 440 / 495 / 55) |
+| nome de arquivo seu | `item` (a contagem e o tipo continuam) |
+| e-mail, telefone no log | `<email>`, `<telefone>` |
+| pasta em foco, app do ANR | `com.<app>` |
+
+O que fica é o que reproduz o defeito: modelo, versão, memória, bateria, as
+negativas, o `FATAL EXCEPTION`. **Nome de app não é diagnóstico; é vida privada.**
+
+De quebra, isso consertou um vazamento que já existia: a seção “Aplicativos fora
+da loja” listava os 12 primeiros pacotes **na tela e no arquivo** — quem recebia
+o relatório via quais apps você tem.
+
+## `--refazer`: o relatório sem o celular
+
+```
+escanear-celular.py --refazer SM-A346M-20261122-201808.zip
+```
+
+Roda o mesmo parser e os mesmos limiares sobre as leituras do zip. Não toca em
+aparelho nenhum. Daqui eu conserto, escrevo o teste e te devolvo a versão — sem
+esperar o próximo print.
+
+## O que os testes pegaram (e eu não teria visto lendo o código)
+
+1. o pacote **omitia** `pm list packages`, e sem ele 440/495/55 viravam vazio;
+2. o `ps` do Android tem **duas** colunas, e ao trocar o nome por marcador a
+   linha ficava ilegível — “fechar app” desaparecia do relatório;
+3. faltavam `thermal` e as falhas da anatomia: o relatório refeito vinha com
+   menos limitação que o original, e o defeito “mudava de cara”.
+
+O teste compara o refeito com o original campo a campo. Ele reprovou três vezes
+até o pacote ficar fiel — que é exatamente o trabalho.

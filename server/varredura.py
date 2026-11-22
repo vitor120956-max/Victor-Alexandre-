@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from . import anatomia, celular, diagnostico_celular
@@ -443,7 +444,9 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
                     "rotulo": "Fora da loja do fabricante",
                     "valor": str(len(ler_apps_de_sistema(saidas.get("pm list packages -3", ""))) or "0"),
                 },
-                {"rotulo": "Amostra", "valor": ", ".join(sistema[:10])},
+                # 0.94.1 — a amostra saía com o nome dos pacotes do sistema e
+                # aparecia **no arquivo** que o dono manda para outra pessoa.
+                {"rotulo": "Onde ver quais", "valor": "Ajustes → Apps (ordene por tamanho)"},
             ],
             nota="Desinstalar app de sistema é o que mais quebra aparelho — e o JARVIS não faz isso.",
         ))
@@ -518,6 +521,9 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
         # rodou aqui, e rodar de novo seria uma segunda leitura do mesmo dado
         # (e uma segunda chance de divergir). Sai do relatório antes de imprimir.
         "_saude": saude,
+        # 0.94.1 — o que a anatomia não conseguiu ler também é leitura: sem
+        # isso o pacote reproduz 4 de 5 limitações e o defeito “parece” outro.
+        "_limites_anatomia": list(anatomia_relatorio.get("limitacoes", [])),
         "nao_faz": list(diagnostico_celular.NAO_FAZ) + [
             "Não copia arquivo do aparelho: copiar é `celular.puxar`, com confirmação e só nas pastas de mídia.",
             "Não abre a tela do celular: isso é `scrcpy`, outro comando.",
@@ -561,6 +567,11 @@ def varrer(
             medido, sintomas, relatorio.get("_saude")
         )
         relatorio.pop("_saude", None)
+    # 0.94.1 — as saídas cruas ficam no dicionário até alguém pedir o pacote
+    # (`empacotar_leituras`). `em_texto()` e `json.dumps` não as veem porque o
+    # prefixo "_" as marca como interna, e quem imprime chama `so_publico()`.
+    relatorio["_saidas"] = dict(medido.get("saidas", {}))
+    relatorio["_falhas"] = list(medido.get("falhas", []))
     return relatorio
 
 
@@ -1059,3 +1070,235 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
             "Não procura falha de segurança: isso quebra a proteção de um aparelho que não é o dele.",
         ],
     }
+
+# ---------------------------------------------------------------------------
+# 0.94.1 — o pacote das leituras cruas (“--pacote”)
+# ---------------------------------------------------------------------------
+
+# Só o que ajuda a reproduzir o defeito. Nome de app instalado, número de
+# telefone, conta e IMEI **não entram**: o diagnóstico não precisa deles, e o
+# pacote sai daqui para o PC de outra pessoa.
+_PACOTE_ENTRA = (
+    "getprop",
+    "dumpsys battery",
+    "df -k",
+    "cat /proc/meminfo",
+    "cat /proc/uptime",
+    "ps -A -o RSS,NAME",
+    "dumpsys meminfo",
+    "dumpsys cpuinfo",
+    "dumpsys diskstats",
+    "dumpsys input",
+    "dumpsys gfxinfo",
+    "dumpsys window displays",
+    "pm list packages",
+    "pm list packages -s",
+    "pm list packages -3",
+    "logcat -b crash -d -t 80",
+    "logcat -b system -d -t 400",
+    "settings get global window_animation_scale",
+    "settings get global transition_animation_scale",
+    "settings get global animator_duration_scale",
+    "thermal",  # a anatomia lê as zonas térmicas por esta chave
+)
+
+
+def _re_limpar_falha(frase: str) -> str:
+    """A negativa do Android, sem nome de app e sem telefone."""
+    import re as _re
+
+    limpa = _re.sub(r"com\.[\w.]+", "com.<app>", frase or "")
+    limpa = _re.sub(r"\b[\w.+-]+@[\w.-]+\.\w{2,}\b", "<email>", limpa)
+    return _re.sub(r"\+?\d{2,3}\s?\d{8,9}", "<telefone>", limpa)
+
+
+def so_publico(relatorio: dict[str, Any]) -> dict[str, Any]:
+    """O relatório sem os campos internos (`_saude`, `_saidas`).
+
+    Quem imprime — texto, JSON, tela — passa por aqui. Assim o pacote de
+    depuração pode guardar as leituras cruas sem que elas vazem para a saída
+    normal, que o dono já viu mil vezes e não precisa ficar maior.
+    """
+    return {chave: valor for chave, valor in relatorio.items() if not chave.startswith("_")}
+
+
+def limpar_saidas_para_pacote(saidas: dict[str, str]) -> dict[str, str]:
+    """Tira do texto o que identifica a pessoa, mantendo o que reproduz o erro.
+
+    Um `ps -A` completo tem o nome dos apps **que a pessoa instalou** — isso é
+    vida privada, não diagnóstico. Um `getprop` completo tem número de série e
+    IMEI. A ideia é: o pacote passa por um desconhecido sem expor nada, e ainda
+    assim reconstrói o relatório inteiro no PC de quem conserta.
+    """
+    import re as _re
+
+    limpo: dict[str, str] = {}
+    for chave, texto in saidas.items():
+        if not isinstance(texto, str):
+            continue
+        if chave not in _PACOTE_ENTRA and not chave.startswith("ls -la"):
+            # `ls` das pastas de mídia mostra nome de arquivo do dono; o
+            # relatório só usa a **contagem** e o tipo, e a seção continua
+            # legível com os nomes trocados.
+            if not chave.startswith("for "):
+                continue
+        linhas = []
+        for linha in texto.splitlines():
+            # ps: PID e RSS ficam (o diagnóstico ordena por eles); o nome vira
+            # “app-N”. Não pode virar só “app”: o parser exige **nome com
+            # ponto**? não — exige a linha de 3 campos, e é isso que este
+            # formato preserva. Foi o primeiro teste do `--refazer` que pegou.
+            # O `ps -A -o RSS,NAME` do Android imprime **duas** colunas
+            # (`900120 com.whatsapp`); com PID são três. Os dois formatos
+            # precisam sobreviver: o parser do diagnóstico quer a última
+            # coluna como nome, e ela vira `app-N`.
+            partes = linha.split()
+            primeiro_e_caminho = partes and "/" in partes[0] or (partes and partes[0].startswith("dev"))
+            if (
+                2 <= len(partes) <= 3
+                and partes[0].isdigit()
+                and (len(partes) == 2 or partes[1].isdigit())
+                and not primeiro_e_caminho
+            ):
+                linhas.append(f"{partes[0]} app-{len(linhas)}")
+                continue
+            # `df -k`: “/dev/block/dm-8 114496460 108800000 5696460 95% /data”
+            # — o caminho do dispositivo é o que identifica a partição; o resto
+            # é número que o diagnóstico usa para calcular a porcentagem.
+            if len(partes) >= 5 and primeiro_e_caminho:
+                linhas.append(partes[0] + " " + " ".join(partes[1:]))
+                continue
+            # logcat: tira telefone, e-mail, conta e caminho de /data/data
+            if "Process:" in linha or "ANR in" in linha:
+                linha = _re.sub(r"com\.[\w.]+", "com.<app>", linha)
+            # janela em foco entrega o app que a pessoa estava usando
+            if "mCurrentFocus" in linha or "mFocusedApp" in linha:
+                linha = _re.sub(r"[a-zA-Z][\w.]*\/[\w.$]+", "<app>/<tela>", linha)
+            linha = _re.sub(r"\b[\w.+-]+@[\w.-]+\.\w{2,}\b", "<email>", linha)
+            linha = _re.sub(r"\+?\d{2,3}\s?\d{8,9}", "<telefone>", linha)
+            # getprop: propriedades que identificam o aparelho
+            if _re.match(r"^\[(ro\.(serialno|boot\.serialno|boot\.hardware)|gsm\.(sim\.operator|operator\.alpha))", linha):
+                chave_prop = linha.split("]:", 1)[0]
+                linhas.append(f"{chave_prop}]: [<removido>]")
+                continue
+            # ls: nome do arquivo vira “item” (contagem e tipo continuam)
+            if chave.startswith("ls -la") or chave.startswith("for "):
+                partes = linha.split()
+                # o nome é sempre o **último** campo, e o Android às vezes
+                # imprime 8 em vez de 9 (sem o “total” no começo da linha)
+                if len(partes) >= 8 and partes[0][:1] in "-dl":
+                    partes[-1] = "item"
+                    linha = " ".join(partes)
+                elif linha.startswith("total "):
+                    linha = "total (omitido)"
+            linhas.append(linha)
+        limpo[chave] = "\n".join(linhas)
+    return limpo
+
+
+def empacotar_leituras(relatorio: dict[str, Any], destino: Path) -> Path:
+    """Grava um `.zip` com o relatório e as leituras cruas já limpas.
+
+    O ponto é não pedir print de novo: com este arquivo o relatório é refeito
+    **exatamente** no PC de quem vai consertar, com o mesmo parser e os mesmos
+    limiares. Sem ele, só dá para ler o que a tela decidiu mostrar.
+    """
+    import json as _json
+    import zipfile
+
+    sistema = relatorio.get("_saidas") or {}
+    limpas = limpar_saidas_para_pacote(sistema)
+    # `pm list packages` é lista de pacote — nome de app instalado. O
+    # diagnóstico conta as linhas, então a **contagem tem de sobreviver**: cada
+    # `package:x` vira `package:app-N`, e o pacote ainda reconstrói 440/495/55.
+    for chave in list(limpas):
+        if chave.startswith("pm list packages"):
+            linhas = limpas[chave].splitlines()
+            limpas[chave] = "\n".join(
+                f"package:app-{i}" if linha.strip().startswith("package:") else linha
+                for i, linha in enumerate(l for l in linhas if l.strip())
+            )
+    so_relatorio = {
+        k: v for k, v in relatorio.items()
+        if not k.startswith("_") and k != "serial"  # serial é identificador do dono
+    }
+    # as negativas (`Permission denied`) são o que explica 27 de 29 leituras:
+    # sem elas o pacote não reproduz o relatório. Não têm dado pessoal — são
+    # mensagem do Android sobre caminho de sistema.
+    falhas = [
+        _re_limpar_falha(f) for f in (relatorio.get("_falhas") or [])
+    ]
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(
+            "relatorio.json",
+            _json.dumps(so_relatorio, ensure_ascii=False, indent=2),
+        )
+        z.writestr(
+            "leituras.json",
+            _json.dumps(limpas, ensure_ascii=False, indent=2),
+        )
+        z.writestr("falhas.json", _json.dumps(falhas, ensure_ascii=False, indent=2))
+        limites = [
+            _re_limpar_falha(x) for x in (relatorio.get("_limites_anatomia") or [])
+        ]
+        z.writestr("limites.json", _json.dumps(limites, ensure_ascii=False, indent=2))
+        z.writestr(
+            "LEIA-ME.txt",
+            "Leituras cruas do `adb`, limpas.\n\n"
+            "O QUE TEM: a resposta de cada comando de leitura do celular\n"
+            "(getprop, df, meminfo, ps, pm list, logcat) e o relatorio.json\n"
+            "que a tela mostrou.\n\n"
+            "O QUE NAO TEM: nome, conta, telefone, IMEI, serial, nome de app\n"
+            "instalado, nome de arquivo seu. Esses campos foram trocados por\n"
+            "<removido>, <email>, <telefone> e app-N.\n\n"
+            "PARA REPRODUZIR: com este zip na mao, o relatorio e refeito sem\n"
+            "o celular na mesma maquina.\n",
+        )
+    return destino
+
+
+def refazer_de_pacote(caminho: str | Path) -> dict[str, Any]:
+    """Refaz o relatório a partir do `.zip` do `--pacote`, **sem** o celular.
+
+    0.94.1 — é o que resolve o pedido “entra no meu celular e testa”: numa
+    sessão de outra máquina não há como alcançar o `adb` do PC do dono, mas o
+    pacote traz exatamente o que o `adb` respondeu. Com ele o mesmo parser e os
+    mesmos limiares rodam aqui — então o defeito é reproduzido, consertado e
+    preso por teste, em vez de depender de mais um print.
+    """
+    import json as _json
+    import zipfile
+
+    arquivo = Path(caminho)
+    if not arquivo.is_file():
+        raise OSError(f"não achei {arquivo}")
+    try:
+        with zipfile.ZipFile(arquivo) as z:
+            leituras = _json.loads(z.read("leituras.json").decode("utf-8"))
+            falhas = _json.loads(z.read("falhas.json").decode("utf-8"))
+            limites = _json.loads(z.read("limites.json").decode("utf-8"))
+            # o título que a tela mostrou na hora ("SM-A346M · Android 16") —
+            # sem ele o relatório refeito abre com o serial, que não vai no zip
+            original = _json.loads(z.read("relatorio.json").decode("utf-8"))
+    except KeyError as exc:
+        raise ValueError(f"o pacote não tem {exc.args[0]} — foi gerado por versão antiga?") from exc
+
+    # `montar()` recebe o "medido" no formato do `coletar`: `falhas` são as
+    # negativas do `adb`; as da anatomia entram pelo caminho dela, então vão
+    # junto na lista (é a mesma origem: mensagem do sistema sobre um caminho).
+    medido = {
+        "serial": "pacote",
+        "saidas": leituras,
+        "falhas": list(falhas) + list(limites),
+    }
+    relatorio = montar(medido)
+    # o pacote não guarda qual sintoma o dono marcou; quem refaz decide se quer
+    # cruzar. Sem sintoma, a saída é a mesma de `--sem-perguntas`.
+    publico = so_publico(relatorio)
+    if original.get("titulo"):
+        publico["titulo"] = original["titulo"]
+    if original.get("lido_em"):
+        publico["lido_em"] = original["lido_em"]
+    publico["refeito_de"] = arquivo.name
+    return publico

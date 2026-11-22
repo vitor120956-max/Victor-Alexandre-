@@ -49,10 +49,21 @@ def _salvar(relatorio: dict) -> Path:
     pasta = _pasta()
     pasta.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    serial = (relatorio.get("serial") or "aparelho").replace("/", "-").replace(":", "-")
-    destino = pasta / f"{serial}-{carimbo}.json"
+    # 0.94.1 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
+    # que é identificador do dono. O modelo basta para reconhecer o relatório.
+    modelo = (relatorio.get("titulo") or "").split("·")[0].strip() or "aparelho"
+    seguro = "".join(c if c.isalnum() or c in "-_" else "-" for c in modelo)[:40]
+    destino = pasta / f"{seguro}-{carimbo}.json"
     destino.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
     return destino
+
+
+def _empacotar(relatorio: dict, destino_relatorio: Path) -> Path:
+    """O `.zip` das leituras cruas, ao lado do `relatorio.json`."""
+    from server import varredura
+
+    alvo = destino_relatorio.with_suffix(".zip")
+    return varredura.empacotar_leituras(relatorio, alvo)
 
 
 def _perguntar_sintomas() -> list[str]:
@@ -98,6 +109,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--sem-perguntas", action="store_true", help="Não pergunta nada; só mede.")
     parser.add_argument(
+        "--refazer",
+        metavar="ARQUIVO.zip",
+        default="",
+        help=(
+            "Não toca no celular: refaz o relatório a partir do .zip do `--pacote`. "
+            "É assim que um defeito é reproduzido sem ter o aparelho na mão."
+        ),
+    )
+    parser.add_argument(
+        "--pacote",
+        action="store_true",
+        help=(
+            "Guarda também as leituras cruas do `adb`, num .zip que NÃO tem nada pessoal "
+            "(sem nome, sem conta, sem arquivo de mídia). É o que permite refazer o "
+            "diagnóstico exato no PC de quem escreve o JARVIS, sem pedir outro print."
+        ),
+    )
+    parser.add_argument(
         "--completo",
         action="store_true",
         help="Em vez do scanner: a passagem completa (anatomia + scanner + pastas e partições).",
@@ -108,6 +137,23 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(RAIZ))
 
     from server import diagnostico_celular as dc
+
+    if argumentos.refazer:
+        from server import varredura
+
+        try:
+            refeito = varredura.refazer_de_pacote(argumentos.refazer)
+        except (OSError, ValueError) as exc:
+            print()
+            print("  Não consegui refazer a partir deste arquivo:")
+            print(f"    {exc}")
+            print()
+            return 1
+        if argumentos.json:
+            print(json.dumps(refeito, ensure_ascii=False, indent=2))
+        else:
+            print(varredura.em_texto(refeito))
+        return 0
 
     if argumentos.completo:
         from server import varredura
@@ -131,13 +177,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {exc}")
             print()
             return 1
+        publico = varredura.so_publico(relatorio_completo)
         if argumentos.json:
-            print(json.dumps(relatorio_completo, ensure_ascii=False, indent=2))
+            print(json.dumps(publico, ensure_ascii=False, indent=2))
         else:
-            print(varredura.em_texto(relatorio_completo))
+            print(varredura.em_texto(publico))
         if not argumentos.sem_arquivo:
             try:
-                print(f"  Relatório salvo em: {_salvar(relatorio_completo)}")
+                destino_completo = _salvar(publico)
+                print(f"  Relatório salvo em: {destino_completo}")
+                if argumentos.pacote:
+                    pacote = _empacotar(relatorio_completo, destino_completo)
+                    print(f"  Pacote para mandar: {pacote}")
+                    print("  (não tem nome, conta nem arquivo seu: só as respostas do `adb`)")
                 print()
             except OSError as exc:
                 print(f"  (Não consegui salvar o relatório: {exc})")
