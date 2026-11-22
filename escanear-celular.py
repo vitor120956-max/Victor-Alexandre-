@@ -112,8 +112,19 @@ def main(argv: list[str] | None = None) -> int:
     if argumentos.completo:
         from server import varredura
 
+        # 0.92.9 — a varredura completa também pergunta o que o dono vê. Era o
+        # único caminho que não perguntava, e justamente o do duplo clique: a
+        # fila de suspeitas da 0.92.4 ficava de fora do caminho mais fácil.
+        marcados_completo = [
+            parte.strip() for parte in (argumentos.sintomas or "").split(",") if parte.strip()
+        ]
+        if not marcados_completo and not argumentos.sem_perguntas and not argumentos.json:
+            marcados_completo = _perguntar_sintomas()
+
         try:
-            relatorio_completo = varredura.varrer(argumentos.serial)
+            relatorio_completo = varredura.varrer(
+                argumentos.serial, sintomas=marcados_completo
+            )
         except varredura.VarreduraError as exc:
             print()
             print("  A varredura não conseguiu ler o aparelho:")

@@ -746,3 +746,100 @@ def test_ninguem_promete_root_sem_destravar_quando_o_adbd_recusa():
         "formas de root temporário", ""
     ) or True  # a negação é permitida; a promessa não
     assert "Não existe root temporário" in texto or "Não." in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.92.9 — “posso conectar o celular e o JARVIS escanear por completo e ver se
+# descobre os problemas?”
+#
+# A varredura completa era o único caminho que **não perguntava os sintomas** —
+# e era justamente o do duplo clique. Ela media, o scanner dizia o que os
+# limiares pegaram, e a fila de suspeitas da 0.92.4 (o que separa “frame lento”
+# de “toque fantasma”) ficava de fora.
+# ---------------------------------------------------------------------------
+
+def test_a_varredura_completa_aceita_sintomas():
+    relatorio = vd.varrer.__wrapped__ if hasattr(vd.varrer, "__wrapped__") else None
+    assert "sintomas" in vd.varrer.__code__.co_varnames
+    assert relatorio is None  # não é decorada; o parâmetro é da assinatura
+
+
+def test_com_sintomas_a_fila_de_suspeitas_aparece(monkeypatch):
+    monkeypatch.setattr(vd, "coletar", lambda alvo="", rodar=None: medido())
+    monkeypatch.setattr(vd.anatomia, "ler_android", lambda serial="", **_: {"secoes": [], "limitacoes": []})
+    relatorio = vd.varrer(sintomas=["se-mexe-sozinho", "so-para-apagar-tela", "frame-lento"])
+    assert "sintomas" in relatorio
+    assert relatorio["sintomas"]["fila"], "a fila saiu vazia com sintomas marcados"
+    # o relato do dono traz o toque fantasma em primeiro
+    assert relatorio["sintomas"]["fila"][0]["id"] == "toque-fantasma"
+
+
+def test_sem_sintomas_a_varredura_nao_inventa_fila(monkeypatch):
+    monkeypatch.setattr(vd, "coletar", lambda alvo="", rodar=None: medido())
+    monkeypatch.setattr(vd.anatomia, "ler_android", lambda serial="", **_: {"secoes": [], "limitacoes": []})
+    relatorio = vd.varrer()
+    assert "sintomas" not in relatorio
+
+
+def test_o_texto_do_console_mostra_as_suspeitas(monkeypatch):
+    monkeypatch.setattr(vd, "coletar", lambda alvo="", rodar=None: medido())
+    monkeypatch.setattr(vd.anatomia, "ler_android", lambda serial="", **_: {"secoes": [], "limitacoes": []})
+    texto = vd.em_texto(vd.varrer(sintomas=["se-mexe-sozinho"]))
+    assert "PELO QUE VOCÊ RELATOU" in texto
+    assert "toque fantasma" in texto.lower()
+    assert "teste:" in texto
+
+
+def test_sintoma_desconhecido_nao_derruba_a_varredura(monkeypatch):
+    monkeypatch.setattr(vd, "coletar", lambda alvo="", rodar=None: medido())
+    monkeypatch.setattr(vd.anatomia, "ler_android", lambda serial="", **_: {"secoes": [], "limitacoes": []})
+    relatorio = vd.varrer(sintomas=["nao-existe", "inventado"])
+    assert relatorio["ok"] is True
+    assert relatorio["secoes"]
+
+
+def test_a_rota_aceita_sintomas(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv(vd.AMBIENTE, "1")
+    monkeypatch.setattr("server.celular.ligado", lambda: True)
+    vistos: list[list[str]] = []
+
+    def falso(serial="", *, sintomas=None):
+        vistos.append(list(sintomas or []))
+        return {"ok": True, "alvo": "android", "serial": serial, "titulo": "X",
+                "lido_em": "", "veredito": "", "secoes": [], "problemas": [],
+                "otimizacoes": [], "limitacoes": [], "sem_root": [], "nao_faz": []}
+
+    monkeypatch.setattr(vd, "varrer", falso)
+    resposta = _cliente(tmp_path).get(
+        "/api/anatomia/android/varredura?sintomas=se-mexe-sozinho,frame-lento"
+    )
+    assert resposta.status_code == 200
+    assert vistos[0] == ["se-mexe-sozinho", "frame-lento"]
+
+
+def test_a_skill_da_varredura_repassa_os_sintomas(monkeypatch):
+    """O campo existia no input e era descartado no handler."""
+    from server import skill_registry
+
+    recebidos: list[list[str]] = []
+
+    def falso(serial="", *, sintomas=None):
+        recebidos.append(list(sintomas or []))
+        return {"ok": True}
+
+    monkeypatch.setattr(skill_registry.varredura_celular, "varrer", falso)
+    registro = build_registry(Path("/tmp/reg-sint"))
+    skill = registro.get("celular.varredura")
+    assert skill is not None
+    # o input precisa declarar o campo que o handler agora usa
+    campos = getattr(skill.input_model, "model_fields", {})
+    assert "sintomas" in campos
+
+
+def test_secao_sem_item_nao_sai_como_titulo_vazio():
+    """Saía “PASTAS QUE O ANDROID PUBLICA” e, embaixo, só a nota — parecia perda."""
+    vazio = {"serial": "ABC123", "saidas": {"getprop": "[ro.product.model]: [X]\n"}, "falhas": []}
+    relatorio = vd.montar(vazio)
+    for secao in relatorio["secoes"]:
+        assert secao["itens"], f"seção “{secao['titulo']}” saiu sem item"
+    assert not any(s["id"] == "pastas" for s in relatorio["secoes"])

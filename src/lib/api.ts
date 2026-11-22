@@ -1435,6 +1435,8 @@ export interface CelularVarredura {
   secoes: AnatomiaSecao[];
   problemas: CelularProblema[];
   otimizacoes: CelularOtimizacao[];
+  /** Presente só quando o dono marcou o que vê — a fila de suspeitas cruzada. */
+  sintomas?: CelularSintomas;
   limitacoes: string[];
   sem_root: string[];
   nao_faz: string[];
@@ -1448,8 +1450,11 @@ export interface CelularVarredura {
  * porque um relatório sem veredito de saúde é o defeito que a 0.92.5 tinha.
  * O `409` traz a frase que resolve (cabo, “Permitir”, variável).
  */
-export async function varrerCelular(serial = ''): Promise<CelularVarredura> {
-  const sufixo = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+export async function varrerCelular(serial = '', sintomas: string[] = []): Promise<CelularVarredura> {
+  const consulta = new URLSearchParams();
+  if (serial) consulta.set('serial', serial);
+  if (sintomas.length) consulta.set('sintomas', sintomas.join(','));
+  const sufixo = consulta.toString() ? `?${consulta}` : '';
   const resposta = await apiFetch<{ ok: boolean; result: CelularVarredura }>(
     `/api/anatomia/android/varredura${sufixo}`,
   );

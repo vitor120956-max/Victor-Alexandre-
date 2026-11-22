@@ -267,3 +267,28 @@ O `controle()` expõe `root_temporario.atende_as_tres` (booleano), `resposta`
 (texto medido), `caminhos[]` (a tabela) e `sem_root_agora` (o privilégio, com
 `da_para` e `nao_da`). Um aparelho que **já tem root** devolve `false`: o custo já
 foi pago, e “sim” esconderia a conta.
+
+## 13. A varredura completa agora pergunta os sintomas (0.92.9)
+
+Até a 0.92.8 havia dois caminhos e nenhum fazia tudo:
+
+| caminho | pergunta sintomas? | mede tudo? | fila de suspeitas? |
+|---|---|---|---|
+| `escanear-celular.bat` | sim | não (19 leituras) | sim |
+| `ver-tudo-no-celular.bat` | **não** | sim (28 leituras) | **não** |
+
+A 0.92.9 uniu: `varredura.varrer(serial, sintomas=[...])` roda as 28 leituras e,
+se receber sintomas, chama `diagnostico_celular.cruzar()` sobre **as mesmas
+saídas** — sem reabrir o aparelho e sem uma segunda tabela de pesos que
+divergiria da primeira.
+
+O cruzamento é o mesmo da 0.92.4: para “se mexe sozinho” + “só para ao apagar a
+tela” + “frame lento”, a primeira suspeita é **toque fantasma no vidro** — a
+única causa em que apagar a tela resolve na hora.
+
+Dois defeitos achados ao unir:
+
+1. o handler de `celular.varredura` **descartava** o campo `sintomas` que o input
+   declarava;
+2. seção sem item saía como título solto (o caso de “PASTAS” quando nenhum `ls`
+   responde). Agora a seção sai da lista e o motivo fica nas limitações.

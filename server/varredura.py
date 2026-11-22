@@ -467,7 +467,10 @@ def montar(medido: dict[str, Any], *, agora: str = "") -> dict[str, Any]:
         "titulo": anatomia_relatorio.get("titulo") or serial,
         "lido_em": agora or _agora(),
         "veredito": frase,
-        "secoes": secoes,
+        # 0.92.9 — seção sem item não é seção: saía o título “PASTAS QUE O ANDROID
+        # PUBLICA” seguido só da nota, e parecia leitura perdida. Se nada entrou,
+        # a seção sai e o motivo fica nas limitações (que já listam o comando).
+        "secoes": [s for s in secoes if s["itens"]],
         "problemas": problemas,
         "otimizacoes": saude.get("otimizacoes", []),
         "limitacoes": _limites_sem_repetir(
@@ -501,13 +504,65 @@ def varrer(
     *,
     rodar: Callable[[list[str]], tuple[int, str, str]] | None = None,
     agora: str = "",
+    sintomas: list[str] | None = None,
 ) -> dict[str, Any]:
-    """A passagem completa: mede, junta e devolve um relatório só."""
-    return montar(coletar(alvo, rodar=rodar), agora=agora)
+    """A passagem completa: mede, junta e devolve um relatório só.
+
+    0.92.9 — aceita `sintomas`. Antes a varredura **não perguntava** o que o dono
+    vê: ela media e o scanner dizia o que os limiares pegaram. A fila de
+    suspeitas da 0.92.4 (que é o que transforma “frame lento” em “toque
+    fantasma”) ficava de fora justamente no caminho mais fácil — o do duplo
+    clique. Unificar era o pedido: “escanear por completo e ver se descobre os
+    problemas” inclui o problema que o dono já sabe descrever.
+    """
+    medido = coletar(alvo, rodar=rodar)
+    relatorio = montar(medido, agora=agora)
+    if sintomas:
+        relatorio["sintomas"] = _cruzar_sintomas(medido, sintomas)
+    return relatorio
+
+
+def _cruzar_sintomas(medido: dict[str, Any], sintomas: list[str]) -> dict[str, Any]:
+    """Cruza o relato do dono com o que a varredura mediu.
+
+    Reusa `diagnostico_celular.cruzar` de propósito: uma segunda implementação
+    de pesos e “teste mais barato” divergiria da primeira na primeira mudança.
+    A varredura já leu **todas** as saídas que o scanner pede (a lista é
+    derivada), então o cruzamento roda sobre a mesma medida, sem reabrir o
+    aparelho.
+    """
+    try:
+        return diagnostico_celular.cruzar(
+            {"serial": medido.get("serial", ""), "saidas": medido.get("saidas", {}), "falhas": []},
+            sintomas,
+        )
+    except Exception:  # noqa: BLE001 - sintoma não pode derrubar a varredura
+        return {
+            "sintomas_marcados": list(sintomas),
+            "fila": [],
+            "veredito": "Não consegui cruzar os sintomas com o que o aparelho mediu nesta passagem.",
+            "como_ler": "",
+        }
 
 
 def em_texto(relatorio: dict[str, Any]) -> str:
     linhas = ["", f"  {relatorio['titulo']}", f"  {relatorio['veredito']}", ""]
+    sintoma = relatorio.get("sintomas")
+    if sintoma and sintoma.get("fila"):
+        linhas.append("  PELO QUE VOCÊ RELATOU — SUSPEITAS EM ORDEM")
+        for posicao, causa in enumerate(sintoma["fila"][:4], start=1):
+            marca = (
+                "medido no aparelho"
+                if causa.get("medido_no_aparelho")
+                else "sem medida no aparelho"
+            )
+            linhas.append(f"    {posicao}. {causa['titulo']}  ({marca})")
+            linhas.append(f"       por que: {causa['porque']}")
+            for passo in causa.get("teste", [])[:2]:
+                linhas.append(f"       teste: {passo}")
+        if sintoma.get("veredito"):
+            linhas.append(f"    {sintoma['veredito']}")
+        linhas.append("")
     for secao in relatorio["secoes"]:
         linhas.append(f"  {secao['titulo'].upper()}")
         for item in secao["itens"]:

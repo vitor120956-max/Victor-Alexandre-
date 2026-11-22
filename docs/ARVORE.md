@@ -2949,3 +2949,27 @@ omissão.
 O `root_temporario` ficava `True` por `ro.debuggable`, e a resposta nova dizia que
 o passivo era reversível — escondendo que o custo já tinha sido pago. Agora
 `atende_as_tres` é `false` nesse caso, e o texto diz que o destravar já aconteceu.
+
+### 0.92.9 — um caminho só: a varredura pergunta o que o dono vê
+
+> posso conetar meu cll no pc para o jarvis escanear ele por completo e ver se
+> ele descobre os problemas?
+
+Havia dois scanners e **nenhum fazia tudo**: o `escanear-celular.bat` perguntava
+os sintomas e cruzava, mas lia 19 comandos; o `ver-tudo-no-celular.bat` lia 28 e
+não perguntava nada. A parte que a 0.92.4 tinha de melhor — a fila de suspeitas,
+que transforma “frame lento” em “toque fantasma” — ficava de fora **justamente
+no caminho mais fácil**, o do duplo clique.
+
+A união não duplicou lógica: `varrer()` chama `diagnostico_celular.cruzar()`
+sobre **as mesmas saídas** que já coletou. Duas tabelas de pesos divergiriam na
+primeira mudança; uma função só, não.
+
+Dois defeitos apareceram ao ligar as pontas:
+
+- **o handler descartava o campo.** `celular.varredura` declarava `sintomas` no
+  input e não o repassava — quem chamava pelo chat recebia a fila vazia. O teste
+  agora confere que o campo existe **e** que o valor chega;
+- **seção vazia virava título solto.** “PASTAS QUE O ANDROID PUBLICA” saía
+  seguido só da nota, sem item nenhum — parecia leitura perdida. Seção sem item
+  sai da lista, e o motivo já está nas limitações.

@@ -345,6 +345,33 @@ function CartaoVarredura({ dados }: { dados: CelularVarredura }) {
         <span className="local-badge"><ShieldCheck size={12} /> NADA FOI ALTERADO</span>
       </div>
 
+      {dados.sintomas && dados.sintomas.fila.length > 0 && (
+        <div className="anatomia-suspeitas">
+          <h3><Stethoscope size={13} /> Pelo que você relatou, a ordem é esta</h3>
+          <p className="anatomia-veredito">{dados.sintomas.veredito}</p>
+          <ol>
+            {dados.sintomas.fila.slice(0, 4).map((suspeita, indice) => (
+              <li key={suspeita.id}>
+                <div className="anatomia-suspeita-topo">
+                  <span className="anatomia-suspeita-ordem">{indice + 1}</span>
+                  <strong>{suspeita.titulo}</strong>
+                  <span className={suspeita.medido_no_aparelho.length ? 'anatomia-suspeita-sim' : 'anatomia-suspeita-nao'}>
+                    {suspeita.medido_no_aparelho.length ? 'medido no aparelho' : 'sem medida no aparelho'}
+                  </span>
+                </div>
+                <p>{suspeita.porque}</p>
+                <div className="anatomia-suspeita-testes">
+                  <span>Teste mais barato</span>
+                  <ul>{suspeita.teste.map((passo) => <li key={passo}>{passo}</li>)}</ul>
+                </div>
+                <p className="anatomia-limite"><AlertTriangle size={12} /> se confirmar: {suspeita.o_que_confirma}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="anatomia-como-ler">{dados.sintomas.como_ler}</p>
+        </div>
+      )}
+
       {dados.problemas.length > 0 && (
         <div className="anatomia-suspeitas">
           <h3><AlertTriangle size={13} /> O que o scanner achou</h3>
@@ -478,7 +505,7 @@ export function AnatomiaPage() {
     setVarrendo(true);
     setErro('');
     try {
-      setVarredura(await varrerCelular(serial));
+      setVarredura(await varrerCelular(serial, marcados));
     } catch (falha) {
       setVarredura(null);
       setErro(falha instanceof Error ? falha.message : 'A varredura não respondeu.');

@@ -885,14 +885,21 @@ def create_app(
             )
 
     @application.get("/api/anatomia/android/varredura")
-    def anatomia_android_varredura(serial: str = Query(default="", max_length=64)) -> Any:
+    def anatomia_android_varredura(
+        serial: str = Query(default="", max_length=64),
+        sintomas: str = Query(default="", max_length=200),
+    ) -> Any:
         """“Passar o JARVIS por todo o celular”: um relatório, só leitura.
 
         0.92.5 — o dono conectou o cabo e perguntou por onde começar. Esta rota
         junta anatomia, scanner e mapa de pastas numa passada só.
+
+        0.92.9 — aceita `sintomas` (ids separados por vírgula). Sem eles a
+        varredura media e calava sobre o que o dono já sabia descrever.
         """
+        marcados = [parte.strip() for parte in sintomas.split(",") if parte.strip()]
         try:
-            return {"ok": True, "result": varredura_mod.varrer(serial)}
+            return {"ok": True, "result": varredura_mod.varrer(serial, sintomas=marcados)}
         except varredura_mod.VarreduraError as exc:
             return JSONResponse(
                 status_code=409,

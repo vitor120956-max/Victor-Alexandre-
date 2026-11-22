@@ -4803,9 +4803,14 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
     def celular_varredura_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         # A passagem completa, num comando: anatomia + scanner + mapa de pastas.
         # Tudo de leitura; o que exige root é dito, não tentado.
+        #
+        # 0.92.9 — os sintomas que o dono marcou **chegavam aqui e eram
+        # descartados**: a skill declarava o campo `sintomas` e não o usava. O
+        # cruzamento saía vazio mesmo com o relato certo.
         assert isinstance(data, CelularDiagnosticoInput)
+        marcados = [parte.strip() for parte in (data.sintomas or "").split(",") if parte.strip()]
         try:
-            return varredura_celular.varrer(data.serial)
+            return varredura_celular.varrer(data.serial, sintomas=marcados)
         except varredura_celular.VarreduraError as exc:
             raise SkillError(str(exc)) from exc
 
