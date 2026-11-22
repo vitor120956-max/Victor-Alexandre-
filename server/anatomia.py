@@ -509,7 +509,7 @@ def _propriedades(saida: str) -> dict[str, str]:
         if not linha.startswith("["):
             continue
         if not linha.endswith("]"):
-            # 0.95.0 — linha cortada no meio (o `_cortar` de 60 KB pode cair
+            # 0.95.1 — linha cortada no meio (o `_cortar` de 60 KB pode cair
             # dentro do valor). `rsplit` não acha o `]` final e devolve o resto
             # **truncado como se fosse o valor inteiro**: o relatório do dono
             # saiu com “SM-A346M” quando o modelo é “SM-A346M…” — e teria saído
@@ -710,7 +710,7 @@ def ler_android(
             [
                 _item("Total instalado", total_apps or "não respondeu"),
                 _item("Fora da loja (terceiros)", len(apps) or "0"),
-                # 0.95.0 — nome de app instalado é vida privada; a contagem
+                # 0.95.1 — nome de app instalado é vida privada; a contagem
                 # basta para o diagnóstico e é o que o dono manda no arquivo.
                 _item("Onde ver quais", "Ajustes → Apps (ordene por tamanho)"),
             ],

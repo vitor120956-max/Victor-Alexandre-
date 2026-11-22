@@ -49,7 +49,7 @@ def _salvar(relatorio: dict) -> Path:
     pasta = _pasta()
     pasta.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    # 0.95.0 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
+    # 0.95.1 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
     # que é identificador do dono. O modelo basta para reconhecer o relatório.
     modelo = (relatorio.get("titulo") or "").split("·")[0].strip() or "aparelho"
     seguro = "".join(c if c.isalnum() or c in "-_" else "-" for c in modelo)[:40]

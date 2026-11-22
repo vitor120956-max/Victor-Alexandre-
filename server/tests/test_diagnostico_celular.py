@@ -630,3 +630,137 @@ def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
     assert "O QUE VOCÊ RELATOU — SUSPEITAS EM ORDEM" in texto
     assert "Toque fantasma" in texto
     assert "teste:" in texto
+
+
+# ---------------------------------------------------------------------------
+# 0.95.1 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
+# ---------------------------------------------------------------------------
+
+
+def test_adb_vazio_mas_windows_ve_mtp_diz_que_falta_o_driver(monkeypatch):
+    """O caso do dono: a pasta “A34” aparece no Explorer e o `adb` não vê nada.
+
+    O Windows mostrar os arquivos **não** quer dizer que o driver do ADB está
+    instalado: são interfaces USB diferentes. A mensagem antiga mandava
+    conferir o cabo — e o cabo estava bom.
+    """
+    from server import celular
+
+    monkeypatch.setattr(
+        celular, "windows_ve",
+        lambda **_: {
+            "consulta": True,
+            "telefones": [{"vid": celular.VID_SAMSUNG, "nome": "USB Composite Device", "status": "OK"}],
+            "com_problema": False, "desconhecidos": [], "genericos": [],
+            "visivel": True, "dispositivos": [],
+        },
+    )
+    frase = dc._por_que_nao_apareceu()
+    assert "driver" in frase.lower()
+    assert "Samsung USB Driver" in frase
+    # e não pode culpar o cabo — foi o que a versão antiga fazia
+    assert "cabo (tem de ser de dados" not in frase
+
+
+def test_adb_vazio_com_windows_vendo_o_aparelho_aponta_a_depuracao(monkeypatch):
+    from server import celular
+
+    monkeypatch.setattr(
+        celular, "windows_ve",
+        lambda **_: {
+            "consulta": True,
+            "telefones": [{"vid": celular.VID_SAMSUNG, "nome": "SAMSUNG Android Phone", "status": "OK"}],
+            "com_problema": False, "desconhecidos": [], "genericos": [],
+            "visivel": True, "dispositivos": [],
+        },
+    )
+    frase = dc._por_que_nao_apareceu()
+    assert "Depuração USB" in frase
+    assert "sem fio" in frase.lower()  # as duas brigam pela porta
+    assert "Sempre permitir" in frase
+
+
+def test_adb_vazio_e_windows_sem_celular_culpa_cabo_porta(monkeypatch):
+    from server import celular
+
+    monkeypatch.setattr(
+        celular, "windows_ve",
+        lambda **_: {
+            "consulta": True, "telefones": [], "com_problema": False,
+            "desconhecidos": [], "genericos": [{"nome": "USB Root Hub", "status": "OK"}],
+            "visivel": False, "dispositivos": [],
+        },
+    )
+    frase = dc._por_que_nao_apareceu()
+    assert "não" in frase.lower() and "celular" in frase.lower()
+    assert "cabo" in frase.lower()
+
+
+def test_sonda_de_usb_fora_do_windows_nao_quebra_a_mensagem(monkeypatch):
+    """No Linux/macOS a sonda não existe: a frase genérica continua valendo."""
+    from server import celular
+
+    monkeypatch.setattr(
+        celular, "windows_ve",
+        lambda **_: {"consulta": False, "motivo": "A sonda de USB só existe no Windows."},
+    )
+    frase = dc._por_que_nao_apareceu()
+    assert "Nenhum Android apareceu" in frase
+    assert "cabo" in frase.lower()
+
+
+def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
+    """Uma exceção da sonda não pode virar erro diferente do que o dono espera."""
+    from server import celular
+
+    def explodir(**_):
+        raise RuntimeError("powershell morreu")
+
+    monkeypatch.setattr(celular, "windows_ve", explodir)
+    frase = dc._por_que_nao_apareceu()
+    assert "Nenhum Android apareceu" in frase
+
+
+# ---------------------------------------------------------------------------
+# 0.95.1 — “vai chover amanhã?” não é pedido para fechar app
+# ---------------------------------------------------------------------------
+
+
+def _modelo_fechar():
+    from pathlib import Path
+
+    from server import skill_registry as sr
+
+    registro = sr.build_registry(Path.cwd())
+    return registro.get("celular.fechar-app").input_model
+
+
+def test_frase_inteira_no_campo_pacote_e_recusada_com_explicacao():
+    """O dono perguntou “vai chover amanhã?” e recebeu a recusa desta skill.
+
+    A IA escolheu a ferramenta errada e o texto foi como `pacote`. A mensagem
+    antiga mandava usar “o nome do app como o Android conhece” — como se quem
+    perguntou sobre chuva tivesse errado o nome de um pacote.
+    """
+    modelo = _modelo_fechar()
+    with pytest.raises(Exception) as erro:
+        modelo(pacote="vai chover amanha")
+    mensagem = str(erro.value)
+    assert "frase inteira" in mensagem
+    assert "não é para esta skill" in mensagem
+
+
+def test_pacote_verdadeiro_continua_aceito():
+    from server import acoes
+
+    # o mesmo par que `_exigir_pacote` aceita — as duas camadas concordam
+    for bom in ("com.dti.telefonica", "app.revanced.android.youtube", "com.whatsapp"):
+        assert acoes._exigir_pacote(bom) == bom
+        assert _modelo_fechar()(pacote=bom).pacote == bom
+
+
+def test_nome_de_exibicao_sem_pontos_continua_recusado_com_a_dica_antiga():
+    modelo = _modelo_fechar()
+    with pytest.raises(Exception) as erro:
+        modelo(pacote="whatsapp")
+    assert "com.whatsapp" in str(erro.value)

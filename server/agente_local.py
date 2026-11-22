@@ -268,6 +268,14 @@ _CAMPOS_TEXTO = {
 _CAMPOS_URL = {"url", "link", "href", "endereco", "address", "site"}
 _CAMPOS_CAMINHO = {"path", "caminho", "arquivo", "file", "filename", "pasta", "dir", "diretorio", "caminhoarquivo"}
 _CAMPOS_ID = {"planId", "planid", "id", "chamada", "chamadaid", "artifactid", "runid"}
+# Campos cujo valor é o nome de um app no Android.
+_CAMPOS_PACOTE = {"pacote", "package", "nomedopacote", "app", "aplicativo"}
+
+# 0.95.1 — nome de pacote Android (`com.dti.telefonica`, `app.revanced.android.youtube`).
+# Sem isto, o campo "pacote" caía no ramo de "campo de texto comum" e recebia a
+# **frase inteira**: o chat mandava `pacote=fecha o com.dti.telefonica no celular`
+# e a skill recusava — com razão, mas o defeito era de quem preencheu.
+_RE_PACOTE_ANDROID = re.compile(r"\b([a-z][a-z0-9_]*(?:\.[a-z0-9_]+){2,})\b", re.IGNORECASE)
 
 _RE_URL = re.compile(r"https?://[^\s<>\"']+")
 _RE_ENDERECO = re.compile(r"https?://\S+|\b[\w.-]*[A-Za-z][\w.-]*(?:/[\w.-]+)+")
@@ -712,6 +720,13 @@ def _valor_do_campo(
         return achado.group(1) if achado else None
     if chave in {"entries", "participantes", "itens", "nomes", "lista"}:
         return _lista_do_pedido(consulta)
+
+    if chave in {c.lower() for c in _CAMPOS_PACOTE}:
+        # Só o nome do pacote. Se a frase só trouxer nome de exibição
+        # ("fecha o whatsapp"), devolve None: quem pede o pacote diz qual é, em
+        # vez de mandar a frase e deixar a skill recusar depois.
+        achado = _RE_PACOTE_ANDROID.search(consulta or "")
+        return achado.group(1) if achado else None
 
     tem_padrao = "default" in spec
     if unico_texto or chave in _CAMPOS_TEXTO or (spec.get("format") == "textarea" and not tem_padrao):

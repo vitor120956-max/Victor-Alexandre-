@@ -1,4 +1,4 @@
-"""O plano de ação não pode prometer o que o scanner não mediu (0.95.0).
+"""O plano de ação não pode prometer o que o scanner não mediu (0.95.1).
 
 Estes testes existem por um motivo específico: o módulo é uma **tabela de
 ligação** entre o que o diagnóstico acha e o que o executor faz. Tabela de

@@ -156,6 +156,70 @@ def _agora(agora: datetime | None = None) -> datetime:
     return agora or datetime.now(timezone.utc)
 
 
+def _por_que_nao_apareceu() -> str:
+    """O `adb` não viu nada — mas o Windows pode estar vendo. Diz qual é o caso.
+
+    0.95.1 — esta mensagem era uma frase só (“confira o cabo, ligue a Depuração
+    USB”), e ela mandou o dono conferir um cabo que estava bom: a pasta “A34”
+    aparecia no Explorer com o aparelho conectado. `celular.windows_ve()` já
+    sabia separar driver faltando de cabo solto desde a 0.92.x — só não era
+    consultado aqui.
+
+    A ordem importa: primeiro o que o Windows vê (é o dado mais barato e o mais
+    decisivo), e só depois as hipóteses genéricas.
+    """
+    try:
+        sonda = celular.windows_ve()
+    except Exception:  # noqa: BLE001 - sonda de USB não pode derrubar o diagnóstico
+        sonda = {"consulta": False}
+
+    if sonda.get("consulta"):
+        telefones = sonda.get("telefones") or []
+        if sonda.get("com_problema"):
+            return (
+                "O Windows vê o celular na USB, mas com problema de driver — é por isso que o "
+                "`adb` não enxerga. Instale o **Samsung USB Driver for Mobile Phones** "
+                "(o mesmo que o Kies/ Smart Switch instala), desconecte e reconecte o cabo. "
+                "Depois disso o aparelho aparece em `adb devices`."
+            )
+        if celular.sem_driver_samsung(telefones):
+            return (
+                "O Windows vê um aparelho Samsung na USB, mas com nome genérico "
+                "(“USB Composite Device” / “MTP”) — é o driver da Samsung que falta, e é "
+                "por isso que o `adb` não o vê. Instale o **Samsung USB Driver for Mobile "
+                "Phones**, reconecte o cabo e rode de novo. A Depuração USB pode já estar certa."
+            )
+        if telefones:
+            return (
+                "O Windows vê o celular, mas o `adb` não. Na tela do aparelho, confira: "
+                "(1) Opções do desenvolvedor → **Depuração USB** ligada; "
+                "(2) **Depuração sem fio** desligada (as duas brigam pela mesma porta); "
+                "(3) o aviso “Permitir depuração USB?” aceito — e marque “Sempre permitir "
+                "deste computador”. Se o aviso não aparece, desligue e religue a Depuração USB "
+                "com o cabo conectado."
+            )
+        desconhecidos = sonda.get("desconhecidos") or []
+        if desconhecidos:
+            return (
+                "O Windows vê um dispositivo USB que não consegue identificar (falha de "
+                "descritor) — troque a porta e o cabo antes de qualquer outra coisa. Se "
+                "persistir, é o driver: **Samsung USB Driver for Mobile Phones**."
+            )
+        genericos = sonda.get("genericos") or []
+        if genericos:
+            return (
+                "O Windows **não** vê nenhum celular na USB — ele vê outros dispositivos "
+                "(hub, teclado). Então é cabo, porta ou o aparelho não está conectado: "
+                "use cabo de dados, troque a porta e, com o celular desbloqueado, veja se "
+                "aparece a pergunta “Permitir depuração USB?”."
+            )
+
+    return (
+        "Nenhum Android apareceu. Confira o cabo (tem de ser de dados, não só de carga), "
+        "ligue a Depuração USB em Opções do desenvolvedor e aceite o aviso na tela."
+    )
+
+
 def _serial(alvo: str, rodar: Callable[[list[str]], tuple[int, str, str]]) -> str:
     escolhido = (alvo or "").strip()
     if escolhido:
@@ -168,10 +232,7 @@ def _serial(alvo: str, rodar: Callable[[list[str]], tuple[int, str, str]]) -> st
                 "O aparelho está na USB, mas não autorizou este computador. Desbloqueie a tela "
                 "e toque em “Permitir” no aviso “Permitir depuração USB?”."
             )
-        raise DiagnosticoError(
-            "Nenhum Android apareceu. Confira o cabo (tem de ser de dados, não só de carga), "
-            "ligue a Depuração USB em Opções do desenvolvedor e aceite o aviso na tela."
-        )
+        raise DiagnosticoError(_por_que_nao_apareceu())
     return prontos[0]["serial"]
 
 
@@ -544,7 +605,7 @@ def analisar(
     janela = ler_janela_em_foco(saidas.get("dumpsys window displays", ""))
     entrada = ler_input_dumpsys(saidas.get("dumpsys input", ""))
     root = (saidas.get("which su", "") or "").strip()
-    # 0.95.0 — “sem resposta” é o que um `which` **bem-sucedido** devolve quando o
+    # 0.95.1 — “sem resposta” é o que um `which` **bem-sucedido** devolve quando o
     # binário não existe (código 1, saída vazia). O `coletar` só guarda a chave
     # quando `codigo != 0 and not saida` for falso; como o `which` não achou nada,
     # a chave ficava de fora e a varredura anunciava “«which su»: sem resposta” —
@@ -811,7 +872,7 @@ def analisar(
             "titulo": "Aplicativos fora da loja do fabricante",
             "itens": [
                 {"rotulo": "Total instalado", "valor": str(len(apps))},
-                # 0.95.0 — aqui saía a lista dos 12 primeiros pacotes, e ela
+                # 0.95.1 — aqui saía a lista dos 12 primeiros pacotes, e ela
                 # aparecia na tela **e no arquivo** que o dono manda para outra
                 # pessoa. O nome do que ele instalou é vida privada; o número
                 # não é. Quem precisa do detalhe vê em Ajustes → Apps.
@@ -1009,14 +1070,14 @@ def analisar(
     if not processos:
         limitacoes.append("A lista de processos não veio no formato esperado nesta versão do Android.")
     if not sensores:
-        # 0.95.0 — a anatomia dizia a mesma coisa com outras palavras e as duas
+        # 0.95.1 — a anatomia dizia a mesma coisa com outras palavras e as duas
         # apareciam juntas no relatório. Uma linha só, e `_limites_sem_repetir`
         # descarta a equivalente no fim.
         limitacoes.append(
             "Sem temperatura de CPU: este Android esconde `/sys/class/thermal` de quem não é root — "
             "o aquecimento fica sem número (a da bateria continua aparecendo)."
         )
-    # 0.95.0 — “memória por app não vem” já é dito pela anatomia; repetir aqui
+    # 0.95.1 — “memória por app não vem” já é dito pela anatomia; repetir aqui
     # só enchia a lista de leituras que não responderam com a mesma ideia.
 
     return {
@@ -1044,7 +1105,7 @@ def diagnosticar(
     """Lê o aparelho e devolve o diagnóstico — sem alterar nada nele."""
     medido = coletar(alvo, rodar=rodar)
     relatorio = analisar(medido, agora=agora)
-    # 0.95.0 — o `--pacote` também vale para o scanner sozinho, e não só para a
+    # 0.95.1 — o `--pacote` também vale para o scanner sozinho, e não só para a
     # varredura completa: é no scanner que aparecem o percentual de memória e o
     # nome do app que mais pesa, que é justamente o que o dono quer mostrar.
     relatorio["_saidas"] = dict(medido.get("saidas", {}))
@@ -1164,7 +1225,7 @@ CAUSAS: tuple[dict[str, Any], ...] = (
 
 # O que sustenta cada causa **no aparelho** (não no relato). Sem isso, a causa é
 # só hipótese — e a resposta diz isso.
-# 0.95.0 — esta tabela estava **morta em três das cinco linhas**, e o efeito era
+# 0.95.1 — esta tabela estava **morta em três das cinco linhas**, e o efeito era
 # o oposto do desenhado: toda suspeita saía “sem medida no aparelho”, mesmo num
 # relatório com 25 leituras boas. Os ids de problema que o `analisar()` cria são
 # `app-nao-responde`, `frame-lento`, `aquecendo`, `memoria-baixa` e

@@ -3116,3 +3116,35 @@ do app no relatório.
 
 Nada aqui executa nada. O executor continua sendo `acoes.py`, atrás de
 `JARVIS_ACOES=1` **e** `confirmado: true`.
+
+### 0.95.1 — “vai chover amanhã?” e o JARVIS respondeu sobre fechar app
+
+> *“vai chover amanha? … A skill ‘Fechar um app no celular’ recusou o pedido:
+> Nome de pacote inválido.”*
+
+O motor local **não** fez isso: `pontuar("vai chover amanha", celular.fechar-app)`
+dá **0.00**, e o melhor casamento do pedido inteiro é 0.11 contra um limiar de
+0.50. Quem escolheu a ferramenta foi o modelo, e a frase foi como `pacote`. O
+defeito de verdade é que **nada barrava** essa passagem, e a mensagem de recusa
+era escrita para quem errou o nome de um app — não para quem perguntou sobre
+chuva.
+
+Três consertos:
+
+1. **O campo `pacote` agora valida na entrada.** Uma frase com espaço não é nome
+   de pacote, e a recusa diz isso: *“parece uma frase inteira. Se o pedido não é
+   fechar um app no celular, ele não é para esta skill.”*
+2. **O chat não manda mais a frase inteira.** `agente_local` tratava `pacote`
+   como texto livre — “fecha o com.dti.telefonica no celular” virava o nome do
+   pacote. Agora há um ramo próprio que extrai o nome Android e, quando não há
+   nome na frase (“fecha o whatsapp”), **deixa o campo faltando** e pergunta,
+   em vez de mandar lixo e deixar a skill recusar.
+3. **“Está conectado” ganhou diagnóstico.** O dono viu a pasta “A34” no
+   Explorer e o `adb` dizendo que não havia aparelho. `celular.windows_ve()` já
+   sabia separar driver de cabo desde a 0.92.x — só não era consultado aqui.
+   A mensagem agora separa quatro casos, e o mais provável no caso dele é o
+   primeiro: **o Windows vê o MTP e o driver do ADB não está instalado**.
+
+O primeiro teste que escrevi para o validador exigia **dois** pontos no nome e
+reprovou `com.whatsapp` — defeito introduzido por mim, pego pelo teste antes do
+commit. Um ponto basta.

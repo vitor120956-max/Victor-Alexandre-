@@ -845,6 +845,11 @@ def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
         return "documentos/relatorio.pdf"
     if "sha" in chave or "{64}" in str(spec.get("pattern") or ""):
         return "a" * 64
+    if chave in {"pacote", "package", "nomedopacote"}:
+        # 0.95.1 — o campo de pacote passou a recusar texto que não é nome
+        # Android: “exemplo de texto” não é pacote, e este gerador precisa
+        # produzir um valor que a skill aceite de verdade.
+        return "com.exemplo.app"
     minimo = int(spec.get("minLength") or 1)
     maximo = int(spec.get("maxLength") or 400)
     alvo = max(3, min(minimo, maximo))
@@ -2949,3 +2954,52 @@ def test_somente_skill_ainda_executa_a_skill_quando_ela_serve(tmp_path):
         assert resultado["acao"] == "executado"
         assert resultado["skill"]["id"] == "text.analyze"
     asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
+# 0.95.1 — “fecha o com.dti.telefonica no celular” não é um nome de pacote
+# ---------------------------------------------------------------------------
+
+
+def test_campo_pacote_recebe_o_pacote_e_nao_a_frase_inteira():
+    """O dono pediu “fecha o com.dti.telefonica no celular” e o chat mandou
+    `pacote=fecha o com.dti.telefonica no celular` — a skill recusou, com razão.
+
+    Campo de pacote é nome Android, não texto livre. O ramo “campo de texto
+    comum” pegava a frase inteira porque `pacote` era o único texto do schema.
+    """
+    from server import agente_local as al
+
+    schema = {
+        "properties": {"pacote": {"type": "string"}, "confirmado": {"type": "boolean"}},
+        "required": ["pacote"],
+    }
+    valores, faltando = al.extrair_parametros("fecha o com.dti.telefonica no celular", schema)
+    assert valores.get("pacote") == "com.dti.telefonica"
+    assert faltando == []
+
+
+def test_campo_pacote_ignora_pergunta_junto_do_pedido():
+    """“... onde eu pego esse zip?” vem na mesma frase: não entra no pacote."""
+    from server import agente_local as al
+
+    schema = {"properties": {"pacote": {"type": "string"}}, "required": ["pacote"]}
+    valores, _ = al.extrair_parametros(
+        "fecha o com.dti.telefonica no celular. onde eu pego esse zip?", schema
+    )
+    assert valores["pacote"] == "com.dti.telefonica"
+
+
+def test_nome_de_exibicao_nao_vira_pacote_inventado():
+    """“fecha o whatsapp” não tem pacote na frase.
+
+    Antes, a frase inteira ia como pacote e a skill recusava com uma mensagem
+    que parecia culpa do dono. Agora o campo fica faltando e o chat pergunta —
+    e a pergunta certa é “qual é o nome do pacote”.
+    """
+    from server import agente_local as al
+
+    schema = {"properties": {"pacote": {"type": "string"}}, "required": ["pacote"]}
+    valores, faltando = al.extrair_parametros("fecha o whatsapp", schema)
+    assert "pacote" not in valores
+    assert faltando == ["pacote"]

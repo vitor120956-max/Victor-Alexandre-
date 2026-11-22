@@ -2264,6 +2264,36 @@ class CelularFecharAppInput(BaseModel):
     confirmado: bool = Field(default=False, title="Confirmar",
                              json_schema_extra={"description": "Fechar descarta o que não estava salvo dentro do app."})
 
+    @field_validator("pacote")
+    @classmethod
+    def _so_nome_de_pacote(cls, valor: str) -> str:
+        """Recusa a frase inteira — 0.95.1.
+
+        O dono pediu “vai chover amanhã?” e recebeu a recusa desta skill: o
+        modelo escolheu a ferramenta errada e o texto foi como `pacote`. A
+        mensagem antiga (“use o nome do app como o Android conhece”) parecia
+        culpa de quem perguntou.
+
+        Aqui o pacote tem de **parecer** pacote antes de chegar ao `adb`: pelo
+        menos dois pontos, só letras/números/underscore. E quando não parece, a
+        frase diz que o pedido não é sobre fechar app — porque, nesse caso, não
+        é mesmo.
+        """
+        limpo = (valor or "").strip()
+        # **um** ponto já é nome de pacote (`com.whatsapp`); a frase inteira não tem
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+", limpo):
+            return limpo
+        if " " in limpo:
+            raise ValueError(
+                "Isso não é o nome de um app Android — parece uma frase inteira. "
+                "Se o pedido não é fechar um app no celular, ele não é para esta skill. "
+                "Se for, mande o nome do pacote (ex.: com.whatsapp)."
+            )
+        raise ValueError(
+            "Nome de pacote inválido. Use o nome do app como o Android conhece, "
+            "ex.: com.whatsapp — não o nome de exibição."
+        )
+
 
 class CelularInstalarApkInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
