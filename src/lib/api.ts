@@ -1386,6 +1386,26 @@ export interface CelularControle {
     resumo: string;
     precisa_destravar: boolean;
     apaga_o_aparelho: boolean;
+    /** `true` só quando `adb root` atende às três condições **sem custo pago antes**. */
+    atende_as_tres?: boolean;
+    /** A resposta à pergunta literal: “sem reiniciar, sem apagar, sem quebrar?”. */
+    resposta?: string;
+    caminhos?: {
+      caminho: string;
+      duravel: string;
+      sem_reiniciar: boolean;
+      sem_apagar: boolean;
+      sem_quebrar: boolean;
+      neste_aparelho: boolean;
+      porque: string;
+    }[];
+    sem_root_agora?: {
+      qual: string;
+      como: string;
+      da_para: string[];
+      nao_da: string[];
+      apps_que_usam: string;
+    };
   };
   degraus: CelularControleDegrau[];
   o_que_o_jarvis_faz_com_esse_acesso: string;

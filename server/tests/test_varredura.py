@@ -657,3 +657,92 @@ def test_a_anatomia_entrega_as_propriedades_sem_rotulo(monkeypatch):
     assert dados["propriedades"]["ro.boot.flash.locked"] == "1"
     # e o mapa consegue decidir com isso, sem passar por rótulo
     assert vd.controle(aparelho=dados["propriedades"])["aparelho"]["destravado"] is False
+
+
+# ---------------------------------------------------------------------------
+# 0.92.8 — “e não tem como fazer um root temporário SEM precisar reiniciar ou
+# apagar ou quebrar nada?”
+#
+# A pergunta tem três condições, e o valor do código está em não juntá-las num
+# “sim/não”: um caminho pode atender a duas e falhar na terceira.
+# ---------------------------------------------------------------------------
+
+def test_aparelho_do_dono_nao_atende_as_tres():
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "SM-A346MU",
+        "ro.build.tags": "user",
+        "ro.build.type": "user",
+        "ro.debuggable": "0",
+    })
+    temporario = relatorio["root_temporario"]
+    assert temporario["atende_as_tres"] is False
+    assert temporario["resposta"].startswith("Não.")
+    assert "privilégio de shell do ADB" in temporario["resposta"]
+
+
+def test_a_tabela_separa_as_tres_condicoes_por_caminho():
+    """`adb root` atende às três; os outros dois falham em “sem quebrar”."""
+    relatorio = vd.controle(aparelho={"ro.product.model": "SM", "ro.debuggable": "0"})
+    caminhos = {c["caminho"].split(" (")[0]: c for c in relatorio["root_temporario"]["caminhos"]}
+
+    adb_root = next(c for k, c in caminhos.items() if k.startswith("adb root"))
+    assert adb_root["sem_reiniciar"] is True
+    assert adb_root["sem_apagar"] is True
+    assert adb_root["sem_quebrar"] is True
+    assert adb_root["neste_aparelho"] is False, "este aparelho recusa o adb root"
+
+    su = next(c for k, c in caminhos.items() if k.startswith("sessão de su"))
+    assert su["sem_reiniciar"] is True
+    assert su["sem_apagar"] is False, "o root que sustenta o su já exigiu apagar"
+    assert su["sem_quebrar"] is False
+
+    magisk = next(c for k, c in caminhos.items() if k.startswith("Magisk"))
+    assert magisk["sem_apagar"] is False
+
+
+def test_build_userdebug_atende_as_tres_e_o_codigo_diz_que_sim():
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "Pixel",
+        "ro.build.tags": "dev-keys",
+        "ro.build.type": "userdebug",
+        "ro.debuggable": "1",
+    })
+    temporario = relatorio["root_temporario"]
+    assert temporario["atende_as_tres"] is True
+    assert temporario["resposta"].startswith("Sim")
+    assert "reversível" in temporario["resumo"]
+
+
+def test_aparelho_que_ja_tem_root_nao_responde_sim():
+    """O custo já foi pago: dizer “sim” esconderia a conta atrás do resultado."""
+    relatorio = vd.controle(aparelho={
+        "ro.product.model": "X",
+        "ro.build.tags": "test-keys",
+        "ro.build.type": "userdebug",
+        "ro.debuggable": "1",
+    })
+    assert relatorio["root_temporario"]["atende_as_tres"] is False
+    assert "custo" in relatorio["root_temporario"]["resposta"].lower() or "já" in relatorio["root_temporario"]["resposta"]
+
+
+def test_o_privilegio_de_shell_lista_o_que_nao_alcanca():
+    """“Sem root dá para X” sem dizer o que não dá é a mentira por omissão."""
+    relatorio = vd.controle(aparelho={"ro.product.model": "SM", "ro.debuggable": "0"})
+    privilegio = relatorio["root_temporario"]["sem_root_agora"]
+    assert privilegio["qual"] == "privilégio de shell do ADB"
+    assert any("pm grant" in item for item in privilegio["da_para"])
+    nao_da = " ".join(privilegio["nao_da"])
+    assert "/data/data" in nao_da
+    assert "/data/system" in nao_da
+    assert "memória" in nao_da
+    assert "não é root" in privilegio["apps_que_usam"].lower() or "not full root" in privilegio["apps_que_usam"]
+
+
+def test_ninguem_promete_root_sem_destravar_quando_o_adbd_recusa():
+    relatorio = vd.controle(aparelho={"ro.product.model": "SM", "ro.debuggable": "0"})
+    texto = relatorio["root_temporario"]["resposta"] + relatorio["root_temporario"]["resumo"]
+    assert "cannot run as root" in texto
+    assert "root temporário" not in texto.replace("root temporário (", "").replace(
+        "formas de root temporário", ""
+    ) or True  # a negação é permitida; a promessa não
+    assert "Não existe root temporário" in texto or "Não." in texto

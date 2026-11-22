@@ -216,3 +216,34 @@
 .anatomia-root-temporario dl > div { display: grid; grid-template-columns: minmax(150px, .5fr) 1fr; gap: 10px; }
 .anatomia-root-temporario dt { color: var(--text-soft); font-size: 9px; }
 .anatomia-root-temporario dd { margin: 0; font-size: 9.5px; }
+
+/* 0.92.8 — “root sem reiniciar, sem apagar, sem quebrar?”: a tabela mostra as
+   três condições separadas, porque juntá-las num “sim/não” esconde o custo. */
+.anatomia-root-tabela { display: flex; flex-direction: column; gap: 7px; }
+.anatomia-root-tabela > span { font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-soft); }
+.anatomia-root-tabela table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+.anatomia-root-tabela th {
+  padding: 5px 7px; text-align: left; font-weight: 500;
+  color: var(--text-soft); border-bottom: 1px solid var(--line); font-size: 8px;
+}
+.anatomia-root-tabela td { padding: 5px 7px; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.anatomia-root-tabela tr:last-child td { border-bottom: 0; }
+
+.anatomia-sem-root-agora {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 13px; border-radius: 9px;
+  border: 1px solid rgba(var(--accent-rgb, 126, 214, 165), .24);
+  background: rgba(var(--accent-rgb, 126, 214, 165), .04);
+}
+.anatomia-sem-root-agora h4 {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  font-size: 9px; font-weight: 600; color: var(--accent);
+}
+.anatomia-sem-root-agora p { margin: 0; font-size: 9px; line-height: 1.6; color: var(--text-soft); }
+.anatomia-sem-root-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anatomia-sem-root-colunas > div { display: flex; flex-direction: column; gap: 4px; }
+.anatomia-sem-root-colunas ul { margin: 0; padding-left: 15px; font-size: 8.5px; line-height: 1.65; color: var(--text-soft); }
+@media (max-width: 720px) {
+  .anatomia-sem-root-colunas { grid-template-columns: 1fr; }
+  .anatomia-root-tabela { overflow-x: auto; }
+}

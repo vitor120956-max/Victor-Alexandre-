@@ -241,3 +241,29 @@ Três propriedades passaram a ser lidas por causa desta pergunta:
 - `ro.boot.flash.locked` (`1` travado) — fallback quando a primeira não vem;
 - `service.adb.tcp.port` — é **ela** que marca o degrau 2, não `ro.debuggable`
   (que é build de fábrica/teste, e estava errado desde a 0.92.5).
+
+## 12. “Root sem reiniciar, sem apagar, sem quebrar?” (0.92.8)
+
+Três condições, e cada caminho falha em uma diferente:
+
+| caminho | sem reiniciar | sem apagar | sem quebrar | neste aparelho |
+|---|---|---|---|---|
+| `adb root` | sim | sim | **sim** | não (`ro.debuggable=0`) |
+| sessão de `su` | sim | não | não | não |
+| Magisk “sem persistência” | sim | não | não | não |
+
+**`adb root` é o único que atende às três** — reinicia o daemon do `adb`, não o
+aparelho; não escreve em partição; não toca no `verified boot`. Ele depende de
+`ro.debuggable=1` e build `userdebug`/`eng`. Em produção o `adbd` responde
+`adbd cannot run as root in production builds`.
+
+O que **existe agora** e não quebra nada é o **privilégio de shell do ADB**: a
+identidade `shell` (a mesma que o Shizuku empresta a apps). Alcança leitura,
+instalação, permissões (`pm grant`), ajustes globais, congelar app, espelhar e
+copiar mídia. **Não** alcança `/data/data`, `/data/system`, partições de boot,
+memória de outro app nem módulo de sistema.
+
+O `controle()` expõe `root_temporario.atende_as_tres` (booleano), `resposta`
+(texto medido), `caminhos[]` (a tabela) e `sem_root_agora` (o privilégio, com
+`da_para` e `nao_da`). Um aparelho que **já tem root** devolve `false`: o custo já
+foi pago, e “sim” esconderia a conta.

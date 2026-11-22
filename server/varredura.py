@@ -625,6 +625,150 @@ CONTROLE: tuple[dict[str, Any], ...] = (
 )
 
 
+def _root_sem_reiniciar(
+    props: dict[str, Any],
+    *,
+    adbd_depuravel: bool,
+    root_temporario: bool,
+    tem_root: bool,
+) -> dict[str, Any]:
+    """“Root sem reiniciar, sem apagar, sem quebrar nada?” — item por item.
+
+    A pergunta do dono tem três condições, e elas não são do mesmo tipo:
+
+    * **sem reiniciar** — `adb root` e uma sessão de `su` atendem. O primeiro é
+      o `adbd` reiniciando o próprio daemon (não é reiniciar o aparelho); o
+      segundo pede root **já instalado**.
+    * **sem apagar** — `adb root` e `su` atendem; Magisk atende **só depois** de
+      alguém ter destravado o bootloader e apagado o aparelho uma vez.
+    * **sem quebrar nada** — aqui é onde quase tudo cai. O `adb root` **não**
+      quebra: não toca em partição, não muda `verified boot`, some no reinício.
+      O Magisk **quebra** `verified boot` de propósito (`orange`), e com ele
+      caem OTA, banco, carteira e DRM. Uma sessão de `su` não quebra nada
+      **naquele momento**, mas o root que a sustenta já quebrou.
+
+    Resultado: **um** dos três caminhos atende às três condições — `adb root`.
+    E ele depende de uma propriedade só, que este aparelho não tem.
+
+    O que o dono **pode** ter hoje, sem root e sem destravar nada, é o
+    **privilégio de shell do ADB** (o mesmo que app tipo Shizuku usa): roda com
+    a identidade `shell`, sobrevive enquanto o `adb` estiver autorizado, não
+    apaga nem quebra. Fica **abaixo** de root — e o campo `o_que_nao_faz` diz o
+    que exatamente não dá com ele, para ninguém confundir os dois.
+    """
+    # Com root já instalado, a pergunta “posso ter root sem quebrar?” não faz
+    # sentido: o custo já foi pago. `root_temporario` pode estar `True` por
+    # `ro.debuggable`, mas isso é o `adb root` possível — não um atalho novo.
+    root_temporario = bool(root_temporario) and not tem_root
+    magisk_instalado = tem_root and str(props.get("ro.build.tags", "")).strip() == "test-keys"
+    tabela = [
+        {
+            "caminho": "adb root (adbd vira root)",
+            "duravel": "até reiniciar",
+            "sem_reiniciar": True,
+            "sem_apagar": True,
+            "sem_quebrar": True,
+            "neste_aparelho": root_temporario,
+            "porque": (
+                "O daemon do adb reinicia como root; o aparelho não reinicia. Não escreve em "
+                "partição nem mexe no verified boot — por isso não quebra OTA, banco nem carteira."
+                if root_temporario
+                else "O adbd deste aparelho é de build de produção (`ro.debuggable=0`) e recusa: "
+                     "“adbd cannot run as root in production builds”."
+            ),
+        },
+        {
+            "caminho": "sessão de su (app pede root por N minutos)",
+            "duravel": "N minutos",
+            "sem_reiniciar": True,
+            "sem_apagar": False,
+            "sem_quebrar": False,
+            "neste_aparelho": bool(magisk_instalado),
+            "porque": (
+                "O root que empresta o su é o Magisk instalado — e instalar exigiu destravar o "
+                "bootloader, que apaga o aparelho e deixa o verified boot em `orange`."
+            ),
+        },
+        {
+            "caminho": "Magisk “sem persistência”",
+            "duravel": "até desinstalar",
+            "sem_reiniciar": True,
+            "sem_apagar": False,
+            "sem_quebrar": False,
+            "neste_aparelho": False,
+            "porque": (
+                "Continua sendo root instalado: exige destravar o bootloader (apaga tudo) e "
+                "quebra OTA, banco, carteira e DRM de vídeo."
+            ),
+        },
+    ]
+
+    # O que dá para fazer **agora**, sem root nenhum: privilégio de shell.
+    privilegio = {
+        "qual": "privilégio de shell do ADB",
+        "como": (
+            "É o que o JARVIS já usa: `adb shell` roda como o usuário `shell`, não como root. "
+            "Dura enquanto a Depuração USB estiver autorizada e o cabo (ou o `adb tcpip`) "
+            "estiver ativo. Não apaga nada, não quebra nada, não mexe no bootloader."
+        ),
+        "da_para": [
+            "ler tudo o que o Android publica (o que a varredura já faz)",
+            "instalar e remover app do usuário (com confirmação)",
+            "conceder e revogar permissão de app (`pm grant` / `pm revoke`)",
+            "mudar ajustes globais (`settings put`) — inclusive os de animação",
+            "congelar app (`pm disable-user`), o que equivalente a desativar",
+            "espelhar a tela e mandar toque/tecla (`scrcpy`)",
+            "copiar as pastas de mídia (`adb pull`)",
+        ],
+        "nao_da": [
+            "ler `/data/data` de outro app (as conversas e os dados de cada app)",
+            "ler `/data/system` (senhas, contas, ajustes protegidos)",
+            "abrir a partição de boot/recovery/modem",
+            "ver a memória de outro app em execução",
+            "instalar módulo de sistema (Xposed, Magisk, framework)",
+        ],
+        "apps_que_usam": (
+            "Apps como o Shizuku fazem exatamente isto: sobem um serviço com a identidade "
+            "`shell` (via ADB) e emprestam esse privilégio a outros apps. Não é root, e o "
+            "próprio projeto do Shizuku diz isso: “ADB privileges are not full root”."
+        ),
+    }
+
+    if root_temporario:
+        resposta = (
+            "Sim — `adb root` atende às três: não reinicia o aparelho, não apaga nada e não "
+            "quebra OTA, banco nem carteira. Dura até o próximo reinício. O JARVIS não roda o "
+            "comando (root é a linha do projeto), mas neste aparelho o passivo seria reversível."
+        )
+    elif tem_root:
+        resposta = (
+            "Você já tem root neste aparelho, mas ele não veio de graça: o bootloader foi "
+            "destravado em algum momento, e isso apagou o aparelho e quebrou o `verified boot`. "
+            "O que dá para fazer agora sem reiniciar nem quebrar mais nada é uma sessão de `su` "
+            "— que usa o root que **já** está instalado."
+        )
+    else:
+        resposta = (
+            "Não. Root sem reiniciar, sem apagar e sem quebrar exige `adb root`, e o `adbd` "
+            "deste aparelho recusa em build de produção. As outras formas de root temporário "
+            "(su emprestado, Magisk sem persistência) só existem **depois** de destravar o "
+            "bootloader — e destravar apaga o aparelho e quebra OTA, banco, carteira e DRM. "
+            "O que existe agora, sem root e sem quebrar nada, é o **privilégio de shell do "
+            "ADB** — abaixo de root, e a lista do que ele não alcança está aqui do lado."
+        )
+
+    return {
+        "resposta": resposta,
+        # `true` só quando existe root que atende às TRÊS condições **e ainda
+        # não foi obtido**. Num aparelho que já tem root o custo já foi pago no
+        # passado (bootloader destravado, aparelho apagado): responder “sim”
+        # ali seria esconder a conta atrás do resultado.
+        "atende_as_tres": bool(root_temporario) and not tem_root,
+        "caminhos": tabela,
+        "sem_root_agora": privilegio,
+    }
+
+
 def _root_temporario(
     props: dict[str, Any],
     adbd_depuravel: bool,
@@ -785,7 +929,15 @@ def controle(*, aparelho: dict[str, Any] | None = None) -> dict[str, Any]:
         },
         # A resposta para “podemos usar root temporário?”, medida no aparelho:
         # não é “sim” nem “não” genérico — é o que o `adbd` deste aparelho aceita.
-        "root_temporario": _root_temporario(props, adbd_depuravel, root_temporario, tem_root),
+        "root_temporario": {
+            **_root_temporario(props, adbd_depuravel, root_temporario, tem_root),
+            **_root_sem_reiniciar(
+                props,
+                adbd_depuravel=adbd_depuravel,
+                root_temporario=root_temporario,
+                tem_root=tem_root,
+            ),
+        },
         "degraus": [
             {
                 **degrau_item,

@@ -131,7 +131,69 @@ function CartaoControle({ dados }: { dados: CelularControle }) {
               <dt>Apaga o aparelho?</dt>
               <dd>{dados.root_temporario.apaga_o_aparelho ? 'sim' : 'não'}</dd>
             </div>
+            <div>
+              <dt>Sem reiniciar, sem apagar e sem quebrar?</dt>
+              <dd>
+                {dados.root_temporario.atende_as_tres
+                  ? 'sim — adb root atende às três'
+                  : 'não neste aparelho'}
+              </dd>
+            </div>
           </dl>
+
+          {dados.root_temporario.resposta && (
+            <p className="anatomia-veredito">{dados.root_temporario.resposta}</p>
+          )}
+
+          {dados.root_temporario.caminhos && (
+            <div className="anatomia-root-tabela">
+              <span>Cada caminho, condição por condição</span>
+              <table>
+                <thead>
+                  <tr>
+                    <th>caminho</th>
+                    <th>dura</th>
+                    <th>sem reiniciar</th>
+                    <th>sem apagar</th>
+                    <th>sem quebrar</th>
+                    <th>neste aparelho</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.root_temporario.caminhos.map((caminho) => (
+                    <tr key={caminho.caminho} title={caminho.porque}>
+                      <td>{caminho.caminho}</td>
+                      <td>{caminho.duravel}</td>
+                      <td>{caminho.sem_reiniciar ? 'sim' : 'não'}</td>
+                      <td>{caminho.sem_apagar ? 'sim' : 'não'}</td>
+                      <td>{caminho.sem_quebrar ? 'sim' : 'não'}</td>
+                      <td>{caminho.neste_aparelho ? 'sim' : 'não'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {dados.root_temporario.sem_root_agora && (
+            <div className="anatomia-sem-root-agora">
+              <h4>
+                <ShieldCheck size={12} /> O que dá para fazer agora, sem root: {dados.root_temporario.sem_root_agora.qual}
+              </h4>
+              <p>{dados.root_temporario.sem_root_agora.como}</p>
+              <div className="anatomia-sem-root-colunas">
+                <div>
+                  <span className="anatomia-suspeita-sim">alcança</span>
+                  <ul>{dados.root_temporario.sem_root_agora.da_para.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+                <div>
+                  <span className="anatomia-suspeita-nao">não alcança</span>
+                  <ul>{dados.root_temporario.sem_root_agora.nao_da.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              </div>
+              <p className="anatomia-limite">{dados.root_temporario.sem_root_agora.apps_que_usam}</p>
+            </div>
+          )}
         </div>
       )}
 

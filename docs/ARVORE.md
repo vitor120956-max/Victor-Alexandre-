@@ -2911,3 +2911,41 @@ fixa.
 
 E a tela ganhou o bloco **“Podemos usar root temporário?”** com as três perguntas
 que importam: qual é a situação, precisa destravar, apaga o aparelho.
+
+### 0.92.8 — “sem reiniciar, sem apagar, sem quebrar”: três condições, um caminho
+
+> e n tem como fazer um root temporario sem precisar reiniciar ou apagar ou
+> quebrar nada?
+
+A 0.92.7 respondeu “não existe root temporário neste aparelho”. Esta pergunta é
+mais fina e obrigou a **separar três condições** que estavam sendo tratadas como
+uma só:
+
+| caminho | dura | sem reiniciar | sem apagar | sem quebrar |
+|---|---|---|---|---|
+| `adb root` | até reiniciar | sim | sim | **sim** |
+| sessão de `su` | N minutos | sim | não | não |
+| Magisk “sem persistência” | até desinstalar | sim | não | não |
+
+**Um** atende às três. E o motivo de ele falhar aqui é uma propriedade só:
+`ro.debuggable=0`. O `adbd` de produção recusa — não é escolha do projeto, é o
+fabricante.
+
+O detalhe que faltava: **“sem quebrar” não é o mesmo que “sem apagar”**. Magisk
+não reinicia o aparelho e, uma vez instalado, também não apaga mais nada — mas
+**quebrou** o `verified boot` quando foi instalado, e isso derrubou OTA, banco,
+carteira e DRM de forma permanente. A tabela do cartão mostra as três colunas
+separadas justamente para esse caso não se esconder atrás de um “sim” parcial.
+
+E o outro lado da resposta: o que **existe agora** sem poder de root é o
+**privilégio de shell do ADB** — a identidade `shell`, que é a mesma que apps
+como o Shizuku emprestam. Alcança leitura, instalação, `pm grant`, `settings put`,
+congelar app, `scrcpy` e `adb pull`; **não** alcança `/data/data`, `/data/system`,
+partições de boot, memória de outro app nem módulo de sistema. O cartão lista as
+duas colunas juntas, porque “dá para fazer X” sem “não dá para Y” é mentira por
+omissão.
+
+**Defeito achado pelo teste:** um aparelho que **já tem root** respondia “Sim”.
+O `root_temporario` ficava `True` por `ro.debuggable`, e a resposta nova dizia que
+o passivo era reversível — escondendo que o custo já tinha sido pago. Agora
+`atende_as_tres` é `false` nesse caso, e o texto diz que o destravar já aconteceu.
