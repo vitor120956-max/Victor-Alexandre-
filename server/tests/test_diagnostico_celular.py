@@ -633,7 +633,7 @@ def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.3 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
+# 0.95.4 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
 # ---------------------------------------------------------------------------
 
 
@@ -697,7 +697,13 @@ def test_adb_vazio_e_windows_sem_celular_culpa_cabo_porta(monkeypatch):
 
 
 def test_sonda_de_usb_fora_do_windows_nao_quebra_a_mensagem(monkeypatch):
-    """No Linux/macOS a sonda não existe: a frase genérica continua valendo."""
+    """Sem a sonda, a frase diz que NÃO perguntou ao Windows — não chuta driver.
+
+    0.95.4 — antes ela devolvia o mesmo palpite de sempre ("confira o cabo"), e
+    o dono recebeu exatamente essa frase duas varreduras seguidas: a primeira
+    leu o aparelho inteiro, a segunda não viu nada. A frase agora nomeia a
+    diferença em vez de repetir a lista de sempre.
+    """
     from server import celular
 
     monkeypatch.setattr(
@@ -706,7 +712,9 @@ def test_sonda_de_usb_fora_do_windows_nao_quebra_a_mensagem(monkeypatch):
     )
     frase = dc._por_que_nao_apareceu()
     assert "Nenhum Android apareceu" in frase
-    assert "cabo" in frase.lower()
+    assert "não consegui perguntar ao Windows" in frase
+    # o motivo real tem de aparecer, não um "(falhou)" genérico
+    assert "só existe no Windows" in frase
 
 
 def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
@@ -722,7 +730,7 @@ def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.3 — “vai chover amanhã?” não é pedido para fechar app
+# 0.95.4 — “vai chover amanhã?” não é pedido para fechar app
 # ---------------------------------------------------------------------------
 
 
@@ -767,7 +775,7 @@ def test_nome_de_exibicao_sem_pontos_continua_recusado_com_a_dica_antiga():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.3 — o JARVIS instala o driver em vez de mandar o dono baixar
+# 0.95.4 — o JARVIS instala o driver em vez de mandar o dono baixar
 # ---------------------------------------------------------------------------
 
 
@@ -857,7 +865,7 @@ def test_a_skill_do_driver_esta_no_registro_e_diz_o_que_faz():
 
 
 def test_driver_nao_diz_instalado_quando_o_plano_nao_devolve_token(monkeypatch):
-    """0.95.3 baixava e parava no plano — o dono achava que estava instalado.
+    """0.95.4 baixava e parava no plano — o dono achava que estava instalado.
 
     `instalar()` só monta o plano e devolve o token; quem executa é `executar()`.
     Se o token não vier, o certo é falhar alto, não devolver "baixado" e seguir.
@@ -881,9 +889,9 @@ def test_driver_nao_diz_instalado_quando_o_plano_nao_devolve_token(monkeypatch):
 
 
 def test_escanear_driver_instala_de_ponta_a_ponta_com_janela_falsa(monkeypatch, capsys):
-    """0.95.3 — o caminho que o dono roda: `escanear-celular.bat --driver`.
+    """0.95.4 — o caminho que o dono roda: `escanear-celular.bat --driver`.
 
-    A 0.95.3 devolvia o plano de instalação e parava. Aqui a prova é a ponta:
+    A 0.95.4 devolvia o plano de instalação e parava. Aqui a prova é a ponta:
     `instalar` monta, `executar` executa, e a tela final diz o que fazer depois.
     """
     import importlib.util
@@ -942,3 +950,135 @@ def test_configurar_celular_liga_as_permissoes_do_driver(tmp_path, monkeypatch):
     assert texto.count("JARVIS_HOST_REDE=1") == 1
     assert texto.count("JARVIS_HOST_INSTALAR=1") == 1
     assert "JARVIS_ACOES=1" in texto   # e não apaga o que o dono já tinha
+
+
+def test_script_local_nao_pede_token_de_host(monkeypatch):
+    """0.95.4 — o `.bat` roda no PC do dono e pedia token de host.
+
+    A tela dele: *“Sem token e este pedido não veio da própria máquina.”* —
+    vindo de um `.bat` na própria máquina. O token existe para barrar site de
+    fora; um processo do mesmo usuário já lê `storage/host-token.txt`.
+    """
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    monkeypatch.setenv("JARVIS_HOST_REDE", "1")
+    monkeypatch.setenv("JARVIS_HOST_INSTALAR", "1")
+    # O `baixar` de verdade chama `_exigir_rede(autorizacao)` e é ELE que
+    # levantava o erro na tela do dono. O falso tem de fazer o mesmo, senão o
+    # teste passa por não reproduzir o caminho real (foi o que aconteceu na
+    # primeira tentativa deste teste).
+    def baixar_de_verdade(**k):
+        # repassa o `script_local` como o `baixar` real faz
+        sistema._exigir_rede(  # noqa: SLF001
+            k.get("autorizacao", ""), script_local=k.get("script_local", False)
+        )
+        return {"arquivo": "/tmp/q/driver.exe", "bytes": 1, "sha256": "c" * 64, "tipo": "exe"}
+
+    monkeypatch.setattr(sistema, "baixar", baixar_de_verdade)
+    monkeypatch.setattr(sistema, "instalar", lambda **k: {"confirmação": "tok"})
+    monkeypatch.setattr(sistema, "executar", lambda **k: {"estado": "instalado"})
+
+    # autorizacao vazia e SEM token: tem de passar mesmo assim
+    feito = sistema.driver_do_celular(fabricante="samsung", confirmado=True, autorizacao="")
+    assert feito["instalacao"]["estado"] == "instalado"
+
+
+def test_quem_pede_token_local_de_volta_continua_tendo(monkeypatch):
+    """A trava de quem quer o token até na própria máquina não foi removida."""
+    from server import sistema
+
+    monkeypatch.setenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", "1")
+    assert sistema.da_propria_maquina() is False
+    with pytest.raises(sistema.SistemaError):
+        sistema._exigir("", script_local=True)  # noqa: SLF001
+
+
+def test_rede_desligada_explica_que_e_linha_de_env_e_nao_comando(monkeypatch):
+    """O dono digitou `JARVIS_HOST_REDE=1` no prompt e o Windows reclamou."""
+    from server import sistema
+
+    monkeypatch.delenv("JARVIS_HOST_REDE", raising=False)
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema._exigir_rede_ligada()  # noqa: SLF001
+    texto = str(erro.value)
+    assert ".env" in texto
+    assert "não no prompt" in texto
+
+
+def test_o_plano_do_driver_avisa_que_o_cabo_tem_de_estar_conectado(monkeypatch):
+    """0.95.4 — eu tinha escrito “com o celular desconectado”, e é o contrário.
+
+    O instalador da Samsung é da época do Kies: ele reconhece o aparelho plugado.
+    Sem o cabo, termina “com sucesso” e não instala a interface de depuração.
+    """
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    plano = sistema.driver_do_celular(fabricante="samsung")
+    assert "conectado" in plano["antes_de_instalar"].lower()
+    assert "desbloqueado" in plano["antes_de_instalar"].lower()
+
+
+def test_driver_instalado_nao_baixa_de_novo(monkeypatch):
+    """0.95.4 — o dono rodou o `.bat` três vezes; 33 MB em cada uma seria absurdo."""
+    import importlib.util
+    from pathlib import Path
+
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        sistema, "driver_instalado",
+        lambda f="samsung": {"instalado": True, "como_sei": "O Windows lista a interface ADB da Samsung.",
+                             "dispositivos": ["SAMSUNG Android ADB Interface"]},
+    )
+
+    def nao_pode(*a, **k):
+        raise AssertionError("baixou mesmo com o driver já instalado")
+
+    monkeypatch.setattr(sistema, "baixar", nao_pode)
+    monkeypatch.setattr(sistema, "driver_do_celular", nao_pode)
+
+    alvo = Path(__file__).resolve().parents[2] / "escanear-celular.py"
+    spec = importlib.util.spec_from_file_location("escanear_mod2", alvo)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    import io
+    from contextlib import redirect_stdout
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        codigo = modulo.main(["--driver"])
+    assert codigo == 0
+    assert "já está instalado" in buffer.getvalue()
+    assert "não baixei nada" in buffer.getvalue()
+
+
+def test_driver_instalado_nao_confunde_linux(monkeypatch):
+    """Fora do Windows não há o que conferir — e ele não pode dizer "instalado"."""
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Linux")
+    estado = sistema.driver_instalado("samsung")
+    assert estado["instalado"] is False
+    assert "Windows" in estado["como_sei"]
+
+
+def test_a_api_continua_exigindo_token(monkeypatch):
+    """A isenção é do script local — a API nunca pode passar `script_local`.
+
+    0.95.4 — na primeira tentativa eu tirei o token de `_exigir()` para todo
+    mundo e derrubei 8 testes: `disco()`, `baixar()`, `instalar()` e `executar()`
+    são chamados pela API. Aqui fica preso que, sem `script_local`, o token
+    continua sendo cobrado mesmo na própria máquina.
+    """
+    from server import sistema
+
+    monkeypatch.delenv("JARVIS_HOST_EXIGIR_TOKEN_LOCAL", raising=False)
+    with pytest.raises(sistema.SistemaError, match="token"):
+        sistema._exigir("")  # noqa: SLF001
+    with pytest.raises(sistema.SistemaError, match="token"):
+        sistema._exigir("", script_local=False)  # noqa: SLF001 - explícito, igual à API

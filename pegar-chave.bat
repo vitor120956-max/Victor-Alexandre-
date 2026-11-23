@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - pegar a chave no site
 echo.
 echo   JARVIS - pegar a chave no site, sozinho
-echo   Versao: 0.95.3
+echo   Versao: 0.95.4
 echo   ----------------------------------------------------------------
 echo   (o jeito mais rapido e o chave-pela-api.bat: ele nao abre navegador
 echo    nenhum, pede a chave direto ao OpenRouter; e o chrome-cdp.bat nao le

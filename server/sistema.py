@@ -379,22 +379,53 @@ def capacidades() -> dict[str, Any]:
     }
 
 
-def _exigir(autorizacao: str) -> None:
+def da_propria_maquina() -> bool:
+    """Este processo roda na máquina do dono? (script local, não requisição)
+
+    0.95.4 — nasceu de um erro meu que o dono viveu: o `.bat` chamava o código
+    direto no PC dele e a minha trava pedia *token de host*, que só faz sentido
+    para requisição vinda de outra máquina. O token existe para impedir que um
+    site aberto no navegador dispare instalação — e um processo rodando com o
+    mesmo usuário já lê `storage/host-token.txt` de qualquer jeito, então
+    exigi-lo era teatro.
+
+    A trava que continua valendo é a que importa: as variáveis de ambiente
+    (`JARVIS_HOST_REDE`, `JARVIS_HOST_INSTALAR`) e o token de uso único do
+    plano de instalação.
+    """
+    if os.environ.get(AMBIENTE_EXIGIR_TOKEN_LOCAL, "0").strip() == "1":
+        return False  # quem quer o token de volta, mesmo aqui, continua tendo
+    return True
+
+
+def _exigir(autorizacao: str, *, script_local: bool = False) -> None:
+    """Exige o token de host — **exceto** quando o pedido vem de um script local.
+
+    `script_local=True` é usado só por quem roda como processo na máquina do dono
+    (`driver_do_celular` chamado pelo `.bat`). A API nunca passa isso: ali o
+    token continua sendo cobrado, porque a chamada pode vir de uma página aberta
+    no navegador. A trava de quem quer o token até no script é
+    `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1`.
+    """
+    if script_local and da_propria_maquina():
+        return
     ok, motivo = _autorizado(autorizacao)
     if not ok:
         raise SistemaError(motivo)
 
 
-def _exigir_rede(autorizacao: str) -> None:
+def _exigir_rede(autorizacao: str, *, script_local: bool = False) -> None:
     """Ação que toca a rede **e** muda algo (baixar, instalar, executar)."""
-    _exigir(autorizacao)
+    _exigir(autorizacao, script_local=script_local)
     _exigir_rede_ligada()
 
 
 def _exigir_rede_ligada() -> None:
     if os.environ.get(AMBIENTE_REDE, "0") != "1":
         raise SistemaError(
-            "Rede desligada. Suba a API com JARVIS_HOST_REDE=1 para liberar busca, leitura de página e download."
+            "Rede desligada. Acrescente `JARVIS_HOST_REDE=1` no `.env` (na pasta do "
+            "JARVIS, não no prompt do Windows) e rode de novo. É uma linha do arquivo, "
+            "não um comando."
         )
 
 
@@ -407,11 +438,12 @@ def _exigir_leitura() -> None:
     _exigir_rede_ligada()
 
 
-def _exigir_instalar(autorizacao: str) -> None:
-    _exigir_rede(autorizacao)
+def _exigir_instalar(autorizacao: str, *, script_local: bool = False) -> None:
+    _exigir_rede(autorizacao, script_local=script_local)
     if os.environ.get(AMBIENTE_INSTALAR, "0") != "1":
         raise SistemaError(
-            "Instalação desligada. Suba a API com JARVIS_HOST_INSTALAR=1 depois de revisar o plano do instalador."
+            "Instalação desligada. Acrescente `JARVIS_HOST_INSTALAR=1` no `.env` depois "
+            "de revisar o plano do instalador."
         )
 
 
@@ -1641,10 +1673,11 @@ def baixar(
     url: str,
     modo: str = "full",
     autorizacao: str = "",
+    script_local: bool = False,
 ) -> dict[str, Any]:
     """Baixa um arquivo para a quarentena e devolve o hash. Não executa nada."""
     modo = _modo(modo)
-    _exigir_rede(autorizacao)
+    _exigir_rede(autorizacao, script_local=script_local)
     destino = _url_segura(url)
     QUARENTENA.mkdir(parents=True, exist_ok=True)
     nome = Path(urlparse(destino).path).name or "arquivo"
@@ -2401,10 +2434,11 @@ def instalar(
     exigir_assinatura: bool = False,
     modo: str = "full",
     autorizacao: str = "",
+    script_local: bool = False,
 ) -> dict[str, Any]:
     """Monta o plano do instalador com o comando exato e o token de uso único."""
     modo = _modo(modo)
-    _exigir(autorizacao)
+    _exigir(autorizacao, script_local=script_local)
     rotulo, tipo, alvo, comando, risco, _chave = _plano(arquivo=arquivo, pacote=pacote, silencioso=silencioso)
     motivo = _risco(tipo)[1]
     sha = ""
@@ -2718,10 +2752,11 @@ def executar(
     confirmacao: str,
     modo: str = "full",
     autorizacao: str = "",
+    script_local: bool = False,
 ) -> dict[str, Any]:
     """Executa o plano confirmado. Exige a trava ligada e o token de uso único."""
     modo = _modo(modo)
-    _exigir_instalar(autorizacao)
+    _exigir_instalar(autorizacao, script_local=script_local)
     token = (confirmacao or "").strip()
     if not token or token not in _CONFIRMACAO:
         raise SistemaError(
@@ -2909,7 +2944,7 @@ def catalogo() -> dict[str, Any]:
     }
 
 # ---------------------------------------------------------------------------
-# 0.95.3 — instalar o driver do celular sem o dono baixar nada à mão
+# 0.95.4 — instalar o driver do celular sem o dono baixar nada à mão
 # ---------------------------------------------------------------------------
 
 # Fontes oficiais, com o que cada uma resolve. `verificar_em` existe porque
@@ -2926,13 +2961,54 @@ DRIVERS_CONHECIDOS: dict[str, dict[str, Any]] = {
             "Faz o `adb` enxergar o aparelho quando o Windows só monta o MTP "
             "(a pasta do celular aparece no Explorer e o `adb devices` fica vazio)."
         ),
-        "onde": "no PC (Windows), com o celular desconectado",
+        # 0.95.4 — eu tinha escrito "com o celular desconectado" e isso está
+        # errado: o instalador da Samsung é da época do Kies e foi feito para
+        # rodar COM o aparelho plugado (ele reconhece o telefone e instala a
+        # interface de depuração). Sem o cabo, ele termina "com sucesso" e não
+        # instala o que interessa.
+        "onde": "no PC (Windows), com o celular CONECTADO por USB e desbloqueado",
         "no_celular": "nada — nenhum app é instalado no aparelho",
         "tamanho_mb": 33,
         "reinicia": False,
+        "precisa_do_cabo": True,
         "assinado": "Samsung Electronics (o instalador é assinado; o JARVIS confere)",
     },
 }
+
+
+def driver_instalado(fabricante: str = "samsung") -> dict[str, Any]:
+    """O driver já está no PC? Pergunta ao Windows, sem baixar nada.
+
+    0.95.4 — o dono rodou o `.bat` três vezes e baixaria 33 MB em cada uma. Antes
+    de baixar, vale perguntar: se o Windows já tem o ``Samsung Android ADB
+    Interface`` funcionando, o problema nunca foi o driver.
+    """
+    chave = (fabricante or "").strip().lower()
+    if chave != "samsung":
+        return {"instalado": False, "como_sei": f"Não sei conferir “{fabricante}”."}
+    if platform.system() != "Windows":
+        return {"instalado": False, "como_sei": "A conferência só existe no Windows."}
+    script = (
+        "$d = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.InstanceId -match 'VID_04E8' -and "
+        "$_.FriendlyName -match 'ADB|Android' }; "
+        "if ($d) { 'SIM'; $d | ForEach-Object { $_.FriendlyName } } else { 'NAO' }"
+    )
+    try:
+        resultado = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, timeout=25, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"instalado": False, "como_sei": f"Não consegui perguntar ao Windows: {exc}"}
+    linhas = [linha.strip() for linha in (resultado.stdout or "").splitlines() if linha.strip()]
+    achou = bool(linhas) and linhas[0].upper() == "SIM"
+    return {
+        "instalado": achou,
+        "como_sei": "O Windows lista a interface ADB da Samsung." if achou
+        else "O Windows não lista interface ADB da Samsung.",
+        "dispositivos": linhas[1:],
+    }
 
 
 def driver_do_celular(
@@ -2977,6 +3053,13 @@ def driver_do_celular(
         "o_que_resolve": info["resolve"],
         "instala": info["onde"],
         "no_celular": info["no_celular"],
+        "antes_de_instalar": (
+            "Deixe o celular conectado por USB e desbloqueado. O instalador da Samsung "
+            "reconhece o aparelho e instala a interface de depuração; sem o cabo ele "
+            "termina \"com sucesso\" e não resolve nada."
+            if info.get("precisa_do_cabo")
+            else ""
+        ),
         "url": info["url"],
         "tamanho_aprox_mb": info["tamanho_mb"],
         "reinicia": info["reinicia"],
@@ -2990,23 +3073,31 @@ def driver_do_celular(
         )
         return plano
 
-    baixado = baixar(url=info["url_arquivo"], modo=modo, autorizacao=autorizacao)
+    # `script_local=True`: aqui quem chama é o `.bat` na máquina do dono, não a
+    # API. O token de host existe para barrar página de site; neste caminho ele
+    # pedia token a quem já lê `storage/host-token.txt` — foi o erro da 0.95.3.
+    baixado = baixar(
+        url=info["url_arquivo"], modo=modo, autorizacao=autorizacao, script_local=True
+    )
     arquivo = str(baixado["arquivo"])
     # Duas etapas, de propósito: `instalar` só MONTA o plano e devolve o token;
-    # quem executa é `executar`. A 0.95.3 chamava só `instalar` e o dono ficava
+    # quem executa é `executar`. A 0.95.4 chamava só `instalar` e o dono ficava
     # com um plano na mão achando que o driver tinha sido instalado.
     plano_instalacao = instalar(
         arquivo=arquivo,
         silencioso=True,
         modo=modo,
         autorizacao=autorizacao,
+        script_local=True,
     )
     token = str(plano_instalacao.get("confirmação", "")).strip()
     if not token:
         raise SistemaError(
             "O plano de instalação não devolveu a confirmação. Nada foi executado."
         )
-    instalacao = executar(confirmacao=token, modo=modo, autorizacao=autorizacao)
+    instalacao = executar(
+        confirmacao=token, modo=modo, autorizacao=autorizacao, script_local=True
+    )
     return {
         **plano,
         "baixado": {

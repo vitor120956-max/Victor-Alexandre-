@@ -49,7 +49,7 @@ def _salvar(relatorio: dict) -> Path:
     pasta = _pasta()
     pasta.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    # 0.95.3 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
+    # 0.95.4 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
     # que é identificador do dono. O modelo basta para reconhecer o relatório.
     modelo = (relatorio.get("titulo") or "").split("·")[0].strip() or "aparelho"
     seguro = "".join(c if c.isalnum() or c in "-_" else "-" for c in modelo)[:40]
@@ -100,7 +100,7 @@ def _perguntar_sintomas() -> list[str]:
 def _instalar_driver(como_json: bool) -> int:
     """Baixa e instala o driver do celular — o passo que o dono não faz à mão.
 
-    0.95.3 — nasceu de um pedido literal: *"pq vc nao faz javris instalar para
+    0.95.4 — nasceu de um pedido literal: *"pq vc nao faz javris instalar para
     mim"*. O dono não digita comando de terminal e não caça arquivo em site.
 
     O `.env` é lido no começo (`_ambiente()`), então basta a linha lá dentro; o
@@ -108,6 +108,25 @@ def _instalar_driver(como_json: bool) -> int:
     o que fazer em seguida, não um stack trace.
     """
     from server import sistema
+
+    # 0.95.4 — antes de baixar 33 MB, pergunte ao Windows se já está lá.
+    # O dono roda `.bat` em sequência; não pode pagar o download toda vez.
+    estado = sistema.driver_instalado("samsung")
+    if estado.get("instalado"):
+        if como_json:
+            print(json.dumps({"ja_instalado": True, **estado}, ensure_ascii=False, indent=2))
+            return 0
+        print()
+        print("  O driver já está instalado neste PC — não baixei nada.")
+        print(f"    ({estado.get('como_sei', '')})")
+        for nome in estado.get("dispositivos", []):
+            print(f"    • {nome}")
+        print()
+        print("  Então o que falta não é o driver. Rode o escanear-celular.bat de novo")
+        print("  e, se o aparelho não aparecer, o problema é cabo, porta ou a tela")
+        print("  bloqueada na hora do aviso de depuração — não a instalação.")
+        print()
+        return 0
 
     try:
         feito = sistema.driver_do_celular(fabricante="samsung", confirmado=True)

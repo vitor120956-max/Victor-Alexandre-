@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - instalar o driver do celular
-REM Versao: 0.95.3
+REM Versao: 0.95.4
 REM
 REM Nasceu de um pedido literal do dono: "pq vc nao faz javris instalar para mim".
 REM

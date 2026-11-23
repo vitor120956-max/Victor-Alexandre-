@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title JARVIS - abrir o Chrome com acessibilidade ligada
 echo.
 echo   JARVIS - abrir o Chrome com a acessibilidade ligada
-echo   Versao: 0.95.3
+echo   Versao: 0.95.4
 echo   ----------------------------------------------------------------
 echo.
 echo   O JARVIS le a pagina do Chrome pela acessibilidade do Windows.

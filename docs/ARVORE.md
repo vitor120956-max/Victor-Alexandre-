@@ -3205,3 +3205,37 @@ termina com o passo seguinte escrito na tela.
 > clone de `643b4ca`. Nada se perdeu — a branch foi reancorada em `aa987fa` com
 > `git update-ref` e `git read-tree`, sem `reset --hard`.
 
+### 0.95.4 — o celular apareceu sem driver, e o token era teatro
+
+> *“Não consegui instalar o driver: Sem token e este pedido não veio da própria
+> máquina.”* — a saída de um `.bat` rodando **na** máquina.
+
+A tela do dono desmentiu duas coisas que eu tinha afirmado:
+
+1. **O `adb` funcionou sem o driver.** A primeira varredura leu o A34 inteiro
+   (84,4 GB, 7,3 GB de RAM, ANR de `com.dti.telefonica`). O driver melhoraria o
+   nome do dispositivo no Windows, não era pré-requisito.
+2. **O instalador da Samsung quer o aparelho plugado.** Eu tinha escrito “com o
+   celular desconectado” — é o contrário: ele é da época do Kies e reconhece o
+   telefone na USB. `precisa_do_cabo` entrou no `DRIVERS_CONHECIDOS` e o plano
+   passou a trazer `antes_de_instalar`.
+
+O defeito que travou o dono: `_exigir()` pedia o **token de host** também quando o
+código roda como script local. O token existe para barrar página de site; um
+processo do mesmo usuário lê `storage/host-token.txt` de qualquer forma.
+
+A primeira correção que tentei foi abrir `_exigir()` para todo mundo — e **8
+testes caíram**, todos prendendo que a API exige token. Eles estavam certos. O
+desenho final põe a isenção num parâmetro explícito, `script_local=True`, usado
+só pelo caminho do `.bat`; a API nunca o passa. `da_propria_maquina()` responde
+se o token pode ser dispensado, e `JARVIS_HOST_EXIGIR_TOKEN_LOCAL=1` devolve a
+trava.
+
+E a segunda varredura vazia: `_por_que_nao_apareceu()` consulta o Windows, mas
+quando a sonda **não roda** devolvia a frase genérica de cabo e Depuração USB —
+palpite disfarçado de diagnóstico. Agora ela diz que não conseguiu perguntar e
+nomeia o motivo.
+
+Por fim, `driver_instalado()`: antes de baixar 33 MB, pergunta se a interface ADB
+da Samsung já está no Windows. O dono rodou o `.bat` três vezes seguidas.
+

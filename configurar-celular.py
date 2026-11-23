@@ -97,7 +97,7 @@ def ajustar(texto: str) -> tuple[str, dict[str, str], dict[str, str]]:
 def ligar_driver() -> int:
     """Acrescenta as duas permissões que baixar+instalar o driver exigem.
 
-    0.95.3 — o dono não digita `set VAR=1` no prompt: no Windows antigo isso nem
+    0.95.4 — o dono não digita `set VAR=1` no prompt: no Windows antigo isso nem
     existe (o comando é `set`), e ele já tentou do jeito que eu escrevi errado.
     Aqui a linha vai para o `.env`, que é lido no começo de todo script do
     projeto — então o `.bat` funciona sem exportar nada.
@@ -129,7 +129,7 @@ def ligar_driver() -> int:
         while linhas and not linhas[-1].strip():
             linhas.pop()
         linhas.append("")
-        linhas.append("# --- Driver do celular (0.95.3) -------------------------------------")
+        linhas.append("# --- Driver do celular (0.95.4) -------------------------------------")
         linhas.append("# JARVIS_HOST_REDE: baixa o driver do site da Samsung.")
         linhas.append("# JARVIS_HOST_INSTALAR: executa o instalador depois de conferir o sha256.")
         for chave in faltando:

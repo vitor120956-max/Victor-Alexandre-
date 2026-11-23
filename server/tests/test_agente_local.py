@@ -846,7 +846,7 @@ def _valor_de_exemplo(nome: str, spec: dict[str, Any]) -> Any:
     if "sha" in chave or "{64}" in str(spec.get("pattern") or ""):
         return "a" * 64
     if chave in {"pacote", "package", "nomedopacote"}:
-        # 0.95.3 — o campo de pacote passou a recusar texto que não é nome
+        # 0.95.4 — o campo de pacote passou a recusar texto que não é nome
         # Android: “exemplo de texto” não é pacote, e este gerador precisa
         # produzir um valor que a skill aceite de verdade.
         return "com.exemplo.app"
@@ -2957,7 +2957,7 @@ def test_somente_skill_ainda_executa_a_skill_quando_ela_serve(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.3 — “fecha o com.dti.telefonica no celular” não é um nome de pacote
+# 0.95.4 — “fecha o com.dti.telefonica no celular” não é um nome de pacote
 # ---------------------------------------------------------------------------
 
 

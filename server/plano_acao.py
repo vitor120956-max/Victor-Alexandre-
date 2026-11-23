@@ -1,4 +1,4 @@
-"""Do diagnóstico para a ação — o que o JARVIS faz **depois** de medir (0.95.3).
+"""Do diagnóstico para a ação — o que o JARVIS faz **depois** de medir (0.95.4).
 
 O scanner respondia “a causa é o app X travando” e parava ali. O dono ficava
 com a frase e o trabalho: achar o app, achar o botão, decidir. Este módulo

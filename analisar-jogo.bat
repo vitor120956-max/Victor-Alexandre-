@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title JARVIS - analisar o APK do seu jogo
 setlocal enabledelayedexpansion
-REM Versao: 0.95.3
+REM Versao: 0.95.4
 REM
 REM O jeito mais facil: ARRASTE o APK para cima deste arquivo.
 REM Ele copia para a pasta de jogos do JARVIS e analisa na hora.
