@@ -2279,7 +2279,7 @@ class CelularFecharAppInput(BaseModel):
     @field_validator("pacote")
     @classmethod
     def _so_nome_de_pacote(cls, valor: str) -> str:
-        """Recusa a frase inteira — 0.95.2.
+        """Recusa a frase inteira — 0.95.3.
 
         O dono pediu “vai chover amanhã?” e recebeu a recusa desta skill: o
         modelo escolheu a ferramenta errada e o texto foi como `pacote`. A

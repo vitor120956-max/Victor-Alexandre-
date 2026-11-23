@@ -2909,7 +2909,7 @@ def catalogo() -> dict[str, Any]:
     }
 
 # ---------------------------------------------------------------------------
-# 0.95.2 — instalar o driver do celular sem o dono baixar nada à mão
+# 0.95.3 — instalar o driver do celular sem o dono baixar nada à mão
 # ---------------------------------------------------------------------------
 
 # Fontes oficiais, com o que cada uma resolve. `verificar_em` existe porque
@@ -2992,12 +2992,21 @@ def driver_do_celular(
 
     baixado = baixar(url=info["url_arquivo"], modo=modo, autorizacao=autorizacao)
     arquivo = str(baixado["arquivo"])
-    instalacao = instalar(
+    # Duas etapas, de propósito: `instalar` só MONTA o plano e devolve o token;
+    # quem executa é `executar`. A 0.95.3 chamava só `instalar` e o dono ficava
+    # com um plano na mão achando que o driver tinha sido instalado.
+    plano_instalacao = instalar(
         arquivo=arquivo,
         silencioso=True,
         modo=modo,
         autorizacao=autorizacao,
     )
+    token = str(plano_instalacao.get("confirmação", "")).strip()
+    if not token:
+        raise SistemaError(
+            "O plano de instalação não devolveu a confirmação. Nada foi executado."
+        )
+    instalacao = executar(confirmacao=token, modo=modo, autorizacao=autorizacao)
     return {
         **plano,
         "baixado": {

@@ -597,7 +597,7 @@ def test_verificar_devolve_a_data_e_a_frase_com_a_data(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.2 — quando o `raw.githubusercontent.com` está bloqueado
+# 0.95.3 — quando o `raw.githubusercontent.com` está bloqueado
 # ---------------------------------------------------------------------------
 # O dono já provou que isso acontece: `curl` no `raw` devolve 000 enquanto
 # `github.com` e `codeload` respondem 200. A pergunta que ele faz ("tem versão

@@ -94,6 +94,55 @@ def ajustar(texto: str) -> tuple[str, dict[str, str], dict[str, str]]:
     return "\n".join(linhas).rstrip("\n") + "\n", antes, depois
 
 
+def ligar_driver() -> int:
+    """Acrescenta as duas permissões que baixar+instalar o driver exigem.
+
+    0.95.3 — o dono não digita `set VAR=1` no prompt: no Windows antigo isso nem
+    existe (o comando é `set`), e ele já tentou do jeito que eu escrevi errado.
+    Aqui a linha vai para o `.env`, que é lido no começo de todo script do
+    projeto — então o `.bat` funciona sem exportar nada.
+    """
+    chaves = {
+        "JARVIS_HOST_REDE": "1",
+        "JARVIS_HOST_INSTALAR": "1",
+    }
+    arquivo = ARQUIVO
+    if arquivo.exists():
+        texto = _ler(arquivo)
+    elif EXEMPLO.exists():
+        texto = _ler(EXEMPLO)
+        print("  O '.env' nao existia. Criei a partir do '.env.example'.")
+    else:
+        texto = ""
+
+    linhas = texto.replace("\r\n", "\n").split("\n")
+    antes = {c: "" for c in chaves}
+    trocadas: set[str] = set()
+    for indice, linha in enumerate(linhas):
+        chave = _chave_da_linha(linha)
+        if chave in chaves:
+            antes[chave] = linha.strip()
+            linhas[indice] = f"{chave}={chaves[chave]}"
+            trocadas.add(chave)
+    faltando = [c for c in chaves if c not in trocadas]
+    if faltando:
+        while linhas and not linhas[-1].strip():
+            linhas.pop()
+        linhas.append("")
+        linhas.append("# --- Driver do celular (0.95.3) -------------------------------------")
+        linhas.append("# JARVIS_HOST_REDE: baixa o driver do site da Samsung.")
+        linhas.append("# JARVIS_HOST_INSTALAR: executa o instalador depois de conferir o sha256.")
+        for chave in faltando:
+            linhas.append(f"{chave}={chaves[chave]}")
+            antes[chave] = "(nao existia)"
+    _gravar(arquivo, "\n".join(linhas).rstrip("\n") + "\n")
+
+    for chave, valor in chaves.items():
+        print(f"    {chave}: {antes[chave] or '(vazio)'}  ->  {chave}={valor}")
+    print(f"  (gravado em {arquivo})")
+    return 0
+
+
 def main() -> int:
     print()
     print("  JARVIS - ligar a camada do celular (.env)")
@@ -149,4 +198,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import sys as _sys
+
+    if "--driver" in _sys.argv:
+        raise SystemExit(ligar_driver())
     sys.exit(main())

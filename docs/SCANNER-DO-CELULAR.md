@@ -369,7 +369,7 @@ O zip **não** leva a chave `comandos` do `coletar`: cada item dela é
 `adb -s RXCW400ZV3F shell …`, ou seja, o serial do aparelho em texto. Quem refaz
 remonta a lista vazia.
 
-## 17. Do diagnóstico para a ação (0.95.2)
+## 17. Do diagnóstico para a ação (0.95.3)
 
 O relatório passou a trazer `plano`, e o console imprime duas seções novas:
 

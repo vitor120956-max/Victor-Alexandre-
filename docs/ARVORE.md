@@ -3176,3 +3176,32 @@ Correção de uma frase minha exagerada: o `atualizar-baixar.ps1` já caía para
 `codeload` desde antes. O que faltava era a mensagem dizer isso — e a sonda medir
 em vez de supor.
 
+### 0.95.3 — o driver instala de verdade, e o `.bat` faz sozinho
+
+> *“JARVIS_HOST_REDE=1 / 'não é reconhecido como comando'”* e *“'curl' não é
+> reconhecido”* — a tela do dono no Windows 10 build 14393.
+
+Dois fatos daquela tela mandaram o desenho desta versão:
+
+1. **`curl` não existe no Windows dele.** Só entrou de série no 10/1803; o dele é
+   o 1607. Comando de terminal não é caminho para o dono.
+2. **`JARVIS_HOST_REDE=1` não é comando do Windows** — no `cmd` seria `set`.
+   É linha de `.env`, e eu escrevi como se ele soubesse.
+
+E o defeito de verdade, que os testes pegaram: `driver_do_celular` chamava
+`instalar()` e considerava instalado. Mas `instalar()` **só monta o plano** e
+devolve o token; executar é papel de `executar()`. O dono ficaria com 33 MB
+baixados, um plano na tela e o driver não instalado.
+
+A correção é a ordem explícita — `instalar()` → token → `executar(token)` — e a
+recusa quando o token não vem.
+
+O caminho do dono passou a ser um arquivo: `instalar-driver-celular.bat`, duplo
+clique. Ele grava as duas permissões no `.env` (reaproveitando `ajustar()` do
+`configurar-celular.py`, idempotente), chama `escanear-celular.py --driver`, e
+termina com o passo seguinte escrito na tela.
+
+> Nota de processo: o `.venv` deste sandbox foi recriado e o `git` voltou a um
+> clone de `643b4ca`. Nada se perdeu — a branch foi reancorada em `aa987fa` com
+> `git update-ref` e `git read-tree`, sem `reset --hard`.
+

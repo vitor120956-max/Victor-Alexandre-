@@ -633,7 +633,7 @@ def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.2 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
+# 0.95.3 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
 # ---------------------------------------------------------------------------
 
 
@@ -722,7 +722,7 @@ def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.2 — “vai chover amanhã?” não é pedido para fechar app
+# 0.95.3 — “vai chover amanhã?” não é pedido para fechar app
 # ---------------------------------------------------------------------------
 
 
@@ -767,7 +767,7 @@ def test_nome_de_exibicao_sem_pontos_continua_recusado_com_a_dica_antiga():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.2 — o JARVIS instala o driver em vez de mandar o dono baixar
+# 0.95.3 — o JARVIS instala o driver em vez de mandar o dono baixar
 # ---------------------------------------------------------------------------
 
 
@@ -801,14 +801,23 @@ def test_driver_confirmado_baixa_e_instala_pela_quarentena(monkeypatch):
         return {"arquivo": "/tmp/quarentena/driver.exe", "bytes": 34_000_000, "sha256": "a" * 64, "tipo": "application/x-msdownload"}
 
     def instalar(**kwargs):
-        chamadas.append(f"instalar:{kwargs['arquivo']}")
+        chamadas.append(f"instalar-plano:{kwargs['arquivo']}")
         return {"plano": "driver.exe", "confirmação": "abc123"}
+
+    def executar(**kwargs):
+        # o token tem de ser o que o plano devolveu — não um qualquer
+        chamadas.append(f"executar:{kwargs['confirmacao']}")
+        return {"estado": "instalado", "saida": "Samsung USB Driver instalado."}
 
     monkeypatch.setattr(sistema, "baixar", baixar)
     monkeypatch.setattr(sistema, "instalar", instalar)
+    monkeypatch.setattr(sistema, "executar", executar)
     feito = sistema.driver_do_celular(fabricante="samsung", confirmado=True)
-    assert chamadas == ["baixar:https://developer.samsung.com/sdp/file/de97d0ea-da03-46a4-b35d-346d37a878e0",
-                        "instalar:/tmp/quarentena/driver.exe"]
+    assert chamadas == [
+        "baixar:https://developer.samsung.com/sdp/file/de97d0ea-da03-46a4-b35d-346d37a878e0",
+        "instalar-plano:/tmp/quarentena/driver.exe",
+        "executar:abc123",
+    ], chamadas
     assert feito["baixado"]["sha256"] == "a" * 64
     # o próximo passo é dito, não deixado para o dono adivinhar
     assert "reconecte o cabo" in feito["depois"]
@@ -845,3 +854,91 @@ def test_a_skill_do_driver_esta_no_registro_e_diz_o_que_faz():
     # a descrição precisa dizer que instala no PC — é a dúvida número um do dono
     texto = definicao.description.lower()
     assert "no pc" in texto and "não no celular" in texto
+
+
+def test_driver_nao_diz_instalado_quando_o_plano_nao_devolve_token(monkeypatch):
+    """0.95.3 baixava e parava no plano — o dono achava que estava instalado.
+
+    `instalar()` só monta o plano e devolve o token; quem executa é `executar()`.
+    Se o token não vier, o certo é falhar alto, não devolver "baixado" e seguir.
+    """
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        sistema,
+        "baixar",
+        lambda **k: {"arquivo": "/tmp/quarentena/driver.exe", "bytes": 1, "sha256": "a" * 64, "tipo": "exe"},
+    )
+    monkeypatch.setattr(sistema, "instalar", lambda **k: {"plano": "driver.exe"})
+    executou: list[str] = []
+    monkeypatch.setattr(sistema, "executar", lambda **k: executou.append("x") or {})
+
+    with pytest.raises(sistema.SistemaError) as erro:
+        sistema.driver_do_celular(fabricante="samsung", confirmado=True)
+    assert "confirmação" in str(erro.value)
+    assert executou == []          # e não executou nada às cegas
+
+
+def test_escanear_driver_instala_de_ponta_a_ponta_com_janela_falsa(monkeypatch, capsys):
+    """0.95.3 — o caminho que o dono roda: `escanear-celular.bat --driver`.
+
+    A 0.95.3 devolvia o plano de instalação e parava. Aqui a prova é a ponta:
+    `instalar` monta, `executar` executa, e a tela final diz o que fazer depois.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from server import sistema
+
+    monkeypatch.setattr(sistema.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        sistema,
+        "baixar",
+        lambda **k: {"arquivo": "/tmp/q/driver.exe", "bytes": 34_000_000, "sha256": "b" * 64, "tipo": "exe"},
+    )
+    monkeypatch.setattr(sistema, "instalar", lambda **k: {"plano": "x", "confirmação": "tok1"})
+    executou: list[dict] = []
+
+    def executar(**k):
+        executou.append(k)
+        return {"estado": "instalado"}
+
+    monkeypatch.setattr(sistema, "executar", executar)
+
+    alvo = Path(__file__).resolve().parents[2] / "escanear-celular.py"
+    spec = importlib.util.spec_from_file_location("escanear_mod", alvo)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    codigo = modulo.main(["--driver"])
+    saida = capsys.readouterr().out
+    assert codigo == 0
+    assert executou and executou[0]["confirmacao"] == "tok1"
+    assert "instalado no PC" in saida
+    assert "celular não recebeu nada" in saida
+    # e o passo seguinte tem de estar escrito, não subentendido
+    assert "desconecte o cabo" in saida
+
+
+def test_configurar_celular_liga_as_permissoes_do_driver(tmp_path, monkeypatch):
+    """O `.bat` não pode depender de o dono digitar `set VAR=1` no prompt."""
+    import importlib.util
+    from pathlib import Path
+
+    alvo = Path(__file__).resolve().parents[2] / "configurar-celular.py"
+    spec = importlib.util.spec_from_file_location("configurar_mod", alvo)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    env = tmp_path / ".env"
+    monkeypatch.setattr(modulo, "ARQUIVO", env)
+    monkeypatch.setattr(modulo, "EXEMPLO", tmp_path / ".env.example")
+    env.write_text("JARVIS_ACOES=1\n", encoding="utf-8")
+
+    modulo.ligar_driver()
+    modulo.ligar_driver()          # duas vezes: não pode duplicar a linha
+    texto = env.read_text(encoding="utf-8")
+    assert texto.count("JARVIS_HOST_REDE=1") == 1
+    assert texto.count("JARVIS_HOST_INSTALAR=1") == 1
+    assert "JARVIS_ACOES=1" in texto   # e não apaga o que o dono já tinha

@@ -49,7 +49,7 @@ def _salvar(relatorio: dict) -> Path:
     pasta = _pasta()
     pasta.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    # 0.95.2 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
+    # 0.95.3 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
     # que é identificador do dono. O modelo basta para reconhecer o relatório.
     modelo = (relatorio.get("titulo") or "").split("·")[0].strip() or "aparelho"
     seguro = "".join(c if c.isalnum() or c in "-_" else "-" for c in modelo)[:40]
@@ -97,6 +97,52 @@ def _perguntar_sintomas() -> list[str]:
     return escolhidos
 
 
+def _instalar_driver(como_json: bool) -> int:
+    """Baixa e instala o driver do celular — o passo que o dono não faz à mão.
+
+    0.95.3 — nasceu de um pedido literal: *"pq vc nao faz javris instalar para
+    mim"*. O dono não digita comando de terminal e não caça arquivo em site.
+
+    O `.env` é lido no começo (`_ambiente()`), então basta a linha lá dentro; o
+    `.bat` não precisa exportar nada. E o caminho de saída é sempre uma frase com
+    o que fazer em seguida, não um stack trace.
+    """
+    from server import sistema
+
+    try:
+        feito = sistema.driver_do_celular(fabricante="samsung", confirmado=True)
+    except sistema.SistemaError as exc:
+        if como_json:
+            print(json.dumps({"erro": str(exc)}, ensure_ascii=False, indent=2))
+            return 1
+        print()
+        print("  Não consegui instalar o driver:")
+        print(f"    {exc}")
+        print()
+        if "JARVIS_HOST_REDE" in str(exc) or "Rede desligada" in str(exc):
+            print("  Para mim isso é a linha JARVIS_HOST_REDE=1 no .env —")
+            print("  e o mesmo para JARVIS_HOST_INSTALAR=1. Depois rode de novo.")
+        elif "Windows" in str(exc):
+            print("  O driver é do Windows; este computador não precisa dele.")
+        print()
+        return 1
+
+    if como_json:
+        print(json.dumps(feito, ensure_ascii=False, indent=2))
+        return 0
+    print()
+    print("  Driver instalado no PC. O celular não recebeu nada.")
+    print(f"    arquivo: {feito.get('baixado', {}).get('bytes', 0) / 1_048_576:.1f} MB,"
+          f" sha256 {str(feito.get('baixado', {}).get('sha256', ''))[:16]}...")
+    print()
+    print("  Agora, para o `adb` enxergar o aparelho:")
+    print("    1. desconecte o cabo e conecte de novo (celular desbloqueado);")
+    print("    2. toque em \"Permitir\" no aviso de depuração USB;")
+    print("    3. rode o escanear-celular.bat de novo.")
+    print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Scanner do celular: mede e diz o que está errado.")
     parser.add_argument("serial", nargs="?", default="", help="Serial do `adb devices`; vazio usa o primeiro autorizado.")
@@ -127,6 +173,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--driver",
+        action="store_true",
+        help=(
+            "Instala o Samsung USB Driver no PC, sem passo manual: é o que faz o `adb` "
+            "enxergar o aparelho quando o Windows só mostra a pasta (MTP). Instala NO PC, "
+            "nada no celular. Exige JARVIS_HOST_REDE=1 e JARVIS_HOST_INSTALAR=1 no .env."
+        ),
+    )
+    parser.add_argument(
         "--completo",
         action="store_true",
         help="Em vez do scanner: a passagem completa (anatomia + scanner + pastas e partições).",
@@ -154,6 +209,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(varredura.em_texto(refeito))
         return 0
+
+    if argumentos.driver:
+        return _instalar_driver(argumentos.json)
 
     if argumentos.completo:
         from server import varredura
