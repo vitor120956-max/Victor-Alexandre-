@@ -1,6 +1,6 @@
 {
- "versao": "0.95.4",
- "gerado": "2026-11-23T02:38:49+00:00",
+ "versao": "0.95.5",
+ "gerado": "2026-11-25T11:44:39+00:00",
  "arquivos": {
   ".gitattributes": {
    "sha256": "b747f9fb4e35996078cc0420337afb7b36230eb498f4ee0effbbdf267bf8a723",
@@ -622,20 +622,24 @@
    "sha256": "7a35011d08a7dac755400c88d49108beddafd60282049a5c39b07b482c9d49d7",
    "bytes": 3942
   },
+  "NOVO-0.95.5.md": {
+   "sha256": "2f23abdc5b89a8934dc873573d96a665419ad7aab067f284485ec823533dc583",
+   "bytes": 4196
+  },
   "README.md": {
    "sha256": "5c73078a57091b461cd9b7ab8ee62d1b33cafdcc4b354343b7c0409ef993d973",
    "bytes": 135440
   },
   "acesso-celular.bat": {
-   "sha256": "3486424d4dbfd9e2bb22d74f8faac49b5b4518b212a1542522050200243cd69b",
+   "sha256": "78493be5ecc74a23eb12b0f3604226ea0923d30c3e80a5957a9377933f141b67",
    "bytes": 692
   },
   "acesso-celular.ps1": {
-   "sha256": "d21c0d1e9d221969892efbc920cb3880e6d2d92f0bebedb497f007410d99ee9e",
+   "sha256": "33fa771ad0efbbfe9d67729443f2be250f96c3a2302b283424253b285d569bdb",
    "bytes": 6147
   },
   "analisar-jogo.bat": {
-   "sha256": "d7fd7be62cfa3b1d918df796dc0869bfb3326bce6cd9610964f5347f8cddc81a",
+   "sha256": "5a3ddb03eeba38a56c594bc1db0dfff299444e436ea438203959ffa935adc22d",
    "bytes": 1326
   },
   "analisar-jogo.py": {
@@ -663,15 +667,15 @@
    "bytes": 123549
   },
   "chave-pela-api.bat": {
-   "sha256": "671e53ba55d85164779fa1801165439d160b7d38d9f2043c37e32d4530deaa19",
+   "sha256": "1a9acc342ec611b4ad86f8712f441bf1eb44aecdd9b5af23c069af380a491fb4",
    "bytes": 3005
   },
   "chrome-acessibilidade.bat": {
-   "sha256": "b188b7d20241d7b4f0888c9e416f94bafcc39ec751df5a80514ba8145cbd8088",
+   "sha256": "2e0294d2c83bbd4dd481051fd53323c3559a49e4d749d11bb90bf96d7cb8c7fa",
    "bytes": 2596
   },
   "chrome-cdp.bat": {
-   "sha256": "40ad708eb0d1060ac6048fd0cddaabb1da83d6e0fbecdf2933b62358f5832b6b",
+   "sha256": "b727fdcd088d80b7ea9a2d75bbad7572eda9886dac1bbbebf03f7c1c3d109549",
    "bytes": 4538
   },
   "conferir-ia.py": {
@@ -679,11 +683,11 @@
    "bytes": 17504
   },
   "conferir-versao.bat": {
-   "sha256": "3d5e94bc70e6f569d2de2ac4fb2024014696c405f35ea446409d5f2fd2f6d060",
+   "sha256": "a9c14f9cce5c39066377f6dc9dfdd6f991f983a35db0f2b655c2511ac9e108f2",
    "bytes": 761
   },
   "configurar-celular.py": {
-   "sha256": "1aa4aa9e577fb0fb5d3cd3612c931a40e3fd61e90377af1cefad7e6f280eecf6",
+   "sha256": "a77fc737d4220d0355ed221f75b791b9a108011cbecaa2a1343be549dee458bf",
    "bytes": 7435
   },
   "configurar-chave.py": {
@@ -699,7 +703,7 @@
    "bytes": 2184
   },
   "diagnostico-chave.bat": {
-   "sha256": "a09f621a614ed1051149140ed584a74f8302d7d674ccf0cf53a4942727c4bc9b",
+   "sha256": "f470f578c7a980f7d614bef3f9b713b94ce4f8c9914d852fa108463db7f105a1",
    "bytes": 1302
   },
   "diagnostico-lento.bat": {
@@ -739,8 +743,8 @@
    "bytes": 45900
   },
   "docs/ARVORE.md": {
-   "sha256": "1aaa48a594c31932e35b248cdb57790e006a4fee4766baf602aa628d36b02a54",
-   "bytes": 162797
+   "sha256": "d9afaab87a4682797eed1d04cab9f91042ecfc7a9130bdb3727f6091f127f204",
+   "bytes": 164167
   },
   "docs/ATUALIZACAO.md": {
    "sha256": "89ea6bca324814835e2242dab1ca302b28812d4cb8399511c4d82aeb8b7e1b76",
@@ -947,7 +951,7 @@
    "bytes": 6303
   },
   "docs/SCANNER-DO-CELULAR.md": {
-   "sha256": "ae3d8070d92392576c6aa195c999072220d6a27bb82e5d38af631e22473c898a",
+   "sha256": "35fb67753594e60c4a4569c70eb0a57996d925fe8590ccb14c6bec0c80ca8696",
    "bytes": 20608
   },
   "docs/SELECAO.md": {
@@ -963,8 +967,8 @@
    "bytes": 13847
   },
   "docs/TESTES.md": {
-   "sha256": "2af3edf6e3181babc968f420540c3f88ba172a4b3c6d327a3ff1f0da6c353345",
-   "bytes": 50768
+   "sha256": "e4004b7ce052c643c1b61977f57ec8b265cd7459524c195ea3cf468660b7ffcd",
+   "bytes": 51779
   },
   "docs/licenses/addyosmani-agent-skills.txt": {
    "sha256": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7",
@@ -1059,19 +1063,19 @@
    "bytes": 2552
   },
   "escanear-celular.bat": {
-   "sha256": "45e7ad9bbd445f37eb294263ba1657e0773133888221c9cbc845fcc45a20363f",
+   "sha256": "034a53dcc800beaef9401de7b05d8c4672d73e514ba285bcf44ea50e8c3119ad",
    "bytes": 1487
   },
   "escanear-celular.py": {
-   "sha256": "5711054930f37c2faf28c081de37f8edd658db6496789b8cc211831ca0ed35e0",
-   "bytes": 12617
+   "sha256": "8018d794c7e3b9d49f748b578ec188df552e38bb349415e253ef3a559abbae62",
+   "bytes": 14010
   },
   "formatar-celular.bat": {
-   "sha256": "6b7139cae0308f692f5217a0e2d12dd66b0f0f29530ffe8ba52ec25d5b54301a",
+   "sha256": "019d45b7d1d74a78e5017f3f142e2256232fb3d65cba8e5da76c50387ef570a6",
    "bytes": 1324
   },
   "formatar-celular.ps1": {
-   "sha256": "1f4922770c91589cd4da8c837c9d61ff272456ea6b2fbc3331ce33aefab6fcbd",
+   "sha256": "c3ff4f7d479e31e4de4f8ec529f3a2be9f4fb4a2507258f268efb6b430800c35",
    "bytes": 13112
   },
   "icone-do-jogo-exemplo.png": {
@@ -1091,7 +1095,7 @@
    "bytes": 7695
   },
   "instalar-driver-celular.bat": {
-   "sha256": "f5871f5e4bf2e2fd40d717cb46fa3083d839e76b21af5a38af3637b8370c3708",
+   "sha256": "8e3063e5210a2b1415da8573b8681b66c5f677049f30acc35d923fd495c23544",
    "bytes": 1767
   },
   "ligar-celular.bat": {
@@ -1107,11 +1111,11 @@
    "bytes": 13450
   },
   "package-lock.json": {
-   "sha256": "e3f16e8837292ca3bfc9a3dcece874922627b8064cd283ad7c7a46e3acdb7233",
+   "sha256": "18ed0d3309515d74e5c7feaca8957a5f28e5ee887bfa97516f7f8b3b71e79665",
    "bytes": 81798
   },
   "package.json": {
-   "sha256": "30c759eb29822c3378279d6cf95a894a884bb9558f460a51c2e1cc8a99d4ec82",
+   "sha256": "05e5de471cc43a081b13a736a3eb00d7a94da44958ac355c63808385400f7d29",
    "bytes": 1350
   },
   "parar-jarvis.bat": {
@@ -1119,7 +1123,7 @@
    "bytes": 1702
   },
   "pegar-chave.bat": {
-   "sha256": "f1feda8f688bf3d608edb7c7cdee37f91bf6c76b1f0b4f20ca55d0695449b550",
+   "sha256": "3d2de8704a2333b0a13cbf52143221c326e6a338c5cb0e64a527a1307bdc33e7",
    "bytes": 2730
   },
   "public/favicon.svg": {
@@ -1143,11 +1147,11 @@
    "bytes": 750
   },
   "resgatar-cartao.bat": {
-   "sha256": "b1f2dbe48b7bde1141ab3b55c2b1d3e56d4e5ebc581d57508c407aeba4770f1c",
+   "sha256": "663389f76b0b944f7171df9e9246540c9659b3f617da88f249369ab30595dab8",
    "bytes": 1400
   },
   "resgatar-cartao.ps1": {
-   "sha256": "ef69d81266b9b20281b49e9ced592b63c8ca0899c008de0219ea74134b0906d8",
+   "sha256": "0e6103efefb83fec8d80a5140373513236a8270d72d4b1374ce31786d9c1b6c7",
    "bytes": 13022
   },
   "scripts/checar-pendrive.mjs": {
@@ -1195,7 +1199,7 @@
    "bytes": 6930
   },
   "server/agente_local.py": {
-   "sha256": "061cb6c51fe082e3e6c01db350bc0cfa45bc727543d2a9dbdf77b5e80d47175a",
+   "sha256": "472492103307f3e704d7142b863416d83780b37f8898752e32529516093fde88",
    "bytes": 196374
   },
   "server/ai.py": {
@@ -1203,7 +1207,7 @@
    "bytes": 35259
   },
   "server/anatomia.py": {
-   "sha256": "35e2ae43b848d2ccc86d8c0d890b20a5e196c7f44e9fa5c9ab19e3aa24a78220",
+   "sha256": "0adc0e94163d44222b92913d80683f723c65aada4d158f910007a28d10b742c3",
    "bytes": 38360
   },
   "server/app.py": {
@@ -1227,7 +1231,7 @@
    "bytes": 78891
   },
   "server/atualizacao.py": {
-   "sha256": "3dcd09f5067729f3b5012652fab9514df32f6a520f795c45d2d9f0a30836ec8e",
+   "sha256": "c81460c9f06173b690b42adf3066543e038021730a6985c9b15abfe7b42c1de2",
    "bytes": 35816
   },
   "server/backup.py": {
@@ -1274,6 +1278,10 @@
    "sha256": "b238f0ebcefe0c445eb5edd37fd8fbc342930c8095c2f5a7f721d70b9a8baa7f",
    "bytes": 81141
   },
+  "server/compatibilidade.py": {
+   "sha256": "8fc195e08ad579d8d892cf9d3fc554984bd72e86b3134455de6a7dd0bb7b28e0",
+   "bytes": 18231
+  },
   "server/conectores.py": {
    "sha256": "a23a8cb83c2bdb095e030645d65643b70b8e18b27df6f7a2f6ce49a79f381259",
    "bytes": 22230
@@ -1319,7 +1327,7 @@
    "bytes": 8399
   },
   "server/diagnostico_celular.py": {
-   "sha256": "8427cb859b662d7139afa7a4dd9dfee6d9a0611bf1bb222a63c29aaf3c4e491a",
+   "sha256": "6bebaaad73035cfac5822de073aa9a6b60757b0b3e749438d622dfd8bbd0b8ea",
    "bytes": 64860
   },
   "server/diagram.py": {
@@ -1523,7 +1531,7 @@
    "bytes": 24036
   },
   "server/plano_acao.py": {
-   "sha256": "a05d85eb7fac08d6d9e1e83d4055ab43e43acd885a8ae2ecbb75cd02f1610f23",
+   "sha256": "03fd4ae3c851eec301becbe17416429c33a841fb6785c8d9a4ca0f3c4b3e9c38",
    "bytes": 16471
   },
   "server/portabilidade.py": {
@@ -1567,12 +1575,12 @@
    "bytes": 77822
   },
   "server/sistema.py": {
-   "sha256": "8e2feb977b633adc14653bac34c86ab450fd647854a23d0e80c10a7d7d943056",
+   "sha256": "9ebebc84cad5f793e20f541a0f146bf188d3b019d3ccf54a0434ca5a4490f472",
    "bytes": 126530
   },
   "server/skill_registry.py": {
-   "sha256": "73ebb07b1fae7141fa1bd60039360558d7234d3cf6791ec279adb26bb8869efa",
-   "bytes": 471547
+   "sha256": "3abf17e642fcc99bf28882f7ed7147f65098c04fc471416e38a715ee2d2125dc",
+   "bytes": 473383
   },
   "server/studio.py": {
    "sha256": "1c47d5f64e331a0ffc48ac6c4e23056436cad141508ff3454e035355f435bd7e",
@@ -1611,7 +1619,7 @@
    "bytes": 12657
   },
   "server/tests/test_agency.py": {
-   "sha256": "8b517246c6f1ebb563193beabd5f23bfc032c0aeea78107e0dedf9802ce2616f",
+   "sha256": "047276b6b7ae79294802e452f5f5c05465febab69724cc7e694e3f0d1e045a6d",
    "bytes": 20113
   },
   "server/tests/test_agenda.py": {
@@ -1619,7 +1627,7 @@
    "bytes": 10273
   },
   "server/tests/test_agente_local.py": {
-   "sha256": "db8ce515ab58c5c738bed94ac5abd3ce05bafc1bd30823917cdb46eca2debf01",
+   "sha256": "4776e08104a1bb1ee35f8ada531c8e56114d6d13f9afe65642b0bc7c6ebc58b5",
    "bytes": 111929
   },
   "server/tests/test_ai_provider.py": {
@@ -1627,11 +1635,11 @@
    "bytes": 26543
   },
   "server/tests/test_anatomia.py": {
-   "sha256": "ea89880091b0b2c9dc0b4fb9727fc7cf568a09f62fe610b875a0a1d8c686e4c5",
+   "sha256": "1df72c22d6a6a82c53359e812ecdceae1ca4faee65e24a03b8841397cc5aa474",
    "bytes": 20980
   },
   "server/tests/test_api.py": {
-   "sha256": "704c1d656f6d880d71bc25bf4708927480617d3f8edfb42782e86f8e70ad4b5b",
+   "sha256": "2ebc6be354a556199989ff190b1d80a5aaff36b960a671af3e4b8d9e73ffa5d1",
    "bytes": 17383
   },
   "server/tests/test_arrumar.py": {
@@ -1643,7 +1651,7 @@
    "bytes": 70497
   },
   "server/tests/test_atualizacao.py": {
-   "sha256": "7d97c5559c77209dad7f4e5c7bba8a11b7b7d1c00162299a12136a6cc4bb7a56",
+   "sha256": "c1ba5d07f588fcf2f8432779ae75391d43ac6e6874e7a93df1fb74dea700fa65",
    "bytes": 29712
   },
   "server/tests/test_atualizador.py": {
@@ -1663,7 +1671,7 @@
    "bytes": 10729
   },
   "server/tests/test_career.py": {
-   "sha256": "6fbb2b049a707957fa47bcf677683a3a37a645ff56e49eb11de5d320786c342d",
+   "sha256": "9b84e1518335e75a7d2160237da93d778f0383633a2854d649f63ef27c4f50f1",
    "bytes": 24576
   },
   "server/tests/test_catalogo.py": {
@@ -1706,6 +1714,10 @@
    "sha256": "b591bc993d4b9d10da3fc4a8770b2996c869221f45be59b175b94af843c4a884",
    "bytes": 19966
   },
+  "server/tests/test_compatibilidade.py": {
+   "sha256": "c337e6ce22a5a418016b5acd24b1bccdc73d5e6d36e38e2c1d0882fa1f0a4135",
+   "bytes": 5646
+  },
   "server/tests/test_conectores.py": {
    "sha256": "d658457e239cc4a70b57839082a89c8cae25c93eeabac2675647a877f622c97c",
    "bytes": 12677
@@ -1715,7 +1727,7 @@
    "bytes": 7413
   },
   "server/tests/test_confianca.py": {
-   "sha256": "2774621a0d8bf02496e36ef2a835eb86d27db80ec133b1ea8e7f8582ad1dc285",
+   "sha256": "ea7639ef3656f464f0f4632ab5f5fe485333f4228aaf930558a74e0f84378f7d",
    "bytes": 19721
   },
   "server/tests/test_configurar_chave.py": {
@@ -1731,7 +1743,7 @@
    "bytes": 18843
   },
   "server/tests/test_continuidade.py": {
-   "sha256": "1c782cea56528eec6ed11425869d957f59f36e670a1f69ca1dc471491c2ea524",
+   "sha256": "f2a32d029e24ea9d00bb5ed7f9b8a939888b27146489d2a7f99324507bdfdd84",
    "bytes": 22720
   },
   "server/tests/test_conversa.py": {
@@ -1751,7 +1763,7 @@
    "bytes": 5826
   },
   "server/tests/test_curadoria.py": {
-   "sha256": "a1f65447a7fc71fd401d3ba6e3cc7c5d6d9b7e37cf9c702af7dc8ce215513d9e",
+   "sha256": "0ef46a9721d78b884f744bf1d7a6e437ffe663a6e3c05a0f50193673d2086171",
    "bytes": 24462
   },
   "server/tests/test_dados.py": {
@@ -1763,15 +1775,15 @@
    "bytes": 5703
   },
   "server/tests/test_diagnostico_celular.py": {
-   "sha256": "4de29f835c37738eb083b87926e42684244d610f72dad62c3efb73ce1f3824fd",
+   "sha256": "6e79861c6dfc7d51934453c76317dd96251cae5a06362617372ff6829b4fdad2",
    "bytes": 43554
   },
   "server/tests/test_diagram.py": {
-   "sha256": "37111139af7c1dd4a3a08a933fb60240ee43e495bde7cefb059973dfce6c6138",
+   "sha256": "f747ea07c1ba469a3c4d89c7e7921f6c0f986f011ac5ce9ba6273b815a615114",
    "bytes": 21249
   },
   "server/tests/test_distilar.py": {
-   "sha256": "35f591151fcbfbf362c104556f3cb09aa2ef3eddfaba8c69cb5411544d67b047",
+   "sha256": "b39b242192b79cd3aff9e1dd1ab41185759e2c1f76895eedd585815d5cc27645",
    "bytes": 21579
   },
   "server/tests/test_ditar.py": {
@@ -1787,11 +1799,11 @@
    "bytes": 14580
   },
   "server/tests/test_editorial.py": {
-   "sha256": "addae6558a57520b06ba348a6248da427dd11f6bf646cb65a160873a086327f1",
+   "sha256": "7fc9a317adb167906999fd284f44e1b20b5d48795a0041033af95c011a23fba9",
    "bytes": 30096
   },
   "server/tests/test_elevacao.py": {
-   "sha256": "ec4db200612c96db5892915a187f35a22949870878716e169c244ede7119b6f9",
+   "sha256": "105e092025b367963be82ccddf91597aa0962431fd8f0ee5ae53a6032ec53fb9",
    "bytes": 17051
   },
   "server/tests/test_engineering.py": {
@@ -1807,7 +1819,7 @@
    "bytes": 14951
   },
   "server/tests/test_escritorio.py": {
-   "sha256": "a114b785a6e229b88b13ddd2a80a0157c9feb5868d15227b052eca3809c3d5aa",
+   "sha256": "dd0f4fcfede9d5cf185ba66dc95e2b73ac5df9c80fa02d210ba5707047b9e3c5",
    "bytes": 26025
   },
   "server/tests/test_estacao.py": {
@@ -1823,7 +1835,7 @@
    "bytes": 11828
   },
   "server/tests/test_evolucao.py": {
-   "sha256": "e497a9cfe601e7197033b50d4f7b36d6462a1ad6d349ba969ff56c182a1d8096",
+   "sha256": "02bcf22cf42c6fac716aef66ef3a6cd1d3f382fd81c516153e1c7bccd40b75d6",
    "bytes": 27107
   },
   "server/tests/test_formatar_celular.py": {
@@ -1899,11 +1911,11 @@
    "bytes": 24669
   },
   "server/tests/test_marketing.py": {
-   "sha256": "abe5d3ebf926d8ced8e939b8cb4ce7508a3a4f4349da5975863d80bb315a6f47",
+   "sha256": "fb400c95d08f63b520566cfa4159d6d9fadc63d3340d2a6378d9bfe74374d1a7",
    "bytes": 22500
   },
   "server/tests/test_memoria.py": {
-   "sha256": "275aefdc076ec06b4d2af2afdccd17817567623013cd1edba552ea04029d1381",
+   "sha256": "ba933b506386e7606074e77ae32d6e87c74bdb7a49ce3f9d7c4c73e4d196ea63",
    "bytes": 20566
   },
   "server/tests/test_mesa.py": {
@@ -1955,11 +1967,11 @@
    "bytes": 9482
   },
   "server/tests/test_plano_acao.py": {
-   "sha256": "41a1b2262292e3320f29391441c3dbd34761c8909edfb9d7628827dd71a52005",
+   "sha256": "1bc39cb1ce7c0e2f8b6bc4e0951eaa93c07338395d1c6680b4733a455f676b35",
    "bytes": 9450
   },
   "server/tests/test_portabilidade.py": {
-   "sha256": "76b852f7271a24815ce5e84ae811fcd342111b9660f4ed490ab51b65bccd7de0",
+   "sha256": "7ab94267693f3f7657605fe1d73d4c9b026c59bcfbd05cea84c35214dca6f852",
    "bytes": 19236
   },
   "server/tests/test_processos_portatil.py": {
@@ -1987,11 +1999,11 @@
    "bytes": 4812
   },
   "server/tests/test_reverse.py": {
-   "sha256": "15198e1c7b7758b12c7046c03561e062d64105cc0ea0d7174982e48a36d1b778",
+   "sha256": "fe391e11dcc075a151cf079f822c89152f4a94b7ccc8c83dace7158121805dc4",
    "bytes": 18502
   },
   "server/tests/test_revisao.py": {
-   "sha256": "1c1b743ee3f94816bda156063096ca62a5190f41cfceee5aadc6213ed029c2b1",
+   "sha256": "6791bbab96564af56c733f7be7789f0defb053f6930503f5e42e74ab70496195",
    "bytes": 27170
   },
   "server/tests/test_selecao.py": {
@@ -1999,19 +2011,19 @@
    "bytes": 21158
   },
   "server/tests/test_sistema.py": {
-   "sha256": "190dd3b1a9f6e34f17eca0248f85415f3ce0219741ed98e29840e9d1847d8e9c",
-   "bytes": 60804
+   "sha256": "1b3f2a6e0dfb628958cb669680810dde15931c2efdf05499916385a95e6370d2",
+   "bytes": 60802
   },
   "server/tests/test_studio.py": {
-   "sha256": "1eea07184cd5d2e4dbb3690cb6715fc47007d1f5d83ed91bb75552b157b6fbc7",
+   "sha256": "44d36f4a286e6a2b82a6daacd39b6225ee448080fde985cc953f62157728264f",
    "bytes": 27332
   },
   "server/tests/test_submissao.py": {
-   "sha256": "8fa62da1d686aaa8560f1a86eb56983cf82b96c0255d8de0bfaa4dcd480ea9f5",
+   "sha256": "ebefe0a5ab6287432b10717d8729e29f2a19c2434e5f8718d6e5903ecc1d4af5",
    "bytes": 28073
   },
   "server/tests/test_taste.py": {
-   "sha256": "cd056ab45d0656189edc585bb46023400650a36af9fd4f594b0f3cd99c3a54ca",
+   "sha256": "1abedeaee4cb8beb5300ead550117c77a06f2803dbb7ced2170b3a85ef071e27",
    "bytes": 24177
   },
   "server/tests/test_tempo.py": {
@@ -2023,7 +2035,7 @@
    "bytes": 6848
   },
   "server/tests/test_varredura.py": {
-   "sha256": "2a739910dca1b25764d0c03fefc42e3a4175ce1e8f6a7bd1f193f8ac86168750",
+   "sha256": "0cefafc816665032a01ee14dc9c6513c0c38fe35416e278562c4fa90276cd278",
    "bytes": 52031
   },
   "server/tests/test_verificar_versao.py": {
@@ -2047,7 +2059,7 @@
    "bytes": 3985
   },
   "server/varredura.py": {
-   "sha256": "97ef35b4a546386985ec56f66f8182236c07e69be2800a89b1b8d0474070d668",
+   "sha256": "0c920d14307628ffd57d135077142c78656ed0f73003162f07f74c8ab866eabf",
    "bytes": 61560
   },
   "server/video.py": {
@@ -2059,7 +2071,7 @@
    "bytes": 1743
   },
   "sonda-otg.bat": {
-   "sha256": "a0a9089833f6348e795e3584a4f1d26bb676a8a54bbdff3a4c252627102a3471",
+   "sha256": "19ede1dc11d5caf6ac28ed98d64e5ef93770202fb8a80c0889d0f49b81815a12",
    "bytes": 1580
   },
   "sonda-otg.ps1": {
@@ -2555,11 +2567,11 @@
    "bytes": 38
   },
   "teclado-pelo-pc.bat": {
-   "sha256": "40481283bab04f0c73d6473d06dc2a9aaf93ff9e43fee1edb088699ec023780f",
+   "sha256": "6ee3412533575aba7adc0baff44230f5bd06065c200bcd5b751ffaef0b158c9f",
    "bytes": 5844
   },
   "testar-no-iphone.bat": {
-   "sha256": "b9995ff78e107f0836d890f4bc35b75d202ec8469cd6874416d56c5618aa8479",
+   "sha256": "1ccc30adb0b7429fe392d950adcf10d369c71194f06972c714ad77846b94526d",
    "bytes": 1858
   },
   "testar-no-iphone.py": {
@@ -2567,7 +2579,7 @@
    "bytes": 6837
   },
   "teste-cabo.bat": {
-   "sha256": "f16cf480fb31372813423bc5b762710e6adfe1cbf24b497519f9ae85018c1aad",
+   "sha256": "7087724766fafe6161ef104d2f4c4e84253a2a2b7ecf03150cc1172d2c55edfd",
    "bytes": 1262
   },
   "teste-cabo.ps1": {
@@ -2607,15 +2619,15 @@
    "bytes": 677
   },
   "usar-google.bat": {
-   "sha256": "f5e4d5df0cbbd082891e6d050debbf09c9818e805233b73e769c3aa18b7bc5df",
+   "sha256": "5d9a71666d1c92eac09d5ec0628a83e79f2601d4adef399a518338ac00530686",
    "bytes": 1490
   },
   "usar-openrouter.bat": {
-   "sha256": "0ff250f3088669a521a3e7d6e8d83808716a3f87f554486a53bc636a65290279",
+   "sha256": "58e44af5fa947cb5fbdb0d833768fbfe8fd681785c985a836aeeb9e30bd257e0",
    "bytes": 1316
   },
   "ver-tudo-no-celular.bat": {
-   "sha256": "31f18f4e4c888091f8f52bfdf535c643a9f52bcb10e0104d943a602802a3ac49",
+   "sha256": "53d60453d51ebf7144e0476cc93d894083b1e1ce9e90a15e49bd3319fb2c02b0",
    "bytes": 1725
   },
   "verificar_versao.py": {
@@ -2623,7 +2635,7 @@
    "bytes": 6267
   },
   "vigiar-cabo.bat": {
-   "sha256": "06bce0f1b893c295cd8a0d70c188ce36a4c3230006fcabae79cd7c51f86ae9c2",
+   "sha256": "bc5fa570a4ab133be31334582d061a6f9f2936846ac8fe420feb6479f3523cd5",
    "bytes": 1561
   },
   "vigiar-usb-atento.bat": {
@@ -2723,7 +2735,7 @@
    "bytes": 645
   },
   "web-dist/versao.json": {
-   "sha256": "e5cb4ad792e5fa7c076ec878512a5cb5732c00b9f4541c02dff8e24ce0e1a9fb",
+   "sha256": "b0e4d002bc62cb95548970f31282fb44260d1bf29a626eb66edf3d89fe8a3e0a",
    "bytes": 67
   }
  }

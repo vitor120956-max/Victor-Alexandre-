@@ -3239,3 +3239,29 @@ nomeia o motivo.
 Por fim, `driver_instalado()`: antes de baixar 33 MB, pergunta se a interface ADB
 da Samsung já está no Windows. O dono rodou o `.bat` três vezes seguidas.
 
+### 0.95.5 — oito sistemas, três impossíveis, e a skill que diz por quê
+
+> *“coloque no jarvis lindows, parrot OS, templeOS, astra linux, red star os,
+> whonix, neokylin e windows gaming edition”*
+
+A resposta fácil seria uma lista de oito nomes na tela. Seria mentira em três
+deles, e inútil nos outros cinco. `compatibilidade.py` guarda oito `Sistema` com
+família de pacote, veredito e **o que quebra** — e uma regra que os testes
+cobram: **sistema sem caminho não recebe comando**.
+
+| veredito | sistemas |
+|---|---|
+| roda | Parrot, Astra |
+| roda, com ressalva | NeoKylin (RPM sem `adb` no repo), Whonix (tudo passa pelo Tor) |
+| não roda | Lindows (repositório morto em 2008), Red Star (fechado), TempleOS (sem Python, sem `pip`, sem TLS) |
+| não recomendado | “Windows Gaming Edition” (não é da Microsoft) |
+
+Para os que rodam, os comandos saem certos por família — `apt` para Debian,
+`dnf` para RPM — e `medir()` lê `/etc/os-release`, Python, `pip`, `adb`, `git` e
+`ffmpeg` da máquina atual. Se já está tudo lá, o passo a passo encolhe.
+
+Dois defeitos que os testes acharam: o handler de `sistema.driver-celular` usava
+`sistema_mod` **sem importar** desde a 0.95.2 (o teste só lia o schema; agora os
+handlers rodam), e o meu primeiro teste de “nome desconhecido” exigia minúscula
+numa mensagem que lista os nomes certos.
+

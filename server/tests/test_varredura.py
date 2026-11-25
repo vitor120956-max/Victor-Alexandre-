@@ -856,7 +856,7 @@ def test_secao_sem_item_nao_sai_como_titulo_vazio():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
+# 0.95.5 — os defeitos que o relatório REAL do dono (SM-A346M, Android 16) expôs
 #
 # O relatório rodou de ponta a ponta: 25 de 28 leituras, fila de suspeitas
 # montada. E mesmo assim mentiu em quatro pontos. Todos só apareceram com
@@ -1053,7 +1053,7 @@ def test_a_mesma_negativa_nao_aparece_duas_vezes():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — o pacote das leituras cruas (`--pacote` / `--refazer`)
+# 0.95.5 — o pacote das leituras cruas (`--pacote` / `--refazer`)
 # ---------------------------------------------------------------------------
 
 
@@ -1180,7 +1180,7 @@ def test_o_bat_do_celular_e_ascii_crlf_e_repete_a_opcao_do_pacote():
         bruto = (raiz / nome).read_bytes()
         assert [b for b in bruto if b > 127] == [], f"{nome} tem byte não-ASCII"
         assert bruto.count(b"\n") == bruto.count(b"\r\n"), f"{nome} não é CRLF puro"
-        assert b"0.95.4" in bruto, f"{nome} ficou numa versão antiga"
+        assert b"0.95.5" in bruto, f"{nome} ficou numa versão antiga"
 
     texto = (raiz / "ver-tudo-no-celular.bat").read_text(encoding="ascii")
     assert "--pacote" in texto
@@ -1191,7 +1191,7 @@ def test_o_bat_do_celular_e_ascii_crlf_e_repete_a_opcao_do_pacote():
 def test_o_scanner_sozinho_tambem_empacota(monkeypatch):
     """`--pacote` tem de valer no caminho do `escanear-celular.bat` também.
 
-    0.95.4 — antes só a varredura completa guardava as leituras, e o dono que
+    0.95.5 — antes só a varredura completa guardava as leituras, e o dono que
     usa o scanner sozinho (o do duplo clique mais antigo) ficava sem pacote.
     """
     import zipfile

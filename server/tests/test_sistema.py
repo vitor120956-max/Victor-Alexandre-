@@ -1366,12 +1366,12 @@ def client(tmp_path):
 def test_api_health_na_versao_nova(client):
     dados = client.get("/api/health").json()
     assert dados["version"] == VERSAO
-    assert dados["skills"] == 359
+    assert dados["skills"] == 360
 
 
-def test_api_lista_as_dezessete_skills_de_sistema(client):
+def test_api_lista_as_dezoito_skills_de_sistema(client):
     ids = [item["id"] for item in client.get("/api/skills").json()["skills"]]
-    assert len([item for item in ids if item.startswith("sistema.")]) == 17
+    assert len([item for item in ids if item.startswith("sistema.")]) == 18
 
 
 def test_api_sistema_disco_exige_token_com_trava_local(client, monkeypatch):

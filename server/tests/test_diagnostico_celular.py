@@ -633,7 +633,7 @@ def test_o_texto_do_console_mostra_a_fila_de_suspeitas():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
+# 0.95.5 — “está conectado” e o adb não vê: a mensagem tem de dizer o porquê
 # ---------------------------------------------------------------------------
 
 
@@ -699,7 +699,7 @@ def test_adb_vazio_e_windows_sem_celular_culpa_cabo_porta(monkeypatch):
 def test_sonda_de_usb_fora_do_windows_nao_quebra_a_mensagem(monkeypatch):
     """Sem a sonda, a frase diz que NÃO perguntou ao Windows — não chuta driver.
 
-    0.95.4 — antes ela devolvia o mesmo palpite de sempre ("confira o cabo"), e
+    0.95.5 — antes ela devolvia o mesmo palpite de sempre ("confira o cabo"), e
     o dono recebeu exatamente essa frase duas varreduras seguidas: a primeira
     leu o aparelho inteiro, a segunda não viu nada. A frase agora nomeia a
     diferença em vez de repetir a lista de sempre.
@@ -730,7 +730,7 @@ def test_sonda_que_explode_nao_derruba_o_diagnostico(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — “vai chover amanhã?” não é pedido para fechar app
+# 0.95.5 — “vai chover amanhã?” não é pedido para fechar app
 # ---------------------------------------------------------------------------
 
 
@@ -775,7 +775,7 @@ def test_nome_de_exibicao_sem_pontos_continua_recusado_com_a_dica_antiga():
 
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — o JARVIS instala o driver em vez de mandar o dono baixar
+# 0.95.5 — o JARVIS instala o driver em vez de mandar o dono baixar
 # ---------------------------------------------------------------------------
 
 
@@ -865,7 +865,7 @@ def test_a_skill_do_driver_esta_no_registro_e_diz_o_que_faz():
 
 
 def test_driver_nao_diz_instalado_quando_o_plano_nao_devolve_token(monkeypatch):
-    """0.95.4 baixava e parava no plano — o dono achava que estava instalado.
+    """0.95.5 baixava e parava no plano — o dono achava que estava instalado.
 
     `instalar()` só monta o plano e devolve o token; quem executa é `executar()`.
     Se o token não vier, o certo é falhar alto, não devolver "baixado" e seguir.
@@ -889,9 +889,9 @@ def test_driver_nao_diz_instalado_quando_o_plano_nao_devolve_token(monkeypatch):
 
 
 def test_escanear_driver_instala_de_ponta_a_ponta_com_janela_falsa(monkeypatch, capsys):
-    """0.95.4 — o caminho que o dono roda: `escanear-celular.bat --driver`.
+    """0.95.5 — o caminho que o dono roda: `escanear-celular.bat --driver`.
 
-    A 0.95.4 devolvia o plano de instalação e parava. Aqui a prova é a ponta:
+    A 0.95.5 devolvia o plano de instalação e parava. Aqui a prova é a ponta:
     `instalar` monta, `executar` executa, e a tela final diz o que fazer depois.
     """
     import importlib.util
@@ -953,7 +953,7 @@ def test_configurar_celular_liga_as_permissoes_do_driver(tmp_path, monkeypatch):
 
 
 def test_script_local_nao_pede_token_de_host(monkeypatch):
-    """0.95.4 — o `.bat` roda no PC do dono e pedia token de host.
+    """0.95.5 — o `.bat` roda no PC do dono e pedia token de host.
 
     A tela dele: *“Sem token e este pedido não veio da própria máquina.”* —
     vindo de um `.bat` na própria máquina. O token existe para barrar site de
@@ -1008,7 +1008,7 @@ def test_rede_desligada_explica_que_e_linha_de_env_e_nao_comando(monkeypatch):
 
 
 def test_o_plano_do_driver_avisa_que_o_cabo_tem_de_estar_conectado(monkeypatch):
-    """0.95.4 — eu tinha escrito “com o celular desconectado”, e é o contrário.
+    """0.95.5 — eu tinha escrito “com o celular desconectado”, e é o contrário.
 
     O instalador da Samsung é da época do Kies: ele reconhece o aparelho plugado.
     Sem o cabo, termina “com sucesso” e não instala a interface de depuração.
@@ -1022,7 +1022,7 @@ def test_o_plano_do_driver_avisa_que_o_cabo_tem_de_estar_conectado(monkeypatch):
 
 
 def test_driver_instalado_nao_baixa_de_novo(monkeypatch):
-    """0.95.4 — o dono rodou o `.bat` três vezes; 33 MB em cada uma seria absurdo."""
+    """0.95.5 — o dono rodou o `.bat` três vezes; 33 MB em cada uma seria absurdo."""
     import importlib.util
     from pathlib import Path
 
@@ -1070,7 +1070,7 @@ def test_driver_instalado_nao_confunde_linux(monkeypatch):
 def test_a_api_continua_exigindo_token(monkeypatch):
     """A isenção é do script local — a API nunca pode passar `script_local`.
 
-    0.95.4 — na primeira tentativa eu tirei o token de `_exigir()` para todo
+    0.95.5 — na primeira tentativa eu tirei o token de `_exigir()` para todo
     mundo e derrubei 8 testes: `disco()`, `baixar()`, `instalar()` e `executar()`
     são chamados pela API. Aqui fica preso que, sem `script_local`, o token
     continua sendo cobrado mesmo na própria máquina.

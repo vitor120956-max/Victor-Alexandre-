@@ -60,7 +60,7 @@ from typing import Any, Callable
 
 from . import dados as dados_locais
 
-VERSAO = "0.95.4"
+VERSAO = "0.95.5"
 NOME_MANIFESTO = "manifest.json"
 
 # Onde o manifesto e os arquivos moram. Trocável por `JARVIS_ATUALIZACAO_URL`
@@ -70,7 +70,7 @@ BASE_PADRAO = (
     "/arena/f26cfa7a-victor-alexandre"
 )
 
-# 0.95.4 — fonte alternativa, para quando `raw.githubusercontent.com` está
+# 0.95.5 — fonte alternativa, para quando `raw.githubusercontent.com` está
 # bloqueado. Isso não é hipótese: no ambiente de teste do próprio projeto o
 # `raw` devolveu **000** (conexão derrubada) enquanto `codeload` e
 # `api.github.com` respondiam 200. Operadora, DNS de escola e filtro
@@ -297,7 +297,7 @@ def _baixar_url(url: str) -> bytes:
 def rota_funciona(baixar: Callable[[str], bytes] | None = None) -> dict[str, Any]:
     """A rota principal responde? Se não, qual usar.
 
-    0.95.4 — o dono não pode ser obrigado a descobrir que o `raw` está
+    0.95.5 — o dono não pode ser obrigado a descobrir que o `raw` está
     bloqueado. Esta função **mede** antes: tenta o manifesto pela base normal
     e, se falhar, confirma se o `codeload` está de pé (é de lá que vem o zip).
 

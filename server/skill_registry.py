@@ -26,6 +26,8 @@ from .agency import (
     default_permissions,
     verify_watchdog,
 )
+from . import compatibilidade as compatibilidade_mod
+from . import sistema as sistema_mod
 from . import acoes as acoes_mod
 from . import agenda as agenda_local
 from . import conversa as conversa_mod
@@ -1313,6 +1315,16 @@ class SistemaInstalarInput(BaseModel):
     autorizacao: str = Field(default="", max_length=200, title="Token de host")
 
 
+class SistemaCompatibilidadeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sistema: str = Field(
+        default="", max_length=60, title="Sistema",
+        json_schema_extra={"description": "Ex.: parrot, astra, neokylin, whonix, lindows, redstar, templeos, windows gaming. Vazio lista todos."},
+    )
+    modo: Literal["lite", "full", "ultra"] = Field(default="full", title="Nível")
+    autorizacao: str = Field(default="", max_length=200, title="Token de host")
+
+
 class SistemaDriverCelularInput(BaseModel):
     """Driver USB do fabricante — a trava por trás do “conectado mas o adb não vê”."""
 
@@ -2279,7 +2291,7 @@ class CelularFecharAppInput(BaseModel):
     @field_validator("pacote")
     @classmethod
     def _so_nome_de_pacote(cls, valor: str) -> str:
-        """Recusa a frase inteira — 0.95.4.
+        """Recusa a frase inteira — 0.95.5.
 
         O dono pediu “vai chover amanhã?” e recebeu a recusa desta skill: o
         modelo escolheu a ferramenta errada e o texto foi como `pacote`. A
@@ -5187,6 +5199,15 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         except SistemaError as exc:
             raise SkillError(str(exc)) from exc
 
+    def sistema_compatibilidade_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
+        assert isinstance(data, SistemaCompatibilidadeInput)
+        try:
+            if data.sistema.strip():
+                return compatibilidade_mod.plano(data.sistema)
+            return {"sistemas": compatibilidade_mod.sistemas(), "esta_maquina": compatibilidade_mod.medir()}
+        except sistema_mod.SistemaError as exc:
+            raise SkillError(str(exc)) from exc
+
     def sistema_driver_celular_handler(data: BaseModel, _dry_run: bool) -> dict[str, Any]:
         assert isinstance(data, SistemaDriverCelularInput)
         try:
@@ -6350,6 +6371,7 @@ def build_registry(files_root: Path, ai_provider: Any | None = None) -> "SkillRe
         SkillDefinition("sistema.assinatura", "Assinatura e integridade", "Calcula o SHA-256 em fluxo, compara com o hash publicado e verifica a assinatura digital pelo que a plataforma oferece: Authenticode no Windows, rpm -K, dpkg-sig ou gpg para assinatura destacada — declarando quando não é verificável.", "Sistema", SistemaAssinaturaInput, sistema_assinatura_handler, timeout_seconds=60),
         SkillDefinition("sistema.instalar", "Plano de instalação", "Monta o comando exato do instalador, declara o risco e devolve o token de uso único; aceita msi, msix, deb, rpm, exe, AppImage, pip e npm, e só arquivo da quarentena.", "Sistema", SistemaInstalarInput, sistema_instalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.driver-celular", "Instalar o driver do celular (sem baixar à mão)", "Baixa e instala o **Samsung USB Driver** — o passo que faz o `adb` enxergar o aparelho quando o Windows só monta o MTP (a pasta do celular aparece no Explorer e `adb devices` fica vazio). Instala **no PC**, não no celular: nenhum app é instalado no aparelho. Sem `confirmado`, devolve só o plano com a URL oficial, o tamanho e o que muda. Exige `JARVIS_HOST_REDE=1` para baixar e `JARVIS_HOST_INSTALAR=1` para instalar; o arquivo vai para a quarentena e a assinatura é conferida antes de rodar.", "Sistema", SistemaDriverCelularInput, sistema_driver_celular_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=660, keywords=("driver samsung", "instalar driver", "usb driver", "adb nao ve", "celular nao aparece")),
+        SkillDefinition("sistema.compatibilidade", "Roda em qual sistema?", "Diz, para Lindows, Parrot, TempleOS, Astra Linux, Red Star OS, Whonix, NeoKylin e \"Windows Gaming Edition\", se o JARVIS instala ali e **o que quebra** — com o passo a passo real (apt/dnf) para os que rodam. Mede a máquina atual — `/etc/os-release`, Python, `pip`, `adb`, `git`, `ffmpeg` — em vez de supor. Para TempleOS, Lindows, Red Star e a \"Gaming Edition\" a resposta é a recusa com o motivo técnico, nunca um comando inventado. Não instala nada: devolve o plano.", "Sistema", SistemaCompatibilidadeInput, sistema_compatibilidade_handler, timeout_seconds=30, keywords=("lindows", "parrot", "templeos", "astra", "red star", "whonix", "neokylin", "gaming edition", "outro sistema", "distro")),
         SkillDefinition("sistema.desinstalar", "Plano de desinstalação", "Monta o comando de remoção por gerenciador (`dpkg:`, `rpm:`, `pip:`, `npm:`, `msi:{GUID}`) ou por um `.msi` da quarentena, com risco declarado e token de uso único.", "Sistema", SistemaDesinstalarInput, sistema_desinstalar_handler, timeout_seconds=30),
         SkillDefinition("sistema.executar", "Execução do plano", "Executa o plano confirmado depois de `JARVIS_HOST_INSTALAR=1` e do token de uso único, e devolve código de saída e mensagens do instalador.", "Sistema", SistemaExecutarInput, sistema_executar_handler, side_effects=True, dry_run_supported=True, requires_confirmation=True, timeout_seconds=300),
         SkillDefinition("distilar.persona", "Perfil gerado por IA", "Pede o rascunho ao provedor externo configurado no .env, monta o SKILL.md com front matter determinístico e submete o texto ao lastro e ao gate de qualidade. Exporta o material para o provedor e consome tokens: exige confirmação.", "Pessoa", DistilarPersonaInput, distilar_persona_handler, side_effects=True, requires_confirmation=True, timeout_seconds=180),

@@ -49,7 +49,7 @@ def _salvar(relatorio: dict) -> Path:
     pasta = _pasta()
     pasta.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    # 0.95.4 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
+    # 0.95.5 — o nome do arquivo levava o **serial do aparelho** (RXCW400ZV3F),
     # que é identificador do dono. O modelo basta para reconhecer o relatório.
     modelo = (relatorio.get("titulo") or "").split("·")[0].strip() or "aparelho"
     seguro = "".join(c if c.isalnum() or c in "-_" else "-" for c in modelo)[:40]
@@ -100,7 +100,7 @@ def _perguntar_sintomas() -> list[str]:
 def _instalar_driver(como_json: bool) -> int:
     """Baixa e instala o driver do celular — o passo que o dono não faz à mão.
 
-    0.95.4 — nasceu de um pedido literal: *"pq vc nao faz javris instalar para
+    0.95.5 — nasceu de um pedido literal: *"pq vc nao faz javris instalar para
     mim"*. O dono não digita comando de terminal e não caça arquivo em site.
 
     O `.env` é lido no começo (`_ambiente()`), então basta a linha lá dentro; o
@@ -109,7 +109,7 @@ def _instalar_driver(como_json: bool) -> int:
     """
     from server import sistema
 
-    # 0.95.4 — antes de baixar 33 MB, pergunte ao Windows se já está lá.
+    # 0.95.5 — antes de baixar 33 MB, pergunte ao Windows se já está lá.
     # O dono roda `.bat` em sequência; não pode pagar o download toda vez.
     estado = sistema.driver_instalado("samsung")
     if estado.get("instalado"):
@@ -192,6 +192,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--sistemas",
+        action="store_true",
+        help=(
+            "O JARVIS roda em qual sistema? Mede esta máquina e responde para "
+            "Lindows, Parrot, TempleOS, Astra, Red Star, Whonix, NeoKylin e "
+            "\"Windows Gaming Edition\" — incluindo o que não tem caminho."
+        ),
+    )
+    parser.add_argument(
         "--driver",
         action="store_true",
         help=(
@@ -227,6 +236,34 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(refeito, ensure_ascii=False, indent=2))
         else:
             print(varredura.em_texto(refeito))
+        return 0
+
+    if argumentos.sistemas:
+        from server import compatibilidade as compat
+
+        if argumentos.json:
+            print(json.dumps(
+                {"sistemas": compat.sistemas(), "esta_maquina": compat.medir()},
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
+        aqui = compat.medir()
+        print()
+        print("  Esta máquina:")
+        print(f"    {aqui['distribuicao'] or aqui['sistema']} · Python {aqui['python']}")
+        if aqui["faltando"]:
+            print(f"    falta: {', '.join(aqui['faltando'])}")
+        else:
+            print("    tudo que o JARVIS usa está presente")
+        for problema in aqui["problemas"]:
+            print(f"    problema: {problema}")
+        print()
+        for item in compat.sistemas():
+            marca = "OK " if item["roda"] else "-- "
+            print(f"  {marca}{item['nome']:26} {item['situacao']}")
+        print()
+        print("  Pergunte no chat: \"roda no TempleOS?\" — ele explica o que quebra.")
+        print()
         return 0
 
     if argumentos.driver:

@@ -382,7 +382,7 @@ def capacidades() -> dict[str, Any]:
 def da_propria_maquina() -> bool:
     """Este processo roda na máquina do dono? (script local, não requisição)
 
-    0.95.4 — nasceu de um erro meu que o dono viveu: o `.bat` chamava o código
+    0.95.5 — nasceu de um erro meu que o dono viveu: o `.bat` chamava o código
     direto no PC dele e a minha trava pedia *token de host*, que só faz sentido
     para requisição vinda de outra máquina. O token existe para impedir que um
     site aberto no navegador dispare instalação — e um processo rodando com o
@@ -2944,7 +2944,7 @@ def catalogo() -> dict[str, Any]:
     }
 
 # ---------------------------------------------------------------------------
-# 0.95.4 — instalar o driver do celular sem o dono baixar nada à mão
+# 0.95.5 — instalar o driver do celular sem o dono baixar nada à mão
 # ---------------------------------------------------------------------------
 
 # Fontes oficiais, com o que cada uma resolve. `verificar_em` existe porque
@@ -2961,7 +2961,7 @@ DRIVERS_CONHECIDOS: dict[str, dict[str, Any]] = {
             "Faz o `adb` enxergar o aparelho quando o Windows só monta o MTP "
             "(a pasta do celular aparece no Explorer e o `adb devices` fica vazio)."
         ),
-        # 0.95.4 — eu tinha escrito "com o celular desconectado" e isso está
+        # 0.95.5 — eu tinha escrito "com o celular desconectado" e isso está
         # errado: o instalador da Samsung é da época do Kies e foi feito para
         # rodar COM o aparelho plugado (ele reconhece o telefone e instala a
         # interface de depuração). Sem o cabo, ele termina "com sucesso" e não
@@ -2979,7 +2979,7 @@ DRIVERS_CONHECIDOS: dict[str, dict[str, Any]] = {
 def driver_instalado(fabricante: str = "samsung") -> dict[str, Any]:
     """O driver já está no PC? Pergunta ao Windows, sem baixar nada.
 
-    0.95.4 — o dono rodou o `.bat` três vezes e baixaria 33 MB em cada uma. Antes
+    0.95.5 — o dono rodou o `.bat` três vezes e baixaria 33 MB em cada uma. Antes
     de baixar, vale perguntar: se o Windows já tem o ``Samsung Android ADB
     Interface`` funcionando, o problema nunca foi o driver.
     """
@@ -3081,7 +3081,7 @@ def driver_do_celular(
     )
     arquivo = str(baixado["arquivo"])
     # Duas etapas, de propósito: `instalar` só MONTA o plano e devolve o token;
-    # quem executa é `executar`. A 0.95.4 chamava só `instalar` e o dono ficava
+    # quem executa é `executar`. A 0.95.5 chamava só `instalar` e o dono ficava
     # com um plano na mão achando que o driver tinha sido instalado.
     plano_instalacao = instalar(
         arquivo=arquivo,
